@@ -1,10 +1,14 @@
-// /components/TingYinShiCi.js (最终正确版 - 听音识词逻辑)
+// /components/TingYinShiCi.js (视觉升级版 - 柔和UI + 人物朗读)
 
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 
-// --- TTS 功能模块开始 ---
+// --- 可配置项 ---
+// 在这里替换成您喜欢的人物图片URL，建议使用透明背景的PNG图片
+const DEFAULT_CHARACTER_IMAGE = '/images/character-speaker.png'; 
+
+// --- 核心功能模块 ---
 const cleanTextForSpeech = (text) => {
   if (!text) return '';
   let cleaned = text;
@@ -17,8 +21,16 @@ const cleanTextForSpeech = (text) => {
   return cleaned.replace(/\s+/g, ' ').trim();
 };
 
-const TTSButton = ({ textToSpeak, autoPlay = false, onPlaybackEnd }) => {
-  const [playbackState, setPlaybackState] = useState('idle');
+const shuffleArray = (array) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[newArray[i], newArray[j]] = [newArray[j], newArray[i]]; }
+  return newArray;
+};
+
+
+// --- 子组件：人物朗读模块 ---
+const CharacterSpeaker = ({ textToSpeak, autoPlay = false, characterImage, onPlaybackEnd }) => {
+  const [playbackState, setPlaybackState] = useState('idle'); // idle, loading, playing, paused
   const audioRef = useRef(null);
   const autoPlayRef = useRef(autoPlay);
 
@@ -31,7 +43,7 @@ const TTSButton = ({ textToSpeak, autoPlay = false, onPlaybackEnd }) => {
     if (!cleanedText || playbackState === 'loading') return;
     setPlaybackState('loading');
     const encodedText = encodeURIComponent(cleanedText);
-    const url = `https://t.leftsite.cn/tts?t=${encodedText}&v=zh-CN-XiaochenMultilingualNeural&r=-20&p=0&o=audio-24khz-48kbitrate-mono-mp3`;
+    const url = `https://t.leftsite.cn/tts?t=${encodedText}&v=zh-CN-XiaoyouNeural&r=0&p=0&o=audio-24khz-48kbitrate-mono-mp3`; // 使用更自然的声音
     try {
       const response = await fetch(url);
       if (!response.ok) throw new Error('API 请求失败');
@@ -53,7 +65,7 @@ const TTSButton = ({ textToSpeak, autoPlay = false, onPlaybackEnd }) => {
   useEffect(() => {
     if (autoPlayRef.current && textToSpeak) {
         playAudio(textToSpeak);
-        autoPlayRef.current = false; // 只自动播放一次
+        autoPlayRef.current = false;
     }
   }, [textToSpeak, playAudio]);
 
@@ -63,26 +75,37 @@ const TTSButton = ({ textToSpeak, autoPlay = false, onPlaybackEnd }) => {
     if (playbackState === 'paused') { audioRef.current?.play(); return; }
     playAudio(textToSpeak);
   }, [playbackState, textToSpeak, playAudio]);
-  
-  const renderIcon = () => {
-    switch (playbackState) {
-      case 'loading': return <i className="fas fa-spinner fa-spin text-4xl"></i>;
-      case 'playing': return <i className="fas fa-pause text-4xl"></i>;
-      default: return <i className="fas fa-volume-up text-4xl"></i>;
-    }
-  };
 
-  return <button onClick={handleTogglePlayback} className={`p-6 rounded-full transition-all duration-200 transform active:scale-90 ${playbackState === 'loading' ? 'text-gray-400 cursor-not-allowed' : 'text-primary hover:bg-primary/10'}`}>{renderIcon()}</button>;
+  return (
+    <div className="flex flex-col items-center justify-center cursor-pointer group" onClick={handleTogglePlayback}>
+      <div className="relative">
+        <img src={characterImage || DEFAULT_CHARACTER_IMAGE} alt="朗读助手" className="w-28 h-28 rounded-full object-cover shadow-lg transition-transform duration-300 group-hover:scale-105" />
+        {/* 声波动画 */}
+        {playbackState === 'playing' && (
+          <>
+            <div className="absolute inset-0 rounded-full border-2 border-primary animate-ping opacity-75"></div>
+            <div className="absolute inset-0 rounded-full border-2 border-primary animate-ping opacity-50" style={{animationDelay: '0.5s'}}></div>
+          </>
+        )}
+        {/* 加载状态 */}
+        {playbackState === 'loading' && (
+          <div className="absolute inset-0 bg-white/50 rounded-full flex items-center justify-center">
+            <i className="fas fa-spinner fa-spin text-primary text-2xl"></i>
+          </div>
+        )}
+        {/* 播放/暂停图标 */}
+        <div className="absolute -bottom-2 -right-2 bg-white rounded-full p-2 shadow-md">
+           {playbackState === 'playing' ? <i className="fas fa-pause text-primary"></i> : <i className="fas fa-volume-up text-primary"></i>}
+        </div>
+      </div>
+      <p className="mt-4 text-sm text-gray-500 font-medium">点击人物重新朗读</p>
+    </div>
+  );
 };
-// --- TTS 功能模块结束 ---
 
-const shuffleArray = (array) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[newArray[i], newArray[j]] = [newArray[j], newArray[i]]; }
-  return newArray;
-};
 
-const TingYinShiCi = ({ title = '听音识词', numOptions = 4, isShuffle = 'false', quizData }) => {
+// --- 主组件：听音识词 ---
+const TingYinShiCi = ({ title = '听音识词', numOptions = 4, isShuffle = 'false', quizData, characterImage }) => {
   const [wordList, setWordList] = useState([]);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [options, setOptions] = useState([]);
@@ -90,7 +113,7 @@ const TingYinShiCi = ({ title = '听音识词', numOptions = 4, isShuffle = 'fal
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [error, setError] = useState(null);
-  const [key, setKey] = useState(Date.now()); // 用于强制重新渲染TTSButton
+  const [key, setKey] = useState(Date.now());
 
   useEffect(() => {
     try {
@@ -124,9 +147,9 @@ const TingYinShiCi = ({ title = '听音识词', numOptions = 4, isShuffle = 'fal
       setCurrentWordIndex(i => i + 1);
       setIsAnswered(false);
       setSelectedOption(null);
-      setKey(Date.now()); // 更新key以触发TTSButton的自动播放
+      setKey(Date.now());
     } else {
-      alert(`挑战完成！你的得分是: ${score + (selectedOption.word === wordList[currentWordIndex].word ? 1 : 0)} / ${wordList.length}`);
+      alert(`挑战完成！你的得分是: ${score + (isAnswered && selectedOption.word === wordList[currentWordIndex].word ? 1 : 0)} / ${wordList.length}`);
     }
   };
   
@@ -143,50 +166,53 @@ const TingYinShiCi = ({ title = '听音识词', numOptions = 4, isShuffle = 'fal
   const currentWord = wordList[currentWordIndex];
   const isCorrect = isAnswered && selectedOption.word === currentWord.word;
 
+  const getOptionClasses = (option) => {
+    let base = 'w-full text-center p-4 rounded-xl transition-all duration-300 font-semibold text-lg flex items-center justify-center transform focus:outline-none';
+    if (isAnswered) {
+      if (option.word === currentWord.word) return `${base} bg-green-500 text-white shadow-lg scale-105`;
+      if (option.word === selectedOption.word) return `${base} bg-red-500 text-white shadow-md`;
+      return `${base} bg-gray-200 text-gray-400 dark:bg-dark-2 dark:text-dark-7 pointer-events-none`;
+    }
+    return `${base} bg-white dark:bg-dark-3 text-dark-DEFAULT dark:text-gray-1 shadow-neumorphic-light dark:shadow-neumorphic-dark hover:shadow-neumorphic-light-inset dark:hover:shadow-neumorphic-dark-inset active:scale-95`;
+  };
+
   return (
-    <div className="max-w-2xl mx-auto my-8 p-6 bg-day-DEFAULT dark:bg-night-DEFAULT rounded-xl shadow-2 border border-stroke dark:border-dark-3">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-center mb-2 text-dark-DEFAULT dark:text-gray-1">{title}</h1>
-        <div className="flex justify-between text-sm text-body-color dark:text-dark-7">
-          <span>词语: {currentWordIndex + 1} / {wordList.length}</span>
-          <span>得分: {score}</span>
-        </div>
-        <div className="w-full bg-gray-200 h-2 rounded-full mt-2 dark:bg-dark-2">
-          <div className="bg-primary h-2 rounded-full" style={{ width: `${((currentWordIndex + 1) / wordList.length) * 100}%` }}></div>
+    <div className="max-w-xl mx-auto my-8 p-8 bg-gray-100 dark:bg-dark-1 rounded-2xl shadow-neumorphic-light dark:shadow-neumorphic-dark font-sans">
+      <div className="mb-6 text-center">
+        <h1 className="text-3xl font-bold text-gray-700 dark:text-gray-200">{title}</h1>
+        <div className="mt-2 text-sm text-gray-500 dark:text-dark-7">
+          <span>词语: {currentWordIndex + 1} / {wordList.length}</span> | <span>得分: {score}</span>
         </div>
       </div>
-      <div className="text-center my-8">
-        <TTSButton key={key} textToSpeak={currentWord.word} autoPlay={true} />
+      
+      <div className="my-10">
+        <CharacterSpeaker key={key} textToSpeak={currentWord.word} autoPlay={true} characterImage={characterImage} />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {options.map((option, i) => {
-          let classes = 'w-full text-center p-4 rounded-lg border-2 transition-all duration-300 font-semibold ';
-          if (isAnswered) {
-            if (option.word === currentWord.word) classes += 'bg-secondary/10 border-secondary text-secondary ring-2 ring-secondary';
-            else if (option.word === selectedOption.word) classes += 'bg-red-100 border-red-400 text-red-600 dark:bg-red-900/50 dark:border-red-700 dark:text-red-400 animate-shake';
-            else classes += 'bg-gray-100 border-gray-300 text-gray-500 opacity-60 dark:bg-dark-2 dark:border-dark-3 dark:text-dark-7';
-            classes += ' pointer-events-none';
-          } else {
-            classes += 'bg-white dark:bg-dark-2 border-gray-300 dark:border-dark-3 text-dark-DEFAULT dark:text-gray-1 hover:border-primary hover:text-primary hover:shadow-md';
-          }
-          return <button key={i} onClick={() => handleOptionClick(option)} disabled={isAnswered} className={classes}>{option.word}</button>;
-        })}
+
+      <div className="grid grid-cols-2 gap-4">
+        {options.map((option, i) => (
+          <button key={i} onClick={() => handleOptionClick(option)} disabled={isAnswered} className={getOptionClasses(option)}>
+            {option.word}
+          </button>
+        ))}
       </div>
+      
       {isAnswered && (
-        <div className="mt-6 animate-fade-in-up">
-          <div className="p-4 rounded-lg bg-gray-1 dark:bg-dark-2 border-t-2 border-stroke dark:border-dark-3 shadow-inner">
-            <div className={`flex items-center mb-3 font-bold ${isCorrect ? 'text-secondary' : 'text-red-600 dark:text-red-400'}`}>
-              {isCorrect ? <i className="fas fa-check-circle mr-2"></i> : <i className="fas fa-times-circle mr-2"></i>}
-              {isCorrect ? '回答正确！' : '回答错误。'}
-            </div>
-            <p className="text-body-color dark:text-dark-7 text-lg"><strong>正确答案：</strong> {currentWord.word} {currentWord.pinyin && `(${currentWord.pinyin})`}</p>
+        <div className="mt-8 animate-fade-in-up">
+          <div className="p-4 text-center rounded-xl bg-gray-200 dark:bg-dark-2">
+            <h3 className={`text-xl font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+              {isCorrect ? <><i className="fas fa-check-circle mr-2"></i>正确</> : <><i className="fas fa-times-circle mr-2"></i>错误</>}
+            </h3>
+            <p className="mt-2 text-lg text-gray-700 dark:text-gray-300">
+              答案是：<span className="font-bold">{currentWord.word}</span> {currentWord.pinyin && `(${currentWord.pinyin})`}
+            </p>
           </div>
-          <div className="mt-4 flex justify-end space-x-4">
-             <button onClick={handleRestart} className="px-6 py-2 bg-gray-500 text-white font-medium rounded-lg shadow-md hover:bg-gray-600">
-                <i className="fas fa-redo-alt inline-block"></i> 重来
+          <div className="mt-6 flex justify-center space-x-4">
+             <button onClick={handleRestart} className="px-6 py-2 bg-gray-500 text-white font-medium rounded-lg shadow-md hover:bg-gray-600 transition-colors">
+                <i className="fas fa-redo-alt mr-2"></i>重来
              </button>
-             <button onClick={handleNextWord} className="px-6 py-2 bg-primary text-white font-medium rounded-lg shadow-md hover:bg-blue-dark">
-                {currentWordIndex < wordList.length - 1 ? '下一题' : '查看结果'}
+             <button onClick={handleNextWord} className="px-6 py-2 bg-primary text-white font-medium rounded-lg shadow-md hover:bg-blue-dark transition-colors">
+                {currentWordIndex < wordList.length - 1 ? '下一题' : '完成'}
              </button>
           </div>
         </div>
