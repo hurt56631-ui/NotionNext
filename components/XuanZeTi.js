@@ -1,179 +1,218 @@
-// /components/NotionPage.js (最终修正版 - 只注册存在的组件)
+// /components/XuanZeTi.js (最终版 - 内置TTS功能，完全独立)
 
-import { siteConfig } from '@/lib/config'
-import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
-import { isBrowser, loadExternalResource } from '@/lib/utils'
-import mediumZoom from '@fisch0920/medium-zoom'
-import 'katex/dist/katex.min.css'
-import dynamic from 'next/dynamic'
-import { useEffect, useRef } from 'react'
-import { NotionRenderer } from 'react-notion-x'
+'use client'
 
-// =============================================================================
-// START: 自定义组件注册与渲染逻辑
-// =============================================================================
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
-// 1. 定义一个映射表，用于注册所有可以通过 !include 使用的组件
-const CUSTOM_COMPONENTS_MAP = {
-  // 【重要】只在这里注册您项目中真实存在的组件文件！
-  // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
-  '/components/XuanZeTi.js': dynamic(() => import('@/components/XuanZeTi'), { ssr: false }),
+// --- TTS 功能模块开始 (从 TextToSpeechButton.js 提取并集成) ---
 
-  // 【未来扩展】当您创建了新的组件（如 TingYinShiCi.js）后，再来这里取消注释或添加新的一行。
-  // '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
-  // '/components/LianXianTi.js': dynamic(() => import('@/components/LianXianTi'), { ssr: false }),
-  // '/components/BeiDanCi.js': dynamic(() => import('@/components/BeiDanCi'), { ssr: false }),
+// 1. 文本清理函数
+const cleanTextForSpeech = (text) => {
+  if (!text) return '';
+  let cleaned = text;
+  // 移除括号和其中的内容，移除Markdown标记，移除拼音，移除表情符号等
+  cleaned = cleaned.replace(/【.*?】|\[.*?\]/g, '');
+  cleaned = cleaned.replace(/\b[a-zA-ZüÜ]+[1-5]\b\s*/g, '');
+  cleaned = cleaned.replace(/\*\*/g, '').replace(/#{1,6}\s/g, '').replace(/[-*]\s/g, '');
+  const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+  cleaned = cleaned.replace(emojiRegex, '');
+  cleaned = cleaned.replace(/[()]/g, ' ');
+  return cleaned.replace(/\s+/g, ' ').trim();
 };
 
-// 2. 辅助函数：从 Notion 的富文本数组中提取纯文本
-const getTextContent = (richTextArray) => {
-  return richTextArray?.map(segment => segment[0])?.join('') || '';
-};
+// 2. 独立的 TTS 按钮子组件 (UI 和逻辑)
+const TTSButton = ({ textToSpeak }) => {
+  const [playbackState, setPlaybackState] = useState('idle'); // idle, loading, playing, paused
+  const audioRef = useRef(null);
 
-// 3. 默认的 Notion 代码块渲染器
-const DefaultNotionCodeRenderer = dynamic(
-  () => import('react-notion-x/build/third-party/code').then(m => m.Code),
-  { ssr: false }
-);
-
-// 4. 创建一个自定义的 Code 块渲染器，用于拦截和处理 !include 命令
-const CustomCodeRenderer = (props) => {
-  const { block } = props;
-  const codeContent = getTextContent(block.properties?.title);
-  
-  if (codeContent && codeContent.trim().startsWith('!include')) {
-    try {
-      const includeRegex = /^!include\s+(\S+)\s*(\{.*\})?$/s;
-      const match = codeContent.trim().match(includeRegex);
-
-      if (match) {
-        const componentPath = match[1];
-        const propsJsonString = match[2];
-        const props = propsJsonString ? JSON.parse(propsJsonString) : {};
-
-        const DynamicComponent = CUSTOM_COMPONENTS_MAP[componentPath];
-
-        if (DynamicComponent) {
-          return <DynamicComponent {...props} />;
-        } else {
-          return (
-            <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
-              错误：自定义组件 "{componentPath}" 未在 NotionPage.js 中注册。
-            </div>
-          );
+  // 组件卸载时清理音频
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
+          URL.revokeObjectURL(audioRef.current.src);
         }
       }
-    } catch (e) {
-      return (
-        <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
-          错误：解析 !include 块失败。请检查 JSON 语法。
-          <pre className="mt-2 text-sm whitespace-pre-wrap">{e.message}</pre>
-        </div>
-      );
-    }
-  }
-
-  return <DefaultNotionCodeRenderer {...props} />;
-};
-
-// =============================================================================
-// END: 自定义组件注册与渲染逻辑
-// =============================================================================
-
-
-/**
- * 整个站点的核心组件
- * 将Notion数据渲染成网页
- */
-const NotionPage = ({ post, className }) => {
-  const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK')
-  const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK')
-  const SPOILER_TEXT_TAG = siteConfig('SPOILER_TEXT_TAG')
-
-  const zoom = isBrowser && mediumZoom({ background: 'rgba(0, 0, 0, 0.2)', margin: getMediumZoomMargin() });
-  const zoomRef = useRef(zoom ? zoom.clone() : null);
-  const IMAGE_ZOOM_IN_WIDTH = siteConfig('IMAGE_ZOOM_IN_WIDTH', 1200);
-
-  useEffect(() => {
-    autoScrollToHash();
+    };
   }, []);
 
-  useEffect(() => {
-    if (POST_DISABLE_GALLERY_CLICK) {
-      processGalleryImg(zoomRef?.current);
+  const handleTogglePlayback = useCallback(async (e) => {
+    e.stopPropagation(); // 阻止事件冒泡到父级按钮
+
+    if (playbackState === 'playing') {
+      audioRef.current?.pause();
+      return;
     }
-    if (POST_DISABLE_DATABASE_CLICK) {
-      processDisableDatabaseUrl();
-    }
-
-    const observer = new MutationObserver((mutationsList) => {
-      mutationsList.forEach(mutation => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class' && mutation.target.classList.contains('medium-zoom-image--opened')) {
-          setTimeout(() => {
-            const src = mutation?.target?.getAttribute('src');
-            mutation?.target?.setAttribute('src', compressImage(src, IMAGE_ZOOM_IN_WIDTH));
-          }, 800);
-        }
-      });
-    });
-
-    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, [post]);
-
-  useEffect(() => {
-    if (SPOILER_TEXT_TAG) {
-      import('lodash/escapeRegExp').then(escapeRegExp => {
-        Promise.all([
-          loadExternalResource('/js/spoilerText.js', 'js'),
-          loadExternalResource('/css/spoiler-text.css', 'css')
-        ]).then(() => {
-          window.textToSpoiler && window.textToSpoiler(escapeRegExp.default(SPOILER_TEXT_TAG));
-        });
-      });
+    if (playbackState === 'paused') {
+      audioRef.current?.play();
+      return;
     }
 
-    const timer = setTimeout(() => {
-      document.querySelectorAll('.notion-collection-page-properties')?.forEach(e => e.remove());
-    }, 1000);
+    const cleanedText = cleanTextForSpeech(textToSpeak);
+    if (!cleanedText || playbackState === 'loading') return;
 
-    return () => clearTimeout(timer);
-  }, [post]);
+    setPlaybackState('loading');
+    const encodedText = encodeURIComponent(cleanedText);
+    const url = `https://t.leftsite.cn/tts?t=${encodedText}&v=zh-CN-XiaochenMultilingualNeural&r=-20&p=0&o=audio-24khz-48kbitrate-mono-mp3`;
+    
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('API 请求失败');
+      
+      const audioBlob = await response.blob();
+      if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
+      
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onplay = () => setPlaybackState('playing');
+      audio.onpause = () => setPlaybackState('paused');
+      audio.onended = () => setPlaybackState('idle');
+      audio.onerror = () => { setPlaybackState('idle'); };
+
+      await audio.play();
+    } catch (err) {
+      setPlaybackState('idle');
+    }
+  }, [playbackState, textToSpeak]);
+  
+  const renderIcon = () => {
+    switch (playbackState) {
+      case 'loading':
+        return <i className="fas fa-spinner fa-spin w-5 h-5 flex items-center justify-center"></i>;
+      case 'playing':
+        return <i className="fas fa-pause w-5 h-5 flex items-center justify-center"></i>;
+      case 'paused':
+      case 'idle':
+      default:
+        return <i className="fas fa-volume-up w-5 h-5 flex items-center justify-center"></i>;
+    }
+  };
 
   return (
-    <div id='notion-article' className={`mx-auto overflow-hidden ${className || ''}`}>
-      <NotionRenderer
-        recordMap={post?.blockMap}
-        mapPageUrl={mapPageUrl}
-        mapImageUrl={mapImgUrl}
-        components={{
-          Code: CustomCodeRenderer,
-          Collection,
-          Equation,
-          Modal,
-          Pdf,
-          Tweet
-        }}
-      />
-      <AdEmbed />
-      <PrismMac />
-    </div>
+    <span
+      onClick={handleTogglePlayback}
+      className={`inline-flex items-center justify-center p-2 rounded-full transition-all duration-200 transform active:scale-90 ml-2 
+        ${playbackState === 'loading' ? 'text-gray-400 cursor-not-allowed' : 'text-sky-600 hover:bg-sky-600/10'}`}
+      aria-label={`朗读: ${textToSpeak}`}
+    >
+      {renderIcon()}
+    </span>
   );
 };
 
+// --- TTS 功能模块结束 ---
 
-// 下面的所有代码都保持原样，无需修改
-const processDisableDatabaseUrl = () => { if (isBrowser) { document.querySelectorAll('.notion-table a').forEach(e => e.removeAttribute('href')) } }
-const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgs = document.querySelectorAll('.notion-collection-card-cover img'); if (imgs && zoom) { imgs.forEach(i => zoom.attach(i)) } document.querySelectorAll('.notion-collection-card').forEach(e => e.removeAttribute('href')) } }, 800) }
-const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash) { const node = document.getElementById(hash.substring(1)); if (node) { node.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180) }
-const mapPageUrl = id => '/' + id.replace(/-/g, '')
-function getMediumZoomMargin() { const w = window.innerWidth; if (w < 500) return 8; if (w < 800) return 20; if (w < 1280) return 30; if (w < 1600) return 40; if (w < 1920) return 48; return 72; }
-const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
-const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), { ssr: false });
-const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
-const TweetEmbed = dynamic(() => import('react-tweet-embed'), { ssr: false });
-const AdEmbed = dynamic(() => import('@/components/GoogleAdsense').then(m => m.AdEmbed), { ssr: true });
-const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
-const Modal = dynamic(() => import('react-notion-x/build/third-party/modal').then(m => m.Modal), { ssr: false });
-const Tweet = ({ id }) => <TweetEmbed tweetId={id} />;
-export default NotionPage;
+
+const XuanZeTi = ({ question, options = [], correctAnswerIndex, explanation }) => {
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState(null)
+  const [isAnswered, setIsAnswered] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+
+  const correctAudioRef = useRef(null)
+  const wrongAudioRef = useRef(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      correctAudioRef.current = new Audio('/sounds/correct.mp3')
+      wrongAudioRef.current = new Audio('/sounds/wrong.mp3')
+    }
+  }, [])
+
+  const playSound = (isCorrect) => {
+    const audio = isCorrect ? correctAudioRef.current : wrongAudioRef.current
+    if (audio) {
+      audio.currentTime = 0
+      audio.play().catch(e => console.error("音频播放失败:", e))
+    }
+  }
+
+  const handleOptionClick = (index) => {
+    if (isAnswered) return
+    setSelectedOptionIndex(index)
+    setIsAnswered(true)
+    setShowFeedback(true)
+    playSound(index === correctAnswerIndex)
+  }
+
+  const handleReset = () => {
+    setShowFeedback(false)
+    setTimeout(() => {
+      setSelectedOptionIndex(null)
+      setIsAnswered(false)
+    }, 300)
+  }
+
+  const getOptionClasses = (index) => {
+    let baseClasses = 'w-full text-left p-4 rounded-lg border-2 transition-all duration-300 flex items-center justify-between font-medium shadow-sm'
+    
+    if (isAnswered) {
+      const isCorrectOption = index === correctAnswerIndex
+      const isSelectedOption = index === selectedOptionIndex
+
+      if (isCorrectOption) return `${baseClasses} bg-secondary/10 border-secondary text-secondary ring-2 ring-secondary scale-105 shadow-lg`
+      if (isSelectedOption) return `${baseClasses} bg-red-100 border-red-400 text-red-600 dark:bg-red-900/50 dark:border-red-700 dark:text-red-400 animate-shake`
+      return `${baseClasses} bg-gray-100 border-gray-300 text-gray-500 opacity-70 dark:bg-dark-2 dark:border-dark-3 dark:text-dark-7 pointer-events-none`
+    }
+    
+    return `${baseClasses} bg-white dark:bg-dark-2 border-gray-300 dark:border-dark-3 text-dark-DEFAULT dark:text-gray-1 hover:border-primary hover:text-primary hover:shadow-md cursor-pointer`
+  }
+
+  const FeedbackIcon = ({ isCorrect }) => {
+    if (isCorrect) return <span className="text-secondary font-bold text-xl flex items-center"><i className="fas fa-check-circle mr-2"></i>回答正确！</span>
+    return <span className="text-red-600 dark:text-red-400 font-bold text-xl flex items-center"><i className="fas fa-times-circle mr-2"></i>回答错误！</span>
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto my-8 p-6 bg-day-DEFAULT dark:bg-night-DEFAULT rounded-xl shadow-2 border border-stroke dark:border-dark-3">
+      <div className="flex justify-between items-start mb-6">
+        <h3 className="text-2xl font-bold text-dark-DEFAULT dark:text-gray-1 flex items-center">
+          {question}
+          <TTSButton textToSpeak={question} />
+        </h3>
+      </div>
+      <div className="space-y-4">
+        {options.map((option, index) => (
+          <button key={index} onClick={() => handleOptionClick(index)} disabled={isAnswered} className={getOptionClasses(index)}>
+            <span className="text-lg flex items-center">
+              <span className="font-semibold mr-3">{String.fromCharCode(65 + index)}.</span>
+              {option}
+              {/* 为每个选项添加TTS按钮 */}
+              <TTSButton textToSpeak={option} />
+            </span>
+            {isAnswered && index === correctAnswerIndex && <i className="fas fa-check text-secondary"></i>}
+            {isAnswered && index === selectedOptionIndex && index !== correctAnswerIndex && <i className="fas fa-times text-red-500"></i>}
+          </button>
+        ))}
+      </div>
+      {isAnswered && (
+        <div className={`mt-8 ${showFeedback ? 'animate-fade-in-up' : 'animate-fade-out'}`}>
+          <div className="p-5 bg-gray-1 dark:bg-dark-2 border-t-4 border-primary rounded-b-lg shadow-inner">
+            <div className="flex items-center space-x-3 mb-4">
+               <FeedbackIcon isCorrect={selectedOptionIndex === correctAnswerIndex} />
+            </div>
+            {explanation && (
+              <div>
+                <h4 className="font-bold text-lg mb-2 text-dark-DEFAULT dark:text-gray-1 flex items-center">
+                  <i className="fas fa-lightbulb mr-2 text-yellow-500"></i>
+                  解析
+                  <TTSButton textToSpeak={explanation} />
+                </h4>
+                <p className="text-body-color dark:text-dark-7">{explanation}</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-6 flex justify-end">
+            <button onClick={handleReset} className="px-8 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-blue-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200">
+              再试一次
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default XuanZeTi
