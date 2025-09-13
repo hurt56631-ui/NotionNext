@@ -2,12 +2,10 @@
 
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { FaVolumeUp, FaCheckCircle, FaTimesCircle, FaRedo } from 'react-icons/fa'
 
-// =========================================================================
-// [新增] 同步高级朗读规则 - 从 TextToSpeechButton.js 复制过来
-// =========================================================================
+// [新增] 同步高级朗读规则
 const cleanTextForSpeech = (text) => {
   if (!text) return '';
   let cleaned = text;
@@ -19,7 +17,6 @@ const cleanTextForSpeech = (text) => {
   cleaned = cleaned.replace(/[()]/g, ' ');
   return cleaned.replace(/\s+/g, ' ').trim();
 };
-// =========================================================================
 
 // 工具函数：洗牌数组
 const shuffleArray = (array) => {
@@ -31,35 +28,91 @@ const shuffleArray = (array) => {
   return newArray
 }
 
-const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true', numOptions = '4' }) => {
+// =========================================================================
+// [修改] 组件接收一个名为 `config` 的 JSON 字符串作为 Prop
+// =========================================================================
+const TingYinShiCi = ({ config }) => {
   const [quiz, setQuiz] = useState([])
+  const [initialQuizData, setInitialQuizData] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [options, setOptions] = useState([])
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [isCorrect, setIsCorrect] = useState(null)
   const [score, setScore] = useState(0)
-  const [quizState, setQuizState] = useState('playing') // 'playing', 'answered', 'finished'
-  const [ttsLoading, setTtsLoading] = useState(false) // 新增TTS加载状态
+  const [quizState, setQuizState] = useState('loading-data') // 'loading-data', 'playing', 'answered', 'finished'
+  const [ttsLoading, setTtsLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const audioRef = useRef(null); // 用于管理 Audio 对象
-  const parsedNumOptions = parseInt(numOptions, 10) || 4
+  const audioRef = useRef(null);
 
-  // 解析并初始化数据
-  useEffect(() => {
+  // 解析 config prop
+  const parsedConfig = useMemo(() => {
     try {
-      const data = JSON.parse(quizData)
-      if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('Quiz data is not a valid array or is empty.')
-      }
-      setQuiz(isShuffle === 'true' ? shuffleArray(data) : data)
+      return JSON.parse(config);
     } catch (e) {
-      console.error('Failed to parse quiz data:', e)
-      setError('题库数据格式错误，请检查。')
+      console.error('Failed to parse config prop:', e);
+      setError('组件配置数据格式错误，请检查 Notion 代码块中的 JSON。');
+      return {};
     }
-  }, [quizData, isShuffle])
+  }, [config]);
 
-  // 组件卸载时停止播放并清理音频资源
+  // 从 config 中提取属性
+  const quizTitle = parsedConfig.quizTitle || '听音识词';
+  const dataPageId = parsedConfig.dataPageId;
+  const isShuffle = parsedConfig.isShuffle === true || parsedConfig.isShuffle === 'true'; // 兼容布尔值和字符串
+  const numOptions = parseInt(parsedConfig.numOptions, 10) || 4;
+
+
+  // 从 Notion API 获取题库数据
+  useEffect(() => {
+    const fetchQuizData = async () => {
+      if (!dataPageId) {
+        setError('请提供一个 Notion 页面 ID (dataPageId) 来加载题库。');
+        return;
+      }
+      setQuizState('loading-data');
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/get-page-data?pageId=${dataPageId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch Notion page data: ${response.statusText}`);
+        }
+        const data = await response.json();
+        
+        const codeBlock = data.block.find(
+          block => block.type === 'code' && block.properties?.language?.[0]?.[0] === 'json'
+        );
+
+        if (!codeBlock || !codeBlock.properties?.title?.[0]?.[0]) {
+          throw new Error('Notion 页面中未找到 JSON 格式的代码块。请确保将题库数据放在一个 JSON 代码块中。');
+        }
+
+        const jsonString = codeBlock.properties.title[0][0];
+        const parsedData = JSON.parse(jsonString);
+
+        if (!Array.isArray(parsedData) || parsedData.length === 0) {
+          throw new Error('解析的题库数据不是有效的数组或为空。');
+        }
+        
+        setInitialQuizData(parsedData);
+        setQuiz(isShuffle ? shuffleArray(parsedData) : parsedData); // 使用 isShuffle 布尔值
+        setQuizState('playing');
+
+      } catch (e) {
+        console.error('Failed to fetch or parse quiz data from Notion:', e);
+        setError(`加载题库失败: ${e.message}`);
+        setQuizState('finished');
+      }
+    };
+
+    if (config && dataPageId) { // 确保 config 和 dataPageId 都存在才 fetchData
+        fetchQuizData();
+    } else if (!config) {
+        setError('组件配置 (config) 为空或无效。');
+    }
+  }, [dataPageId, isShuffle, config]); // 依赖 config, dataPageId, isShuffle
+
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -72,17 +125,13 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     };
   }, []);
 
-  // =========================================================================
-  // [修改] speak 函数，调用外部 TTS 接口
-  // =========================================================================
   const speak = useCallback(async (textToSpeak) => {
-    if (ttsLoading) return; // 如果正在加载，不重复请求
+    if (ttsLoading) return;
 
     const cleanedText = cleanTextForSpeech(textToSpeak);
     if (!cleanedText) return;
 
     setTtsLoading(true);
-    // 停止并清理之前的音频
     if (audioRef.current) {
       audioRef.current.pause();
       if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
@@ -91,8 +140,6 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
       audioRef.current = null;
     }
     
-    // 你提供的 TTS 接口 URL
-    // r=-20 对应你的语速-20
     const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanedText)}&v=zh-CN-XiaochenMultilingualNeural&r=-20&p=0&o=audio-24khz-48kbitrate-mono-mp3`;
     
     try {
@@ -106,9 +153,9 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
       audioRef.current = audio;
 
       audio.onended = () => {
-        setTtsLoading(false); // 播放结束后设置加载状态为false
+        setTtsLoading(false);
         if (audioUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(audioUrl); // 释放 Blob URL 资源
+            URL.revokeObjectURL(audioUrl);
         }
       };
       audio.onerror = (e) => {
@@ -126,28 +173,24 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
       alert('无法连接到语音服务，请检查网络或稍后再试。');
       setTtsLoading(false);
     }
-  }, [ttsLoading]); // ttsLoading 作为依赖，防止重复点击
-  // =========================================================================
+  }, [ttsLoading]);
 
-  // 当题目变化时，生成选项并自动朗读
   useEffect(() => {
-    if (quiz.length > 0 && currentQuestionIndex < quiz.length) {
+    if (quizState === 'playing' && quiz.length > 0 && currentQuestionIndex < quiz.length) {
       const currentQuestion = quiz[currentQuestionIndex]
       
       const otherWords = quiz.filter(item => item.word !== currentQuestion.word)
-      const distractors = shuffleArray(otherWords).slice(0, parsedNumOptions - 1)
+      const distractors = shuffleArray(otherWords).slice(0, numOptions - 1) // 使用 numOptions 变量
       
       const allOptions = shuffleArray([currentQuestion, ...distractors])
       setOptions(allOptions)
       
-      // 自动朗读当前词语
       speak(currentQuestion.word)
     }
-  }, [currentQuestionIndex, quiz, speak]) // 将 speak 加入依赖数组
+  }, [currentQuestionIndex, quiz, speak, quizState, numOptions]) // numOptions 作为依赖
 
-  // 处理答案选择
   const handleAnswerClick = (option) => {
-    if (quizState === 'answered') return
+    if (quizState === 'answered' || quizState === 'loading-data') return;
 
     const currentQuestion = quiz[currentQuestionIndex]
     setSelectedAnswer(option.word)
@@ -160,7 +203,6 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     }
     setQuizState('answered')
 
-    // 回答后停止当前播放
     if (audioRef.current) {
         audioRef.current.pause();
         if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
@@ -171,7 +213,6 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     }
   }
 
-  // 下一题
   const handleNextQuestion = () => {
     if (currentQuestionIndex < quiz.length - 1) {
       setCurrentQuestionIndex(prevIndex => prevIndex + 1)
@@ -183,10 +224,12 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     }
   }
   
-  // 重新开始
   const handleRestart = () => {
-    // 重新打乱题目，确保每次重玩都是新的顺序
-    setQuiz(isShuffle === 'true' ? shuffleArray(JSON.parse(quizData)) : JSON.parse(quizData))
+    if (!initialQuizData) {
+        setError('无法重新开始，原始题库数据丢失。');
+        return;
+    }
+    setQuiz(isShuffle ? shuffleArray(initialQuizData) : initialQuizData); // 使用 isShuffle 布尔值
     setCurrentQuestionIndex(0)
     setSelectedAnswer(null)
     setIsCorrect(null)
@@ -194,7 +237,6 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     setQuizState('playing')
   }
 
-  // 根据答案状态获取按钮样式
   const getButtonClass = (option) => {
     const baseClass = 'w-full text-left p-4 my-2 rounded-lg border-2 transition-all duration-300 transform hover:scale-105'
     
@@ -216,8 +258,16 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
     return <div className="max-w-2xl mx-auto p-6 bg-red-100 text-red-700 rounded-lg shadow-md">{error}</div>
   }
   
-  if (quiz.length === 0) {
-    return <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md text-center">正在加载题库...</div>
+  if (quizState === 'loading-data' || quiz.length === 0) {
+    return (
+        <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md text-center">
+            <svg className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p className="text-gray-600">正在从 Notion 加载题库...</p>
+        </div>
+    );
   }
 
   const currentQuestion = quiz[currentQuestionIndex]
@@ -262,7 +312,7 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
         <p className="text-gray-600 mb-3">请听发音，选择正确的词语：</p>
         <button
           onClick={() => speak(currentQuestion.word)}
-          disabled={ttsLoading} // 正在加载时禁用按钮
+          disabled={ttsLoading}
           className="p-6 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all transform hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="重播发音"
         >
@@ -280,7 +330,7 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
       {/* 选项区 */}
       <div>
         {options.map((option, index) => (
-          <button key={index} onClick={() => handleAnswerClick(option)} className={getButtonClass(option)} disabled={quizState === 'answered'}>
+          <button key={index} onClick={() => handleAnswerClick(option)} className={getButtonClass(option)} disabled={quizState === 'answered' || quizState === 'loading-data'}>
             <span className="text-lg font-medium">{option.word}</span>
           </button>
         ))}
@@ -317,7 +367,7 @@ const TingYinShiCi = ({ quizTitle = '听音识词', quizData, isShuffle = 'true'
                     </button>
                   </div>
                   <p className="text-gray-500">{currentQuestion.example1Translation}</p>
-                  {currentQuestion.example2 && ( // 如果有例句2才显示
+                  {currentQuestion.example2 && (
                     <>
                       <p className="font-semibold mt-1">例句2:</p>
                       <div className="flex items-center justify-between">
