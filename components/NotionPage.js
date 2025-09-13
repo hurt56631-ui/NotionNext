@@ -18,6 +18,7 @@ const CUSTOM_COMPONENTS_MAP = {
   // 【重要】只在这里注册您项目中真实存在的组件文件！
   // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
   '/components/XuanZeTi.js': dynamic(() => import('@/components/XuanZeTi'), { ssr: false }),
+  '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
 
   // 【未来扩展】当您创建了新的组件（如 TingYinShiCi.js）后，再来这里取消注释或添加新的一行。
   // '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
