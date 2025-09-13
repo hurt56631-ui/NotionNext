@@ -1,190 +1,179 @@
-// /components/XuanZeTi.js (移除 HSK 标签，选项卡片颜色调整)
-import React, { useState, useEffect, useRef } from 'react'
-import TextToSpeechButton from './TextToSpeechButton'
+// /components/NotionPage.js (最终修正版 - 只注册存在的组件)
 
-const XuanZeTi = ({ question, options, correctAnswerIndex, explanation }) => { // 移除 hskLevel prop
-  const [selectedOptionIndex, setSelectedOptionIndex] = useState(null)
-  const [isAnswered, setIsAnswered] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
+import { siteConfig } from '@/lib/config'
+import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
+import { isBrowser, loadExternalResource } from '@/lib/utils'
+import mediumZoom from '@fisch0920/medium-zoom'
+import 'katex/dist/katex.min.css'
+import dynamic from 'next/dynamic'
+import { useEffect, useRef } from 'react'
+import { NotionRenderer } from 'react-notion-x'
 
-  const correctAudioRef = useRef(null)
-  const wrongAudioRef = useRef(null)
+// =============================================================================
+// START: 自定义组件注册与渲染逻辑
+// =============================================================================
+
+// 1. 定义一个映射表，用于注册所有可以通过 !include 使用的组件
+const CUSTOM_COMPONENTS_MAP = {
+  // 【重要】只在这里注册您项目中真实存在的组件文件！
+  // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
+  '/components/XuanZeTi.js': dynamic(() => import('@/components/XuanZeTi'), { ssr: false }),
+
+  // 【未来扩展】当您创建了新的组件（如 TingYinShiCi.js）后，再来这里取消注释或添加新的一行。
+  // '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
+  // '/components/LianXianTi.js': dynamic(() => import('@/components/LianXianTi'), { ssr: false }),
+  // '/components/BeiDanCi.js': dynamic(() => import('@/components/BeiDanCi'), { ssr: false }),
+};
+
+// 2. 辅助函数：从 Notion 的富文本数组中提取纯文本
+const getTextContent = (richTextArray) => {
+  return richTextArray?.map(segment => segment[0])?.join('') || '';
+};
+
+// 3. 默认的 Notion 代码块渲染器
+const DefaultNotionCodeRenderer = dynamic(
+  () => import('react-notion-x/build/third-party/code').then(m => m.Code),
+  { ssr: false }
+);
+
+// 4. 创建一个自定义的 Code 块渲染器，用于拦截和处理 !include 命令
+const CustomCodeRenderer = (props) => {
+  const { block } = props;
+  const codeContent = getTextContent(block.properties?.title);
   
-  const speechSynthesisUtteranceRef = useRef(null);
-  const speechSynthesisRef = useRef(null);
+  if (codeContent && codeContent.trim().startsWith('!include')) {
+    try {
+      const includeRegex = /^!include\s+(\S+)\s*(\{.*\})?$/s;
+      const match = codeContent.trim().match(includeRegex);
 
-  // 选项卡片颜色数组 (调整，使其在白色背景下更突出)
-  const optionCardColors = [
-    'bg-primary/[0.1] text-primary border-primary/[0.3]', // 使用主题 primary 的浅色
-    'bg-secondary/[0.1] text-secondary border-secondary/[0.3]', // 使用主题 secondary 的浅色
-    'bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 border-blue-400 dark:border-blue-700',
-    'bg-green-200 dark:bg-green-800 text-green-900 dark:text-green-100 border-green-400 dark:border-green-700',
-    'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100 border-yellow-400 dark:border-yellow-700',
-    'bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-purple-400 dark:border-purple-700',
-    'bg-pink-200 dark:bg-pink-800 text-pink-900 dark:text-pink-100 border-pink-400 dark:border-pink-700',
-    'bg-indigo-200 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-100 border-indigo-400 dark:border-indigo-700',
-    'bg-teal-200 dark:bg-teal-800 text-teal-900 dark:text-teal-100 border-teal-400 dark:border-teal-700',
-    'bg-orange-200 dark:bg-orange-800 text-orange-900 dark:text-orange-100 border-orange-400 dark:border-orange-700',
-    'bg-cyan-200 dark:bg-cyan-800 text-cyan-900 dark:text-cyan-100 border-cyan-400 dark:border-cyan-700',
-  ];
+      if (match) {
+        const componentPath = match[1];
+        const propsJsonString = match[2];
+        const props = propsJsonString ? JSON.parse(propsJsonString) : {};
+
+        const DynamicComponent = CUSTOM_COMPONENTS_MAP[componentPath];
+
+        if (DynamicComponent) {
+          return <DynamicComponent {...props} />;
+        } else {
+          return (
+            <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
+              错误：自定义组件 "{componentPath}" 未在 NotionPage.js 中注册。
+            </div>
+          );
+        }
+      }
+    } catch (e) {
+      return (
+        <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
+          错误：解析 !include 块失败。请检查 JSON 语法。
+          <pre className="mt-2 text-sm whitespace-pre-wrap">{e.message}</pre>
+        </div>
+      );
+    }
+  }
+
+  return <DefaultNotionCodeRenderer {...props} />;
+};
+
+// =============================================================================
+// END: 自定义组件注册与渲染逻辑
+// =============================================================================
+
+
+/**
+ * 整个站点的核心组件
+ * 将Notion数据渲染成网页
+ */
+const NotionPage = ({ post, className }) => {
+  const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK')
+  const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK')
+  const SPOILER_TEXT_TAG = siteConfig('SPOILER_TEXT_TAG')
+
+  const zoom = isBrowser && mediumZoom({ background: 'rgba(0, 0, 0, 0.2)', margin: getMediumZoomMargin() });
+  const zoomRef = useRef(zoom ? zoom.clone() : null);
+  const IMAGE_ZOOM_IN_WIDTH = siteConfig('IMAGE_ZOOM_IN_WIDTH', 1200);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      correctAudioRef.current = new Audio('/sounds/correct.mp3') 
-      wrongAudioRef.current = new Audio('/sounds/wrong.mp3')   
-      
-      speechSynthesisRef.current = window.speechSynthesis;
-      speechSynthesisUtteranceRef.current = new SpeechSynthesisUtterance();
-      speechSynthesisUtteranceRef.current.lang = 'zh-CN';
-      speechSynthesisUtteranceRef.current.rate = 1;
-      speechSynthesisUtteranceRef.current.pitch = 1;
+    autoScrollToHash();
+  }, []);
+
+  useEffect(() => {
+    if (POST_DISABLE_GALLERY_CLICK) {
+      processGalleryImg(zoomRef?.current);
+    }
+    if (POST_DISABLE_DATABASE_CLICK) {
+      processDisableDatabaseUrl();
     }
 
-    return () => {
-      if (speechSynthesisRef.current && speechSynthesisRef.current.speaking) {
-        speechSynthesisRef.current.cancel();
-      }
-    };
-  }, [])
+    const observer = new MutationObserver((mutationsList) => {
+      mutationsList.forEach(mutation => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'class' && mutation.target.classList.contains('medium-zoom-image--opened')) {
+          setTimeout(() => {
+            const src = mutation?.target?.getAttribute('src');
+            mutation?.target?.setAttribute('src', compressImage(src, IMAGE_ZOOM_IN_WIDTH));
+          }, 800);
+        }
+      });
+    });
 
-  const playSound = (isCorrect) => {
-    if (isCorrect && correctAudioRef.current) {
-      correctAudioRef.current.currentTime = 0;
-      correctAudioRef.current.play().catch(e => console.error("Error playing correct sound:", e))
-    } else if (!isCorrect && wrongAudioRef.current) {
-      wrongAudioRef.current.currentTime = 0;
-      wrongAudioRef.current.play().catch(e => console.error("Error playing wrong sound:", e))
+    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [post]);
+
+  useEffect(() => {
+    if (SPOILER_TEXT_TAG) {
+      import('lodash/escapeRegExp').then(escapeRegExp => {
+        Promise.all([
+          loadExternalResource('/js/spoilerText.js', 'js'),
+          loadExternalResource('/css/spoiler-text.css', 'css')
+        ]).then(() => {
+          window.textToSpoiler && window.textToSpoiler(escapeRegExp.default(SPOILER_TEXT_TAG));
+        });
+      });
     }
-  }
 
-  const speakOptionText = (textToSpeak) => {
-    if (speechSynthesisRef.current && textToSpeak) {
-      if (speechSynthesisRef.current.speaking) {
-        speechSynthesisRef.current.cancel();
-      }
-      speechSynthesisUtteranceRef.current.text = textToSpeak;
-      speechSynthesisRef.current.speak(speechSynthesisUtteranceRef.current);
-    }
-  };
+    const timer = setTimeout(() => {
+      document.querySelectorAll('.notion-collection-page-properties')?.forEach(e => e.remove());
+    }, 1000);
 
-  const handleOptionClick = (index, optionText) => {
-    if (isAnswered) return
-
-    setSelectedOptionIndex(index)
-    setIsAnswered(true)
-    setShowFeedback(true)
-
-    playSound(index === correctAnswerIndex)
-    speakOptionText(optionText);
-  }
-
-  const handleReset = () => {
-    setShowFeedback(false)
-    if (speechSynthesisRef.current && speechSynthesisRef.current.speaking) {
-      speechSynthesisRef.current.cancel();
-    }
-    setTimeout(() => {
-      setSelectedOptionIndex(null)
-      setIsAnswered(false)
-    }, 300)
-  }
-
-  const getOptionClasses = (optionIndex) => {
-    let classes = 'w-full text-left p-3 rounded-md border transition-all duration-200 flex items-center '
-    const isCorrectOption = optionIndex === correctAnswerIndex
-    const isSelectedOption = optionIndex === selectedOptionIndex
-
-    // 基础颜色背景
-    const baseColorClass = optionCardColors[optionIndex % optionCardColors.length];
-    classes += baseColorClass + ' ';
-
-    if (isAnswered) {
-      if (isCorrectOption) {
-        classes += 'bg-secondary/[0.1] border-secondary text-secondary font-medium shadow-md ';
-      } else if (isSelectedOption && !isCorrectOption) {
-        classes += 'bg-red-100 border-red-400 text-red-600 font-medium dark:bg-red-900 dark:border-red-700 dark:text-red-400 shadow-md ';
-      } else {
-        classes += 'opacity-80 shadow-sm ';
-      }
-      classes += 'pointer-events-none ';
-    } else {
-      classes += 'hover:bg-opacity-80 hover:shadow-md hover:scale-[1.01] ';
-      if (isSelectedOption) {
-        classes += 'ring-2 ring-offset-2 ring-primary shadow-xl scale-[1.03] ';
-      } else {
-        classes += 'shadow-sm ';
-      }
-    }
-    return classes
-  }
+    return () => clearTimeout(timer);
+  }, [post]);
 
   return (
-    <div className="max-w-xl mx-auto my-8 p-6 bg-day-DEFAULT dark:bg-night-DEFAULT rounded-xl shadow-2 border border-stroke dark:border-dark-3">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-2xl font-bold text-dark-DEFAULT dark:text-gray-1 flex items-center">
-          {question}
-          <TextToSpeechButton text={question} lang="zh-CN" />
-        </h3>
-        {/* 移除 HSK 标签 */}
-        {/* {hskLevel && (
-          <span className={`px-3 py-1 text-sm font-bold rounded-full ml-3 ${getHskLevelColorClass(hskLevel)}`}>
-            HSK {hskLevel}
-            <TextToSpeechButton text={`HSK ${hskLevel} 级`} lang="zh-CN" />
-          </span>
-        )} */}
-      </div>
-
-      <div className="space-y-3">
-        {options.map((option, index) => (
-          <button
-            key={index}
-            onClick={() => handleOptionClick(index, option)}
-            disabled={isAnswered}
-            className={getOptionClasses(index)}
-          >
-            <span className="text-lg font-semibold flex-1 flex items-center">
-              {String.fromCharCode(65 + index)}. {option}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {isAnswered && (
-        <div className={`mt-8 ${showFeedback ? 'animate-fade-in-up-fast' : 'animate-fade-out-fast'}`}>
-          <div className="flex items-center space-x-3 mb-4">
-            {selectedOptionIndex === correctAnswerIndex ? (
-              <span className="text-secondary font-bold text-xl">
-                <i className="fas fa-check-circle mr-2"></i>回答正确！
-              </span>
-            ) : (
-              <span className="text-red-600 font-bold text-xl dark:text-red-400">
-                <i className="fas fa-times-circle mr-2"></i>回答错误！
-              </span>
-            )}
-          </div>
-
-          {explanation && (
-            <div className="mt-4 p-4 bg-gray-1 dark:bg-dark-2 border-t-2 border-stroke dark:border-dark-3 rounded-b-xl text-body-color dark:text-dark-7 shadow-inner animate-fade-in-fast">
-              <h4 className="font-bold text-lg mb-2 text-dark-DEFAULT dark:text-gray-1 flex items-center">
-                <i className="fas fa-lightbulb mr-2 text-warning"></i>解释：
-                <TextToSpeechButton text={explanation} lang="zh-CN" />
-              </h4>
-              <p>{explanation}</p>
-            </div>
-          )}
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleReset}
-              className="px-6 py-3 bg-dark-6 text-white font-medium rounded-lg shadow-md hover:bg-dark-5 focus:outline-none focus:ring-2 focus:ring-dark-7 focus:ring-offset-2 transition-colors duration-200"
-            >
-              重置
-            </button>
-          </div>
-        </div>
-      )}
+    <div id='notion-article' className={`mx-auto overflow-hidden ${className || ''}`}>
+      <NotionRenderer
+        recordMap={post?.blockMap}
+        mapPageUrl={mapPageUrl}
+        mapImageUrl={mapImgUrl}
+        components={{
+          Code: CustomCodeRenderer,
+          Collection,
+          Equation,
+          Modal,
+          Pdf,
+          Tweet
+        }}
+      />
+      <AdEmbed />
+      <PrismMac />
     </div>
-  )
-}
+  );
+};
 
-export default XuanZeTi
+
+// 下面的所有代码都保持原样，无需修改
+const processDisableDatabaseUrl = () => { if (isBrowser) { document.querySelectorAll('.notion-table a').forEach(e => e.removeAttribute('href')) } }
+const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgs = document.querySelectorAll('.notion-collection-card-cover img'); if (imgs && zoom) { imgs.forEach(i => zoom.attach(i)) } document.querySelectorAll('.notion-collection-card').forEach(e => e.removeAttribute('href')) } }, 800) }
+const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash) { const node = document.getElementById(hash.substring(1)); if (node) { node.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180) }
+const mapPageUrl = id => '/' + id.replace(/-/g, '')
+function getMediumZoomMargin() { const w = window.innerWidth; if (w < 500) return 8; if (w < 800) return 20; if (w < 1280) return 30; if (w < 1600) return 40; if (w < 1920) return 48; return 72; }
+const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
+const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), { ssr: false });
+const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
+const TweetEmbed = dynamic(() => import('react-tweet-embed'), { ssr: false });
+const AdEmbed = dynamic(() => import('@/components/GoogleAdsense').then(m => m.AdEmbed), { ssr: true });
+const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
+const Modal = dynamic(() => import('react-notion-x/build/third-party/modal').then(m => m.Modal), { ssr: false });
+const Tweet = ({ id }) => <TweetEmbed tweetId={id} />;
+export default NotionPage;
