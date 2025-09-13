@@ -2,15 +2,12 @@
 
 'use client'
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { FaVolumeUp, FaCheckCircle, FaTimesCircle, FaRedo } from 'react-icons/fa'
 
-// 文本清理函数
+// 文本清理函数 (可根据需要自行修改)
 const cleanTextForSpeech = (text) => {
-  if (!text) return '';
-  let cleaned = text;
-  // ... (您的清理规则)
-  return cleaned.replace(/\s+/g, ' ').trim();
+  return text ? text.replace(/\s+/g, ' ').trim() : '';
 };
 
 // 工具函数：洗牌数组
@@ -24,68 +21,74 @@ const shuffleArray = (array) => {
 };
 
 const TingYinShiCi = (props) => {
-  // =========================================================================
-  // [核心修改] 智能解析两种不同的 props 格式
-  // =========================================================================
-  const { quizTitle, numOptions, isShuffle, quizData, error: parseError } = useMemo(() => {
-    try {
-      // 检查是否是单行 JSON 格式: !include ... {"config": "{...}"} or !include ... {"prop":"value"}
-      // NotionNext 会把整个 {...} 作为名为 'config' 的 prop 传入
-      if (props.config) {
-        const parsedConfig = JSON.parse(props.config);
-        // 在单行JSON格式中，quizData/flashcards 本身也是一个字符串，需要再次解析
-        const data = JSON.parse(parsedConfig.quizData || parsedConfig.flashcards || '[]');
-        return {
-          quizTitle: parsedConfig.quizTitle || '听音识词',
-          numOptions: parseInt(parsedConfig.numOptions, 10) || 4,
-          isShuffle: parsedConfig.isShuffle === 'true' || parsedConfig.isShuffle === true,
-          quizData: data
-        };
-      }
-      
-      // 检查是否是多行 G-Prop 格式: !include- ... -G prop=`value`
-      if (props.quizData) {
-        const data = JSON.parse(props.quizData);
-        return {
-          quizTitle: props.quizTitle || '听音识词',
-          numOptions: parseInt(props.numOptions, 10) || 4,
-          isShuffle: props.isShuffle === 'true',
-          quizData: data
-        };
-      }
-      
-      // 如果两种格式都没有，则返回错误
-      return { error: '未提供题库数据 (quizData) 或组件配置 (config)。' };
+  const [quizData, setQuizData] = useState([]);
+  const [quizTitle, setQuizTitle] = useState('听音识词');
+  const [numOptions, setNumOptions] = useState(4);
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [error, setError] = useState(null);
 
-    } catch (e) {
-      console.error('解析组件属性失败:', e);
-      return { error: `组件属性解析失败，请检查Notion代码块中的JSON格式。错误: ${e.message}` };
+  // =========================================================================
+  // [核心修改] 模仿 BeiDanCi.js 的 props 解析逻辑
+  // =========================================================================
+  useEffect(() => {
+    try {
+        // NotionNext 的 !include ... {...} 语法会将整个 JSON 对象作为字符串放在 props.config 中
+        let config = {};
+        if (props.config && typeof props.config === 'string') {
+            config = JSON.parse(props.config);
+        } else {
+            // 兼容 -G propName = `value` 格式
+            config = props;
+        }
+
+        // 解析 quizData
+        let data = [];
+        const quizDataProp = config.quizData || config.flashcards; // 兼容 flashcards 字段
+        if (typeof quizDataProp === 'string') {
+            data = JSON.parse(quizDataProp);
+        } else if (Array.isArray(quizDataProp)) {
+            data = quizDataProp;
+        }
+        if (!Array.isArray(data) || data.length === 0) {
+            setError('题库数据 (quizData) 为空或格式不正确。');
+        }
+        setQuizData(data);
+        
+        // 解析其他配置
+        setQuizTitle(config.quizTitle || '听音识词');
+        setNumOptions(parseInt(config.numOptions, 10) || 4);
+        setIsShuffle(String(config.isShuffle) === 'true');
+
+    } catch(e) {
+        console.error("解析组件属性失败:", e);
+        setError(`组件属性解析失败，请检查Notion代码块中的JSON格式。错误: ${e.message}`);
     }
   }, [props]);
   // =========================================================================
 
-
-  const [quiz, setQuiz] = useState([])
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [options, setOptions] = useState([])
-  const [selectedAnswer, setSelectedAnswer] = useState(null)
-  const [isCorrect, setIsCorrect] = useState(null)
-  const [score, setScore] = useState(0)
-  const [quizState, setQuizState] = useState('playing') // 'playing', 'answered', 'finished'
-  const [ttsLoading, setTtsLoading] = useState(false)
-
+  const [quiz, setQuiz] = useState([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [options, setOptions] = useState([]);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [isCorrect, setIsCorrect] = useState(null);
+  const [score, setScore] = useState(0);
+  const [quizState, setQuizState] = useState('playing');
+  const [ttsLoading, setTtsLoading] = useState(false);
   const audioRef = useRef(null);
-
-  // 初始化数据
+  
+  // 初始化或当配置改变时，重置quiz
   useEffect(() => {
-    if (quizData && quizData.length > 0) {
+    if (quizData.length > 0) {
       setQuiz(isShuffle ? shuffleArray(quizData) : quizData);
+      setCurrentQuestionIndex(0);
+      setScore(0);
+      setSelectedAnswer(null);
+      setIsCorrect(null);
       setQuizState('playing');
     }
   }, [quizData, isShuffle]);
 
-
-  // 组件卸载时清理音频资源
+  // 组件卸载时清理音频
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -125,22 +128,16 @@ const TingYinShiCi = (props) => {
         setTtsLoading(false);
         if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
       };
-      audio.onerror = (e) => {
-        console.error('音频播放错误:', e);
-        setTtsLoading(false);
-        if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
-      };
-
+      audio.onerror = () => { setTtsLoading(false); if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl); };
       await audio.play();
     } catch (err) {
-      console.error('TTS 朗读失败:', err);
       setTtsLoading(false);
     }
   }, [ttsLoading]);
   
   // 生成选项并自动朗读
   useEffect(() => {
-    if (quiz.length > 0 && currentQuestionIndex < quiz.length) {
+    if (quizState === 'playing' && quiz.length > 0 && currentQuestionIndex < quiz.length) {
       const currentQuestion = quiz[currentQuestionIndex];
       const otherWords = quiz.filter(item => item.word !== currentQuestion.word);
       const distractors = shuffleArray(otherWords).slice(0, numOptions - 1);
@@ -148,120 +145,30 @@ const TingYinShiCi = (props) => {
       setOptions(allOptions);
       speak(currentQuestion.word);
     }
-  }, [currentQuestionIndex, quiz, numOptions, speak]);
+  }, [currentQuestionIndex, quiz, numOptions, speak, quizState]);
 
+  // ... (所有 handle* 函数和 UI 渲染代码与上一版基本一致，这里省略部分以节约篇幅)
+  const handleAnswerClick = (option) => { if (quizState !== 'answered') { const currentQuestion = quiz[currentQuestionIndex]; setSelectedAnswer(option.word); if (option.word === currentQuestion.word) { setIsCorrect(true); setScore(prev => prev + 1); } else { setIsCorrect(false); } setQuizState('answered'); }};
+  const handleNextQuestion = () => { if (currentQuestionIndex < quiz.length - 1) { setCurrentQuestionIndex(prev => prev + 1); setSelectedAnswer(null); setIsCorrect(null); setQuizState('playing'); } else { setQuizState('finished'); }};
+  const handleRestart = () => { setQuiz(isShuffle ? shuffleArray(quizData) : quizData); setCurrentQuestionIndex(0); setScore(0); setSelectedAnswer(null); setIsCorrect(null); setQuizState('playing'); };
+  const getButtonClass = (option) => { const base = 'w-full text-left p-4 my-2 rounded-lg border-2 transition-all duration-300'; if (quizState === 'answered') { const correctWord = quiz[currentQuestionIndex].word; if (option.word === correctWord) return `${base} bg-green-100 border-green-500`; if (option.word === selectedAnswer) return `${base} bg-red-100 border-red-500`; return `${base} bg-gray-100 border-gray-300 cursor-not-allowed`; } return `${base} bg-white border-gray-300 hover:bg-blue-50 hover:border-blue-500`; };
 
-  const handleAnswerClick = (option) => {
-    if (quizState === 'answered') return;
-    const currentQuestion = quiz[currentQuestionIndex];
-    setSelectedAnswer(option.word);
-    if (option.word === currentQuestion.word) {
-      setIsCorrect(true);
-      setScore(prevScore => prevScore + 1);
-    } else {
-      setIsCorrect(false);
-    }
-    setQuizState('answered');
-  };
-
-  const handleNextQuestion = () => {
-    if (currentQuestionIndex < quiz.length - 1) {
-      setCurrentQuestionIndex(prevIndex => prevIndex + 1);
-      setSelectedAnswer(null);
-      setIsCorrect(null);
-      setQuizState('playing');
-    } else {
-      setQuizState('finished');
-    }
-  };
+  if (error) { return <div className="w-full mx-auto my-8 p-6 bg-red-100 dark:bg-red-900/50 rounded-xl shadow-lg border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300">{error}</div>; }
+  if (quiz.length === 0) { return <div className="text-center p-8">正在加载或没有数据...</div>; }
   
-  const handleRestart = () => {
-    setQuiz(isShuffle ? shuffleArray(quizData) : quizData);
-    setCurrentQuestionIndex(0);
-    setSelectedAnswer(null);
-    setIsCorrect(null);
-    setScore(0);
-    setQuizState('playing');
-  };
-  
-  // ... (剩余的UI渲染部分代码保持不变) ...
-  // getButtonClass 函数, 返回的 JSX 结构等
-  
-  const getButtonClass = (option) => {
-    const baseClass = 'w-full text-left p-4 my-2 rounded-lg border-2 transition-all duration-300 transform hover:scale-105'
-    if (quizState === 'answered') {
-      const currentQuestion = quiz[currentQuestionIndex]
-      if (option.word === currentQuestion.word) {
-        return `${baseClass} bg-green-100 border-green-500 text-green-800`
-      }
-      if (option.word === selectedAnswer && !isCorrect) {
-        return `${baseClass} bg-red-100 border-red-500 text-red-800`
-      }
-      return `${baseClass} bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed`
-    }
-    return `${baseClass} bg-white border-gray-300 hover:bg-blue-50 hover:border-blue-500`
-  }
-
-  if (parseError) {
-    return <div className="max-w-2xl mx-auto p-6 bg-red-100 text-red-700 rounded-lg shadow-md">{parseError}</div>
-  }
-  if (!quizData || quiz.length === 0) {
-    return <div className="max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-md text-center">正在加载题库...</div>
-  }
   const currentQuestion = quiz[currentQuestionIndex];
-  if (!currentQuestion) return null; // 防止在数据切换时出现瞬间的 undefined 错误
+  if (!currentQuestion) return null;
 
-  if (quizState === 'finished') {
-    return (
-      <div className="max-w-2xl mx-auto p-8 bg-white rounded-2xl shadow-lg text-center transition-all duration-500">
-        <h2 className="text-3xl font-bold text-gray-800 mb-4">挑战完成!</h2>
-        <p className="text-xl text-gray-600 mb-6">你的得分是：<span className="text-4xl font-extrabold text-blue-600">{score}</span> / {quiz.length}</p>
-        <button onClick={handleRestart} className="flex items-center justify-center w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700"><FaRedo className="mr-2" />再来一次</button>
-      </div>
-    )
-  }
+  if (quizState === 'finished') { return <div className="max-w-2xl mx-auto p-8 bg-white rounded-2xl shadow-lg text-center"><h2 className="text-3xl font-bold mb-4">挑战完成!</h2><p className="text-xl mb-6">得分: <span className="text-4xl font-extrabold text-blue-600">{score}</span> / {quiz.length}</p><button onClick={handleRestart} className="flex items-center justify-center w-full px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700"><FaRedo className="mr-2"/>再来一次</button></div>; }
 
   return (
     <div className="max-w-2xl mx-auto p-6 bg-gray-50 rounded-2xl shadow-lg font-sans">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">{quizTitle}</h1>
-        <div className="flex justify-between items-center text-sm text-gray-500">
-          <span>进度: {currentQuestionIndex + 1} / {quiz.length}</span>
-          <span>得分: {score}</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${((currentQuestionIndex + 1) / quiz.length) * 100}%` }}></div></div>
-      </div>
-      <div className="text-center mb-6">
-        <p className="text-gray-600 mb-3">请听发音，选择正确的词语：</p>
-        <button onClick={() => speak(currentQuestion.word)} disabled={ttsLoading} className="p-6 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 transition-all transform hover:scale-110 disabled:opacity-50">
-          {ttsLoading ? (<svg className="animate-spin h-7 w-7 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>) : (<FaVolumeUp size={40} />)}
-        </button>
-      </div>
-      <div>{options.map((option, index) => (<button key={index} onClick={() => handleAnswerClick(option)} className={getButtonClass(option)} disabled={quizState === 'answered'}>{option.word}</button>))}</div>
-      {quizState === 'answered' && (
-        <div className="mt-6 p-4 rounded-lg animate-fade-in">
-          {isCorrect ? (
-            <div className="flex items-center text-green-700 bg-green-100 p-4 rounded-lg">
-              <FaCheckCircle className="mr-3 text-2xl" />
-              <div>
-                <p className="font-bold">回答正确！</p>
-                <p className="text-sm">{currentQuestion.pinyin} - {currentQuestion.meaning}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center text-red-700 bg-red-100 p-4 rounded-lg">
-              <FaTimesCircle className="mr-3 text-2xl" />
-              <div>
-                <p className="font-bold">回答错误。</p>
-                <p className="text-sm">正确答案是: {currentQuestion.word}</p>
-              </div>
-            </div>
-          )}
-          <button onClick={handleNextQuestion} className="w-full mt-4 px-6 py-3 bg-gray-800 text-white font-semibold rounded-lg shadow-md hover:bg-gray-900">{currentQuestionIndex === quiz.length - 1 ? '查看结果' : '下一题'}</button>
-        </div>
-      )}
+      <div className="mb-6"><h1 className="text-2xl font-bold text-center text-gray-800 mb-2">{quizTitle}</h1><div className="flex justify-between text-sm text-gray-500"><span>进度: {currentQuestionIndex + 1} / {quiz.length}</span><span>得分: {score}</span></div><div className="w-full bg-gray-200 rounded-full h-2.5 mt-2"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${((currentQuestionIndex + 1) / quiz.length) * 100}%` }}></div></div></div>
+      <div className="text-center mb-6"><p className="text-gray-600 mb-3">请听发音，选择正确的词语：</p><button onClick={() => speak(currentQuestion.word)} disabled={ttsLoading} className="p-6 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 disabled:opacity-50">{ttsLoading ? (<svg className="animate-spin h-7 w-7 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75" fill="currentColor"></path></svg>) : (<FaVolumeUp size={40}/>)}</button></div>
+      <div>{options.map((option, i) => <button key={i} onClick={() => handleAnswerClick(option)} className={getButtonClass(option)} disabled={quizState === 'answered'}>{option.word}</button>)}</div>
+      {quizState === 'answered' && (<div className="mt-6 p-4 rounded-lg"><div className={`flex items-center p-4 rounded-lg ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{isCorrect ? <FaCheckCircle className="mr-3 text-2xl"/> : <FaTimesCircle className="mr-3 text-2xl"/>}<div><p className="font-bold">{isCorrect ? '回答正确！' : '回答错误。'}</p><p className="text-sm">{isCorrect ? `${currentQuestion.pinyin} - ${currentQuestion.meaning}` : `正确答案是: ${currentQuestion.word}`}</p></div></div><button onClick={handleNextQuestion} className="w-full mt-4 px-6 py-3 bg-gray-800 text-white font-semibold rounded-lg shadow-md hover:bg-gray-900">{currentQuestionIndex === quiz.length - 1 ? '查看结果' : '下一题'}</button></div>)}
     </div>
-  )
+  );
 };
 
 export default TingYinShiCi;
