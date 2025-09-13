@@ -1,4 +1,4 @@
-// /components/NotionPage.js (已添加自定义组件注册和渲染功能)
+// /components/NotionPage.js (最终修正版 - 只注册存在的组件)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -10,20 +10,19 @@ import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
 // =============================================================================
-// START: 自定义组件注册与渲染逻辑 (这是新添加的部分)
+// START: 自定义组件注册与渲染逻辑
 // =============================================================================
 
 // 1. 定义一个映射表，用于注册所有可以通过 !include 使用的组件
 const CUSTOM_COMPONENTS_MAP = {
-  // 在这里添加您所有自定义组件的路径和导入语句
-  // 格式：'/components/组件文件名.js': dynamic(() => import('@/components/组件文件名'), { ssr: false }),
-  
-  // 示例：注册我们之前创建的组件
+  // 【重要】只在这里注册您项目中真实存在的组件文件！
+  // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
   '/components/XuanZeTi.js': dynamic(() => import('@/components/XuanZeTi'), { ssr: false }),
-  '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
-  // 您可以继续添加其他组件，比如 LianXianTi, BeiDanCi 等
-  '/components/LianXianTi.js': dynamic(() => import('@/components/LianXianTi'), { ssr: false }),
-  '/components/BeiDanCi.js': dynamic(() => import('@/components/BeiDanCi'), { ssr: false }),
+
+  // 【未来扩展】当您创建了新的组件（如 TingYinShiCi.js）后，再来这里取消注释或添加新的一行。
+  // '/components/TingYinShiCi.js': dynamic(() => import('@/components/TingYinShiCi'), { ssr: false }),
+  // '/components/LianXianTi.js': dynamic(() => import('@/components/LianXianTi'), { ssr: false }),
+  // '/components/BeiDanCi.js': dynamic(() => import('@/components/BeiDanCi'), { ssr: false }),
 };
 
 // 2. 辅助函数：从 Notion 的富文本数组中提取纯文本
@@ -42,26 +41,21 @@ const CustomCodeRenderer = (props) => {
   const { block } = props;
   const codeContent = getTextContent(block.properties?.title);
   
-  // 检查代码块内容是否以 '!include' 开头
-  // 注意：在您的原始版本中，语言判断可能不是必须的，我们先用内容判断
   if (codeContent && codeContent.trim().startsWith('!include')) {
     try {
-      // 解析 !include 语句，提取组件路径和 props
-      const includeRegex = /^!include\s+(\S+)\s*(\{.*\})?$/s; // s 标志允许多行
+      const includeRegex = /^!include\s+(\S+)\s*(\{.*\})?$/s;
       const match = codeContent.trim().match(includeRegex);
 
       if (match) {
-        const componentPath = match[1]; // 组件路径
-        const propsJsonString = match[2]; // props JSON 字符串
-        const props = propsJsonString ? JSON.parse(propsJsonString) : {}; // 解析 props
+        const componentPath = match[1];
+        const propsJsonString = match[2];
+        const props = propsJsonString ? JSON.parse(propsJsonString) : {};
 
         const DynamicComponent = CUSTOM_COMPONENTS_MAP[componentPath];
 
         if (DynamicComponent) {
-          // 如果组件已注册，则渲染它
           return <DynamicComponent {...props} />;
         } else {
-          // 如果组件未注册，显示错误提示
           return (
             <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
               错误：自定义组件 "{componentPath}" 未在 NotionPage.js 中注册。
@@ -70,7 +64,6 @@ const CustomCodeRenderer = (props) => {
         }
       }
     } catch (e) {
-      // 如果解析出错，显示错误信息
       return (
         <div className="p-3 my-2 text-red-700 bg-red-100 rounded-md">
           错误：解析 !include 块失败。请检查 JSON 语法。
@@ -80,7 +73,6 @@ const CustomCodeRenderer = (props) => {
     }
   }
 
-  // 如果不是 !include 块，则使用默认的代码块渲染器
   return <DefaultNotionCodeRenderer {...props} />;
 };
 
@@ -155,9 +147,7 @@ const NotionPage = ({ post, className }) => {
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
-          // 这是最关键的修改：将默认的 Code 组件替换为我们的自定义渲染器
-          Code: CustomCodeRenderer, 
-          // 其他组件保持不变
+          Code: CustomCodeRenderer,
           Collection,
           Equation,
           Modal,
@@ -173,77 +163,11 @@ const NotionPage = ({ post, className }) => {
 
 
 // 下面的所有代码都保持原样，无需修改
-/**
- * 页面的数据库链接禁止跳转，只能查看
- */
-const processDisableDatabaseUrl = () => {
-  if (isBrowser) {
-    const links = document.querySelectorAll('.notion-table a')
-    for (const e of links) {
-      e.removeAttribute('href')
-    }
-  }
-}
-
-/**
- * gallery视图，点击后是放大图片还是跳转到gallery的内部页面
- */
-const processGalleryImg = zoom => {
-  setTimeout(() => {
-    if (isBrowser) {
-      const imgList = document?.querySelectorAll(
-        '.notion-collection-card-cover img'
-      )
-      if (imgList && zoom) {
-        for (let i = 0; i < imgList.length; i++) {
-          zoom.attach(imgList[i])
-        }
-      }
-
-      const cards = document.getElementsByClassName('notion-collection-card')
-      for (const e of cards) {
-        e.removeAttribute('href')
-      }
-    }
-  }, 800)
-}
-
-/**
- * 根据url参数自动滚动到锚位置
- */
-const autoScrollToHash = () => {
-  setTimeout(() => {
-    const hash = window?.location?.hash
-    if (hash && hash.length > 0) {
-      const tocNode = document.getElementById(hash.substring(1))
-      if (tocNode && tocNode?.className?.indexOf('notion') > -1) {
-        tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      }
-    }
-  }, 180)
-}
-
-/**
- * 将id映射成博文内部链接。
- */
-const mapPageUrl = id => {
-  return '/' + id.replace(/-/g, '')
-}
-
-/**
- * 缩放
- */
-function getMediumZoomMargin() {
-  const width = window.innerWidth
-  if (width < 500) return 8
-  if (width < 800) return 20
-  if (width < 1280) return 30
-  if (width < 1600) return 40
-  if (width < 1920) return 48
-  return 72
-}
-
-// 动态导入的组件
+const processDisableDatabaseUrl = () => { if (isBrowser) { document.querySelectorAll('.notion-table a').forEach(e => e.removeAttribute('href')) } }
+const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgs = document.querySelectorAll('.notion-collection-card-cover img'); if (imgs && zoom) { imgs.forEach(i => zoom.attach(i)) } document.querySelectorAll('.notion-collection-card').forEach(e => e.removeAttribute('href')) } }, 800) }
+const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash) { const node = document.getElementById(hash.substring(1)); if (node) { node.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180) }
+const mapPageUrl = id => '/' + id.replace(/-/g, '')
+function getMediumZoomMargin() { const w = window.innerWidth; if (w < 500) return 8; if (w < 800) return 20; if (w < 1280) return 30; if (w < 1600) return 40; if (w < 1920) return 48; return 72; }
 const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
 const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), { ssr: false });
 const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
@@ -252,8 +176,4 @@ const AdEmbed = dynamic(() => import('@/components/GoogleAdsense').then(m => m.A
 const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
 const Modal = dynamic(() => import('react-notion-x/build/third-party/modal').then(m => m.Modal), { ssr: false });
 const Tweet = ({ id }) => <TweetEmbed tweetId={id} />;
-
-// 注意：我们把原始的 Code 动态导入移到了我们的自定义逻辑中 (DefaultNotionCodeRenderer)
-// const Code = dynamic(() => import('react-notion-x/build/third-party/code').then(m => m.Code), { ssr: false });
-
 export default NotionPage;
