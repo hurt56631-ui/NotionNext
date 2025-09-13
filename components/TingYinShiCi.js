@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { FaVolumeUp, FaCheckCircle, FaTimesCircle, FaRedo } from 'react-icons/fa'
 
-// 工具函数：洗牌数组
+// 工具函数：洗牌数组 (无需修改)
 const shuffleArray = (array) => {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -17,7 +17,7 @@ const shuffleArray = (array) => {
 
 const TingYinShiCi = (props) => {
   // ----------------------------------------------------------------------
-  // 1. 状态管理 State Management
+  // 1. 状态管理 (无需修改)
   // ----------------------------------------------------------------------
   const [quiz, setQuiz] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -28,20 +28,18 @@ const TingYinShiCi = (props) => {
   const [quizState, setQuizState] = useState('playing'); // playing, answered, finished
   const [ttsLoading, setTtsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const audioRef = useRef(null);
   
   // ----------------------------------------------------------------------
-  // 2. Props 解析 (完全模仿 BeiDanCi.js 的模式)
+  // 2. Props 解析 (无需修改，你的代码已经很健壮了)
   // ----------------------------------------------------------------------
   useEffect(() => {
     try {
-      // NotionNext 的 !include ... {...} 语法会将整个 JSON 对象作为字符串放在 props.config 中
       let effectiveProps = props;
       if (props.config && typeof props.config === 'string') {
         effectiveProps = JSON.parse(props.config);
       }
 
-      const dataProp = effectiveProps.quizData || effectiveProps.flashcards; // 兼容 flashcards
+      const dataProp = effectiveProps.quizData;
       let parsedData = [];
 
       if (typeof dataProp === 'string') {
@@ -59,7 +57,6 @@ const TingYinShiCi = (props) => {
       const shuffle = String(effectiveProps.isShuffle) === 'true';
       setQuiz(shuffle ? shuffleArray(parsedData) : parsedData);
       
-      // 重置状态
       setCurrentQuestionIndex(0);
       setScore(0);
       setSelectedAnswer(null);
@@ -72,14 +69,15 @@ const TingYinShiCi = (props) => {
       setError(`组件属性解析失败: ${e.message}`);
       setQuiz([]);
     }
-  }, [props]); // 依赖整个 props 对象，当 Notion 代码块变化时重新初始化
+  }, [props]);
 
   // ----------------------------------------------------------------------
-  // 3. 核心功能 Logic
+  // 3. 核心功能 Logic (这里是主要修改点)
   // ----------------------------------------------------------------------
   const speak = useCallback(async (text) => {
     if (!text || ttsLoading) return;
     setTtsLoading(true);
+    // 使用你提供的TTS API
     const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaochenMultilingualNeural&r=-20`;
     try {
       const response = await fetch(url);
@@ -101,26 +99,40 @@ const TingYinShiCi = (props) => {
     }
   }, [ttsLoading]);
 
-  // 生成选项并自动朗读
+  // === CHANGE START: 修改生成选项和自动朗读的逻辑 ===
   useEffect(() => {
     if (quizState === 'playing' && quiz.length > 0) {
       const currentQuestion = quiz[currentQuestionIndex];
-      const { questionTitle = '听音识词', numOptions = 4 } = props;
+      
+      // 检查新的数据结构是否有效
+      if (!currentQuestion || !currentQuestion.answer || !currentQuestion.distractors) {
+        setError(`第 ${currentQuestionIndex + 1} 题数据格式错误，缺少 answer 或 distractors 字段。`);
+        return;
+      }
 
-      const otherWords = quiz.filter(item => item.word !== currentQuestion.word);
-      const distractors = shuffleArray(otherWords).slice(0, numOptions - 1);
-      const allOptions = shuffleArray([currentQuestion, ...distractors]);
+      // 从当前问题中直接获取正确答案和干扰项，然后洗牌
+      const allOptions = shuffleArray([
+        currentQuestion.answer, 
+        ...currentQuestion.distractors
+      ]);
       
       setOptions(allOptions);
-      speak(currentQuestion.word);
+
+      // 朗读 `audio` 字段指定的文本
+      if (currentQuestion.audio) {
+        speak(currentQuestion.audio);
+      }
     }
-  }, [quiz, currentQuestionIndex, quizState, props, speak]);
+  }, [quiz, currentQuestionIndex, quizState, speak]);
 
   const handleAnswerClick = (option) => {
     if (quizState === 'answered') return;
+    
     const currentQuestion = quiz[currentQuestionIndex];
-    setSelectedAnswer(option.word);
-    if (option.word === currentQuestion.word) {
+    setSelectedAnswer(option);
+    
+    // 比较选项和当前问题的 `answer`
+    if (option === currentQuestion.answer) {
       setIsCorrect(true);
       setScore(s => s + 1);
     } else {
@@ -128,6 +140,7 @@ const TingYinShiCi = (props) => {
     }
     setQuizState('answered');
   };
+  // === CHANGE END ===
 
   const handleNextQuestion = () => {
     if (currentQuestionIndex < quiz.length - 1) {
@@ -141,14 +154,9 @@ const TingYinShiCi = (props) => {
   };
 
   const handleRestart = () => {
-    // 重新解析 props 来重置
-    const event = new Event('reset');
-    window.dispatchEvent(event);
-    // 这是一个技巧，通过改变 props 的引用来触发 useEffect 重新运行
-    const newProps = {...props};
-    // 实际上，我们只需要在 useEffect 中处理重置逻辑
+    // 简单的重置状态逻辑
     const shuffle = String(props.isShuffle) === 'true';
-    const parsedData = JSON.parse(props.quizData);
+    const parsedData = JSON.parse(props.config.quizData); // 假设 config 始终存在
     setQuiz(shuffle ? shuffleArray(parsedData) : parsedData);
     setCurrentQuestionIndex(0);
     setScore(0);
@@ -158,7 +166,7 @@ const TingYinShiCi = (props) => {
   };
 
   // ----------------------------------------------------------------------
-  // 4. 渲染 UI (Rendering)
+  // 4. 渲染 UI (Rendering) (这里是次要修改点，以展示诗句)
   // ----------------------------------------------------------------------
   if (error) {
     return <div className="p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>;
@@ -170,7 +178,8 @@ const TingYinShiCi = (props) => {
   const currentQuestion = quiz[currentQuestionIndex];
   if (!currentQuestion) return null;
 
-  const { questionTitle = '听音识词' } = props;
+  // === CHANGE START: 使用新的 prop 和 state 来渲染UI ===
+  const { title = '听音诗词' } = props.config ? JSON.parse(props.config) : props;
 
   if (quizState === 'finished') {
     return (
@@ -187,7 +196,7 @@ const TingYinShiCi = (props) => {
   return (
     <div className="max-w-2xl mx-auto p-6 bg-gray-50 rounded-2xl shadow-lg">
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-center mb-2">{questionTitle}</h1>
+        <h1 className="text-xl font-bold text-center mb-2">{title}</h1>
         <div className="flex justify-between text-sm text-gray-500">
           <span>{currentQuestionIndex + 1} / {quiz.length}</span>
           <span>得分: {score}</span>
@@ -197,36 +206,55 @@ const TingYinShiCi = (props) => {
         </div>
       </div>
       
+      {/* 展示诗句问题 */}
+      <div className="whitespace-pre-wrap text-center text-lg p-4 my-4 bg-white rounded-lg border">
+        {currentQuestion.question}
+      </div>
+      
       <div className="text-center my-6">
-        <button onClick={() => speak(currentQuestion.word)} disabled={ttsLoading} className="p-5 bg-blue-500 text-white rounded-full shadow-lg disabled:opacity-50">
+        <button onClick={() => speak(currentQuestion.audio)} disabled={ttsLoading} className="p-5 bg-blue-500 text-white rounded-full shadow-lg disabled:opacity-50 transition-transform transform hover:scale-110">
           {ttsLoading ? '...' : <FaVolumeUp size={30}/>}
         </button>
       </div>
       
-      <div>
+      {/* 渲染选项 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {options.map((opt, i) => (
           <button 
             key={i} 
             onClick={() => handleAnswerClick(opt)} 
-            className={`w-full text-left p-4 my-2 rounded-lg border-2 transition-colors ${quizState === 'answered' ? (opt.word === currentQuestion.word ? 'bg-green-100 border-green-500' : (opt.word === selectedAnswer ? 'bg-red-100 border-red-500' : 'bg-gray-100 border-gray-300')) : 'bg-white border-gray-300 hover:bg-blue-50'}`}
+            className={`w-full text-center p-4 my-1 rounded-lg border-2 transition-all duration-300 transform hover:-translate-y-1
+              ${quizState === 'answered' 
+                ? (opt === currentQuestion.answer 
+                    ? 'bg-green-100 border-green-500 ring-2 ring-green-500' 
+                    : (opt === selectedAnswer 
+                        ? 'bg-red-100 border-red-500' 
+                        : 'bg-gray-100 border-gray-300 opacity-70')) 
+                : 'bg-white border-gray-300 hover:border-blue-500 hover:shadow-md'}`}
             disabled={quizState === 'answered'}
           >
-            {opt.word}
+            {opt}
           </button>
         ))}
       </div>
       
       {quizState === 'answered' && (
-        <div className="mt-4">
-          <div className={`p-3 rounded-lg flex items-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`}>
-            {isCorrect ? <FaCheckCircle className="text-green-500 mr-2"/> : <FaTimesCircle className="text-red-500 mr-2"/>}
-            {isCorrect ? `正确！${currentQuestion.pinyin}` : `错误。正确答案是 ${currentQuestion.word}`}
+        <div className="mt-6 p-4 rounded-lg bg-gray-100 border">
+          <div className={`flex items-center mb-3 ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+            {isCorrect ? <FaCheckCircle className="mr-2"/> : <FaTimesCircle className="mr-2"/>}
+            <span className="font-bold">
+              {isCorrect ? '回答正确！' : `回答错误。正确答案是：${currentQuestion.answer}`}
+            </span>
           </div>
-          <button onClick={handleNextQuestion} className="w-full mt-2 py-2 bg-gray-800 text-white rounded-lg">
-            {currentQuestionIndex < quiz.length - 1 ? '下一题' : '完成'}
+          {currentQuestion.pinyin && <p className="text-gray-700"><strong>拼音：</strong> {currentQuestion.pinyin}</p>}
+          {currentQuestion.explanation && <p className="text-gray-600 mt-1"><strong>解析：</strong> {currentQuestion.explanation}</p>}
+
+          <button onClick={handleNextQuestion} className="w-full mt-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900">
+            {currentQuestionIndex < quiz.length - 1 ? '下一题' : '查看结果'}
           </button>
         </div>
       )}
+      {/* === CHANGE END === */}
     </div>
   );
 };
