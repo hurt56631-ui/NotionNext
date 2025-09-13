@@ -298,3 +298,69 @@ img {
   @keyframes l1 {
   0% {background-position: right}
 }
+
+/* ================================================================== */
+/* START: 自定义组件美化样式 (这是新添加的部分)                           */
+/* ================================================================== */
+
+/* 1. Neumorphic (拟物化) 阴影效果 */
+.shadow-neumorphic-light {
+  box-shadow: 5px 5px 10px #d1d1d1, -5px -5px 10px #ffffff;
+}
+.dark .shadow-neumorphic-light {
+  box-shadow: none; /* 在暗黑模式下，浅色阴影不好看，可以取消 */
+}
+
+.shadow-neumorphic-light-inset {
+  box-shadow: inset 5px 5px 10px #d1d1d1, inset -5px -5px 10px #ffffff;
+}
+.dark .shadow-neumorphic-light-inset {
+  box-shadow: none;
+}
+
+.shadow-neumorphic-dark {
+  box-shadow: none; /* 在浅色模式下不显示 */
+}
+.dark .shadow-neumorphic-dark {
+  box-shadow: 5px 5px 10px #1a1a1a, -5px -5px 10px #2c2c2c;
+}
+
+.shadow-neumorphic-dark-inset {
+  box-shadow: none;
+}
+.dark .shadow-neumorphic-dark-inset {
+  box-shadow: inset 5px 5px 10px #1a1a1a, inset -5px -5px 10px #2c2c2c;
+}
+
+
+/* 2. 自定义动画效果 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 3. 将动画应用到 Tailwind 类名 */
+@layer utilities {
+  .animate-shake {
+    animation: shake 0.5s ease-in-out;
+  }
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+  }
+}
+
+/* ================================================================== */
+/* END: 自定义组件美化样式                                            */
+/* ================================================================== */
