@@ -1,212 +1,184 @@
-// /components/XuanZeTi.js (最终版 - 内置TTS功能，完全独立)
+// /components/XuanZeTi.js (移除 HSK 标签，选项卡片颜色调整)
+import React, { useState, useEffect, useRef } from 'react'
+import TextToSpeechButton from './TextToSpeechButton'
 
-'use client'
-
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-
-// --- TTS 功能模块开始 (从 TextToSpeechButton.js 提取并集成) ---
-
-// 1. 文本清理函数
-const cleanTextForSpeech = (text) => {
-  if (!text) return '';
-  let cleaned = text;
-  // 移除括号和其中的内容，移除Markdown标记，移除拼音，移除表情符号等
-  cleaned = cleaned.replace(/【.*?】|\[.*?\]/g, '');
-  cleaned = cleaned.replace(/\b[a-zA-ZüÜ]+[1-5]\b\s*/g, '');
-  cleaned = cleaned.replace(/\*\*/g, '').replace(/#{1,6}\s/g, '').replace(/[-*]\s/g, '');
-  const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
-  cleaned = cleaned.replace(emojiRegex, '');
-  cleaned = cleaned.replace(/[()]/g, ' ');
-  return cleaned.replace(/\s+/g, ' ').trim();
-};
-
-// 2. 独立的 TTS 按钮子组件 (UI 和逻辑)
-const TTSButton = ({ textToSpeak }) => {
-  const [playbackState, setPlaybackState] = useState('idle'); // idle, loading, playing, paused
-  const audioRef = useRef(null);
-
-  // 组件卸载时清理音频
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        if (audioRef.current.src && audioRef.current.src.startsWith('blob:')) {
-          URL.revokeObjectURL(audioRef.current.src);
-        }
-      }
-    };
-  }, []);
-
-  const handleTogglePlayback = useCallback(async (e) => {
-    e.stopPropagation(); // 阻止事件冒泡到父级按钮
-
-    if (playbackState === 'playing') {
-      audioRef.current?.pause();
-      return;
-    }
-    if (playbackState === 'paused') {
-      audioRef.current?.play();
-      return;
-    }
-
-    const cleanedText = cleanTextForSpeech(textToSpeak);
-    if (!cleanedText || playbackState === 'loading') return;
-
-    setPlaybackState('loading');
-    const encodedText = encodeURIComponent(cleanedText);
-    const url = `https://t.leftsite.cn/tts?t=${encodedText}&v=zh-CN-XiaochenMultilingualNeural&r=-20&p=0&o=audio-24khz-48kbitrate-mono-mp3`;
-    
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('API 请求失败');
-      
-      const audioBlob = await response.blob();
-      if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
-      
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      audio.onplay = () => setPlaybackState('playing');
-      audio.onpause = () => setPlaybackState('paused');
-      audio.onended = () => setPlaybackState('idle');
-      audio.onerror = () => { setPlaybackState('idle'); };
-
-      await audio.play();
-    } catch (err) {
-      setPlaybackState('idle');
-    }
-  }, [playbackState, textToSpeak]);
-  
-  const renderIcon = () => {
-    switch (playbackState) {
-      case 'loading':
-        return <i className="fas fa-spinner fa-spin w-5 h-5 flex items-center justify-center"></i>;
-      case 'playing':
-        return <i className="fas fa-pause w-5 h-5 flex items-center justify-center"></i>;
-      case 'paused':
-      case 'idle':
-      default:
-        return <i className="fas fa-volume-up w-5 h-5 flex items-center justify-center"></i>;
-    }
-  };
-
-  return (
-    <span
-      onClick={handleTogglePlayback}
-      className={`inline-flex items-center justify-center p-2 rounded-full transition-all duration-200 transform active:scale-90 ml-2 
-        ${playbackState === 'loading' ? 'text-gray-400 cursor-not-allowed' : 'text-sky-600 hover:bg-sky-600/10'}`}
-      aria-label={`朗读: ${textToSpeak}`}
-    >
-      {renderIcon()}
-    </span>
-  );
-};
-
-// --- TTS 功能模块结束 ---
-
-
-const XuanZeTi = ({ question, options = [], correctAnswerIndex, explanation }) => {
+const XuanZeTi = ({ question, options, correctAnswerIndex, explanation }) => { // 移除 hskLevel prop
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(null)
   const [isAnswered, setIsAnswered] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
 
   const correctAudioRef = useRef(null)
   const wrongAudioRef = useRef(null)
+  
+  const speechSynthesisUtteranceRef = useRef(null);
+  const speechSynthesisRef = useRef(null);
+
+  // 选项卡片颜色数组 (调整，使其在白色背景下更突出)
+  const optionCardColors = [
+    'bg-primary/[0.1] text-primary border-primary/[0.3]', // 使用主题 primary 的浅色
+    'bg-secondary/[0.1] text-secondary border-secondary/[0.3]', // 使用主题 secondary 的浅色
+    'bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 border-blue-400 dark:border-blue-700',
+    'bg-green-200 dark:bg-green-800 text-green-900 dark:text-green-100 border-green-400 dark:border-green-700',
+    'bg-yellow-200 dark:bg-yellow-800 text-yellow-900 dark:text-yellow-100 border-yellow-400 dark:border-yellow-700',
+    'bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-purple-400 dark:border-purple-700',
+    'bg-pink-200 dark:bg-pink-800 text-pink-900 dark:text-pink-100 border-pink-400 dark:border-pink-700',
+    'bg-indigo-200 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-100 border-indigo-400 dark:border-indigo-700',
+    'bg-teal-200 dark:bg-teal-800 text-teal-900 dark:text-teal-100 border-teal-400 dark:border-teal-700',
+    'bg-orange-200 dark:bg-orange-800 text-orange-900 dark:text-orange-100 border-orange-400 dark:border-orange-700',
+    'bg-cyan-200 dark:bg-cyan-800 text-cyan-900 dark:text-cyan-100 border-cyan-400 dark:border-cyan-700',
+  ];
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      correctAudioRef.current = new Audio('/sounds/correct.mp3')
-      wrongAudioRef.current = new Audio('/sounds/wrong.mp3')
+      correctAudioRef.current = new Audio('/sounds/correct.mp3') 
+      wrongAudioRef.current = new Audio('/sounds/wrong.mp3')   
+      
+      speechSynthesisRef.current = window.speechSynthesis;
+      speechSynthesisUtteranceRef.current = new SpeechSynthesisUtterance();
+      speechSynthesisUtteranceRef.current.lang = 'zh-CN';
+      speechSynthesisUtteranceRef.current.rate = 1;
+      speechSynthesisUtteranceRef.current.pitch = 1;
     }
+
+    return () => {
+      if (speechSynthesisRef.current && speechSynthesisRef.current.speaking) {
+        speechSynthesisRef.current.cancel();
+      }
+    };
   }, [])
 
   const playSound = (isCorrect) => {
-    const audio = isCorrect ? correctAudioRef.current : wrongAudioRef.current
-    if (audio) {
-      audio.currentTime = 0
-      audio.play().catch(e => console.error("音频播放失败:", e))
+    if (isCorrect && correctAudioRef.current) {
+      correctAudioRef.current.currentTime = 0;
+      correctAudioRef.current.play().catch(e => console.error("Error playing correct sound:", e))
+    } else if (!isCorrect && wrongAudioRef.current) {
+      wrongAudioRef.current.currentTime = 0;
+      wrongAudioRef.current.play().catch(e => console.error("Error playing wrong sound:", e))
     }
   }
 
-  const handleOptionClick = (index) => {
+  const speakOptionText = (textToSpeak) => {
+    if (speechSynthesisRef.current && textToSpeak) {
+      if (speechSynthesisRef.current.speaking) {
+        speechSynthesisRef.current.cancel();
+      }
+      speechSynthesisUtteranceRef.current.text = textToSpeak;
+      speechSynthesisRef.current.speak(speechSynthesisUtteranceRef.current);
+    }
+  };
+
+  const handleOptionClick = (index, optionText) => {
     if (isAnswered) return
+
     setSelectedOptionIndex(index)
     setIsAnswered(true)
     setShowFeedback(true)
+
     playSound(index === correctAnswerIndex)
+    speakOptionText(optionText);
   }
 
   const handleReset = () => {
     setShowFeedback(false)
+    if (speechSynthesisRef.current && speechSynthesisRef.current.speaking) {
+      speechSynthesisRef.current.cancel();
+    }
     setTimeout(() => {
       setSelectedOptionIndex(null)
       setIsAnswered(false)
     }, 300)
   }
 
-  const getOptionClasses = (index) => {
-    let baseClasses = 'w-full text-left p-4 rounded-lg border-2 transition-all duration-300 flex items-center justify-between font-medium shadow-sm'
-    
+  const getOptionClasses = (optionIndex) => {
+    let classes = 'w-full text-left p-3 rounded-md border transition-all duration-200 flex items-center '
+    const isCorrectOption = optionIndex === correctAnswerIndex
+    const isSelectedOption = optionIndex === selectedOptionIndex
+
+    // 基础颜色背景
+    const baseColorClass = optionCardColors[optionIndex % optionCardColors.length];
+    classes += baseColorClass + ' ';
+
     if (isAnswered) {
-      const isCorrectOption = index === correctAnswerIndex
-      const isSelectedOption = index === selectedOptionIndex
-
-      if (isCorrectOption) return `${baseClasses} bg-secondary/10 border-secondary text-secondary ring-2 ring-secondary scale-105 shadow-lg`
-      if (isSelectedOption) return `${baseClasses} bg-red-100 border-red-400 text-red-600 dark:bg-red-900/50 dark:border-red-700 dark:text-red-400 animate-shake`
-      return `${baseClasses} bg-gray-100 border-gray-300 text-gray-500 opacity-70 dark:bg-dark-2 dark:border-dark-3 dark:text-dark-7 pointer-events-none`
+      if (isCorrectOption) {
+        classes += 'bg-secondary/[0.1] border-secondary text-secondary font-medium shadow-md ';
+      } else if (isSelectedOption && !isCorrectOption) {
+        classes += 'bg-red-100 border-red-400 text-red-600 font-medium dark:bg-red-900 dark:border-red-700 dark:text-red-400 shadow-md ';
+      } else {
+        classes += 'opacity-80 shadow-sm ';
+      }
+      classes += 'pointer-events-none ';
+    } else {
+      classes += 'hover:bg-opacity-80 hover:shadow-md hover:scale-[1.01] ';
+      if (isSelectedOption) {
+        classes += 'ring-2 ring-offset-2 ring-primary shadow-xl scale-[1.03] ';
+      } else {
+        classes += 'shadow-sm ';
+      }
     }
-    
-    return `${baseClasses} bg-white dark:bg-dark-2 border-gray-300 dark:border-dark-3 text-dark-DEFAULT dark:text-gray-1 hover:border-primary hover:text-primary hover:shadow-md cursor-pointer`
-  }
-
-  const FeedbackIcon = ({ isCorrect }) => {
-    if (isCorrect) return <span className="text-secondary font-bold text-xl flex items-center"><i className="fas fa-check-circle mr-2"></i>回答正确！</span>
-    return <span className="text-red-600 dark:text-red-400 font-bold text-xl flex items-center"><i className="fas fa-times-circle mr-2"></i>回答错误！</span>
+    return classes
   }
 
   return (
-    <div className="max-w-2xl mx-auto my-8 p-6 bg-day-DEFAULT dark:bg-night-DEFAULT rounded-xl shadow-2 border border-stroke dark:border-dark-3">
-      <div className="flex justify-between items-start mb-6">
+    <div className="max-w-xl mx-auto my-8 p-6 bg-day-DEFAULT dark:bg-night-DEFAULT rounded-xl shadow-2 border border-stroke dark:border-dark-3">
+      <div className="flex justify-between items-center mb-6">
         <h3 className="text-2xl font-bold text-dark-DEFAULT dark:text-gray-1 flex items-center">
           {question}
-          <TTSButton textToSpeak={question} />
+          <TextToSpeechButton text={question} lang="zh-CN" />
         </h3>
+        {/* 移除 HSK 标签 */}
+        {/* {hskLevel && (
+          <span className={`px-3 py-1 text-sm font-bold rounded-full ml-3 ${getHskLevelColorClass(hskLevel)}`}>
+            HSK {hskLevel}
+            <TextToSpeechButton text={`HSK ${hskLevel} 级`} lang="zh-CN" />
+          </span>
+        )} */}
       </div>
-      <div className="space-y-4">
+
+      <div className="space-y-3">
         {options.map((option, index) => (
-          <button key={index} onClick={() => handleOptionClick(index)} disabled={isAnswered} className={getOptionClasses(index)}>
-            <span className="text-lg flex items-center">
-              <span className="font-semibold mr-3">{String.fromCharCode(65 + index)}.</span>
-              {option}
-              {/* 为每个选项添加TTS按钮 */}
-              <TTSButton textToSpeak={option} />
+          <button
+            key={index}
+            onClick={() => handleOptionClick(index, option)}
+            disabled={isAnswered}
+            className={getOptionClasses(index)}
+          >
+            <span className="text-lg font-semibold flex-1 flex items-center">
+              {String.fromCharCode(65 + index)}. {option}
             </span>
-            {isAnswered && index === correctAnswerIndex && <i className="fas fa-check text-secondary"></i>}
-            {isAnswered && index === selectedOptionIndex && index !== correctAnswerIndex && <i className="fas fa-times text-red-500"></i>}
           </button>
         ))}
       </div>
+
       {isAnswered && (
-        <div className={`mt-8 ${showFeedback ? 'animate-fade-in-up' : 'animate-fade-out'}`}>
-          <div className="p-5 bg-gray-1 dark:bg-dark-2 border-t-4 border-primary rounded-b-lg shadow-inner">
-            <div className="flex items-center space-x-3 mb-4">
-               <FeedbackIcon isCorrect={selectedOptionIndex === correctAnswerIndex} />
-            </div>
-            {explanation && (
-              <div>
-                <h4 className="font-bold text-lg mb-2 text-dark-DEFAULT dark:text-gray-1 flex items-center">
-                  <i className="fas fa-lightbulb mr-2 text-yellow-500"></i>
-                  解析
-                  <TTSButton textToSpeak={explanation} />
-                </h4>
-                <p className="text-body-color dark:text-dark-7">{explanation}</p>
-              </div>
+        <div className={`mt-8 ${showFeedback ? 'animate-fade-in-up-fast' : 'animate-fade-out-fast'}`}>
+          <div className="flex items-center space-x-3 mb-4">
+            {selectedOptionIndex === correctAnswerIndex ? (
+              <span className="text-secondary font-bold text-xl">
+                <i className="fas fa-check-circle mr-2"></i>回答正确！
+              </span>
+            ) : (
+              <span className="text-red-600 font-bold text-xl dark:text-red-400">
+                <i className="fas fa-times-circle mr-2"></i>回答错误！
+              </span>
             )}
           </div>
+
+          {explanation && (
+            <div className="mt-4 p-4 bg-gray-1 dark:bg-dark-2 border-t-2 border-stroke dark:border-dark-3 rounded-b-xl text-body-color dark:text-dark-7 shadow-inner animate-fade-in-fast">
+              <h4 className="font-bold text-lg mb-2 text-dark-DEFAULT dark:text-gray-1 flex items-center">
+                <i className="fas fa-lightbulb mr-2 text-warning"></i>解释：
+                <TextToSpeechButton text={explanation} lang="zh-CN" />
+              </h4>
+              <p>{explanation}</p>
+            </div>
+          )}
+
           <div className="mt-6 flex justify-end">
-            <button onClick={handleReset} className="px-8 py-3 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-blue-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200">
-              再试一次
+            <button
+              onClick={handleReset}
+              className="px-6 py-3 bg-dark-6 text-white font-medium rounded-lg shadow-md hover:bg-dark-5 focus:outline-none focus:ring-2 focus:ring-dark-7 focus:ring-offset-2 transition-colors duration-200"
+            >
+              重置
             </button>
           </div>
         </div>
