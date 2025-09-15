@@ -2,40 +2,65 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
+// --- 辅助函数 ---
+
 // TTS 朗读函数
 const speakText = (text) => {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // 停止上一个可能正在进行的朗读
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     window.speechSynthesis.speak(utterance);
-  } else {
-    console.warn("当前环境不支持 Web Speech API (TTS)。");
   }
 };
+
+// 拼音对比函数，生成带对错状态的数组
+const comparePinyin = (correct, recognized) => {
+  if (!recognized) return null;
+  const result = [];
+  const maxLength = Math.max(correct.length, recognized.length);
+
+  for (let i = 0; i < maxLength; i++) {
+    const correctChar = correct[i];
+    const recognizedChar = recognized[i];
+
+    if (recognizedChar) {
+      result.push({
+        char: recognizedChar,
+        status: correctChar === recognizedChar ? 'correct' : 'incorrect',
+      });
+    }
+  }
+  return result;
+};
+
+
+// --- 主组件 ---
 
 const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] }) => {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentPinyin, setCurrentPinyin] = useState('...');
   
-  // 用于语音识别和结果反馈的状态
-  const [isChecking, setIsChecking] = useState(false);
+  // 语音识别相关状态
+  const [isRecognizing, setIsRecognizing] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const [comparisonResult, setComparisonResult] = useState(null); // 'correct', 'incorrect', or null
+  const [pinyinComparison, setPinyinComparison] = useState(null); // 用于存储拼音对比结果数组
+  const recognitionRef = useRef(null); // 用于持有 recognition 实例
 
   const currentWord = quizData.length > 0 ? quizData[currentWordIndex].word : '你好';
 
-  // 当 currentWord 改变时，重置状态并更新拼音
+  // 当单词切换时，重置所有状态并获取新拼音
   useEffect(() => {
-    // 切换单词时，重置所有反馈状态
+    setIsRecognizing(false);
     setRecognizedText('');
-    setComparisonResult(null);
-    setIsChecking(false);
+    setPinyinComparison(null);
+    if (recognitionRef.current) {
+        recognitionRef.current.abort(); // 确保旧的识别实例被终止
+    }
 
     if (currentWord) {
-      setCurrentPinyin('...'); // 显示加载中
+      setCurrentPinyin('...');
       import('pinyin-pro').then(({ pinyin }) => {
-        // 设置为带声调符号的拼音
         setCurrentPinyin(pinyin(currentWord, { toneType: 'symbol' }));
       }).catch(error => {
         console.error("加载 pinyin-pro 失败:", error);
@@ -44,62 +69,66 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
     }
   }, [currentWord]);
 
-  // 检查发音的函数
-  const checkPronunciation = useCallback(() => {
+  // 开始语音识别
+  const startRecognition = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('抱歉，您的浏览器不支持语音识别功能。请尝试使用 Chrome 或 Safari 浏览器。');
+      alert('抱歉，您的浏览器不支持语音识别功能。');
       return;
     }
 
-    setIsChecking(true);
-    setRecognizedText('请开始说话...');
-    setComparisonResult(null);
+    setRecognizedText('');
+    setPinyinComparison(null);
+    setIsRecognizing(true);
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN'; // 设置识别语言为中文
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    recognition.lang = 'zh-CN';
+    recognition.continuous = true; // 持续识别
+    recognition.interimResults = true; // 获取中间结果
 
-    recognition.start();
+    recognitionRef.current = recognition;
 
     recognition.onresult = (event) => {
-      const speechResult = event.results[0][0].transcript.replace(/[，。？！,!?\s]/g, ''); // 去除所有标点和空格
-      setRecognizedText(`识别结果: "${speechResult}"`);
-      if (speechResult === currentWord) {
-        setComparisonResult('correct');
-      } else {
-        setComparisonResult('incorrect');
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+            // isFinal 事件触发后，我们不再需要手动停止
+            stopRecognition(); 
+        }
+        interimTranscript += event.results[i][0].transcript;
       }
+      setRecognizedText(interimTranscript);
     };
 
     recognition.onerror = (event) => {
       console.error('语音识别错误:', event.error);
-      if (event.error === 'no-speech') {
-        setRecognizedText('未检测到语音，请重试。');
-      } else if (event.error === 'not-allowed') {
-        setRecognizedText('麦克风权限被拒绝。');
-      } else {
-        setRecognizedText('识别失败，请重试。');
-      }
-      setComparisonResult(null);
+      setRecognizedText(`识别出错: ${event.error}`);
     };
 
     recognition.onend = () => {
-      setIsChecking(false);
+      setIsRecognizing(false);
+      // 在识别结束后进行对比
+      import('pinyin-pro').then(({ pinyin }) => {
+        const recognizedPinyin = pinyin(recognizedText.replace(/[，。？！,!?\s]/g, ''), { toneType: 'symbol' });
+        setPinyinComparison(comparePinyin(currentPinyin.replace(/\s/g, ''), recognizedPinyin.replace(/\s/g, '')));
+      });
     };
 
-  }, [currentWord]);
+    recognition.start();
+  }, [currentPinyin, recognizedText]);
+
+  // 手动停止语音识别
+  const stopRecognition = useCallback(() => {
+    if (recognitionRef.current && isRecognizing) {
+      recognitionRef.current.stop();
+      setIsRecognizing(false); // 立即更新UI状态
+    }
+  }, [isRecognizing]);
+
 
   const playStandardAudio = useCallback(() => speakText(currentWord), [currentWord]);
-
-  const nextWord = useCallback(() => {
-    setCurrentWordIndex((prevIndex) => (prevIndex + 1) % quizData.length);
-  }, [quizData.length]);
-
-  const prevWord = useCallback(() => {
-    setCurrentWordIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : quizData.length - 1));
-  }, [quizData.length]);
+  const nextWord = useCallback(() => setCurrentWordIndex(prev => (prev + 1) % quizData.length), [quizData.length]);
+  const prevWord = useCallback(() => setCurrentWordIndex(prev => (prev > 0 ? prev - 1 : quizData.length - 1)), [quizData.length]);
 
   if (quizData.length === 0) {
     return <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>请在 Notion 中配置发音练习数据。</div>;
@@ -108,80 +137,87 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
   return (
     <div style={{
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      padding: '20px',
+      padding: '2.5rem 2rem', // 增加内边距
       border: '1px solid #e2e8f0',
-      borderRadius: '12px',
-      maxWidth: '480px',
-      margin: '20px auto',
+      borderRadius: '1rem', // 更大的圆角
+      maxWidth: '560px', // 卡片更宽
+      margin: '2.5rem auto',
       textAlign: 'center',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      backgroundColor: '#ffffff',
+      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
     }}>
-      <h2 style={{ color: '#2d3748', fontWeight: '600' }}>{title}</h2>
+      <h2 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '1.5rem', marginBottom: '2.5rem' }}>{title}</h2>
       
-      <div style={{ margin: '25px 0', borderBottom: '1px solid #edf2f7', paddingBottom: '25px' }}>
-        <p style={{ fontSize: '4em', fontWeight: 'bold', color: '#2b6cb0', margin: '0', letterSpacing: '0.05em' }}>{currentWord}</p>
-        <p style={{ fontSize: '2em', color: '#4a5568', margin: '8px 0 0 0', letterSpacing: '0.05em' }}>{currentPinyin}</p>
+      <div style={{ marginBottom: '2.5rem' }}>
+        <p style={{ fontSize: '2.25rem', color: '#4a5568', margin: '0 0 0.5rem 0', letterSpacing: '0.05em' }}>{currentPinyin}</p>
+        <p style={{ fontSize: '6rem', fontWeight: 'bold', color: '#2b6cb0', margin: '0', letterSpacing: '0.05em', lineHeight: '1' }}>{currentWord}</p>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '2rem' }}>
         <button 
-          onClick={playStandardAudio} 
-          style={{
-            padding: '12px 25px', fontSize: '1.1em', backgroundColor: '#38a169',
-            color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: '500', transition: 'background-color 0.2s'
-          }}
+          onClick={playStandardAudio}
+          style={{...buttonStyle, backgroundColor: '#38a169'}}
         >
           🔊 听标准发音
         </button>
         <button 
-          onClick={checkPronunciation} 
-          disabled={isChecking} 
-          style={{
-            padding: '12px 25px', fontSize: '1.1em', backgroundColor: '#3182ce',
-            color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
-            fontWeight: '500', transition: 'background-color 0.2s',
-            opacity: isChecking ? 0.7 : 1
-          }}
+          onClick={isRecognizing ? stopRecognition : startRecognition}
+          style={{...buttonStyle, backgroundColor: isRecognizing ? '#dd6b20' : '#3182ce' }}
         >
-          {isChecking ? '正在识别...' : '🎤 开始评测'}
+          {isRecognizing ? '⏹️ 停止识别' : '🎤 开始评测'}
         </button>
       </div>
       
-      <div style={{ marginTop: '20px', minHeight: '80px', padding: '10px', backgroundColor: '#f7fafc', borderRadius: '8px' }}>
-        <p style={{ fontSize: '1.1em', color: '#4a5568', margin: '0' }}>{recognizedText || '点击"开始评测"后请说话'}</p>
-        {comparisonResult === 'correct' && (
-          <p style={{ fontSize: '1.4em', color: '#38a169', fontWeight: 'bold', marginTop: '8px' }}>✔️ 非常棒，发音正确！</p>
-        )}
-        {comparisonResult === 'incorrect' && (
-          <p style={{ fontSize: '1.4em', color: '#e53e3e', fontWeight: 'bold', marginTop: '8px' }}>❌ 加油，再试一次！</p>
+      <div style={{ minHeight: '6rem', padding: '1rem', backgroundColor: '#f7fafc', borderRadius: '0.5rem' }}>
+        <p style={{ fontSize: '1.1rem', color: '#718096', margin: '0 0 0.5rem 0', fontWeight: '500' }}>识别结果</p>
+        {!pinyinComparison && <p style={{ color: '#a0aec0' }}>{recognizedText || '点击“开始评测”，然后请说话'}</p>}
+        {pinyinComparison && (
+          <div style={{ fontSize: '1.75rem', fontWeight: 'bold', letterSpacing: '0.05em' }}>
+            {pinyinComparison.map((item, index) => (
+              <span key={index} style={{ color: item.status === 'correct' ? '#38a169' : '#e53e3e' }}>
+                {item.char}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 
       {quizData.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px' }}>
-           <button 
-             onClick={prevWord}
-             style={{
-               padding: '10px 20px', fontSize: '1em', backgroundColor: 'white', color: '#4a5568',
-               border: '1px solid #cbd5e0', borderRadius: '8px', cursor: 'pointer', fontWeight: '500'
-             }}
-           >
-             ⬅️ 上一个
-           </button>
-           <button 
-             onClick={nextWord}
-             style={{
-               padding: '10px 20px', fontSize: '1em', backgroundColor: 'white', color: '#4a5568',
-               border: '1px solid #cbd5e0', borderRadius: '8px', cursor: 'pointer', fontWeight: '500'
-             }}
-           >
-             下一个 ➡️
-           </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2.5rem' }}>
+           <button onClick={prevWord} style={navButtonStyle}>⬅️ 上一个</button>
+           <button onClick={nextWord} style={navButtonStyle}>下一个 ➡️</button>
         </div>
       )}
     </div>
   );
 };
+
+// 按钮通用样式，避免重复
+const buttonStyle = {
+  padding: '0.75rem 1.75rem',
+  fontSize: '1.125rem',
+  color: 'white',
+  border: 'none',
+  borderRadius: '0.5rem',
+  cursor: 'pointer',
+  fontWeight: '600',
+  transition: 'all 0.2s ease-in-out',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem'
+};
+
+const navButtonStyle = {
+  padding: '0.5rem 1rem',
+  fontSize: '1rem',
+  backgroundColor: 'white',
+  color: '#4a5568',
+  border: '1px solid #cbd5e0',
+  borderRadius: '0.5rem',
+  cursor: 'pointer',
+  fontWeight: '500',
+  transition: 'all 0.2s ease-in-out',
+};
+
 
 export default PronunciationPractice;
