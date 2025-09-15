@@ -2,13 +2,20 @@
 
 import { useAuth } from '../lib/AuthContext';
 import Image from 'next/image';
+import { useState, useEffect } from 'react'; // 1. 导入 useState 和 useEffect
 
 const GoogleLoginButton = () => {
   const { user, loginWithGoogle, logout } = useAuth();
+  const [isMounted, setIsMounted] = useState(false); // 2. 创建一个状态来跟踪组件是否已在客户端加载
 
-  // 如果正在加载用户信息，可以先不显示任何东西或显示一个加载动画
-  if (user === undefined) {
-    return null; // 或者 return <div>Loading...</div>;
+  // 3. 使用 useEffect 来确保只在客户端组件加载后才更新状态
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // 4. 在组件完全加载前，我们什么都不渲染，以避免 hydration 错误
+  if (!isMounted) {
+    return null;
   }
 
   return (
