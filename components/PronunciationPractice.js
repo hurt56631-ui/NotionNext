@@ -2,12 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
-// 注意：我们依然在 useEffect 中动态导入 pinyin-pro
-// const { pinyin } = require('pinyin-pro'); // 不在顶层导入
-
+// TTS 朗读函数
 const speakText = (text) => {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // 停止上一个朗读
+    window.speechSynthesis.cancel(); // 停止上一个可能正在进行的朗读
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
     window.speechSynthesis.speak(utterance);
@@ -18,27 +16,26 @@ const speakText = (text) => {
 
 const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] }) => {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const mediaRecorderRef = useRef(null);
   const [currentPinyin, setCurrentPinyin] = useState('...');
   
-  // 新增状态：用于语音识别和结果反馈
+  // 用于语音识别和结果反馈的状态
   const [isChecking, setIsChecking] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [comparisonResult, setComparisonResult] = useState(null); // 'correct', 'incorrect', or null
 
   const currentWord = quizData.length > 0 ? quizData[currentWordIndex].word : '你好';
 
-  // 1. 修改 useEffect 以使用 'symbol' 声调
+  // 当 currentWord 改变时，重置状态并更新拼音
   useEffect(() => {
+    // 切换单词时，重置所有反馈状态
     setRecognizedText('');
     setComparisonResult(null);
-    setAudioBlob(null);
+    setIsChecking(false);
 
     if (currentWord) {
-      setCurrentPinyin('...');
+      setCurrentPinyin('...'); // 显示加载中
       import('pinyin-pro').then(({ pinyin }) => {
+        // 设置为带声调符号的拼音
         setCurrentPinyin(pinyin(currentWord, { toneType: 'symbol' }));
       }).catch(error => {
         console.error("加载 pinyin-pro 失败:", error);
@@ -47,56 +44,16 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
     }
   }, [currentWord]);
 
-
-  const startRecording = useCallback(async () => {
-    // 开始录音前重置状态
-    setAudioBlob(null);
-    setRecognizedText('');
-    setComparisonResult(null);
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('您的浏览器不支持录音功能。');
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      const audioChunks = [];
-      recorder.ondataavailable = (event) => audioChunks.push(event.data);
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      recorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('获取麦克风失败:', error);
-      alert('无法访问麦克风。请确保已授予权限。');
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, [isRecording]);
-
-  // 2. 新增：检查发音的函数
+  // 检查发音的函数
   const checkPronunciation = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('您的浏览器不支持语音识别功能。');
+      alert('抱歉，您的浏览器不支持语音识别功能。请尝试使用 Chrome 或 Safari 浏览器。');
       return;
     }
 
     setIsChecking(true);
-    setRecognizedText('正在识别...');
+    setRecognizedText('请开始说话...');
     setComparisonResult(null);
 
     const recognition = new SpeechRecognition();
@@ -106,14 +63,8 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
 
     recognition.start();
 
-    // 播放录音以供识别 (可选，但通常识别API直接用麦克风)
-    // 这里我们直接让用户对着麦克风说话，并在录音停止后点击检查
-    // 为了更好的体验，我们应该在录音时就进行识别
-    // 让我们简化一下：点击“检查发音”时，让用户再说一遍
-    alert("请在提示后，清晰地说出上面的词语。");
-
     recognition.onresult = (event) => {
-      const speechResult = event.results[0][0].transcript.replace(/，|。| /g, ''); // 去除标点和空格
+      const speechResult = event.results[0][0].transcript.replace(/[，。？！,!?\s]/g, ''); // 去除所有标点和空格
       setRecognizedText(`识别结果: "${speechResult}"`);
       if (speechResult === currentWord) {
         setComparisonResult('correct');
@@ -124,7 +75,13 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
 
     recognition.onerror = (event) => {
       console.error('语音识别错误:', event.error);
-      setRecognizedText('识别失败，请重试。');
+      if (event.error === 'no-speech') {
+        setRecognizedText('未检测到语音，请重试。');
+      } else if (event.error === 'not-allowed') {
+        setRecognizedText('麦克风权限被拒绝。');
+      } else {
+        setRecognizedText('识别失败，请重试。');
+      }
       setComparisonResult(null);
     };
 
@@ -133,7 +90,6 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
     };
 
   }, [currentWord]);
-
 
   const playStandardAudio = useCallback(() => speakText(currentWord), [currentWord]);
 
@@ -145,37 +101,83 @@ const PronunciationPractice = ({ title = '中文发音练习课', quizData = [] 
     setCurrentWordIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : quizData.length - 1));
   }, [quizData.length]);
 
+  if (quizData.length === 0) {
+    return <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>请在 Notion 中配置发音练习数据。</div>;
+  }
+
   return (
-    <div style={{...}}> {/* 保持外层 div 样式不变 */}
-      <h2 style={{ color: '#333' }}>{title}</h2>
-      <div style={{...}}> {/* 保持单词和拼音 div 样式不变 */}
-        <p style={{...}}>{currentWord}</p>
-        <p style={{...}}>{currentPinyin}</p>
+    <div style={{
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+      padding: '20px',
+      border: '1px solid #e2e8f0',
+      borderRadius: '12px',
+      maxWidth: '480px',
+      margin: '20px auto',
+      textAlign: 'center',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+    }}>
+      <h2 style={{ color: '#2d3748', fontWeight: '600' }}>{title}</h2>
+      
+      <div style={{ margin: '25px 0', borderBottom: '1px solid #edf2f7', paddingBottom: '25px' }}>
+        <p style={{ fontSize: '4em', fontWeight: 'bold', color: '#2b6cb0', margin: '0', letterSpacing: '0.05em' }}>{currentWord}</p>
+        <p style={{ fontSize: '2em', color: '#4a5568', margin: '8px 0 0 0', letterSpacing: '0.05em' }}>{currentPinyin}</p>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '20px' }}>
-        <button onClick={playStandardAudio} style={{...}}>🔊 听标准发音</button>
-        {/* 这里我们简化流程，直接用一个按钮进行识别 */}
-        <button onClick={checkPronunciation} disabled={isChecking} style={{...}}>
+        <button 
+          onClick={playStandardAudio} 
+          style={{
+            padding: '12px 25px', fontSize: '1.1em', backgroundColor: '#38a169',
+            color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontWeight: '500', transition: 'background-color 0.2s'
+          }}
+        >
+          🔊 听标准发音
+        </button>
+        <button 
+          onClick={checkPronunciation} 
+          disabled={isChecking} 
+          style={{
+            padding: '12px 25px', fontSize: '1.1em', backgroundColor: '#3182ce',
+            color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontWeight: '500', transition: 'background-color 0.2s',
+            opacity: isChecking ? 0.7 : 1
+          }}
+        >
           {isChecking ? '正在识别...' : '🎤 开始评测'}
         </button>
       </div>
-
-      {/* 3. 新增：显示识别结果和反馈 */}
-      <div style={{ marginTop: '20px', minHeight: '80px' }}>
-        <p style={{ fontSize: '1.2em', color: '#333' }}>{recognizedText}</p>
+      
+      <div style={{ marginTop: '20px', minHeight: '80px', padding: '10px', backgroundColor: '#f7fafc', borderRadius: '8px' }}>
+        <p style={{ fontSize: '1.1em', color: '#4a5568', margin: '0' }}>{recognizedText || '点击"开始评测"后请说话'}</p>
         {comparisonResult === 'correct' && (
-          <p style={{ fontSize: '1.5em', color: 'green', fontWeight: 'bold' }}>✔️ 非常棒，发音正确！</p>
+          <p style={{ fontSize: '1.4em', color: '#38a169', fontWeight: 'bold', marginTop: '8px' }}>✔️ 非常棒，发音正确！</p>
         )}
         {comparisonResult === 'incorrect' && (
-          <p style={{ fontSize: '1.5em', color: 'red', fontWeight: 'bold' }}>❌ 加油，再试一次！</p>
+          <p style={{ fontSize: '1.4em', color: '#e53e3e', fontWeight: 'bold', marginTop: '8px' }}>❌ 加油，再试一次！</p>
         )}
       </div>
 
       {quizData.length > 1 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px' }}>
-           <button onClick={prevWord}>⬅️ 上一个</button>
-           <button onClick={nextWord}>下一个 ➡️</button>
+           <button 
+             onClick={prevWord}
+             style={{
+               padding: '10px 20px', fontSize: '1em', backgroundColor: 'white', color: '#4a5568',
+               border: '1px solid #cbd5e0', borderRadius: '8px', cursor: 'pointer', fontWeight: '500'
+             }}
+           >
+             ⬅️ 上一个
+           </button>
+           <button 
+             onClick={nextWord}
+             style={{
+               padding: '10px 20px', fontSize: '1em', backgroundColor: 'white', color: '#4a5568',
+               border: '1px solid #cbd5e0', borderRadius: '8px', cursor: 'pointer', fontWeight: '500'
+             }}
+           >
+             下一个 ➡️
+           </button>
         </div>
       )}
     </div>
