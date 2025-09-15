@@ -9,10 +9,11 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
-// 导入您的自定义组件
+// --- 导入您的所有自定义组件 ---
 const PronunciationPractice = dynamic(() => import('@/components/PronunciationPractice'), { ssr: false });
 const MotionTest = dynamic(() => import('@/components/MotionTest'), { ssr: false });
-const HanziWriterPractice = dynamic(() => import('@/components/HanziWriterPractice'), { ssr: false }); // <-- 新增：导入 HanziWriterPractice 组件
+const HanziWriterPractice = dynamic(() => import('@/components/HanziWriterPractice'), { ssr: false });
+const SentenceScramble = dynamic(() => import('@/components/SentenceScramble'), { ssr: false }); // <-- 新增：导入 SentenceScramble 组件
 
 // 动态导入 react-notion-x 提供的原始 Code 组件
 const Code = dynamic(
@@ -190,16 +191,18 @@ const NotionPage = ({ post, className }) => {
               const includeData = parseInclude(blockContent);
               if (includeData) {
                  const { componentPath, parsedProps } = includeData;
-                 // 根据 componentPath 渲染不同的自定义组件
+                 // --- 根据 componentPath 渲染不同的自定义组件 ---
                  if (componentPath === '/components/PronunciationPractice.js') {
                    return <PronunciationPractice key={props.block.id} {...parsedProps} />;
                  }
                  if (componentPath === '/components/MotionTest.js') {
                    return <MotionTest key={props.block.id} {...parsedProps} />;
                  }
-                 // 新增：添加对 HanziWriterPractice 组件的渲染规则
                  if (componentPath === '/components/HanziWriterPractice.js') {
                     return <HanziWriterPractice key={props.block.id} {...parsedProps} />;
+                 }
+                 if (componentPath === '/components/SentenceScramble.js') { // <-- 新增：添加 SentenceScramble 组件的渲染规则
+                    return <SentenceScramble key={props.block.id} {...parsedProps} />;
                  }
               }
             }
