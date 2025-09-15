@@ -10,6 +10,7 @@ import RandomPostButton from './RandomPostButton'
 import ReadingProgress from './ReadingProgress'
 import SearchButton from './SearchButton'
 import SlideOver from './SlideOver'
+import GoogleLoginButton from './GoogleLoginButton' // 导入 Google 登录按钮
 
 /**
  * 页头：顶部导航
@@ -52,11 +53,13 @@ const Header = props => {
         setTextWhite(false)
         setBgWhite(true)
       }
-    }, 100)
+    }, 100),
+    [] // useCallback 依赖项
   )
+
   useEffect(() => {
     scrollTrigger()
-  }, [router])
+  }, [router, scrollTrigger])
 
   // 监听滚动
   useEffect(() => {
@@ -64,7 +67,7 @@ const Header = props => {
     return () => {
       window.removeEventListener('scroll', scrollTrigger)
     }
-  }, [])
+  }, [scrollTrigger])
 
   // 导航栏根据滚动轮播菜单内容
   useEffect(() => {
@@ -166,7 +169,10 @@ const Header = props => {
           </div>
 
           {/* 右侧固定 */}
-          <div className='flex flex-shrink-0 justify-end items-center w-48'>
+          <div className='flex flex-shrink-0 justify-end items-center space-x-2 md:space-x-4'>
+            {/* Google登录按钮 */}
+            <GoogleLoginButton />
+
             <RandomPostButton {...props} />
             <SearchButton {...props} />
             {!JSON.parse(siteConfig('THEME_SWITCH')) && (
