@@ -1,7 +1,7 @@
 // _app.js
 
 // 导入你的样式文件...
-import '@/styles/animate.css'
+//import '@/styles/animate.css'
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
 import '@/styles/notion.css'
