@@ -10,7 +10,7 @@ import RandomPostButton from './RandomPostButton'
 import ReadingProgress from './ReadingProgress'
 import SearchButton from './SearchButton'
 import SlideOver from './SlideOver'
-import GoogleLoginButton from './GoogleLoginButton' // 导入 Google 登录按钮
+import GoogleLoginButton from '@/components/GoogleLoginButton' // 导入 Google 登录按钮
 
 /**
  * 页头：顶部导航
