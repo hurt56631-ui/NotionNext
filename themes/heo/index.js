@@ -44,41 +44,46 @@ import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
+import BottomNavBar from './components/BottomNavBar' // 导入底部导航栏
 
 /**
- * 基础布局 采用上中下布局，移动端使用顶部侧边导航栏
+ * 基础布局
  * @param props
  * @returns {JSX.Element}
  * @constructor
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
-
-  // 全屏模式下的最大宽度
   const { fullWidth, isDarkMode } = useGlobal()
-  const router = useRouter()
+  const router = useRouter() // 获取 router 实例
+
+  // 判断是否是首页，只有首页才显示 Header
+  const isHomePage = router.pathname === '/'
 
   const headerSlot = (
     <header>
       {/* 顶部导航 */}
-      <Header {...props} />
+      {/* 关键改动：只有 isHomePage 为 true 时才渲染 Header */}
+      {isHomePage && <Header {...props} />}
 
-      {/* 通知横幅 */}
-      {router.route === '/' ? (
+      {/* 通知横幅和 Hero 部分也只在首页显示 */}
+      {isHomePage ? (
         <>
           <NoticeBar />
           <Hero {...props} />
         </>
-      ) : null}
-      {fullWidth ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+      ) : (
+        // 对于非首页，在这里渲染文章头
+        !fullWidth && <PostHeader {...props} isDarkMode={isDarkMode} />
+      )}
     </header>
   )
-
+  
   // 右侧栏 用户信息+标签列表
   const slotRight =
     router.route === '/404' || fullWidth ? null : <SideRight {...props} />
 
-  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]' // 普通最大宽度是86rem和顶部菜单栏对齐，留空则与窗口对齐
+  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
 
   const HEO_HERO_BODY_REVERSE = siteConfig(
     'HEO_HERO_BODY_REVERSE',
@@ -98,18 +103,20 @@ const LayoutBase = props => {
       className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
       <Style />
 
-      {/* 顶部嵌入 导航栏，首页放hero，文章页放文章详情 */}
-      {headerSlot}
+      {/* 关键改动：将 Header 移出，并根据条件渲染 */}
+      {isHomePage && headerSlot}
 
       {/* 主区块 */}
       <main
         id='wrapper-outer'
-        className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
+        // 关键改动：添加 pb-16 (padding-bottom)，防止被底部导航栏遮挡
+        className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5 pb-16 md:pb-0`}>
         <div
           id='container-inner'
           className={`${HEO_HERO_BODY_REVERSE ? 'flex-row-reverse' : ''} w-full mx-auto lg:flex justify-center relative z-10`}>
           <div className={`w-full h-auto ${className || ''}`}>
-            {/* 主区上部嵌入 */}
+            {/* 对于非首页，我们在这里渲染文章头，确保它在主内容区 */}
+            {!isHomePage && <PostHeader {...props} isDarkMode={isDarkMode} />}
             {slotTop}
             {children}
           </div>
@@ -125,6 +132,9 @@ const LayoutBase = props => {
 
       {/* 页脚 */}
       <Footer />
+      
+      {/* 添加底部导航栏 */}
+      <BottomNavBar />
 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -511,4 +521,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-}
+    }
