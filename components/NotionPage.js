@@ -11,7 +11,8 @@ import { NotionRenderer } from 'react-notion-x'
 
 // 导入您的自定义组件
 const PronunciationPractice = dynamic(() => import('@/components/PronunciationPractice'), { ssr: false });
-const MotionTest = dynamic(() => import('@/components/MotionTest'), { ssr: false }); // <-- 新增：导入 MotionTest 组件
+const MotionTest = dynamic(() => import('@/components/MotionTest'), { ssr: false });
+const HanziWriterPractice = dynamic(() => import('@/components/HanziWriterPractice'), { ssr: false }); // <-- 新增：导入 HanziWriterPractice 组件
 
 // 动态导入 react-notion-x 提供的原始 Code 组件
 const Code = dynamic(
@@ -193,9 +194,12 @@ const NotionPage = ({ post, className }) => {
                  if (componentPath === '/components/PronunciationPractice.js') {
                    return <PronunciationPractice key={props.block.id} {...parsedProps} />;
                  }
-                 // 新增：添加对 MotionTest 组件的渲染规则
                  if (componentPath === '/components/MotionTest.js') {
                    return <MotionTest key={props.block.id} {...parsedProps} />;
+                 }
+                 // 新增：添加对 HanziWriterPractice 组件的渲染规则
+                 if (componentPath === '/components/HanziWriterPractice.js') {
+                    return <HanziWriterPractice key={props.block.id} {...parsedProps} />;
                  }
               }
             }
