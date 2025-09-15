@@ -1,6 +1,6 @@
 // components/SentenceScramble.js
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // 引入 useEffect
 import {
   DndContext,
   closestCenter,
@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// 单个可拖拽词语的组件
+// 单个可拖拽词语的组件 (无需修改)
 function SortableWord({ id, children }) {
   const {
     attributes,
@@ -38,7 +38,7 @@ function SortableWord({ id, children }) {
     border: '2px solid #3182ce',
     borderRadius: '10px',
     cursor: 'grab',
-    touchAction: 'none', // 优化移动端触摸体验
+    touchAction: 'none',
     boxShadow: isDragging ? '0 10px 15px -3px rgba(0, 0, 0, 0.2)' : '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
     zIndex: isDragging ? 100 : 'auto',
     fontWeight: '500',
@@ -55,9 +55,23 @@ function SortableWord({ id, children }) {
 
 // 主组件：句子排序练习
 const SentenceScramble = ({ scrambledSentence, correctSentence }) => {
-  const initialItems = scrambledSentence.split(' ');
-  const [words, setWords] = useState(initialItems);
-  const [isCorrect, setIsCorrect] = useState(null); // null, true, or false
+  // 关键修复：添加 prop 校验和安全的初始值
+  const getInitialItems = () => {
+    if (typeof scrambledSentence === 'string' && scrambledSentence.length > 0) {
+      return scrambledSentence.split(' ');
+    }
+    return []; // 如果 prop 有问题，返回一个空数组，避免崩溃
+  };
+
+  const [words, setWords] = useState(getInitialItems());
+  const [isCorrect, setIsCorrect] = useState(null);
+
+  // 当 scrambledSentence prop 变化时，重置组件状态
+  useEffect(() => {
+    setWords(getInitialItems());
+    setIsCorrect(null);
+  }, [scrambledSentence]);
+
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -68,30 +82,39 @@ const SentenceScramble = ({ scrambledSentence, correctSentence }) => {
 
   function handleDragEnd(event) {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
       setWords((items) => {
         const oldIndex = items.indexOf(active.id);
         const newIndex = items.indexOf(over.id);
         return arrayMove(items, oldIndex, newIndex);
       });
-      // 每次拖动后都清除上一次的检查结果
       setIsCorrect(null);
     }
   }
 
   function checkAnswer() {
-    const currentSentence = words.join(' ');
-    if (currentSentence === correctSentence) {
-      setIsCorrect(true);
+    // 同样在这里添加校验
+    if (typeof correctSentence === 'string') {
+        const currentSentence = words.join(' ');
+        setIsCorrect(currentSentence === correctSentence);
     } else {
-      setIsCorrect(false);
+        console.error("`correctSentence` prop is missing or not a string.");
     }
   }
 
   function reset() {
-    setWords(initialItems);
+    setWords(getInitialItems());
     setIsCorrect(null);
+  }
+  
+  // 如果初始数据为空，显示错误提示
+  if (words.length === 0) {
+      return (
+          <div style={{ padding: '2rem', border: '2px dashed #e53e3e', borderRadius: '1rem', margin: '2rem auto', maxWidth: '90%', textAlign: 'center' }}>
+              <p style={{ color: '#e53e3e', fontWeight: 'bold' }}>句子排序组件加载失败！</p>
+              <p style={{ color: '#718096' }}>请检查 Notion 中的 `!include` 代码块，确保 `scrambledSentence` 属性已正确提供。</p>
+          </div>
+      )
   }
 
   return (
