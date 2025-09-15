@@ -11,13 +11,12 @@ import { NotionRenderer } from 'react-notion-x'
 
 // 导入您的自定义组件
 const PronunciationPractice = dynamic(() => import('@/components/PronunciationPractice'), { ssr: false });
-// 如果您有 TingYinShiCi 组件，也在这里导入
-// const TingYinShiCi = dynamic(() => import('@/components/TingYinShiCi'), { ssr: false });
+const MotionTest = dynamic(() => import('@/components/MotionTest'), { ssr: false }); // <-- 新增：导入 MotionTest 组件
 
-// 动态导入 react-notion-x 提供的原始 Code 组件，确保它在服务器端和客户端都可用
+// 动态导入 react-notion-x 提供的原始 Code 组件
 const Code = dynamic(
   () => import('react-notion-x/build/third-party/code').then(m => m.Code),
-  { ssr: false } // 如果 NotionNext 的 SSR 不依赖它，可以设为 false
+  { ssr: false }
 );
 
 // 动态导入 react-notion-x 提供的其他组件
@@ -27,7 +26,7 @@ const Collection = dynamic(
       m => m.Collection
     ),
   {
-    ssr: true // Collection通常需要SSR
+    ssr: true
   }
 )
 
@@ -65,7 +64,6 @@ const PrismMac = dynamic(() => import('@/components/PrismMac'), {
 const Tweet = ({ id }) => {
   return <TweetEmbed tweetId={id} />
 }
-
 
 /**
  * 整个站点的核心组件
@@ -195,10 +193,10 @@ const NotionPage = ({ post, className }) => {
                  if (componentPath === '/components/PronunciationPractice.js') {
                    return <PronunciationPractice key={props.block.id} {...parsedProps} />;
                  }
-                 // 如果有 TingYinShiCi，也在这里添加映射
-                 // if (componentPath === '/components/TingYinShiCi.js') {
-                 //   return <TingYinShiCi key={props.block.id} {...parsedProps} />;
-                 // }
+                 // 新增：添加对 MotionTest 组件的渲染规则
+                 if (componentPath === '/components/MotionTest.js') {
+                   return <MotionTest key={props.block.id} {...parsedProps} />;
+                 }
               }
             }
             // 如果不是 !include 块，则回退到 react-notion-x 提供的原始 Code 组件
@@ -220,9 +218,6 @@ const NotionPage = ({ post, className }) => {
 
 // ==================== 以下是辅助函数，无需修改 ====================
 
-/**
- * 页面的数据库链接禁止跳转，只能查看
- */
 const processDisableDatabaseUrl = () => {
   if (isBrowser) {
     const links = document.querySelectorAll('.notion-table a')
@@ -232,9 +227,6 @@ const processDisableDatabaseUrl = () => {
   }
 }
 
-/**
- * gallery视图，点击后是放大图片还是跳转到gallery的内部页面
- */
 const processGalleryImg = zoom => {
   setTimeout(() => {
     if (isBrowser) {
@@ -255,9 +247,6 @@ const processGalleryImg = zoom => {
   }, 800)
 }
 
-/**
- * 根据url参数自动滚动到锚位置
- */
 const autoScrollToHash = () => {
   setTimeout(() => {
     const hash = window?.location?.hash
@@ -272,19 +261,10 @@ const autoScrollToHash = () => {
   }, 180)
 }
 
-/**
- * 将id映射成博文内部链接。
- * @param {*} id
- * @returns
- */
 const mapPageUrl = id => {
   return '/' + id.replace(/-/g, '')
 }
 
-/**
- * 缩放
- * @returns
- */
 function getMediumZoomMargin() {
   const width = window.innerWidth
 
