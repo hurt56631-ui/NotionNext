@@ -14,6 +14,8 @@ const PronunciationPractice = dynamic(() => import('@/components/PronunciationPr
 const MotionTest = dynamic(() => import('@/components/MotionTest'), { ssr: false });
 const HanziWriterPractice = dynamic(() => import('@/components/HanziWriterPractice'), { ssr: false });
 const SentenceScramble = dynamic(() => import('@/components/SentenceScramble'), { ssr: false });
+const SwipeableFlashcard = dynamic(() => import('@/components/SwipeableFlashcard'), { ssr: false }); // <-- 新增：导入 SwipeableFlashcard 组件
+const MediaPlayer = dynamic(() => import('@/components/MediaPlayer'), { ssr: false }); // <-- 补上：导入 MediaPlayer 组件
 
 // 动态导入 react-notion-x 提供的原始 Code 组件
 const Code = dynamic(
@@ -125,6 +127,7 @@ const NotionPage = ({ post, className }) => {
               // 检查是否有解析错误
               if (includeData && !includeData.error) {
                  const { componentPath, parsedProps } = includeData;
+                 // --- 根据 componentPath 渲染不同的自定义组件 ---
                  if (componentPath === '/components/PronunciationPractice.js') {
                    return <PronunciationPractice key={props.block.id} {...parsedProps} />;
                  }
@@ -136,6 +139,12 @@ const NotionPage = ({ post, className }) => {
                  }
                  if (componentPath === '/components/SentenceScramble.js') {
                     return <SentenceScramble key={props.block.id} {...parsedProps} />;
+                 }
+                 if (componentPath === '/components/MediaPlayer.js') { // <-- 补上：添加 MediaPlayer 渲染规则
+                    return <MediaPlayer key={props.block.id} {...parsedProps} />;
+                 }
+                 if (componentPath === '/components/SwipeableFlashcard.js') { // <-- 新增：添加 SwipeableFlashcard 渲染规则
+                    return <SwipeableFlashcard key={props.block.id} {...parsedProps} />;
                  }
               } else if (includeData && includeData.error) {
                   // 如果解析 JSON 失败，显示一个错误组件
