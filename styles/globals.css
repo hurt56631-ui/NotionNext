@@ -298,3 +298,10 @@ img {
   @keyframes l1 {
   0% {background-position: right}
 }
+
+/* === 新增的磨砂玻璃效果兼容性代码 === */
+@supports (backdrop-filter: blur(1rem)) or (-webkit-backdrop-filter: blur(1rem)) {
+  .dark .bg-white\/80 {
+    background-color: rgba(30, 41, 55, 0.8); /* 深色模式下的背景色 */
+  }
+}
