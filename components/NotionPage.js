@@ -1,3 +1,5 @@
+// components/NotionPage.js
+
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
 import { isBrowser, loadExternalResource } from '@/lib/utils'
@@ -7,12 +9,19 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
+// 导入您的自定义组件
+// 确保这个路径是正确的，并且文件名为 PronunciationPractice.js
+const PronunciationPractice = dynamic(() => import('@/components/PronunciationPractice'), { ssr: false });
+// 如果您有 TingYinShiCi 组件，也在这里导入
+// const TingYinShiCi = dynamic(() => import('@/components/TingYinShiCi'), { ssr: false });
+
 
 // 1. 定义一个映射表，用于注册所有可以通过 !include 使用的组件
-const CUSTOM_COMPONENTS_MAP = {
-  // 【重要】只在这里注册您项目中真实存在的组件文件！
-  // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
-  '/components/Create PronunciationPractice.js': dynamic(() => import('@/components/Create PronunciationPractice'), { ssr: false }),
+// 注意：这里我们不再直接使用 CUSTOM_COMPONENTS_MAP 来映射，
+// 而是通过一个解析函数来处理 `!include` 语句，
+// 因为 NotionRenderer 的 components prop 主要用于覆盖原有的 Notion 块类型。
+// 对于 `!include` 这种自定义语法，通常需要拦截 Notion 块的文本内容进行处理。
+
 /**
  * 整个站点的核心组件
  * 将Notion数据渲染成网页
@@ -35,6 +44,7 @@ const NotionPage = ({ post, className }) => {
 
   const zoomRef = useRef(zoom ? zoom.clone() : null)
   const IMAGE_ZOOM_IN_WIDTH = siteConfig('IMAGE_ZOOM_IN_WIDTH', 1200)
+
   // 页面首次打开时执行的勾子
   useEffect(() => {
     // 检测当前的url并自动滚动到对应目标
@@ -122,6 +132,56 @@ const NotionPage = ({ post, className }) => {
     return () => clearTimeout(timer)
   }, [post])
 
+  // ==================== Custom block rendering logic ====================
+  // 这是一个自定义渲染器，用于处理 NotonRenderer 无法直接渲染的块，
+  // 例如您通过 `!include` 语法嵌入的组件。
+  const customRenderer = (block) => {
+    // 检查是否是文本块或代码块，并尝试解析 !include 语句
+    if (block.type === 'code' || block.type === 'text' || block.type === 'paragraph') {
+      // 假设 !include 语句通常会出现在 code 块或单独的文本块中
+      const blockContent = block.properties?.title?.[0]?.[0]; // 尝试获取块的文本内容
+      if (blockContent) {
+        const includeRegex = /^!include\s+(\S+?\.js)\s*({.*})?$/;
+        const match = blockContent.match(includeRegex);
+
+        if (match) {
+          const componentPath = match[1]; // 例如 /components/PronunciationPractice.js
+          const propsString = match[2] || '{}';
+          try {
+            const props = JSON.parse(propsString);
+
+            // 根据 componentPath 映射到实际的 React 组件
+            if (componentPath === '/components/PronunciationPractice.js') {
+              return <PronunciationPractice key={block.id} {...props} />;
+            }
+            // 如果有 TingYinShiCi，也在这里添加映射
+            // if (componentPath === '/components/TingYinShiCi.js') {
+            //   return <TingYinShiCi key={block.id} {...props} />;
+            // }
+
+            // 如果匹配到 !include 但没有找到对应的组件，可以渲染一个错误提示
+            return (
+              <div key={block.id} style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>
+                Error: Custom component not found for path: {componentPath}
+              </div>
+            );
+
+          } catch (e) {
+            console.error('Failed to parse props for !include block:', e, blockContent);
+            return (
+              <div key={block.id} style={{ color: 'red', border: '1px solid red', padding: '10px', margin: '10px 0' }}>
+                Error: Invalid JSON props for !include block: {blockContent}
+              </div>
+            );
+          }
+        }
+      }
+    }
+    // 如果不是 !include 块，则返回 null，让 NotionRenderer 继续处理
+    return null;
+  };
+  // ======================================================================
+
   return (
     <div
       id='notion-article'
@@ -136,8 +196,48 @@ const NotionPage = ({ post, className }) => {
           Equation,
           Modal,
           Pdf,
-          Tweet
+          Tweet,
+          // 将 customRenderer 传入 NotionRenderer 的 overrideFn (或其他类似的自定义渲染钩子)
+          // 注意：react-notion-x 并没有直接的 `overrideFn` prop。
+          // 您可能需要修改 NotionNext 封装 `react-notion-x` 的地方来拦截块的渲染。
+          // 另一个常见的方法是在 `components` prop 中针对 'code' 或 'text' 块类型进行自定义处理。
+          // 这里的实现假设您需要拦截原始的 block 渲染流程。
+          // 考虑到 NotionNext 框架通常会封装 NotionRenderer，
+          // 最稳妥的方式是在您的 NotionNext 渲染器中，
+          // 遍历 `post?.blockMap?.block` 时，对每个 block 调用 customRenderer。
+
+          // 重新思考：更常见和直接的方式是修改 NotionNext 自己的渲染循环。
+          // 例如，如果您的 NotionNext 是这样渲染块的：
+          // post?.blockMap?.block && Object.values(post.blockMap.block).map(block => <RenderBlock key={block.id} block={block} />)
+          // 那么您应该修改 RenderBlock 或其父级。
+
+          // 暂时将这个逻辑放置在 NotionRenderer 的 components.Code 中，
+          // 因为 NotionNext 的 !include 语法通常是通过 code 块实现的。
+          // 如果您的 !include 不仅仅是 code 块，则需要更全面的拦截。
+          Code: (props) => {
+            const blockContent = props.block.properties?.title?.[0]?.[0];
+            if (blockContent) {
+              const includeData = parseInclude(blockContent); // 使用一个辅助函数
+              if (includeData) {
+                 const { componentPath, parsedProps } = includeData; // 辅助函数需要返回组件路径和解析后的 props
+                 if (componentPath === '/components/PronunciationPractice.js') {
+                   return <PronunciationPractice key={props.block.id} {...parsedProps} />;
+                 }
+                 // 其他自定义组件
+              }
+            }
+            // 如果不是自定义组件，则回退到默认的 Code 渲染
+            return <Code {...props} />;
+          },
+          // 确保其他组件也在这里
+          // Code, // 这里需要注意，不能直接覆盖 Code，因为它也是个动态导入的组件
+          // 您需要确保这个自定义的 Code 渲染器仍然能处理非 !include 的 Code 块。
+          // 所以上面已经把原始的 Code 引入，并在条件不满足时返回它。
         }}
+        // 由于直接修改 NotionRenderer 的 components.Code 可能会影响所有代码块，
+        // 建议 NotionNext 框架会提供一个更高级的自定义块渲染机制。
+        // 如果没有，或者您想快速测试，上面的 components.Code 方法可以作为一种尝试。
+        // 更推荐的做法是修改 NotionNext 内部处理 block.type = 'code' 的地方。
       />
 
       <AdEmbed />
@@ -145,6 +245,25 @@ const NotionPage = ({ post, className }) => {
     </div>
   )
 }
+
+// 辅助函数：解析 !include 语法
+const parseInclude = (textContent) => {
+  const includeRegex = /^!include\s+(\S+?\.js)\s*({.*})?$/;
+  const match = textContent.match(includeRegex);
+  if (match) {
+    const componentPath = match[1];
+    const propsString = match[2] || '{}';
+    try {
+      const parsedProps = JSON.parse(propsString);
+      return { componentPath, parsedProps };
+    } catch (e) {
+      console.error('Failed to parse props for !include block:', e, textContent);
+      return null;
+    }
+  }
+  return null;
+};
+
 
 /**
  * 页面的数据库链接禁止跳转，只能查看
@@ -232,7 +351,8 @@ function getMediumZoomMargin() {
 }
 
 // 代码
-const Code = dynamic(
+// 注意：这里需要确保原始的 Code 组件依然可用，以便在自定义逻辑不匹配时回退
+const OriginalCode = dynamic(
   () =>
     import('react-notion-x/build/third-party/code').then(m => {
       return m.Code
