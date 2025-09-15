@@ -1,9 +1,10 @@
-// components/LoginModal.js (使用 Font Awesome 图标)
+// components/LoginModal.js 【已修复 import 错误】
 
+// 1. 关键改动：确保 useAuth 是从正确的文件导入的！
 import { useAuth } from '../lib/AuthContext';
 
 const LoginModal = ({ isOpen, onClose }) => {
-  const { loginWithGoogle, loginWithFacebook } from useAuth();
+  const { loginWithGoogle, loginWithFacebook } = useAuth();
 
   if (!isOpen) {
     return null;
@@ -33,7 +34,6 @@ const LoginModal = ({ isOpen, onClose }) => {
             onClick={loginWithGoogle} 
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-all"
           >
-            {/* 这里的 'fab fa-google' 是 Font Awesome 的 Google 图标类名 */}
             <i className="fab fa-google text-lg"></i>
             <span className="font-semibold text-gray-700">使用 Google 登录</span>
           </button>
@@ -43,7 +43,6 @@ const LoginModal = ({ isOpen, onClose }) => {
             onClick={loginWithFacebook} 
             className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#1877F2] rounded-lg shadow-md hover:bg-[#166fe5] transition-all"
           >
-            {/* 这里的 'fab fa-facebook-f' 是 Font Awesome 的 Facebook 图标类名 */}
             <i className="fab fa-facebook-f text-lg text-white"></i>
             <span className="font-semibold text-white">使用 Facebook 登录</span>
           </button>
