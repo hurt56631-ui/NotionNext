@@ -1,28 +1,25 @@
-// import '@/styles/animate.css' // @see https://animate.style/
+// pages/_app.js
+
+// 导入 Firebase 全局认证上下文
+import { AuthProvider } from '../lib/AuthContext'; 
+
+// 样式导入 (保持不变)
+import '@/styles/animate.css' 
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
+import 'react-notion-x/src/styles.css'
+import '@/styles/notion.css'
 
-// core styles shared by all of react-notion-x (required)
-import '@/styles/notion.css' //  重写部分notion样式
-import 'react-notion-x/src/styles.css' // 原版的react-notion-x
-
+// 其他 Hooks 和组件 (保持不变)
 import useAdjustStyle from '@/hooks/useAdjustStyle'
 import { GlobalContextProvider } from '@/lib/global'
 import { getBaseLayoutByTheme } from '@/themes/theme'
 import { useRouter } from 'next/router'
 import { useCallback, useMemo } from 'react'
 import { getQueryParam } from '../lib/utils'
-
-// 各种扩展插件 这个要阻塞引入
 import BLOG from '@/blog.config'
 import ExternalPlugins from '@/components/ExternalPlugins'
 import SEO from '@/components/SEO'
-import { zhCN } from '@clerk/localizations'
-import dynamic from 'next/dynamic'
-// import { ClerkProvider } from '@clerk/nextjs'
-const ClerkProvider = dynamic(() =>
-  import('@clerk/nextjs').then(m => m.ClerkProvider)
-)
 
 /**
  * App挂载DOM 入口文件
@@ -30,10 +27,12 @@ const ClerkProvider = dynamic(() =>
  * @returns
  */
 const MyApp = ({ Component, pageProps }) => {
-  // 一些可能出现 bug 的样式，可以统一放入该钩子进行调整
+  // 样式调整 Hook (保持不变)
   useAdjustStyle()
 
   const route = useRouter()
+  
+  // 主题逻辑 (保持不变)
   const theme = useMemo(() => {
     return (
       getQueryParam(route.asPath, 'theme') ||
@@ -42,7 +41,7 @@ const MyApp = ({ Component, pageProps }) => {
     )
   }, [route])
 
-  // 整体布局
+  // 布局逻辑 (保持不变)
   const GLayout = useCallback(
     props => {
       const Layout = getBaseLayoutByTheme(theme)
@@ -51,24 +50,18 @@ const MyApp = ({ Component, pageProps }) => {
     [theme]
   )
 
-  const enableClerk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-  const content = (
-    <GlobalContextProvider {...pageProps}>
-      <GLayout {...pageProps}>
-        <SEO {...pageProps} />
-        <Component {...pageProps} />
-      </GLayout>
-      <ExternalPlugins {...pageProps} />
-    </GlobalContextProvider>
-  )
   return (
-    <>
-      {enableClerk ? (
-        <ClerkProvider localization={zhCN}>{content}</ClerkProvider>
-      ) : (
-        content
-      )}
-    </>
+    // <--- 新增的 AuthProvider 包裹层 --->
+    // 它使得整个应用都能访问到用户登录状态
+    <AuthProvider>
+      <GlobalContextProvider {...pageProps}>
+        <GLayout {...pageProps}>
+          <SEO {...pageProps} />
+          <Component {...pageProps} />
+        </GLayout>
+        <ExternalPlugins {...pageProps} />
+      </GlobalContextProvider>
+    </AuthProvider>
   )
 }
 
