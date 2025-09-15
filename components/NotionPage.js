@@ -7,6 +7,12 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
+
+// 1. 定义一个映射表，用于注册所有可以通过 !include 使用的组件
+const CUSTOM_COMPONENTS_MAP = {
+  // 【重要】只在这里注册您项目中真实存在的组件文件！
+  // 确保 '/components/XuanZeTi.js' 这个文件存在于您的项目中。
+  '/components/Create PronunciationPractice.js': dynamic(() => import('@/components/Create PronunciationPractice'), { ssr: false }),
 /**
  * 整个站点的核心组件
  * 将Notion数据渲染成网页
