@@ -1,4 +1,4 @@
-// themes/heo/components/PostItem.js (方案一：增加行高)
+// themes/heo/components/PostItem.js (最终修复版：使用内联 style 强制行高)
 
 import Link from 'next/link';
 
@@ -7,7 +7,7 @@ const PostItem = ({ post }) => {
   const isAdmin = post.authorRole === 'admin';
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 p-4 border-b border-gray-200 dark:border-gray-700 shadow-md hover:shadow-xl transition-shadow duration-300">
       {/* 顶部：头像、用户名、时间、地点 */}
       <div className="flex items-center mb-3">
         {post.authorAvatar && <img src={post.authorAvatar} alt={post.authorName} className="w-10 h-10 rounded-full border-2 border-gray-200 dark:border-gray-600" />}
@@ -32,8 +32,21 @@ const PostItem = ({ post }) => {
       <Link href={`/forum/post/${post.id}`}>
         <a className="space-y-2 block my-2">
           <h2 className="text-lg font-bold hover:text-blue-500 dark:text-gray-100">{post.title}</h2>
-          {/* 【关键改动】增加了 leading-relaxed 来增大行高 */}
-          <p className="text-gray-800 dark:text-gray-200 text-base line-clamp-2 leading-relaxed">{post.content}</p>
+          {/* 【关键改动】移除了 line-clamp-2 和 leading-relaxed，直接使用 style 设置行高 */}
+          {/* 为了确保两行能够完整显示，我们将行高稍微设置大一点，并使用一个自定义的两行截断 */}
+          <p 
+            className="text-gray-800 dark:text-gray-200 text-base overflow-hidden" 
+            style={{ 
+              lineHeight: '1.8em', // 增大行高，确保复杂文字不被截断
+              maxHeight: '3.6em',  // 1.8em * 2行 = 3.6em 的最大高度
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 2, // 模拟 line-clamp-2 的效果
+              textOverflow: 'ellipsis'
+            }}
+          >
+            {post.content}
+          </p>
         </a>
       </Link>
       
