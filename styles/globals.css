@@ -271,6 +271,11 @@ a.avatar-wrapper {
   text-orientation: upright; /* 文字方向正常 */
 }
 
+/* 自定义的文字浮动阴影效果 */
+.text-shadow-lg {
+  text-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
 /* Chatbase 在移动端禁止遮挡 */
 @media (max-width: 700px) {
   button#chatbase-bubble-button {
