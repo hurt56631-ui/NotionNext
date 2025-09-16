@@ -1,37 +1,70 @@
-// pages/forum/index.js (最终功能版)
+// pages/forum/index.js (已修复“一直加载中”问题)
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../lib/AuthContext';
 import Link from 'next/link';
 import ForumCategoryTabs from '../../themes/heo/components/ForumCategoryTabs';
 import PostItem from '../../themes/heo/components/PostItem';
-import LoginModal from '@/components/LoginModal'; // 1. 导入登录弹窗
+import LoginModal from '@/components/LoginModal';
 
 const ForumHomePage = () => {
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false); // 2. 控制登录弹窗的状态
-
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState('推荐');
   const [currentSort, setCurrentSort] = useState('最新');
 
   useEffect(() => {
-    // ... (获取帖子的 useEffect 逻辑保持不变)
-  }, [currentCategory, currentSort]);
+    setLoading(true); // 开始获取数据前，设置加载状态
+
+    let q; // 声明一个查询变量
+    const postsRef = collection(db, 'posts');
+
+    // --- 构建动态查询 ---
+    // 1. 分类筛选 (我们先假设'推荐'是获取所有帖子)
+    if (currentCategory === '推荐') {
+      // 2. 排序逻辑
+      if (currentSort === '最热') {
+        q = query(postsRef, orderBy('likesCount', 'desc')); // 假设有点赞数字段 likesCount
+      } else { // 默认和最新都按创建时间
+        q = query(postsRef, orderBy('createdAt', 'desc'));
+      }
+    } else {
+      // 3. 其他分类的筛选
+      if (currentSort === '最热') {
+        q = query(postsRef, where('category', '==', currentCategory), orderBy('likesCount', 'desc'));
+      } else {
+        q = query(postsRef, where('category', '==', currentCategory), orderBy('createdAt', 'desc'));
+      }
+    }
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const postsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setPosts(postsData);
+      setLoading(false); // 成功获取数据后，关闭加载状态
+    }, (error) => {
+      console.error("获取帖子失败:", error);
+      setLoading(false); // 获取数据失败后，也要关闭加载状态
+    });
+
+    // 组件卸载时，取消对数据库的监听
+    return () => unsubscribe();
+  }, [currentCategory, currentSort]); // 当分类或排序改变时，重新执行这个 effect
 
   const handleCategoryChange = (category) => setCurrentCategory(category);
   const handleSortChange = (sort) => setCurrentSort(sort);
   
-  // 3. 点击发帖按钮的统一处理函数
   const handlePostButtonClick = (e) => {
     if (!user) {
-      e.preventDefault(); // 阻止 Link 的默认跳转行为
-      setIsLoginModalOpen(true); // 打开登录弹窗
+      e.preventDefault();
+      setIsLoginModalOpen(true);
     }
-    // 如果用户已登录，则不执行任何操作，Link 会正常跳转
   };
 
   return (
@@ -50,13 +83,16 @@ const ForumHomePage = () => {
           <ForumCategoryTabs onCategoryChange={handleCategoryChange} onSortChange={handleSortChange} />
           
           <div className="mt-4 bg-white dark:bg-gray-800 rounded-lg shadow">
-            {loading && <p className="p-4 text-center text-gray-500">加载中...</p>}
-            {!loading && posts.length === 0 && <p className="p-4 text-center text-gray-500">该分类下还没有帖子哦，快来发布第一篇吧！</p>}
-            {!loading && posts.map(post => <PostItem key={post.id} post={post} />)}
+            {loading ? (
+              <p className="p-8 text-center text-gray-500">正在加载帖子...</p>
+            ) : posts.length > 0 ? (
+              posts.map(post => <PostItem key={post.id} post={post} />)
+            ) : (
+              <p className="p-8 text-center text-gray-500">该分类下还没有帖子哦，快来发布第一篇吧！</p>
+            )}
           </div>
         </div>
 
-        {/* 4. 发帖按钮始终显示 */}
         <Link href="/forum/new-post">
           <a 
             onClick={handlePostButtonClick}
@@ -67,7 +103,6 @@ const ForumHomePage = () => {
         </Link>
       </div>
       
-      {/* 5. 渲染登录弹窗 */}
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </>
   );
