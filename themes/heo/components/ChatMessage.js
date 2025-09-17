@@ -1,16 +1,14 @@
-// themes/heo/components/ChatMessage.js (UI微调版)
+// themes/heo/components/ChatMessage.js (路径修正版)
 
-import { useAuth } from '@/lib/Auth-context' // 修正路径
+import { useAuth } from '@/lib/AuthContext' // 修正了这里的路径
 
 const ChatMessage = ({ message, otherUser }) => {
   const { user } = useAuth()
   const isMe = message.senderId === user.uid
 
   return (
-    // 添加 flex-shrink-0 确保消息不会被压缩
     <div className={`flex items-end gap-2 my-2 flex-shrink-0`}>
       {!isMe && (
-        // 关键修改: 增大头像尺寸 w-10 h-10 (等于 40px)
         <img
           src={otherUser?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
           alt={otherUser?.displayName}
@@ -25,7 +23,6 @@ const ChatMessage = ({ message, otherUser }) => {
         <p>{message.text}</p>
       </div>
        {isMe && (
-        // 关键修改: 增大头像尺寸 w-10 h-10
         <img
           src={user?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
           alt={user?.displayName}
