@@ -27,7 +27,7 @@ const ChatMessage = ({ message, otherUser }) => {
         <img
           src={user?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
           alt={user?.displayName}
-          className="rounded-full w-10 h-10 object-cover"
+          className="rounded-full w-14 h-14 object-cover"
         />
       )}
     </div>
