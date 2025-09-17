@@ -1,9 +1,10 @@
-// pages/forum/messages/index.js (修正版)
+// pages/forum/messages/index.js (最终修正版)
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '@/lib/AuthContext'
-import Layout from '@/themes/heo'
+// 修正 1: 使用正确的命名导入
+import { LayoutBase } from '@/themes/heo' 
 import ConversationList from '@/themes/heo/components/ConversationList'
 import ChatWindow from '@/themes/heo/components/ChatWindow'
 import { getConversationsForUser } from '@/lib/chat'
@@ -26,24 +27,19 @@ const MessagesPage = () => {
     }
   }, [user]);
 
-  // ==================== 修改部分 START ====================
   const handleSelectChat = (selectedChatId) => {
-    // 修正：将 isMobile 的判断移动到了函数内部的最开始
-    // 这样只有在用户点击时（即在浏览器中），这行代码才会被执行
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
-    
-    if (isMobile) {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
       router.push(`/forum/messages/${selectedChatId}`)
     } else {
       router.push(`/forum/messages?chatId=${selectedChatId}`, undefined, { shallow: true })
     }
   }
-  // ==================== 修改部分 END ====================
 
   const activeConversation = conversations.find(c => c.id === activeChatId);
 
   return (
-    <Layout>
+    // 修正 2: 将 <Layout> 改回 <LayoutBase>
+    <LayoutBase>
       {loading && <div className="p-10 text-center">加载中...</div>}
       {!loading && !user && <div className="p-10 text-center">请先登录以查看消息。</div>}
       {!loading && user && (
@@ -56,7 +52,7 @@ const MessagesPage = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </LayoutBase>
   )
 }
 
