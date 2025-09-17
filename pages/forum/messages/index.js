@@ -1,28 +1,22 @@
-// pages/forum/messages/index.js (抽屉触发版)
+// pages/forum/messages/index.js (抽屉触发版 - 最终清理)
 
 import { useRouter } from 'next/router'
 import { useAuth } from '@/lib/AuthContext'
 import { LayoutBase } from '@/themes/heo'
 import ConversationList from '@/themes/heo/components/ConversationList'
-import { useDrawer } from '@/lib/DrawerContext' // 引入 useDrawer
+// 不再需要 useDrawer
 
 const MessagesPage = () => {
   const { user, loading } = useAuth()
-  const router = useRouter()
-  const { openDrawer } = useDrawer(); // 获取 openDrawer 方法
-
-  const handleSelectChat = (conversation) => {
-    // 点击对话时，不再跳转页面，而是打开聊天抽屉
-    openDrawer({ type: 'chat', conversation: conversation });
-  }
-
+  
+  // 这个页面的唯一职责就是显示对话列表
+  // 点击对话后的行为，完全由 ConversationList 和 BottomNavBar 内部处理
   return (
     <LayoutBase>
       {loading && <div className="p-10 text-center">加载中...</div>}
       {!loading && !user && <div className="p-10 text-center">请先登录以查看消息。</div>}
       {!loading && user && (
-        // 我们不再需要复杂的左右分栏，直接显示列表即可
-        <ConversationList onSelectChat={handleSelectChat} />
+        <ConversationList />
       )}
     </LayoutBase>
   )
