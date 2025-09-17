@@ -1,31 +1,56 @@
-// pages/forum/messages/index.js (最终修正版)
+// pages/forum/messages/index.js (最终健壮版)
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '@/lib/AuthContext'
-// 修正 1: 使用正确的命名导入
-import { LayoutBase } from '@/themes/heo' 
+import { LayoutBase } from '@/themes/heo'
 import ConversationList from '@/themes/heo/components/ConversationList'
 import ChatWindow from '@/themes/heo/components/ChatWindow'
 import { getConversationsForUser } from '@/lib/chat'
+import { doc, getDoc } from 'firebase/firestore' // 1. 引入 getDoc
+import { db } from '@/lib/firebase' // 2. 引入 db
 
 const MessagesPage = () => {
   const { user, loading } = useAuth()
   const router = useRouter()
   const { chatId } = router.query
-  const [activeChatId, setActiveChatId] = useState(chatId || null)
+  const [activeChatId, setActiveChatId] = useState(null)
   const [conversations, setConversations] = useState([]);
+  const [activeConversation, setActiveConversation] = useState(null);
   
+  // 监听路由变化
   useEffect(() => {
     setActiveChatId(chatId || null)
   }, [chatId])
 
+  // 监听对话列表
   useEffect(() => {
     if (user) {
       const unsubscribe = getConversationsForUser(user.uid, setConversations);
       return () => unsubscribe();
     }
   }, [user]);
+
+  // 【核心修复】当 activeChatId 或对话列表变化时，更新 activeConversation
+  useEffect(() => {
+    if (activeChatId) {
+      const convInList = conversations.find(c => c.id === activeChatId);
+      if (convInList) {
+        setActiveConversation(convInList);
+      } else {
+        // 如果列表里没有，说明是新创建的，单独去获取一次
+        const fetchConversation = async () => {
+          const convDoc = await getDoc(doc(db, 'chats', activeChatId));
+          if (convDoc.exists()) {
+            setActiveConversation({ id: convDoc.id, ...convDoc.data() });
+          }
+        };
+        fetchConversation();
+      }
+    } else {
+      setActiveConversation(null);
+    }
+  }, [activeChatId, conversations]);
 
   const handleSelectChat = (selectedChatId) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -35,10 +60,7 @@ const MessagesPage = () => {
     }
   }
 
-  const activeConversation = conversations.find(c => c.id === activeChatId);
-
   return (
-    // 修正 2: 将 <Layout> 改回 <LayoutBase>
     <LayoutBase>
       {loading && <div className="p-10 text-center">加载中...</div>}
       {!loading && !user && <div className="p-10 text-center">请先登录以查看消息。</div>}
