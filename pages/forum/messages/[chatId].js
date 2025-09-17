@@ -1,4 +1,4 @@
-// pages/forum/messages/[chatId].js (最终全屏UI版)
+// pages/forum/messages/[chatId].js (最终简化版)
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
@@ -30,12 +30,11 @@ const ChatDetailPage = () => {
   }, [chatId, user, router]);
 
   return (
-    // 使用一个特殊的 prop (fullScreen) 来通知 LayoutBase
-    <LayoutBase fullScreen={true}>
+    // 不需要传递任何特殊 prop，LayoutBase 会自动处理
+    <LayoutBase>
       {(loading || !conversation) && <div className="p-10 text-center">加载中...</div>}
       {!loading && !user && <div className="p-10 text-center">请先登录。</div>}
       {!loading && user && conversation && (
-        // ChatWindow 会填充 LayoutBase 提供的全屏空间
         <ChatWindow chatId={chatId} conversation={conversation} />
       )}
     </LayoutBase>
