@@ -1,4 +1,4 @@
-// _app.js
+// _app.js (最终修改版)
 
 // 导入你的样式文件...
 //import '@/styles/animate.css'
@@ -8,7 +8,9 @@ import '@/styles/notion.css'
 import 'react-notion-x/src/styles.css'
 
 // 导入 Firebase Auth Provider
-import { AuthProvider } from '../lib/AuthContext' // 导入我们创建的 AuthProvider
+import { AuthProvider } from '../lib/AuthContext'
+// 1. 从我们创建的新文件中导入 DrawerProvider
+import { DrawerProvider } from '../lib/DrawerContext' 
 
 import useAdjustStyle from '@/hooks/useAdjustStyle'
 import { GlobalContextProvider } from '@/lib/global'
@@ -44,7 +46,6 @@ const MyApp = ({ Component, pageProps }) => {
     [theme]
   )
 
-  // 移除了所有 Clerk 相关的代码
   const content = (
     <GlobalContextProvider {...pageProps}>
       <GLayout {...pageProps}>
@@ -55,10 +56,13 @@ const MyApp = ({ Component, pageProps }) => {
     </GlobalContextProvider>
   )
   
-  // 在最外层用 AuthProvider 包裹整个应用
+  // 2. 在 AuthProvider 内部，用 DrawerProvider 包裹所有内容
+  // 这样，应用里的任何组件都可以通过 `useDrawer()` 来控制抽屉了
   return (
     <AuthProvider>
-      {content}
+      <DrawerProvider>
+        {content}
+      </DrawerProvider>
     </AuthProvider>
   )
 }
