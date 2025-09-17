@@ -34,7 +34,7 @@ const ConversationItem = ({ conversation, onClick }) => { // 移除了 isActive 
       <img
         src={otherUser.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
         alt={otherUser.displayName}
-        className="rounded-full object-cover w-12 h-12"
+        className="rounded-full object-cover w-16 h-16"
       />
       <div className="flex-1 ml-3 overflow-hidden">
         <div className="flex justify-between items-center">
