@@ -1,7 +1,10 @@
+// pages/forum/messages/[chatId].js (最终修正版)
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '@/lib/AuthContext'
-import Layout from '@/themes/heo'
+// 修正 1: 使用正确的命名导入
+import { LayoutBase } from '@/themes/heo' 
 import ChatWindow from '@/themes/heo/components/ChatWindow'
 import { getDoc, doc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
@@ -28,13 +31,14 @@ const ChatDetailPage = () => {
   }, [chatId, router]);
 
   useEffect(() => {
-    if (window.innerWidth >= 768) {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
       router.replace(`/forum/messages?chatId=${chatId}`)
     }
   }, [chatId, router])
 
   return (
-    <Layout>
+    // 修正 2: 将 <Layout> 改回 <LayoutBase>
+    <LayoutBase>
       {(loading || !conversation) && <div>加载中...</div>}
       {!loading && !user && <div>请先登录。</div>}
       {!loading && user && conversation && (
@@ -49,7 +53,7 @@ const ChatDetailPage = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </LayoutBase>
   )
 }
 
