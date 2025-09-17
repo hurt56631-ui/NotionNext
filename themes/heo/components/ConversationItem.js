@@ -1,35 +1,36 @@
-// themes/heo/components/ConversationItem.js (UI微調版)
+// themes/heo/components/ConversationItem.js (抽屉模式最终版)
 
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/lib/AuthContext' // 修正路径
+import { useAuth } from '@/lib/AuthContext'
 import { getUserProfile } from '@/lib/chat'
 
-const ConversationItem = ({ conversation, onClick, isActive }) => {
+const ConversationItem = ({ conversation, onClick }) => { // 移除了 isActive prop
   const { user } = useAuth()
   const [otherUser, setOtherUser] = useState(null)
 
   useEffect(() => {
-    const otherUserId = conversation.participants.find(uid => uid !== user.uid)
-    if (otherUserId) {
-      getUserProfile(otherUserId).then(setOtherUser)
+    // 核心修改：确保 user 对象存在，并且 conversation 数据也存在
+    if (user && conversation?.participants) {
+      const otherUserId = conversation.participants.find(uid => uid !== user.uid)
+      if (otherUserId) {
+        getUserProfile(otherUserId).then(setOtherUser)
+      }
     }
-  }, [conversation, user.uid])
+  }, [conversation, user]) // 依赖项加入 user，确保登录后才执行
 
   if (!otherUser) {
-    return <div className="h-[76px] bg-gray-50 animate-pulse"></div>;
+    return <div className="h-[76px] bg-gray-50 dark:bg-gray-800 animate-pulse"></div>;
   }
   
   const lastMessage = conversation.lastMessage || '...'
   const timestamp = conversation.lastMessageTimestamp?.toDate().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) || ''
   
   return (
+    // onClick 现在由父组件决定行为
     <div
       onClick={onClick}
-      className={`flex items-center p-3 cursor-pointer transition-colors duration-200 ${
-        isActive ? 'bg-blue-50 dark:bg-gray-700' : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-      }`}
+      className="flex items-center p-3 cursor-pointer transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-700"
     >
-      {/* 关键修改: 增大头像尺寸 w-12 h-12 (等于 48px) */}
       <img
         src={otherUser.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
         alt={otherUser.displayName}
