@@ -1,10 +1,4 @@
-/**
- *   HEO 主题说明
- *  > 主题设计者 [张洪](https://zhheo.com/)
- *  > 主题开发者 [tangly1024](https://github.com/tangly1024)
- *  1. 开启方式 在blog.config.js 将主题配置为 `HEO`
- *  2. 更多说明参考此[文档](https://docs.tangly1024.com/article/notionnext-heo)
- */
+// themes/heo/index.js (最终修改版)
 
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -44,7 +38,7 @@ import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-import BottomNavBar from './components/BottomNavBar' // 导入底部导航栏
+import BottomNavBar from './components/BottomNavBar'
 
 /**
  * 基础布局
@@ -53,46 +47,47 @@ import BottomNavBar from './components/BottomNavBar' // 导入底部导航栏
  * @constructor
  */
 const LayoutBase = props => {
-  const { children, slotTop, className } = props
+  // 关键修改 1: 从 props 中解构出 fullScreen 属性
+  const { children, slotTop, className, fullScreen } = props
   const { fullWidth, isDarkMode } = useGlobal()
-  const router = useRouter() // 获取 router 实例
+  const router = useRouter()
 
-  // 判断是否是首页，只有首页才显示 Header
+  // 关键修改 2: 如果 fullScreen 为 true，则返回一个极简的全屏布局
+  if (fullScreen) {
+    return (
+      <div id='theme-heo-fullscreen' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-screen flex flex-col`}>
+        <Style />
+        {/* 直接渲染 children，它将填充整个屏幕 */}
+        <main className="flex-grow w-full h-full">
+          {children}
+        </main>
+        {/* 注意：在这个模式下，Header, Footer, BottomNavBar 都不会被渲染 */}
+      </div>
+    )
+  }
+
+  // --- 如果不是 fullScreen，则执行下面的原始逻辑 ---
   const isHomePage = router.pathname === '/'
-
   const headerSlot = (
     <header>
-      {/* 顶部导航 */}
-      {/* 关键改动：只有 isHomePage 为 true 时才渲染 Header */}
       {isHomePage && <Header {...props} />}
-
-      {/* 通知横幅和 Hero 部分也只在首页显示 */}
       {isHomePage ? (
         <>
           <NoticeBar />
           <Hero {...props} />
         </>
       ) : (
-        // 对于非首页，在这里渲染文章头
         !fullWidth && <PostHeader {...props} isDarkMode={isDarkMode} />
       )}
     </header>
   )
   
-  // 右侧栏 用户信息+标签列表
   const slotRight =
     router.route === '/404' || fullWidth ? null : <SideRight {...props} />
-
   const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-
-  const HEO_HERO_BODY_REVERSE = siteConfig(
-    'HEO_HERO_BODY_REVERSE',
-    false,
-    CONFIG
-  )
+  const HEO_HERO_BODY_REVERSE = siteConfig( 'HEO_HERO_BODY_REVERSE', false, CONFIG )
   const HEO_LOADING_COVER = siteConfig('HEO_LOADING_COVER', true, CONFIG)
 
-  // 加载wow动画
   useEffect(() => {
     loadWowJS()
   }, [])
@@ -102,45 +97,32 @@ const LayoutBase = props => {
       id='theme-heo'
       className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
       <Style />
-
-      {/* 关键改动：将 Header 移出，并根据条件渲染 */}
       {isHomePage && headerSlot}
-
-      {/* 主区块 */}
       <main
         id='wrapper-outer'
-        // 关键改动：添加 pb-16 (padding-bottom)，防止被底部导航栏遮挡
         className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5 pb-16 md:pb-0`}>
         <div
           id='container-inner'
           className={`${HEO_HERO_BODY_REVERSE ? 'flex-row-reverse' : ''} w-full mx-auto lg:flex justify-center relative z-10`}>
           <div className={`w-full h-auto ${className || ''}`}>
-            {/* 对于非首页，我们在这里渲染文章头，确保它在主内容区 */}
             {!isHomePage && <PostHeader {...props} isDarkMode={isDarkMode} />}
             {slotTop}
             {children}
           </div>
-
           <div className='lg:px-2'></div>
-
           <div className='hidden xl:block'>
-            {/* 主区快右侧 */}
             {slotRight}
           </div>
         </div>
       </main>
-
-      {/* 页脚 */}
       <Footer />
-      
-      {/* 添加底部导航栏 */}
       <BottomNavBar />
-
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
   )
 }
 
+// ... (所有其他布局组件 LayoutIndex, LayoutPostList 等保持完全不变)
 /**
  * 首页
  * 是一个博客列表，嵌入一个Hero大图
@@ -521,4 +503,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-    }
+        }
