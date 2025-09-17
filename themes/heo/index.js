@@ -1,4 +1,4 @@
-// themes/heo/index.js (最终修改版)
+// themes/heo/index.js (最终的、完整的修复版)
 
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -47,26 +47,27 @@ import BottomNavBar from './components/BottomNavBar'
  * @constructor
  */
 const LayoutBase = props => {
-  // 关键修改 1: 从 props 中解构出 fullScreen 属性
-  const { children, slotTop, className, fullScreen } = props
+  const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
 
-  // 关键修改 2: 如果 fullScreen 为 true，则返回一个极简的全屏布局
-  if (fullScreen) {
+  // 【关键改动 1】: 根据路由自动判断是否是手机端的聊天详情页
+  const isMobileChatPage = router.pathname.startsWith('/forum/messages/') && router.query.chatId;
+
+  // 如果是手机聊天页，则进入特殊的全屏模式
+  if (isMobileChatPage) {
     return (
-      <div id='theme-heo-fullscreen' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-screen flex flex-col`}>
+      <div id='theme-heo-fullscreen' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-screen w-screen fixed inset-0 flex flex-col`}>
         <Style />
-        {/* 直接渲染 children，它将填充整个屏幕 */}
-        <main className="flex-grow w-full h-full">
+        <main className="flex-grow w-full h-full overflow-hidden">
           {children}
         </main>
-        {/* 注意：在这个模式下，Header, Footer, BottomNavBar 都不会被渲染 */}
+        {/* 在这个模式下，Header, Footer, BottomNavBar 都不会被渲染 */}
       </div>
     )
   }
 
-  // --- 如果不是 fullScreen，则执行下面的原始逻辑 ---
+  // --- 如果不是手机聊天页，则执行下面的原始逻辑 ---
   const isHomePage = router.pathname === '/'
   const headerSlot = (
     <header>
@@ -122,7 +123,6 @@ const LayoutBase = props => {
   )
 }
 
-// ... (所有其他布局组件 LayoutIndex, LayoutPostList 等保持完全不变)
 /**
  * 首页
  * 是一个博客列表，嵌入一个Hero大图
@@ -132,7 +132,6 @@ const LayoutBase = props => {
 const LayoutIndex = props => {
   return (
     <div id='post-outer-wrapper' className='px-5 md:px-0'>
-      {/* 文章分类条 */}
       <CategoryBar {...props} />
       {siteConfig('POST_LIST_STYLE') === 'page' ? (
         <BlogPostListPage {...props} />
@@ -151,7 +150,6 @@ const LayoutIndex = props => {
 const LayoutPostList = props => {
   return (
     <div id='post-outer-wrapper' className='px-5  md:px-0'>
-      {/* 文章分类条 */}
       <CategoryBar {...props} />
       {siteConfig('POST_LIST_STYLE') === 'page' ? (
         <BlogPostListPage {...props} />
@@ -173,7 +171,6 @@ const LayoutSearch = props => {
   const currentSearch = keyword || router?.query?.s
 
   useEffect(() => {
-    // 高亮搜索结果
     if (currentSearch) {
       setTimeout(() => {
         replaceSearchResult({
@@ -213,14 +210,9 @@ const LayoutSearch = props => {
  */
 const LayoutArchive = props => {
   const { archivePosts } = props
-
-  // 归档页顶部显示条，如果是默认归档则不显示。分类详情页显示分类列表，标签详情页显示当前标签
-
   return (
     <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
-      {/* 文章分类条 */}
       <CategoryBar {...props} border={false} />
-
       <div className='px-3'>
         {Object.keys(archivePosts).map(archiveTitle => (
           <BlogPostArchive
@@ -242,7 +234,6 @@ const LayoutArchive = props => {
 const LayoutSlug = props => {
   const { post, lock, validPassword } = props
   const { locale, fullWidth } = useGlobal()
-
   const [hasCode, setHasCode] = useState(false)
 
   useEffect(() => {
@@ -263,7 +254,6 @@ const LayoutSlug = props => {
   const router = useRouter()
   const waiting404 = siteConfig('POST_WAITING_TIME_FOR_404') * 1000
   useEffect(() => {
-    // 404
     if (!post) {
       setTimeout(
         () => {
@@ -286,17 +276,13 @@ const LayoutSlug = props => {
     <>
       <div
         className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} ${hasCode ? 'xl:w-[73.15vw]' : ''}  bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4 `}>
-        {/* 文章锁 */}
         {lock && <PostLock validPassword={validPassword} />}
-
         {!lock && post && (
           <div className='mx-auto md:w-full md:px-5'>
-            {/* 文章主体 */}
             <article
               id='article-wrapper'
               itemScope
               itemType='https://schema.org/Movie'>
-              {/* Notion文章主体 */}
               <section
                 className='wow fadeInUp p-5 justify-center mx-auto'
                 data-wow-delay='.2s'>
@@ -306,31 +292,21 @@ const LayoutSlug = props => {
                 {post && <NotionPage post={post} />}
                 <WWAds orientation='horizontal' className='w-full' />
               </section>
-
-              {/* 上一篇\下一篇文章 */}
               <PostAdjacent {...props} />
-
-              {/* 分享 */}
               <ShareBar post={post} />
               {post?.type === 'Post' && (
                 <div className='px-5'>
-                  {/* 版权 */}
                   <PostCopyright {...props} />
-                  {/* 文章推荐 */}
                   <PostRecommend {...props} />
                 </div>
               )}
             </article>
-
-            {/* 评论区 */}
             {fullWidth ? null : (
               <div className={`${commentEnable && post ? '' : 'hidden'}`}>
                 <hr className='my-4 border-dashed' />
-                {/* 评论区上方广告 */}
                 <div className='py-2'>
                   <AdSlot />
                 </div>
-                {/* 评论互动 */}
                 <div className='duration-200 overflow-x-auto px-5'>
                   <div className='text-2xl dark:text-white'>
                     <i className='fas fa-comment mr-1' />
@@ -343,7 +319,6 @@ const LayoutSlug = props => {
           </div>
         )}
       </div>
-
       <FloatTocButton {...props} />
     </>
   )
@@ -355,11 +330,9 @@ const LayoutSlug = props => {
  * @returns
  */
 const Layout404 = props => {
-  // const { meta, siteInfo } = props
   const { onLoading, fullWidth } = useGlobal()
   return (
     <>
-      {/* 主区块 */}
       <main
         id='wrapper-outer'
         className={`flex-grow ${fullWidth ? '' : 'max-w-4xl'} w-screen mx-auto px-5`}>
@@ -374,16 +347,12 @@ const Layout404 = props => {
             leaveFrom='opacity-100 translate-y-0'
             leaveTo='opacity-0 -translate-y-16'
             unmount={false}>
-            {/* 404卡牌 */}
             <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-              {/* 左侧动图 */}
               <LazyImage
                 className='error-img h-60 md:h-full p-4'
                 src={
                   'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'
                 }></LazyImage>
-
-              {/* 右侧文字 */}
               <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
                 <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>
                   404
@@ -396,8 +365,6 @@ const Layout404 = props => {
                 </SmartLink>
               </div>
             </div>
-
-            {/* 404页面底部显示最新文章 */}
             <div className='mt-12'>
               <LatestPostsGroup {...props} />
             </div>
@@ -416,7 +383,6 @@ const Layout404 = props => {
 const LayoutCategoryIndex = props => {
   const { categoryOptions } = props
   const { locale } = useGlobal()
-
   return (
     <div id='category-outer-wrapper' className='mt-8 px-5 md:px-0'>
       <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>
@@ -458,7 +424,6 @@ const LayoutCategoryIndex = props => {
 const LayoutTagIndex = props => {
   const { tagOptions } = props
   const { locale } = useGlobal()
-
   return (
     <div id='tag-outer-wrapper' className='px-5 mt-8 md:px-0'>
       <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>
@@ -503,4 +468,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-              }
+}
