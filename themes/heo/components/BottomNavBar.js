@@ -3,15 +3,15 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React, { useState, useEffect } from 'react';
-import AIChatDrawer from './AIChatDrawer'; // 确保您有这个AI抽屉组件
-import ChatDrawer from './ChatDrawer'; // 我们新的聊天抽屉组件
+import AIChatDrawer from './AIChatDrawer'; 
+import ChatDrawer from './ChatDrawer'; 
 
 const BottomNavBar = () => {
   const router = useRouter();
+  // 状态管理现在在这个组件内部
   const [activeDrawer, setActiveDrawer] = useState(null); // null, 'ai', 'chat'
   const [chatConversation, setChatConversation] = useState(null);
 
-  // 导航项定义
   const navItems = [
     { name: '主页', path: '/', icon: 'fas fa-home', type: 'link' },
     { name: 'AI助手', type: 'ai', icon: 'fas fa-robot' },
@@ -25,7 +25,6 @@ const BottomNavBar = () => {
     if (type === 'chat') {
       setChatConversation(data.conversation);
     }
-    // 添加 hash 以支持手势返回
     router.push(router.pathname + `#${type}-drawer`, undefined, { shallow: true });
   };
 
@@ -37,7 +36,6 @@ const BottomNavBar = () => {
     }
   };
   
-  // 监听 URL hash 的变化来处理手势返回
   useEffect(() => {
     const handleHashChange = () => {
       if (!window.location.hash.includes('-drawer') && activeDrawer) {
@@ -53,7 +51,7 @@ const BottomNavBar = () => {
       <style jsx global>{`
         @media (max-width: 767px) {
           body {
-            padding-bottom: 4rem; /* h-16 */
+            padding-bottom: 4rem; 
           }
         }
       `}</style>
@@ -71,7 +69,6 @@ const BottomNavBar = () => {
               </Link>
             );
           }
-          // 渲染触发器按钮
           return (
             <button key={item.name} onClick={() => openDrawer(item.type)} className='flex flex-col items-center justify-center flex-1 px-2 py-1 text-gray-600 dark:text-gray-300'>
               <i className={`${item.icon} text-xl mb-1`}></i>
@@ -81,7 +78,6 @@ const BottomNavBar = () => {
         })}
       </div>
 
-      {/* 抽屉组件们 */}
       <AIChatDrawer isOpen={activeDrawer === 'ai'} onClose={closeDrawer} />
       <ChatDrawer isOpen={activeDrawer === 'chat'} onClose={closeDrawer} conversation={chatConversation} />
     </>
