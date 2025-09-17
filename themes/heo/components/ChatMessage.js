@@ -1,18 +1,20 @@
-import { useAuth } from '@/lib/AuthContext'
+// themes/heo/components/ChatMessage.js (UI微调版)
+
+import { useAuth } from '@/lib/Auth-context' // 修正路径
 
 const ChatMessage = ({ message, otherUser }) => {
   const { user } = useAuth()
   const isMe = message.senderId === user.uid
 
   return (
-    <div className={`flex items-end gap-2 my-2 ${isMe ? 'justify-end' : 'justify-start'}`}>
+    // 添加 flex-shrink-0 确保消息不会被压缩
+    <div className={`flex items-end gap-2 my-2 flex-shrink-0`}>
       {!isMe && (
+        // 关键修改: 增大头像尺寸 w-10 h-10 (等于 40px)
         <img
           src={otherUser?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
           alt={otherUser?.displayName}
-          width={32}
-          height={32}
-          className="rounded-full w-8 h-8"
+          className="rounded-full w-10 h-10 object-cover"
         />
       )}
       <div
@@ -23,12 +25,11 @@ const ChatMessage = ({ message, otherUser }) => {
         <p>{message.text}</p>
       </div>
        {isMe && (
+        // 关键修改: 增大头像尺寸 w-10 h-10
         <img
           src={user?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
           alt={user?.displayName}
-          width={32}
-          height={32}
-          className="rounded-full w-8 h-8"
+          className="rounded-full w-10 h-10 object-cover"
         />
       )}
     </div>
