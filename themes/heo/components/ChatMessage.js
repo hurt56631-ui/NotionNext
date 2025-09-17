@@ -1,13 +1,14 @@
-// themes/heo/components/ChatMessage.js (路径修正版)
+// themes/heo/components/ChatMessage.js (最终对齐修复版)
 
-import { useAuth } from '@/lib/AuthContext' // 修正了这里的路径
+import { useAuth } from '@/lib/AuthContext'
 
 const ChatMessage = ({ message, otherUser }) => {
   const { user } = useAuth()
   const isMe = message.senderId === user.uid
 
   return (
-    <div className={`flex items-end gap-2 my-2 flex-shrink-0`}>
+    // 【核心修复】: 在这里重新加入了 isMe 的判断，来决定 justify-start 或 justify-end
+    <div className={`flex items-end gap-2 my-2 flex-shrink-0 ${isMe ? 'justify-end' : 'justify-start'}`}>
       {!isMe && (
         <img
           src={otherUser?.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
