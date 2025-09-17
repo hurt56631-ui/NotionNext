@@ -1,17 +1,27 @@
+// themes/heo/components/StartChatButton.js (抽屉模式最终版)
+
 import { useAuth } from '@/lib/AuthContext'
 import { startChat } from '@/lib/chat'
-import { useRouter } from 'next/router'
+import { useDrawer } from '@/lib/DrawerContext' // 1. 引入 useDrawer
 
 const StartChatButton = ({ targetUserId }) => {
   const { user } = useAuth()
-  const router = useRouter()
+  const { openDrawer } = useDrawer() // 2. 获取 openDrawer 方法
 
-  const handleStartChat = () => {
+  const handleStartChat = async () => {
     if (!user) {
       alert('请先登录！')
       return
     }
-    startChat(user.uid, targetUserId, router.push)
+    
+    // 3. 调用新的 startChat，它会返回对话数据
+    const conversation = await startChat(user.uid, targetUserId);
+    if (conversation) {
+      // 4. 用获取到的对话数据，打开聊天抽屉
+      openDrawer({ type: 'chat', conversation: conversation });
+    } else {
+      alert('无法开启对话，请稍后再试。');
+    }
   }
 
   if (!user || user.uid === targetUserId) {
