@@ -1,7 +1,8 @@
+// themes/heo/components/ConversationItem.js (UI微調版)
+
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/lib/AuthContext'
+import { useAuth } from '@/lib/AuthContext' // 修正路径
 import { getUserProfile } from '@/lib/chat'
-import Image from 'next/image'
 
 const ConversationItem = ({ conversation, onClick, isActive }) => {
   const { user } = useAuth()
@@ -28,11 +29,10 @@ const ConversationItem = ({ conversation, onClick, isActive }) => {
         isActive ? 'bg-blue-50 dark:bg-gray-700' : 'hover:bg-gray-100 dark:hover:bg-gray-800'
       }`}
     >
+      {/* 关键修改: 增大头像尺寸 w-12 h-12 (等于 48px) */}
       <img
         src={otherUser.photoURL || 'https://www.gravatar.com/avatar?d=mp'}
         alt={otherUser.displayName}
-        width={48}
-        height={48}
         className="rounded-full object-cover w-12 h-12"
       />
       <div className="flex-1 ml-3 overflow-hidden">
