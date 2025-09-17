@@ -1,3 +1,5 @@
+// pages/forum/messages/index.js (修正版)
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '@/lib/AuthContext'
@@ -24,14 +26,19 @@ const MessagesPage = () => {
     }
   }, [user]);
 
+  // ==================== 修改部分 START ====================
   const handleSelectChat = (selectedChatId) => {
-    const isMobile = window.innerWidth < 768
+    // 修正：将 isMobile 的判断移动到了函数内部的最开始
+    // 这样只有在用户点击时（即在浏览器中），这行代码才会被执行
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+    
     if (isMobile) {
       router.push(`/forum/messages/${selectedChatId}`)
     } else {
       router.push(`/forum/messages?chatId=${selectedChatId}`, undefined, { shallow: true })
     }
   }
+  // ==================== 修改部分 END ====================
 
   const activeConversation = conversations.find(c => c.id === activeChatId);
 
