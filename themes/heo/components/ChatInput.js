@@ -1,3 +1,5 @@
+// themes/heo/components/ChatInput.js (无表情功能版)
+
 import { useState } from 'react'
 import { useAuth } from '@/lib/AuthContext'
 import { sendMessage } from '@/lib/chat'
@@ -8,7 +10,7 @@ const ChatInput = ({ chatId }) => {
 
   const handleSend = (e) => {
     e.preventDefault()
-    if (!chatId || !user) return
+    if (!chatId || !user || !text.trim()) return
     sendMessage(chatId, text, user.uid)
     setText('')
   }
