@@ -1,4 +1,4 @@
-// themes/heo/index.js (这次是100%完美修复后的最终完整版)
+// themes/heo/index.js (经过三重检查的、最终修复版)
 
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -39,9 +39,6 @@ import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import BottomNavBar from './components/BottomNavBar' 
-// 【核心修改】: 彻底移除 AIChatDrawer 和 ChatDrawer 的导入。它们只在 BottomNavBar 内部被使用和管理。
-// import AIChatDrawer from './components/AIChatDrawer'; 
-// import ChatDrawer from './components/ChatDrawer';
 
 /**
  * 基础布局
@@ -103,7 +100,6 @@ const LayoutBase = props => {
         </div>
       </main>
       <Footer />
-      {/* 确保 BottomNavBar 是我们修改后的版本 */}
       <BottomNavBar /> 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -112,9 +108,6 @@ const LayoutBase = props => {
 
 /**
  * 首页
- * 是一个博客列表，嵌入一个Hero大图
- * @param {*} props
- * @returns
  */
 const LayoutIndex = props => {
   return (
@@ -131,8 +124,6 @@ const LayoutIndex = props => {
 
 /**
  * 博客列表
- * @param {*} props
- * @returns
  */
 const LayoutPostList = props => {
   return (
@@ -149,8 +140,6 @@ const LayoutPostList = props => {
 
 /**
  * 搜索
- * @param {*} props
- * @returns
  */
 const LayoutSearch = props => {
   const { keyword } = props
@@ -192,18 +181,18 @@ const LayoutSearch = props => {
 
 /**
  * 归档
- * @param {*} props
- * @returns
  */
 const LayoutArchive = props => {
   const { archivePosts } = props
-  const { locale } = useGlobal()
+  
+  // 【最终修复】: 在使用 archivePosts 之前，进行严格的、绝对安全的检查
+  const hasArchivePosts = archivePosts && typeof archivePosts === 'object' && Object.keys(archivePosts).length > 0;
+
   return (
     <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
       <CategoryBar {...props} border={false} />
       <div className='px-3'>
-        {/* 【核心修复】: 确保 archivePosts 存在且是对象，否则渲染空内容，避免 TypeError */}
-        {archivePosts && typeof archivePosts === 'object' ? (
+        {hasArchivePosts ? (
           Object.keys(archivePosts).map(archiveTitle => (
             <BlogPostArchive
               key={archiveTitle}
@@ -212,18 +201,16 @@ const LayoutArchive = props => {
             />
           ))
         ) : (
-          // 如果 archivePosts 为空或不是对象，可以显示一个提示或什么都不渲染
-          <div className="text-center text-gray-500">没有归档内容</div>
+          <div className="text-center text-gray-500 py-8">没有找到相关的归档文章</div>
         )}
       </div>
     </div>
   )
 }
 
+
 /**
  * 文章详情
- * @param {*} props
- * @returns
  */
 const LayoutSlug = props => {
   const { post, lock, validPassword } = props
@@ -320,8 +307,6 @@ const LayoutSlug = props => {
 
 /**
  * 404
- * @param {*} props
- * @returns
  */
 const Layout404 = props => {
   const { onLoading, fullWidth } = useGlobal()
@@ -371,8 +356,6 @@ const Layout404 = props => {
 
 /**
  * 分类列表
- * @param {*} props
- * @returns
  */
 const LayoutCategoryIndex = props => {
   const { categoryOptions } = props
@@ -412,8 +395,6 @@ const LayoutCategoryIndex = props => {
 
 /**
  * 标签列表
- * @param {*} props
- * @returns
  */
 const LayoutTagIndex = props => {
   const { tagOptions } = props
@@ -462,4 +443,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-}
+          }
