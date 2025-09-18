@@ -1,121 +1,56 @@
-import { siteConfig } from '@/lib/config'
-import { useRef } from 'react'
-import { handleEmailClick } from '@/lib/plugins/mailEncrypt'
+// themes/heo/components/ConversationList.js (抽屉模式最终版 - 彻底清理)
 
-/**
- * 社交联系方式按钮组
- * @returns {JSX.Element}
- * @constructor
- */
-const SocialButton = () => {
-  const CONTACT_GITHUB = siteConfig('CONTACT_GITHUB')
-  const CONTACT_TWITTER = siteConfig('CONTACT_TWITTER')
-  const CONTACT_TELEGRAM = siteConfig('CONTACT_TELEGRAM')
-  const CONTACT_LINKEDIN = siteConfig('CONTACT_LINKEDIN')
-  const CONTACT_WEIBO = siteConfig('CONTACT_WEIBO')
-  const CONTACT_INSTAGRAM = siteConfig('CONTACT_INSTAGRAM')
-  const CONTACT_EMAIL = siteConfig('CONTACT_EMAIL')
-  const ENABLE_RSS = siteConfig('ENABLE_RSS')
-  const CONTACT_BILIBILI = siteConfig('CONTACT_BILIBILI')
-  const CONTACT_YOUTUBE = siteConfig('CONTACT_YOUTUBE')
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/AuthContext'
+import { getConversationsForUser } from '@/lib/chat'
+import ConversationItem from './ConversationItem'
+import { useDrawer } from '@/themes/heo/components/BottomNavBar'; // 【核心修改】: 从 BottomNavBar 导入 openDrawer
 
-  const emailIcon = useRef(null)
+const ConversationList = () => { // 不再需要 activeChatId prop
+  const { user } = useAuth()
+  const [conversations, setConversations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const { openDrawer } = useDrawer(); // 【核心修改】: 获取 openDrawer
+
+  useEffect(() => {
+    if (!user) return
+    setLoading(true)
+    const unsubscribe = getConversationsForUser(user.uid, (convs) => {
+      setConversations(convs)
+      setLoading(false)
+    })
+    return () => unsubscribe()
+  }, [user])
+
+  const handleSelectChat = (conversation) => {
+    openDrawer('chat', { conversation }); // 【核心修改】: 调用 openDrawer 打开聊天抽屉
+  };
+
+  if (loading) {
+    return <div className="p-4 text-center text-gray-500">加载对话中...</div>
+  }
 
   return (
-    <div className='w-full justify-center flex-wrap flex'>
-      <div className='space-x-12 text-3xl text-gray-600 dark:text-gray-300 '>
-        {CONTACT_GITHUB && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'github'}
-            href={CONTACT_GITHUB}>
-            <i className='transform hover:scale-125 duration-150 fab fa-github dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_TWITTER && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'twitter'}
-            href={CONTACT_TWITTER}>
-            <i className='transform hover:scale-125 duration-150 fab fa-twitter dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_TELEGRAM && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            href={CONTACT_TELEGRAM}
-            title={'telegram'}>
-            <i className='transform hover:scale-125 duration-150 fab fa-telegram dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_LINKEDIN && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            href={CONTACT_LINKEDIN}
-            title={'linkIn'}>
-            <i className='transform hover:scale-125 duration-150 fab fa-linkedin dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_WEIBO && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'weibo'}
-            href={CONTACT_WEIBO}>
-            <i className='transform hover:scale-125 duration-150 fab fa-weibo dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_INSTAGRAM && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'instagram'}
-            href={CONTACT_INSTAGRAM}>
-            <i className='transform hover:scale-125 duration-150 fab fa-instagram dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_EMAIL && (
-          <a
-            onClick={e => handleEmailClick(e, emailIcon, CONTACT_EMAIL)}
-            title='email'
-            className='cursor-pointer'
-            ref={emailIcon}>
-            <i className='transform hover:scale-125 duration-150 fas fa-envelope dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {ENABLE_RSS && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'RSS'}
-            href={'/rss/feed.xml'}>
-            <i className='transform hover:scale-125 duration-150 fas fa-rss dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_BILIBILI && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'bilibili'}
-            href={CONTACT_BILIBILI}>
-            <i className='transform hover:scale-125 duration-150 fab fa-bilibili dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
-        {CONTACT_YOUTUBE && (
-          <a
-            target='_blank'
-            rel='noreferrer'
-            title={'youtube'}
-            href={CONTACT_YOUTUBE}>
-            <i className='transform hover:scale-125 duration-150 fab fa-youtube dark:hover:text-indigo-400 hover:text-indigo-600' />
-          </a>
-        )}
+    <div className="h-full overflow-y-auto border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">消息</h2>
       </div>
+      {conversations.length > 0 ? (
+        conversations.map(conv => (
+          <ConversationItem
+            key={conv.id}
+            conversation={conv}
+            onClick={() => handleSelectChat(conv)} // 【核心修改】: 调用 handleSelectChat
+          />
+        ))
+      ) : (
+        <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+          <p>还没有对话。</p>
+          <p className="text-sm">去帖子里找人私信吧！</p>
+        </div>
+      )}
     </div>
   )
 }
-export default SocialButton
+
+export default ConversationList
