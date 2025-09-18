@@ -1,4 +1,4 @@
-// themes/heo/index.js (健壮性修复后的最终完整版)
+// themes/heo/index.js (这次是100%完美修复后的最终完整版)
 
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -39,8 +39,9 @@ import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import BottomNavBar from './components/BottomNavBar' 
-import AIChatDrawer from './components/AIChatDrawer'; 
-import ChatDrawer from './components/ChatDrawer';
+// 【核心修改】: 彻底移除 AIChatDrawer 和 ChatDrawer 的导入。它们只在 BottomNavBar 内部被使用和管理。
+// import AIChatDrawer from './components/AIChatDrawer'; 
+// import ChatDrawer from './components/ChatDrawer';
 
 /**
  * 基础布局
@@ -102,6 +103,7 @@ const LayoutBase = props => {
         </div>
       </main>
       <Footer />
+      {/* 确保 BottomNavBar 是我们修改后的版本 */}
       <BottomNavBar /> 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -195,19 +197,24 @@ const LayoutSearch = props => {
  */
 const LayoutArchive = props => {
   const { archivePosts } = props
-  const { locale } = useGlobal() // 确保 locale 被使用
+  const { locale } = useGlobal()
   return (
     <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
       <CategoryBar {...props} border={false} />
       <div className='px-3'>
-        {/* 【核心修复】: 确保 archivePosts 存在且是对象 */}
-        {archivePosts && typeof archivePosts === 'object' && Object.keys(archivePosts).map(archiveTitle => (
-          <BlogPostArchive
-            key={archiveTitle}
-            posts={archivePosts[archiveTitle]}
-            archiveTitle={archiveTitle}
-          />
-        ))}
+        {/* 【核心修复】: 确保 archivePosts 存在且是对象，否则渲染空内容，避免 TypeError */}
+        {archivePosts && typeof archivePosts === 'object' ? (
+          Object.keys(archivePosts).map(archiveTitle => (
+            <BlogPostArchive
+              key={archiveTitle}
+              posts={archivePosts[archiveTitle]}
+              archiveTitle={archiveTitle}
+            />
+          ))
+        ) : (
+          // 如果 archivePosts 为空或不是对象，可以显示一个提示或什么都不渲染
+          <div className="text-center text-gray-500">没有归档内容</div>
+        )}
       </div>
     </div>
   )
