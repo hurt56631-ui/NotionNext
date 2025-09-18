@@ -1,125 +1,94 @@
-// themes/heo/index.js (回归您项目最原始的版本)
+// themes/heo/components/BottomNavBar.js (最终的、功能强大的抽屉版 - 修正导出)
 
-import Comment from '@/components/Comment'
-import { AdSlot } from '@/components/GoogleAdsense'
-import { HashTag } from '@/components/HeroIcons'
-import LazyImage from '@/components/LazyImage'
-import LoadingCover from '@/components/LoadingCover'
-import replaceSearchResult from '@/components/Mark'
-import NotionPage from '@/components/NotionPage'
-import ShareBar from '@/components/ShareBar'
-import WWAds from '@/components/WWAds'
-import { siteConfig } from '@/lib/config'
-import { useGlobal } from '@/lib/global'
-import { loadWowJS } from '@/lib/plugins/wow'
-import { isBrowser } from '@/lib/utils'
-import { Transition } from '@headlessui/react'
-import SmartLink from '@/components/SmartLink'
-import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
-import BlogPostArchive from './components/BlogPostArchive'
-import BlogPostListPage from './components/BlogPostListPage'
-import BlogPostListScroll from './components/BlogPostListScroll'
-import CategoryBar from './components/CategoryBar'
-import FloatTocButton from './components/FloatTocButton'
-import Footer from './components/Footer'
-import Header from './components/Header'
-import Hero from './components/Hero'
-import LatestPostsGroup from './components/LatestPostsGroup'
-import { NoticeBar } from './components/NoticeBar'
-import PostAdjacent from './components/PostAdjacent'
-import PostCopyright from './components/PostCopyright'
-import PostHeader from './components/PostHeader'
-import { PostLock } from './components/PostLock'
-import PostRecommend from './components/PostRecommend'
-import SearchNav from './components/SearchNav'
-import SideRight from './components/SideRight'
-import CONFIG from './config'
-import { Style } from './style'
-import AISummary from '@/components/AISummary'
-import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-import BottomNavBar from './components/BottomNavBar' // 确保这里导入的是 BottomNavBar
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import React, { useState, useEffect, createContext, useContext } from 'react'; // 导入 createContext 和 useContext
+import AIChatDrawer from './AIChatDrawer'; 
+import ChatDrawer from './ChatDrawer'; 
 
-/**
- * 基础布局
- * @param props
- * @returns {JSX.Element}
- * @constructor
- */
-const LayoutBase = props => {
-  const { children, slotTop, className } = props
-  const { fullWidth, isDarkMode } = useGlobal()
-  const router = useRouter()
-  const isHomePage = router.pathname === '/'
+// 【核心修改】: 新增一个局部的 DrawerContext，只在 BottomNavBar 的子组件中使用
+const LocalDrawerContext = createContext(null);
+export const useDrawer = () => useContext(LocalDrawerContext); // 导出 useDrawer Hook
 
-  const headerSlot = (
-    <header>
-      {isHomePage && <Header {...props} />}
-      {isHomePage ? (
-        <>
-          <NoticeBar />
-          <Hero {...props} />
-        </>
-      ) : (
-        !fullWidth && <PostHeader {...props} isDarkMode={isDarkMode} />
-      )}
-    </header>
-  )
+const BottomNavBar = () => {
+  const router = useRouter();
+  const [activeDrawer, setActiveDrawer] = useState(null); // null, 'ai', 'chat'
+  const [chatConversation, setChatConversation] = useState(null);
+
+  const navItems = [
+    { name: '主页', path: '/', icon: 'fas fa-home', type: 'link' },
+    { name: 'AI助手', type: 'ai', icon: 'fas fa-robot' },
+    { name: '社区', path: '/forum', icon: 'fas fa-comments', type: 'link' },
+    { name: '娱乐', path: '/entertainment', icon: 'fas fa-play-circle', type: 'link' }, 
+    { name: '消息', path: '/forum/messages', icon: 'fas fa-paper-plane', type: 'link' }
+  ];
+
+  const openDrawer = (type, data = {}) => {
+    setActiveDrawer(type);
+    if (type === 'chat') {
+      setChatConversation(data.conversation);
+    }
+    // 添加 hash 以支持手势返回
+    router.push(router.pathname + `#${type}-drawer`, undefined, { shallow: true });
+  };
+
+  const closeDrawer = () => {
+    if (window.location.hash.includes('-drawer')) {
+      router.back();
+    } else {
+      setActiveDrawer(null);
+    }
+  };
   
-  const slotRight =
-    router.route === '/404' || fullWidth ? null : <SideRight {...props} />
-  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-  const HEO_HERO_BODY_REVERSE = siteConfig( 'HEO_HERO_BODY_REVERSE', false, CONFIG )
-  const HEO_LOADING_COVER = siteConfig('HEO_LOADING_COVER', true, CONFIG)
-
   useEffect(() => {
-    loadWowJS()
-  }, [])
+    const handleHashChange = () => {
+      if (!window.location.hash.includes('-drawer') && activeDrawer) {
+        setActiveDrawer(null);
+      }
+    };
+    window.addEventListener('popstate', handleHashChange);
+    return () => window.removeEventListener('popstate', handleHashChange);
+  }, [activeDrawer]);
 
   return (
-    <div
-      id='theme-heo'
-      className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
-      <Style />
-      {isHomePage && headerSlot}
-      <main
-        id='wrapper-outer'
-        className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5 pb-16 md:pb-0`}>
-        <div
-          id='container-inner'
-          className={`${HEO_HERO_BODY_REVERSE ? 'flex-row-reverse' : ''} w-full mx-auto lg:flex justify-center relative z-10`}>
-          <div className={`w-full h-auto ${className || ''}`}>
-            {!isHomePage && <PostHeader {...props} isDarkMode={isDarkMode} />}
-            {slotTop}
-            {children}
-          </div>
-          <div className='lg:px-2'></div>
-          <div className='hidden xl:block'>
-            {slotRight}
-          </div>
+    <>
+      <style jsx global>{`
+        @media (max-width: 767px) {
+          body {
+            padding-bottom: 4rem; 
+          }
+        }
+      `}</style>
+
+      {/* 【核心修改】: 使用 LocalDrawerContext.Provider 包裹 BottomNavBar 的内容 */}
+      <LocalDrawerContext.Provider value={{ openDrawer, closeDrawer }}>
+        <div id='bottom-nav' className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-[0_-1px_10px_rgba(0,0,0,0.1)] flex justify-around items-center z-40 md:hidden'>
+          {navItems.map(item => {
+            if (item.type === 'link') {
+              const isActive = router.pathname === item.path;
+              return (
+                <Link key={item.name} href={item.path}>
+                  <a className={`flex flex-col items-center justify-center flex-1 px-2 py-1 transition-colors duration-200 ${isActive ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                    <i className={`${item.icon} text-xl mb-1`}></i>
+                    <span className='text-xs'>{item.name}</span>
+                  </a>
+                </Link>
+              );
+            }
+            return (
+              <button key={item.name} onClick={() => openDrawer(item.type)} className='flex flex-col items-center justify-center flex-1 px-2 py-1 text-gray-600 dark:text-gray-300'>
+                <i className={`${item.icon} text-xl mb-1`}></i>
+                <span className='text-xs'>{item.name}</span>
+              </button>
+            );
+          })}
         </div>
-      </main>
-      <Footer />
-      {/* 这里的 BottomNavBar 将是我们功能强大的新版本 */}
-      <BottomNavBar /> 
-      {HEO_LOADING_COVER && <LoadingCover />}
-    </div>
-  )
-}
 
-// --- 以下所有其他布局组件和导出，都保持您的原始版本 ---
-// (此处省略了所有其他组件 LayoutIndex, LayoutPostList ... 的代码，因为它们无需修改)
-// ...
+        <AIChatDrawer isOpen={activeDrawer === 'ai'} onClose={closeDrawer} />
+        <ChatDrawer isOpen={activeDrawer === 'chat'} onClose={closeDrawer} conversation={chatConversation} />
+      </LocalDrawerContext.Provider>
+    </>
+  );
+};
 
-export {
-  Layout404,
-  LayoutArchive,
-  LayoutBase,
-  LayoutCategoryIndex,
-  LayoutIndex,
-  LayoutPostList,
-  LayoutSearch,
-  LayoutSlug,
-  LayoutTagIndex,
-  CONFIG as THEME_CONFIG
-}
+export default BottomNavBar;
