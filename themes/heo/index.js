@@ -1,4 +1,4 @@
-// themes/heo/components/BottomNavBar.js (最终的、功能强大的抽屉版 - 修正导出)
+// themes/heo/components/BottomNavBar.js (最终的、功能强大的抽屉版  修正导出)
 
 import Link from 'next/link';
 import { useRouter } from 'next/router';
