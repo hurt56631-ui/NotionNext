@@ -5,7 +5,7 @@ import '@/styles/utility-patterns.css'
 import '@/styles/notion.css'
 import 'react-notion-x/src/styles.css'
 import { AuthProvider } from '../lib/AuthContext'
-// 不再需要 DrawerProvider
+// 不再要 DrawerProvider
 import useAdjustStyle from '@/hooks/useAdjustStyle'
 import { GlobalContextProvider } from '@/lib/global'
 import { getBaseLayoutByTheme } from '@/themes/theme'
