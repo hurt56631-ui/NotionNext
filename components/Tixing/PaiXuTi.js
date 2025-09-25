@@ -9,7 +9,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
+//import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
@@ -23,7 +23,7 @@ import { useSpring, animated } from '@react-spring/web';
 import { Howl } from 'howler';
 // 【新】引入加载中图标
 import { FaVolumeUp, FaCheck, FaTimes, FaRedo, FaSpinner } from 'react-icons/fa';
-import confetti from 'canvas-confetti';
+//import confetti from 'canvas-confetti';
 
 // --- 样式定义 ---
 const styles = {
