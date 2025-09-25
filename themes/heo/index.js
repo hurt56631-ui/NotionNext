@@ -13,6 +13,7 @@ import LazyImage from '@/components/LazyImage'
 import LoadingCover from '@/components/LoadingCover'
 import replaceSearchResult from '@/components/Mark'
 import NotionPage from '@/components/NotionPage'
+import ShareBar from '@/components/ShareBar'
 import WWAds from '@/components/WWAds'
 import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
@@ -27,13 +28,16 @@ import BlogPostListPage from './components/BlogPostListPage'
 import BlogPostListScroll from './components/BlogPostListScroll'
 import CategoryBar from './components/CategoryBar'
 import FloatTocButton from './components/FloatTocButton'
+import Footer from './components/Footer'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import LatestPostsGroup from './components/LatestPostsGroup'
 import { NoticeBar } from './components/NoticeBar'
 import PostAdjacent from './components/PostAdjacent'
+import PostCopyright from './components/PostCopyright'
 import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
+import PostRecommend from './components/PostRecommend'
 import SearchNav from './components/SearchNav'
 import SideRight from './components/SideRight'
 import CONFIG from './config'
@@ -118,6 +122,9 @@ const LayoutBase = props => {
           </div>
         </div>
       </main>
+
+      {/* 页脚 */}
+      <Footer />
 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -310,6 +317,17 @@ const LayoutSlug = props => {
 
               {/* 上一篇\下一篇文章 */}
               <PostAdjacent {...props} />
+
+              {/* 分享 */}
+              <ShareBar post={post} />
+              {post?.type === 'Post' && (
+                <div className='px-5'>
+                  {/* 版权 */}
+                  <PostCopyright {...props} />
+                  {/* 文章推荐 */}
+                  <PostRecommend {...props} />
+                </div>
+              )}
             </article>
 
             {/* 评论区 */}
@@ -385,6 +403,11 @@ const Layout404 = props => {
                   </button>
                 </SmartLink>
               </div>
+            </div>
+
+            {/* 404页面底部显示最新文章 */}
+            <div className='mt-12'>
+              <LatestPostsGroup {...props} />
             </div>
           </Transition>
         </div>
