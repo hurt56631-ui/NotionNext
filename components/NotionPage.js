@@ -1,3 +1,5 @@
+// components/NotionPage.js - 最终修复版
+
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
 import { isBrowser, loadExternalResource } from '@/lib/utils'
@@ -7,135 +9,93 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
-// 新增：引入你的自定义题型组件
-const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), {
-  ssr: false
-})
+// --- 1. 导入你的自定义组件 ---
+// 在这里导入所有你需要用 !include 调用的组件
+const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
+// 以后有新组件，也加在这里。例如:
+// const TianKongTi = dynamic(() => import('@/components/Tixing/TianKongTi'), { ssr: false })
 
 
-/**
- * 整个站点的核心组件
- * 将Notion数据渲染成网页
- * @param {*} param0
- * @returns
- */
+// --- 2. 导入 react-notion-x 的原始组件，并重命名以备后用 ---
+const DefaultCodeComponent = dynamic(() => import('react-notion-x/build/third-party/code').then(m => m.Code), { ssr: false });
+const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
+const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
+const Modal = dynamic(() => import('react-notion-x/build/third-party/modal').then(m => m.Modal), { ssr: false });
+const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), { ssr: false });
+const TweetEmbed = dynamic(() => import('react-tweet-embed'), { ssr: false });
+
+// 其他辅助组件
+const AdEmbed = dynamic(() => import('@/components/GoogleAdsense').then(m => m.AdEmbed), { ssr: true });
+const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
+const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
+
+
+// --- 3. 创建我们自己的、增强版的 Code 组件 ---
+// 这是核心逻辑：劫持代码块的渲染
+const CustomCode = (props) => {
+  const blockContent = props.block.properties?.title?.[0]?.[0] || '';
+
+  // 检查代码块内容是否以 !include 开头
+  if (blockContent.startsWith('!include')) {
+    // 正则表达式，用于解析出组件路径和 props
+    const includeRegex = /!include\s+(\S+\.js)\s*({.*})?/s;
+    const match = blockContent.match(includeRegex);
+
+    if (match) {
+      const componentPath = match[1]; // e.g., /components/Tixing/PaiXuTi.js
+      const propsString = match[2] || '{}'; // The JSON part
+
+      try {
+        const parsedProps = JSON.parse(propsString);
+        
+        // --- 在这里添加你的组件判断逻辑 ---
+        if (componentPath === '/components/Tixing/PaiXuTi.js') {
+          return <PaiXuTi {...parsedProps} />;
+        }
+        // 以后有新组件，也加在这里。例如:
+        // if (componentPath === '/components/Tixing/TianKongTi.js') {
+        //   return <TianKongTi {...parsedProps} />;
+        // }
+
+        // 如果没有匹配的组件，可以返回一个提示
+        return <div style={{ color: 'orange' }}>未找到组件: {componentPath}</div>;
+
+      } catch (e) {
+        console.error('!include JSON 解析失败:', e, `原始JSON字符串: "${propsString}"`);
+        return <div style={{ padding: '1rem', border: '2px dashed red', color: 'red' }}>!include 块的 JSON 配置错误，请检查 Notion 页面中的双引号和逗号。</div>;
+      }
+    }
+  }
+
+  // 如果不是 !include 指令，就渲染一个正常的代码块
+  return <DefaultCodeComponent {...props} />;
+};
+
+
+// --- 主页面组件 ---
 const NotionPage = ({ post, className }) => {
-  // 是否关闭数据库和画册的点击跳转
+  // ... (这里的所有 Hooks 和 useEffect 代码都保持原样，无需改动) ...
   const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK')
   const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK')
   const SPOILER_TEXT_TAG = siteConfig('SPOILER_TEXT_TAG')
-
-  const zoom =
-    isBrowser &&
-    mediumZoom({
-      //   container: '.notion-viewport',
-      background: 'rgba(0, 0, 0, 0.2)',
-      margin: getMediumZoomMargin()
-    })
-
+  const zoom = isBrowser && mediumZoom({ background: 'rgba(0, 0, 0, 0.2)', margin: getMediumZoomMargin() })
   const zoomRef = useRef(zoom ? zoom.clone() : null)
   const IMAGE_ZOOM_IN_WIDTH = siteConfig('IMAGE_ZOOM_IN_WIDTH', 1200)
-  // 页面首次打开时执行的勾子
-  useEffect(() => {
-    // 检测当前的url并自动滚动到对应目标
-    autoScrollToHash()
-  }, [])
-
-  // 页面文章发生变化时会执行的勾子
-  useEffect(() => {
-    // 相册视图点击禁止跳转，只能放大查看图片
-    if (POST_DISABLE_GALLERY_CLICK) {
-      // 针对页面中的gallery视图，点击后是放大图片还是跳转到gallery的内部页面
-      processGalleryImg(zoomRef?.current)
-    }
-
-    // 页内数据库点击禁止跳转，只能查看
-    if (POST_DISABLE_DATABASE_CLICK) {
-      processDisableDatabaseUrl()
-    }
-
-    /**
-     * 放大查看图片时替换成高清图像
-     */
-    const observer = new MutationObserver((mutationsList, observer) => {
-      mutationsList.forEach(mutation => {
-        if (
-          mutation.type === 'attributes' &&
-          mutation.attributeName === 'class'
-        ) {
-          if (mutation.target.classList.contains('medium-zoom-image--opened')) {
-            // 等待动画完成后替换为更高清的图像
-            setTimeout(() => {
-              // 获取该元素的 src 属性
-              const src = mutation?.target?.getAttribute('src')
-              //   替换为更高清的图像
-              mutation?.target?.setAttribute(
-                'src',
-                compressImage(src, IMAGE_ZOOM_IN_WIDTH)
-              )
-            }, 800)
-          }
-        }
-      })
-    })
-
-    // 监视页面元素和属性变化
-    observer.observe(document.body, {
-      attributes: true,
-      subtree: true,
-      attributeFilter: ['class']
-    })
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [post])
-
-  useEffect(() => {
-    // Spoiler文本功能
-    if (SPOILER_TEXT_TAG) {
-      import('lodash/escapeRegExp').then(escapeRegExp => {
-        Promise.all([
-          loadExternalResource('/js/spoilerText.js', 'js'),
-          loadExternalResource('/css/spoiler-text.css', 'css')
-        ]).then(() => {
-          window.textToSpoiler &&
-            window.textToSpoiler(escapeRegExp.default(SPOILER_TEXT_TAG))
-        })
-      })
-    }
-
-    // 查找所有具有 'notion-collection-page-properties' 类的元素,删除notion自带的页面properties
-    const timer = setTimeout(() => {
-      // 查找所有具有 'notion-collection-page-properties' 类的元素
-      const elements = document.querySelectorAll(
-        '.notion-collection-page-properties'
-      )
-
-      // 遍历这些元素并将其从 DOM 中移除
-      elements?.forEach(element => {
-        element?.remove()
-      })
-    }, 1000) // 1000 毫秒 = 1 秒
-
-    // 清理定时器，防止组件卸载时执行
-    return () => clearTimeout(timer)
-  }, [post])
-
+  useEffect(() => { autoScrollToHash() }, [])
+  useEffect(() => { if (POST_DISABLE_GALLERY_CLICK) { processGalleryImg(zoomRef?.current) } if (POST_DISABLE_DATABASE_CLICK) { processDisableDatabaseUrl() } const observer = new MutationObserver((mutationsList) => { mutationsList.forEach(mutation => { if (mutation.type === 'attributes' && mutation.attributeName === 'class' && mutation.target.classList.contains('medium-zoom-image--opened')) { setTimeout(() => { const src = mutation?.target?.getAttribute('src'); mutation?.target?.setAttribute('src', compressImage(src, IMAGE_ZOOM_IN_WIDTH)) }, 800) } }) }); observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['class'] }); return () => observer.disconnect() }, [post])
+  useEffect(() => { if (SPOILER_TEXT_TAG) { import('lodash/escapeRegExp').then(escapeRegExp => { Promise.all([loadExternalResource('/js/spoilerText.js', 'js'), loadExternalResource('/css/spoiler-text.css', 'css')]).then(() => { window.textToSpoiler && window.textToSpoiler(escapeRegExp.default(SPOILER_TEXT_TAG)) }) }) } const timer = setTimeout(() => { const elements = document.querySelectorAll('.notion-collection-page-properties'); elements?.forEach(element => element?.remove()) }, 1000); return () => clearTimeout(timer) }, [post])
+  
   return (
-    <div
-      id='notion-article'
-      className={`mx-auto overflow-hidden ${className || ''}`}>
+    <div id='notion-article' className={`mx-auto overflow-hidden ${className || ''}`}>
       <NotionRenderer
         recordMap={post?.blockMap}
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
-          // 在这里注册你的新组件
-          PaiXuTi,
+          // --- 4. 将我们自定义的 Code 组件注册进去 ---
+          Code: CustomCode,
 
-          // 以下是原有的组件
-          Code,
+          // 注册其他标准组件
           Collection,
           Equation,
           Modal,
@@ -143,166 +103,17 @@ const NotionPage = ({ post, className }) => {
           Tweet
         }}
       />
-
       <AdEmbed />
       <PrismMac />
     </div>
   )
 }
 
-/**
- * 页面的数据库链接禁止跳转，只能查看
- */
-const processDisableDatabaseUrl = () => {
-  if (isBrowser) {
-    const links = document.querySelectorAll('.notion-table a')
-    for (const e of links) {
-      e.removeAttribute('href')
-    }
-  }
-}
+// ... (这里的所有辅助函数也都保持原样，无需改动) ...
+const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
+const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
+const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180) }
+const mapPageUrl = id => { return '/' + id.replace(/-/g, '') }
+function getMediumZoomMargin() { const width = window.innerWidth; if (width < 500) { return 8 } else if (width < 800) { return 20 } else if (width < 1280) { return 30 } else if (width < 1600) { return 40 } else if (width < 1920) { return 48 } else { return 72 } }
 
-/**
- * gallery视图，点击后是放大图片还是跳转到gallery的内部页面
- */
-const processGalleryImg = zoom => {
-  setTimeout(() => {
-    if (isBrowser) {
-      const imgList = document?.querySelectorAll(
-        '.notion-collection-card-cover img'
-      )
-      if (imgList && zoom) {
-        for (let i = 0; i < imgList.length; i++) {
-          zoom.attach(imgList[i])
-        }
-      }
-
-      const cards = document.getElementsByClassName('notion-collection-card')
-      for (const e of cards) {
-        e.removeAttribute('href')
-      }
-    }
-  }, 800)
-}
-
-/**
- * 根据url参数自动滚动到锚位置
- */
-const autoScrollToHash = () => {
-  setTimeout(() => {
-    // 跳转到指定标题
-    const hash = window?.location?.hash
-    const needToJumpToTitle = hash && hash.length > 0
-    if (needToJumpToTitle) {
-      console.log('jump to hash', hash)
-      const tocNode = document.getElementById(hash.substring(1))
-      if (tocNode && tocNode?.className?.indexOf('notion') > -1) {
-        tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      }
-    }
-  }, 180)
-}
-
-/**
- * 将id映射成博文内部链接。
- * @param {*} id
- * @returns
- */
-const mapPageUrl = id => {
-  // return 'https://www.notion.so/' + id.replace(/-/g, '')
-  return '/' + id.replace(/-/g, '')
-}
-
-/**
- * 缩放
- * @returns
- */
-function getMediumZoomMargin() {
-  const width = window.innerWidth
-
-  if (width < 500) {
-    return 8
-  } else if (width < 800) {
-    return 20
-  } else if (width < 1280) {
-    return 30
-  } else if (width < 1600) {
-    return 40
-  } else if (width < 1920) {
-    return 48
-  } else {
-    return 72
-  }
-}
-
-// 代码
-const Code = dynamic(
-  () =>
-    import('react-notion-x/build/third-party/code').then(m => {
-      return m.Code
-    }),
-  { ssr: false }
-)
-
-// 公式
-const Equation = dynamic(
-  () =>
-    import('@/components/Equation').then(async m => {
-      // 化学方程式
-      await import('@/lib/plugins/mhchem')
-      return m.Equation
-    }),
-  { ssr: false }
-)
-
-// 原版文档
-// const Pdf = dynamic(
-//   () => import('react-notion-x/build/third-party/pdf').then(m => m.Pdf),
-//   {
-//     ssr: false
-//   }
-// )
-const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), {
-  ssr: false
-})
-
-// 美化代码 from: https://github.com/txs
-const PrismMac = dynamic(() => import('@/components/PrismMac'), {
-  ssr: false
-})
-
-/**
- * tweet嵌入
- */
-const TweetEmbed = dynamic(() => import('react-tweet-embed'), {
-  ssr: false
-})
-
-/**
- * 文内google广告
- */
-const AdEmbed = dynamic(
-  () => import('@/components/GoogleAdsense').then(m => m.AdEmbed),
-  { ssr: true }
-)
-
-const Collection = dynamic(
-  () =>
-    import('react-notion-x/build/third-party/collection').then(
-      m => m.Collection
-    ),
-  {
-    ssr: true
-  }
-)
-
-const Modal = dynamic(
-  () => import('react-notion-x/build/third-party/modal').then(m => m.Modal),
-  { ssr: false }
-)
-
-const Tweet = ({ id }) => {
-  return <TweetEmbed tweetId={id} />
-}
-
-export default NotionPage
+export default NotionPage;
