@@ -9,7 +9,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-//import {
+import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
@@ -17,8 +17,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 // 【新】导入约束修改器
-import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
-import { CSS } from '@dnd-kit/utilities';
+//import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
+//import { CSS } from '@dnd-kit/utilities';
 import { useSpring, animated } from '@react-spring/web';
 import { Howl } from 'howler';
 // 【新】引入加载中图标
