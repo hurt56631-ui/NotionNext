@@ -56,7 +56,7 @@ const playSound = (sound) => { if (sound && sound.play) { sound.play(); } };
 async function playTTS(text) {
   const apiBaseUrl = 'https://t.leftsite.cn';
   const voice = 'zh-CN-XiaochenMultilingualNeural';
-  const rate = '-20%';
+  const rate = '-25';
   const encodedText = encodeURIComponent(text);
   const url = `${apiBaseUrl}/tts?t=${encodedText}&v=${voice}&r=${rate}`;
 
