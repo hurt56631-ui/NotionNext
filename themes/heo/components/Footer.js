@@ -8,7 +8,7 @@ import SocialButton from './SocialButton'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import React, { useState, useEffect } from 'react'
-import AiChatAssistant from './AiChatAssistant' // 1. 导入新的 AI 助手组件
+import AiChatAssistant from '@/components/AiChatAssistant' // 1. 导入新的 AI 助手组件
 
 /**
  * 页脚，现在同时包含桌面版页脚和移动版底部导航
