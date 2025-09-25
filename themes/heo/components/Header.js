@@ -17,7 +17,8 @@ import SlideOver from './SlideOver'
  * @returns
  */
 const Header = props => {
-  const [fixedNav, setFixedNav] = useState(false)
+  // 移除 fixedNav 状态，因为我们将不再固定顶栏
+  // const [fixedNav, setFixedNav] = useState(false)
   const [textWhite, setTextWhite] = useState(false)
   const [navBgWhite, setBgWhite] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
@@ -31,40 +32,45 @@ const Header = props => {
 
   /**
    * 根据滚动条，切换导航栏样式
+   * 此函数将被修改，以适应非固定顶栏和仅在首页显示的情况
    */
   const scrollTrigger = useCallback(
     throttle(() => {
       const scrollS = window.scrollY
       // 导航栏设置 白色背景
       if (scrollS <= 1) {
-        setFixedNav(false)
+        // setFixedNav(false) // 移除此行
         setBgWhite(false)
         setTextWhite(false)
 
-        // 文章详情页特殊处理
+        // 文章详情页特殊处理，如果希望文章页顶栏文本为白色，可以保留，但不再是固定状态
         if (document?.querySelector('#post-bg')) {
-          setFixedNav(true)
+          // setFixedNav(true) // 移除此行
           setTextWhite(true)
         }
       } else {
         // 向下滚动后的导航样式
-        setFixedNav(true)
+        // setFixedNav(true) // 移除此行
         setTextWhite(false)
         setBgWhite(true)
       }
     }, 100)
   )
-  useEffect(() => {
-    scrollTrigger()
-  }, [router])
 
-  // 监听滚动
   useEffect(() => {
-    window.addEventListener('scroll', scrollTrigger)
-    return () => {
+    // 只有在首页才监听滚动事件
+    if (router.pathname === '/') {
+      scrollTrigger()
+      window.addEventListener('scroll', scrollTrigger)
+    } else {
+      // 在非首页时移除监听器
       window.removeEventListener('scroll', scrollTrigger)
     }
-  }, [])
+    return () => {
+      // 组件卸载时也移除监听器
+      window.removeEventListener('scroll', scrollTrigger)
+    }
+  }, [router.pathname]) // 路由改变时重新评估监听器
 
   // 导航栏根据滚动轮播菜单内容
   useEffect(() => {
@@ -87,7 +93,8 @@ const Header = props => {
       }
     }
 
-    if (isBrowser) {
+    // 只有在首页才监听滚动事件
+    if (isBrowser && router.pathname === '/') {
       window.addEventListener('scroll', handleScroll)
     }
 
@@ -96,7 +103,12 @@ const Header = props => {
         window.removeEventListener('scroll', handleScroll)
       }
     }
-  }, [])
+  }, [router.pathname]) // 路由改变时重新评估监听器
+
+  // 如果不是首页，则不渲染 Header 组件
+  if (router.pathname !== '/') {
+    return null
+  }
 
   return (
     <>
@@ -132,17 +144,17 @@ const Header = props => {
         }
       `}</style>
 
-      {/* fixed时留白高度 */}
-      {fixedNav && !document?.querySelector('#post-bg') && (
+      {/* fixed时留白高度 - 移除此部分，因为顶栏不再固定 */}
+      {/* {fixedNav && !document?.querySelector('#post-bg') && (
         <div className='h-16'></div>
-      )}
+      )} */}
 
-      {/* 顶部导航菜单栏 */}
+      {/* 顶部导航菜单栏 - 修改 class 以移除固定定位 */}
       <nav
         id='nav'
         className={`z-20 h-16 top-0 w-full duration-300 transition-all
-            ${fixedNav ? 'fixed' : 'relative bg-transparent'} 
-            ${textWhite ? 'text-white ' : 'text-black dark:text-white'}  
+            ${'relative bg-transparent'} // 始终为相对定位，不再使用 fixedNav 变量
+            ${textWhite ? 'text-white ' : 'text-black dark:text-white'}
             ${navBgWhite ? 'bg-white dark:bg-[#18171d] shadow' : 'bg-transparent'}`}>
         <div className='flex h-full mx-auto justify-between items-center max-w-[86rem] px-6'>
           {/* 左侧logo */}
