@@ -298,3 +298,20 @@ img {
   @keyframes l1 {
   0% {background-position: right}
 }
+
+/* --- 自定义隐藏规则 --- */
+
+/* 1. 彻底隐藏整个网站页脚 */
+#theme-heo > footer {
+    display: none !important;
+}
+
+/* 2. 隐藏文章页顶部的背景大图 */
+#post-bg {
+    display: none !important;
+}
+
+/* 3. 隐藏文章末尾的标签、版权等区域 */
+#article-wrapper > div.px-5:last-child > section:first-child {
+    display: none !important;
+}
