@@ -81,7 +81,7 @@ const SortableItem = React.memo(({ id, item, isDragging, isPlaying, onPlaySound 
 
 
 // --- 主组件：PaiXuTi (TTS 朗读版) ---
-function PaiXuTi({ question, initialItems, correctOrder }) {
+function PaiXuTi({ question, initialItems = [], correctOrder }) {
   const [items, setItems] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [status, setStatus] = useState('pending');
