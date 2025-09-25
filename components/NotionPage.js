@@ -7,6 +7,12 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
+// 新增：引入你的自定义题型组件
+const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), {
+  ssr: false
+})
+
+
 /**
  * 整个站点的核心组件
  * 将Notion数据渲染成网页
@@ -125,6 +131,10 @@ const NotionPage = ({ post, className }) => {
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
+          // 在这里注册你的新组件
+          PaiXuTi,
+
+          // 以下是原有的组件
           Code,
           Collection,
           Equation,
