@@ -1,4 +1,4 @@
-// components/Footer.js (修改后，作为 BottomNav 使用)
+// components/Footer.js (修改后，作为 BottomNav 用)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
