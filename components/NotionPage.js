@@ -10,6 +10,7 @@ import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
 // --- 1. 导入你的所有自定义组件 ---
+const HanziWriterTest = dynamic(() => import('@/components/HanziWriterTest'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false }) // <<<< 新增：导入单词卡组件
 
@@ -41,6 +42,10 @@ const CustomCode = (props) => {
         // --- 在这里添加你的组件判断逻辑 ---
         if (componentPath === '/components/Tixing/PaiXuTi.js') {
           return <PaiXuTi {...parsedProps} />;
+        }
+
+        if (componentPath === '/components/HanziWriterTest.js') {
+          return <HanziWriterTest {...parsedProps} />;
         }
         // <<<< 新增：增加对 CiDianKa 组件的判断
         if (componentPath === '/components/Tixing/CiDianKa.js') {
