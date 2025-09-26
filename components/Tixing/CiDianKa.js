@@ -1,15 +1,14 @@
-// components/Tixing/CiDianKa.js (V18 - 终极修复版：重构交互、修复UI、增加广告同步)
+// components/Tixing/CiDianKa.js (V18.1 - 终极修复版：修复编译错误)
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'; // <<<< 关键修复：导入 useRef
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // <<<< 关键修复：在这里添加了 useCallback
 import { useSprings, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaImages, FaPlay } from 'react-icons/fa';
 import { pinyin as pinyinConverter, parse as parsePinyin } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
-import AdComponent from '@/components/AdComponent'; // <<<< 新功能：导入广告组件
+import AdComponent from '@/components/AdComponent';
 
-// ... (样式和辅助函数)
 // ===================== 美化：渐变色背景 =====================
 const gradients = [
   'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
@@ -224,7 +223,7 @@ const CiDianKa = ({ flashcards = [] }) => {
             {showSettings && (
                 <div style={styles.settingsModal}>
                     <input type="file" ref={fileInputRef} onChange={handleBgUpload} multiple accept="image/*" style={{display: 'none'}} />
-                    <button style={{...styles.button, background: '#e2e8f0', color: '#2d3748'}} onClick={() => fileInput.current.click()}> <FaImages /> 上传背景图 </button>
+                    <button style={{...styles.button, background: '#e2e8f0', color: '#2d3748'}} onClick={() => fileInputRef.current.click()}> <FaImages /> 上传背景图 </button>
                 </div>
             )}
         </div>
