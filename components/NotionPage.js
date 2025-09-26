@@ -1,4 +1,4 @@
-// components/NotionPage.js - 最终集成版
+// components/NotionPage.js - 最终集成版 (已修复编译错误)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -10,7 +10,6 @@ import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
 // --- 1. 导入你的所有自定义组件 ---
-// <<<< 修改这里：引入新的 HanziModal
 const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false }) 
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
@@ -44,7 +43,6 @@ const CustomCode = (props) => {
         if (componentPath === '/components/Tixing/PaiXuTi.js') {
           return <PaiXuTi {...parsedProps} />;
         }
-        // <<<< 修改这里：使用新的 HanziModal
         if (componentPath === '/components/HanziModal.js') {
           return <HanziModal {...parsedProps} />;
         }
@@ -97,10 +95,10 @@ const NotionPage = ({ post, className }) => {
   )
 }
 
-// --- 辅助函数 (无改动) ---
+// --- 辅助函数 ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
-const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } }, 180) } }
+const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); } // <<<< 修复在这里
 const mapPageUrl = id => { return '/' + id.replace(/-/g, '') }
 function getMediumZoomMargin() { const width = window.innerWidth; if (width < 500) { return 8 } else if (width < 800) { return 20 } else if (width < 1280) { return 30 } else if (width < 1600) { return 40 } else if (width < 1920) { return 48 } else { return 72 } }
 
