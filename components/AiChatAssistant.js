@@ -28,25 +28,7 @@ const CHAT_MODELS_LIST = [ { id: 'model-1', name: 'Gemini 2.5 Flash', value: 'ge
 const DEFAULT_PROMPTS = [ { id: 'default-grammar-correction', name: '纠正中文语法', content: '你是一位专业的、耐心的中文老师，请纠正我发送的中文句子中的语法和用词错误，并给出修改建议和说明。', openingLine: '你好，请发送你需要我纠正的中文句子。', model: 'gemini-2.5-flash', ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' }, { id: 'explain-word', name: '解释中文词语', content: '你是一位专业的中文老师，请用简单易懂的方式解释我发送的中文词语，并提供几个例子。', openingLine: '你好，请问你想了解哪个中文词语？', model: 'gemini-1.5-pro-latest', ttsVoice: 'zh-CN-YunxiNeural', avatarUrl: '' }, { id: 'translate-myanmar', name: '中缅互译', content: '你是一位专业的翻译助手，请将我发送的内容在中文和缅甸语之间进行互译。', openingLine: '你好！请发送中文或缅甸语内容以进行翻译。', model: 'gemini-2.5-flash', ttsVoice: 'my-MM-NilarNeural', avatarUrl: '' } ];
 const DEFAULT_SETTINGS = { apiKey: '', apiKeys: [], activeApiKeyId: '', chatModels: CHAT_MODELS_LIST, selectedModel: 'gemini-2.5-flash', temperature: 0.8, maxOutputTokens: 2048, disableThinkingMode: true, startWithNewChat: false, prompts: DEFAULT_PROMPTS, currentPromptId: DEFAULT_PROMPTS[0]?.id || '', autoRead: false, ttsEngine: TTS_ENGINE.THIRD_PARTY, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', ttsRate: 0, ttsPitch: 0, systemTtsVoiceURI: '', speechLanguage: 'zh-CN', chatBackgroundUrl: '/images/chat-bg-light.jpg', backgroundOpacity: 70, userAvatarUrl: '/images/user-avatar.png', aiAvatarUrl: '/images/ai-avatar.png', isFacebookApp: false, };
 
-
-// --- 【全新】内部 TTS 组件 ---
-const MICROSOFT_TTS_VOICES = [
-  { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' },
-  { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' },
-  { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' },
-  { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' },
-  { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' },
-  { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' },
-  { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' },
-  { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' },
-  { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' },
-  { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' },
-  { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' },
-  { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' },
-  { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' },
-  { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' },
-  { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' },
-];
+const MICROSOFT_TTS_VOICES = [ { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' }, { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' }, { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' }, { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' }, { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' }, { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' }, { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' }, { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' }, { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' }, { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' }, { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' }, { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' }, { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' }, { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' }, { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' }, ];
 
 const AiTtsButton = ({ text, ttsSettings }) => {
     const [playbackState, setPlaybackState] = useState('idle');
@@ -56,11 +38,10 @@ const AiTtsButton = ({ text, ttsSettings }) => {
     const cleanTextForSpeech = (rawText) => { if (!rawText) return ''; let cleaned = rawText; cleaned = cleaned.replace(/!\[.*?\]\(.*?\)/g, ''); cleaned = cleaned.replace(/\[(.*?)\]\(.*?\)/g, '$1'); cleaned = cleaned.replace(/(\*\*|__|\*|_|~~|`)/g, ''); cleaned = cleaned.replace(/^(#+\s*|[\*\-]\s*)/gm, ''); cleaned = cleaned.replace(/【.*?】|\[.*?\]/g, ''); const pinyinRegex = /\b[a-zA-ZüÜ]+[1-5]\b\s*/g; cleaned = cleaned.replace(pinyinRegex, ''); const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g; cleaned = cleaned.replace(emojiRegex, ''); return cleaned.trim(); };
     useEffect(() => { return () => { if (abortControllerRef.current) abortControllerRef.current.abort(); if (audioRef.current) { audioRef.current.pause(); if (audioRef.current.src?.startsWith('blob:')) URL.revokeObjectURL(audioRef.current.src); } }; }, []);
     const startPlayback = useCallback(async (textToSpeak) => { if (playbackState === 'playing') { audioRef.current?.pause(); return; } if (playbackState === 'paused') { audioRef.current?.play(); return; } const cleanedText = cleanTextForSpeech(textToSpeak); if (!cleanedText) return; setPlaybackState('loading'); abortControllerRef.current = new AbortController(); try { const params = new URLSearchParams({ t: cleanedText, v: ttsVoice, r: `${ttsRate}%`, p: `${ttsPitch}%` }); const url = `https://t.leftsite.cn/tts?${params.toString()}`; const response = await fetch(url, { signal: abortControllerRef.current.signal }); if (!response.ok) { const errorText = await response.text(); throw new Error(`API 请求失败: ${response.status} ${errorText}`); } const blob = await response.blob(); const audioUrl = URL.createObjectURL(blob); if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src); const audio = new Audio(audioUrl); audioRef.current = audio; audio.onplay = () => setPlaybackState('playing'); audio.onpause = () => { if (audio.currentTime < audio.duration) setPlaybackState('paused'); }; audio.onended = () => setPlaybackState('idle'); audio.onerror = (e) => { console.error('音频播放错误:', e); setPlaybackState('idle'); }; await audio.play(); } catch (err) { if (err.name !== 'AbortError') { console.error('语音合成失败:', err); alert(`语音合成失败: ${err.message}`); } setPlaybackState('idle'); } }, [ttsVoice, ttsRate, ttsPitch, playbackState]);
-    const AnimatedMusicIcon = ({ state }) => { const barStyle = (animationDelay) => ({ animation: state === 'playing' ? `sound-wave 1.2s ease-in-out ${animationDelay} infinite alternate` : 'none', }); return ( <div className="relative w-6 h-6 flex items-center justify-center"> <div className={`absolute transition-opacity duration-300 ${state === 'loading' ? 'opacity-100' : 'opacity-0'}`}> <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> </div> <div className={`absolute transition-opacity duration-300 ${state !== 'loading' ? 'opacity-100' : 'opacity-0'}`}> <div className="flex items-end justify-center w-6 h-6 gap-0.5"> <span className="w-1 h-2 bg-current rounded-full" style={barStyle('0s')}></span> <span className="w-1 h-4 bg-current rounded-full" style={barStyle('0.2s')}></span> <span className="w-1 h-5 bg-current rounded-full" style={barStyle('0.4s')}></span> <span className="w-1 h-3 bg-current rounded-full" style={barStyle('0.6s')}></span> </div> </div> <style jsx>{` @keyframes sound-wave { 0% { transform: scaleY(0.2); } 100% { transform: scaleY(1); } } `}</style> </div> ); };
+    const AnimatedMusicIcon = ({ state }) => { const barStyle = (animationDelay) => ({ animation: state === 'playing' ? `sound-wave 1.2s ease-in-out ${animationDelay} infinite alternate` : 'none', }); return ( <div className="relative w-6 h-6 flex items-center justify-center"> <div className={`absolute transition-opacity duration-300 ${state === 'loading' ? 'opacity-100' : 'opacity-0'}`}> <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> d/div> <div className={`absolute transition-opacity duration-300 ${state !== 'loading' ? 'opacity-100' : 'opacity-0'}`}> <div className="flex items-end justify-center w-6 h-6 gap-0.5"> <span className="w-1 h-2 bg-current rounded-full" style={barStyle('0s')}></span> <span className="w-1 h-4 bg-current rounded-full" style={barStyle('0.2s')}></span> <span className="w-1 h-5 bg-current rounded-full" style={barStyle('0.4s')}></span> <span className="w-1 h-3 bg-current rounded-full" style={barStyle('0.6s')}></span> </div> </div> <style jsx>{` @keyframes sound-wave { 0% { transform: scaleY(0.2); } 100% { transform: scaleY(1); } } `}</style> </div> ); };
     return ( <button onClick={(e) => { e.stopPropagation(); startPlayback(text); }} disabled={playbackState === 'loading'} className="p-2 rounded-full transition-colors duration-200 transform active:scale-90 hover:bg-black/10 text-gray-500 disabled:cursor-not-allowed disabled:opacity-50" title={playbackState === 'playing' ? "暂停" : "朗读"}> <AnimatedMusicIcon state={playbackState} /> </button> );
 };
 
-// --- 子组件 ---
 const TypingEffect = ({ text, onComplete, onUpdate }) => {
     const [displayedText, setDisplayedText] = useState('');
     useEffect(() => { if (!text) return; setDisplayedText(''); let index = 0; const intervalId = setInterval(() => { setDisplayedText(prev => prev + text.charAt(index)); index++; if (onUpdate) onUpdate(); if (index >= text.length) { clearInterval(intervalId); if (onComplete) onComplete(); } }, 30); return () => clearInterval(intervalId); }, [text, onComplete, onUpdate]);
@@ -69,7 +50,6 @@ const TypingEffect = ({ text, onComplete, onUpdate }) => {
 
 const SimpleMarkdown = ({ text }) => { if (!text) return null; const lines = text.split('\n').map((line, index) => { if (line.trim() === '') return <br key={index} />; if (line.match(/\*\*(.*?)\*\*/)) { const content = line.replace(/\*\*/g, ''); return <strong key={index} className="block mt-2 mb-1">{content}</strong>; } if (line.startsWith('* ') || line.startsWith('- ')) { return <li key={index} className="ml-5 list-disc">{line.substring(2)}</li>; } return <p key={index} className="my-1">{line}</p>; }); return <div>{lines}</div>; };
 
-// --- 3. MessageBubble 组件的全新版本 ---
 const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate }) => {
     const isUser = msg.role === 'user';
     const userBubbleClass = 'bg-blue-500 text-white rounded-br-lg shadow-[0_5px_15px_rgba(59,130,246,0.3),_0_12px_28px_rgba(59,130,246,0.2)]';
@@ -170,7 +150,7 @@ const AiChatAssistant = ({ onClose }) => {
     const triggerCameraInput = () => { if (imageInputRef.current) { imageInputRef.current.setAttribute('capture', 'environment'); imageInputRef.current.click(); } };
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     
-    // --- 4. handleSubmit 函数的最终版本 ---
+    // --- 4. 带有日志打印功能的 handleSubmit 函数 ---
     const handleSubmit = async (isRegenerate = false) => {
         if (!currentConversation || isLoading) return;
         const activeKey = (settings.apiKeys || []).find(k => k.id === settings.activeApiKeyId);
@@ -205,6 +185,9 @@ const AiChatAssistant = ({ onClose }) => {
             if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text; } else { aiResponseContent = data.choices?.[0]?.message?.content; }
             if (!aiResponseContent) throw new Error('AI未能返回有效内容。');
             
+            console.log('--- AI 原始回复 ---');
+            console.log(aiResponseContent);
+
             let aiMessage;
             try {
                 let jsonString = aiResponseContent.trim();
@@ -220,9 +203,10 @@ const AiChatAssistant = ({ onClose }) => {
                 if (parsed.component && parsed.props && componentMap[parsed.component]) {
                     aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: parsed.props, isTyping: false };
                 } else {
-                    throw new Error("Not a component JSON");
+                    throw new Error("JSON 格式正确，但不是约定的组件格式。");
                 }
             } catch(e) {
+                console.error('!!! JSON 解析失败 !!!', e);
                 aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true };
             }
             
@@ -295,10 +279,6 @@ const AiChatAssistant = ({ onClose }) => {
         </div>
     );
 };
-
-// =================================================================================
-// AIChatDrawer Component (The Wrapper)
-// =================================================================================
 
 const AIChatDrawer = ({ isOpen, onClose }) => {
   return (
