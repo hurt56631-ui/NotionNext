@@ -1,4 +1,4 @@
-// components/Tixing/CiDianKa.js (V6 - 全屏优化 & 立方体动画 & 手势修复 & 笔画动画修复)
+// components/Tixing/CiDianKa.js (V7 - 交互、布局和动画完全修复)
 
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import { useSprings, animated, to } from '@react-spring/web';
@@ -9,16 +9,20 @@ import HanziWriter from 'hanzi-writer';
 
 // --- 样式 ---
 const styles = {
-  // 添加了 perspective 以实现 3D 效果
   fullScreenWrapper: { position: 'fixed', inset: 0, zIndex: 50, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', perspective: '1500px' },
-  wrapper: { position: 'relative', width: '100%', height: '100%', margin: 0, cursor: 'grab', touchAction: 'none' },
+  wrapper: { position: 'relative', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' },
   card: { position: 'absolute', width: '100%', height: '100%', willChange: 'transform', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  // 修改了宽度和高度为 100%
   cardInner: { width: '100%', height: '100%', position: 'relative', transformStyle: 'preserve-3d', display: 'flex' },
-  // 移除了 borderRadius
-  cardFace: { position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', background: 'linear-gradient(145deg, #ffffff 0%, #f7faff 100%)', padding: '24px', display: 'flex', flexDirection: 'column', color: '#1e2b3b' },
+  cardFace: {
+    position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden',
+    background: 'linear-gradient(145deg, #ffffff 0%, #f7faff 100%)',
+    padding: '24px',
+    // 关键修复：为底部导航栏增加安全区域，防止遮挡
+    paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 24px))',
+    display: 'flex', flexDirection: 'column', color: '#1e2b3b'
+  },
   cardBack: { transform: 'rotateY(180deg)' },
-  mainContent: { flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' },
+  mainContent: { flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' },
   header: { textAlign: 'center', width: '100%' },
   pinyin: { fontSize: '1.8rem', color: '#64748b', marginBottom: '12px' },
   word: { fontSize: '6rem', fontWeight: 'bold', lineHeight: '1.1', marginBottom: '20px' },
@@ -34,7 +38,7 @@ const styles = {
   modalContent: { background: 'white', padding: '20px', borderRadius: '16px', width: '90%', maxWidth: '320px' },
 };
 
-// --- TTS (单例播放，避免重叠) ---
+// --- TTS (单例播放) ---
 let currentSound = null;
 const playTTS = (text) => {
   if (!text) return;
@@ -43,70 +47,41 @@ const playTTS = (text) => {
   currentSound.play();
 };
 
-// --- 汉字书写 Modal (修复动画效果) ---
+// --- 汉字书写 Modal ---
 const HanziWriterModal = ({ character, onClose }) => {
   const writerRef = useRef(null);
   useEffect(() => {
-    if (!writerRef.current) return;
-    
-    writerRef.current.innerHTML = ''; // 清空之前的实例
     let writer = null;
-
     const timeoutId = setTimeout(() => {
       if (writerRef.current) {
-        writer = HanziWriter.create(writerRef.current, character, {
-          width: 280,
-          height: 280,
-          padding: 20,
-          showOutline: true,
-          strokeAnimationSpeed: 1,
-          delayBetweenStrokes: 100,
-        });
+        writerRef.current.innerHTML = ''; // 清空旧实例
+        writer = HanziWriter.create(writerRef.current, character, { width: 280, height: 280, padding: 20, showOutline: true });
         writer.animateCharacter();
       }
-    }, 200); // 增加延迟确保数据加载
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    }, 100);
+    return () => clearTimeout(timeoutId);
   }, [character]);
-
   return <div style={styles.modalBackdrop} onClick={onClose}><div style={styles.modalContent} onClick={(e) => e.stopPropagation()} ref={writerRef}></div></div>;
 };
 
-// --- 单词卡 ---
-const CardView = forwardRef(({ cardData, isFlipped, onFlip }, ref) => {
+// --- 单词卡 (移除手势相关逻辑，由父组件全权处理) ---
+const CardView = forwardRef(({ cardData }, ref) => {
   const { word, pinyin, meaning, example, aiExplanation } = cardData;
   const [showWriter, setShowWriter] = useState(false);
-
   return (
     <div style={styles.cardInner} ref={ref}>
       {showWriter && <HanziWriterModal character={word} onClose={() => setShowWriter(false)} />}
-      <animated.div style={{ ...styles.cardFace, transform: 'rotateY(0deg)' }} onClick={onFlip}>
+      <animated.div style={{ ...styles.cardFace, transform: 'rotateY(0deg)' }}>
         <div style={styles.mainContent}>
-          <header style={styles.header}>
-            <div style={styles.pinyin}>{pinyin}</div>
-            <div style={styles.word}>{word}</div>
-          </header>
+          <header style={styles.header}><div style={styles.pinyin}>{pinyin}</div><div style={styles.word}>{word}</div></header>
         </div>
-        {/* 为 footer 添加 onPointerDown 事件来阻止 useDrag 手势 */}
-        <footer style={styles.footer} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button style={styles.footerButton}><FaMicrophone /> 发音练习</button>
-            <button style={styles.footerButton} onClick={() => setShowWriter(true)}><FaPenFancy /> 笔顺</button>
-          </div>
+        <footer style={styles.footer} onPointerDown={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: '12px' }}><button style={styles.footerButton}><FaMicrophone /> 发音练习</button><button style={styles.footerButton} onClick={() => setShowWriter(true)}><FaPenFancy /> 笔顺</button></div>
           <button style={styles.footerButton} onClick={() => playTTS(word)}><FaVolumeUp /></button>
         </footer>
       </animated.div>
-      <animated.div style={{ ...styles.cardFace, ...styles.cardBack }} onClick={onFlip}>
-        <div style={styles.backSideContent}>
-          <div style={styles.meaning}>{meaning}</div>
-          <div style={styles.example}>
-            <FaVolumeUp style={styles.ttsIconSmall} onClick={(e) => { e.stopPropagation(); playTTS(example); }} />
-            <span style={styles.exampleText}>{example}</span>
-          </div>
-          {aiExplanation && <div style={styles.explanation}>{aiExplanation}</div>}
-        </div>
+      <animated.div style={{ ...styles.cardFace, ...styles.cardBack }}>
+        <div style={styles.backSideContent}><div style={styles.meaning}>{meaning}</div><div style={styles.example}><FaVolumeUp style={styles.ttsIconSmall} onClick={(e) => { e.stopPropagation(); playTTS(example); }} /><span style={styles.exampleText}>{example}</span></div>{aiExplanation && <div style={styles.explanation}>{aiExplanation}</div>}</div>
       </animated.div>
     </div>
   );
@@ -117,39 +92,52 @@ CardView.displayName = 'CardView';
 const CiDianKa = ({ flashcards = [] }) => {
   const [gone] = useState(() => new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [props, api] = useSprings(flashcards.length, i => ({ x: 0, rot: 0, scale: 1, rotateY: 0, zIndex: flashcards.length - i }));
 
-  const [props, api] = useSprings(flashcards.length, i => ({ x: 0, y: 0, scale: 1, rot: 0, rotateY: 0 }));
+  useEffect(() => { if (flashcards[currentIndex]) playTTS(flashcards[currentIndex].word); }, [flashcards]);
 
-  useEffect(() => {
-    if (flashcards[currentIndex]) playTTS(flashcards[currentIndex].word);
-  }, [currentIndex, flashcards]);
+  const handleFlip = (index) => api.start(i => i === index && { rotateY: props[i].rotateY.get() === 180 ? 0 : 180 });
 
   const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
-    if (props[index].rotateY.get() !== 0) return;
+    // 关键修复：整合手势，只允许操作顶层卡片
+    if (index !== currentIndex) return;
+
     const trigger = vx > 0.2;
     const dir = xDir < 0 ? -1 : 1;
-    if (!down && trigger) {
-      gone.add(index);
-      setCurrentIndex((prev) => (prev + 1) % flashcards.length);
-    }
-    api.start(i => {
-      if (index !== i) return;
-      const isGone = gone.has(index);
-      const x = isGone ? (200 + window.innerWidth) * dir : down ? mx : 0;
-      // 修改 rot 计算以产生更明显的 Y 轴旋转
-      const rot = mx / 10 + (isGone ? dir * 45 * vx : 0);
-      const scale = down ? 1.05 : 1;
-      return { x, rot, scale, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
-    });
-    if (!down && gone.size === flashcards.length) setTimeout(() => { gone.clear(); api.start(i => ({ x: 0, rot: 0, scale: 1, delay: i * 50 })); }, 600);
-  });
 
-  const handleFlip = (index) => {
-    api.start(i => {
-      if (i !== index) return;
-      return { rotateY: props[i].rotateY.get() === 180 ? 0 : 180 };
-    });
-  };
+    // 如果卡片已翻转，则不允许滑动
+    if (props[index].rotateY.get() !== 0) return;
+
+    if (!down) { // 手势释放
+      if (trigger) { // 判定为有效滑动
+        gone.add(index);
+        api.start(i => {
+          if (i !== index) return;
+          return { x: (200 + window.innerWidth) * dir, rot: mx / 10 + dir * 45 * vx, config: { friction: 50, tension: 200 } };
+        });
+        // 动画开始后立即更新索引，准备下一张卡片
+        const nextIndex = (currentIndex + 1) % flashcards.length;
+        setCurrentIndex(nextIndex);
+        if (gone.size === flashcards.length) {
+            setTimeout(() => {
+                gone.clear();
+                api.start(i => ({ x: 0, rot: 0, scale: 1, delay: i * 50 }));
+                setCurrentIndex(0); // 重置索引
+            }, 600);
+        }
+      } else if (Math.abs(mx) < 5) { // 判定为轻点 (翻转卡片)
+        handleFlip(index);
+        api.start(i => i === index && { x: 0, rot: 0, scale: 1, config: { friction: 50, tension: 500 } });
+      } else { // 判定为无效滑动 (松手后弹回)
+        api.start(i => i === index && { x: 0, rot: 0, scale: 1, config: { friction: 50, tension: 500 } });
+      }
+    } else { // 手势进行中
+      const x = mx;
+      const rot = mx / 10;
+      const scale = 1.05;
+      api.start(i => i === index && { x, rot, scale, config: { friction: 50, tension: 800 } });
+    }
+  });
 
   if (!flashcards || flashcards.length === 0) return <div>没有卡片数据。</div>;
 
@@ -157,10 +145,9 @@ const CiDianKa = ({ flashcards = [] }) => {
     <div style={styles.fullScreenWrapper}>
       <div style={styles.wrapper}>
         {props.map((springProps, i) => (
-          // 修改 transform 属性以包含 rotateY
-          <animated.div key={i} style={{ ...styles.card, ...springProps, transform: to([springProps.x, springProps.rot], (x, r) => `translateX(${x}px) rotateY(${r}deg)`) }} {...bind(i)}>
+          <animated.div key={i} style={{ ...styles.card, zIndex: springProps.zIndex, transform: to([springProps.x, springProps.rot], (x, r) => `translateX(${x}px) rotateY(${r}deg)`) }} {...bind(i)}>
             <animated.div style={{ width: '100%', height: '100%', transform: springProps.rotateY.to(r => `rotateY(${r}deg)`) }}>
-              <CardView cardData={flashcards[i]} onFlip={() => handleFlip(i)} />
+              <CardView cardData={flashcards[i]} />
             </animated.div>
           </animated.div>
         ))}
