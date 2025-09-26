@@ -3,16 +3,15 @@ import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 
 // =================================================================================
-// 【第一处修改】: 导入你的题型组件
+// 1. 导入你的题型组件
 // =================================================================================
 import PaiXuTi from './Tixing/PaiXuTi';
 
 // =================================================================================
-// AiChatAssistant Component Logic (Integrated directly into this file)
-// Version: Integrated with new custom AiTtsButton
+// AiChatAssistant Component Logic
 // =================================================================================
 
-// 【第二处修改】: 创建一个组件映射表，方便未来扩展
+// 2. 创建一个组件映射表
 const componentMap = {
   PaiXuTi: PaiXuTi
 };
@@ -31,7 +30,23 @@ const DEFAULT_SETTINGS = { apiKey: '', apiKeys: [], activeApiKeyId: '', chatMode
 
 
 // --- 【全新】内部 TTS 组件 ---
-const MICROSOFT_TTS_VOICES = [ { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' }, { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' }, { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' }, { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' }, { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' }, { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' }, { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' }, { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' }, { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' }, { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' }, { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' }, { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' }, { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' }, { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' }, { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' }, ];
+const MICROSOFT_TTS_VOICES = [
+  { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' },
+  { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' },
+  { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' },
+  { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' },
+  { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' },
+  { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' },
+  { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' },
+  { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' },
+  { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' },
+  { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' },
+  { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' },
+  { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' },
+  { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' },
+  { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' },
+  { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' },
+];
 
 const AiTtsButton = ({ text, ttsSettings }) => {
     const [playbackState, setPlaybackState] = useState('idle');
@@ -54,38 +69,13 @@ const TypingEffect = ({ text, onComplete, onUpdate }) => {
 
 const SimpleMarkdown = ({ text }) => { if (!text) return null; const lines = text.split('\n').map((line, index) => { if (line.trim() === '') return <br key={index} />; if (line.match(/\*\*(.*?)\*\*/)) { const content = line.replace(/\*\*/g, ''); return <strong key={index} className="block mt-2 mb-1">{content}</strong>; } if (line.startsWith('* ') || line.startsWith('- ')) { return <li key={index} className="ml-5 list-disc">{line.substring(2)}</li>; } return <p key={index} className="my-1">{line}</p>; }); return <div>{lines}</div>; };
 
-// =================================================================================
-// 【第三处修改】: 这是 MessageBubble 的全新版本，能够渲染交互式组件
-// =================================================================================
+// --- 3. MessageBubble 组件的全新版本 ---
 const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate }) => {
     const isUser = msg.role === 'user';
     const userBubbleClass = 'bg-blue-500 text-white rounded-br-lg shadow-[0_5px_15px_rgba(59,130,246,0.3),_0_12px_28px_rgba(59,130,246,0.2)]';
     const aiBubbleClass = 'bg-white dark:bg-gray-700 border border-gray-200/50 dark:border-gray-600/50 shadow-[0_5px_15px_rgba(0,0,0,0.12),_0_15px_35px_rgba(0,0,0,0.08)]';
-
-    const [componentData, setComponentData] = useState(null);
-
-    useEffect(() => {
-        if (msg.role === 'ai' && msg.content && !msg.isTyping) {
-            let jsonString = msg.content.trim();
-            if (jsonString.startsWith('```')) {
-                const firstLineEnd = jsonString.indexOf('\n');
-                const lastBackticks = jsonString.lastIndexOf('```');
-                if (firstLineEnd !== -1 && lastBackticks !== -1) {
-                    jsonString = jsonString.substring(firstLineEnd + 1, lastBackticks).trim();
-                }
-            }
-            try {
-                const parsed = JSON.parse(jsonString);
-                if (parsed.component && parsed.props && componentMap[parsed.component]) {
-                    setComponentData({ componentName: parsed.component, props: parsed.props });
-                } else {
-                    setComponentData(null);
-                }
-            } catch (e) {
-                setComponentData(null);
-            }
-        }
-    }, [msg.content, msg.isTyping, msg.role]);
+    
+    const isComponentMessage = msg.isComponent || false;
 
     return (
         <div className={`flex items-end gap-2.5 my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -96,8 +86,8 @@ const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingC
                     <div className="flex flex-wrap gap-2 mb-2">{msg.images.map((img, index) => <img key={index} src={img.previewUrl} alt={`附件 ${index + 1}`} className="w-24 h-24 object-cover rounded-md" />)}</div>
                 )}
                 
-                {componentData ? (
-                    React.createElement(componentMap[componentData.componentName], componentData.props)
+                {isComponentMessage ? (
+                    React.createElement(componentMap[msg.componentName], msg.props)
                 ) : (
                     <>
                         <div className={`prose prose-sm max-w-none prose-p:my-1 ${isUser ? 'prose-white' : 'text-gray-900 dark:text-gray-100 [text-shadow:0_1px_2px_rgba(0,0,0,0.05)]'}`}>
@@ -118,11 +108,6 @@ const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingC
     );
 };
 
-
-// =================================================================================
-// 后面的所有代码都保持原样，无需改动
-// =================================================================================
-
 const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDelete, onRename, prompts, settings }) => {
     const [editingId, setEditingId] = useState(null);
     const [newName, setNewName] = useState('');
@@ -142,8 +127,28 @@ const ModelSelector = ({ settings, onSelect, onClose }) => ( <div className="fix
 const AssistantSelector = ({ prompts, settings, onSelect, onClose }) => ( <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex flex-col p-4 animate-fade-in" onClick={onClose}> <div className="w-full max-w-2xl m-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg flex flex-col" onClick={e => e.stopPropagation()}> <div className="p-4 border-b border-gray-200 dark:border-gray-700 text-center relative"><h3 className="text-lg font-bold text-gray-800 dark:text-gray-200">更换助理</h3><button onClick={onClose} className="absolute top-2 right-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><i className="fas fa-times"></i></button></div> <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[60vh]"> {(prompts || []).map(p => ( <button key={p.id} onClick={() => onSelect(p.id)} className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${settings.currentPromptId === p.id ? 'border-blue-600 bg-blue-500/10' : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-700'}`}> <img src={convertGitHubUrl(p.avatarUrl) || convertGitHubUrl(settings.aiAvatarUrl)} alt={p.name} className="w-16 h-16 rounded-full object-cover mb-2 shadow-md"/> <span className="text-sm font-semibold text-center text-gray-800 dark:text-gray-200">{p.name}</span> </button> ))} </div> </div> </div> );
 
 const AiChatAssistant = ({ onClose }) => {
-    const [conversations, setConversations] = useState([]); const [currentConversationId, setCurrentConversationId] = useState(null); const [userInput, setUserInput] = useState(''); const [isLoading, setIsLoading] = useState(false); const [error, setError] = useState(''); const [settings, setSettings] = useState(DEFAULT_SETTINGS); const [showSettings, setShowSettings] = useState(false); const [isMounted, setIsMounted] = useState(false); const [isSidebarOpen, setIsSidebarOpen] = useState(false); const [showAssistantSelector, setShowAssistantSelector] = useState(false); const [showModelSelector, setShowModelSelector] = useState(false); const [selectedImages, setSelectedImages] = useState([]); const [isListening, setIsListening] = useState(false); const messagesEndRef = useRef(null); const abortControllerRef = useRef(null); const imageInputRef = useRef(null); const recognitionRef = useRef(null); const textareaRef = useRef(null); const lastAutoReadMessageId = useRef(null);
+    const [conversations, setConversations] = useState([]);
+    const [currentConversationId, setCurrentConversationId] = useState(null);
+    const [userInput, setUserInput] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    const [showSettings, setShowSettings] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [showAssistantSelector, setShowAssistantSelector] = useState(false);
+    const [showModelSelector, setShowModelSelector] = useState(false);
+    const [selectedImages, setSelectedImages] = useState([]);
+    const [isListening, setIsListening] = useState(false);
+    const messagesEndRef = useRef(null);
+    const abortControllerRef = useRef(null);
+    const imageInputRef = useRef(null);
+    const recognitionRef = useRef(null);
+    const textareaRef = useRef(null);
+    const lastAutoReadMessageId = useRef(null);
+
     useEffect(() => { setIsMounted(true); let finalSettings = { ...DEFAULT_SETTINGS }; const savedSettings = safeLocalStorageGet('ai_chat_settings'); if (savedSettings) { const parsed = JSON.parse(savedSettings); if (parsed.thirdPartyTtsConfig) { parsed.ttsVoice = parsed.thirdPartyTtsConfig.microsoftVoice || DEFAULT_SETTINGS.ttsVoice; delete parsed.thirdPartyTtsConfig; } parsed.prompts = (parsed.prompts || []).map(p => ({ ...p, model: p.model || DEFAULT_SETTINGS.selectedModel, ttsVoice: p.ttsVoice || DEFAULT_SETTINGS.ttsVoice, avatarUrl: p.avatarUrl || '' })); if (!parsed.chatModels || parsed.chatModels.length === 0) { parsed.chatModels = CHAT_MODELS_LIST; } if (!parsed.apiKeys) { parsed.apiKeys = []; } finalSettings = { ...DEFAULT_SETTINGS, ...parsed }; } if (typeof navigator !== 'undefined' && /FBAN|FBAV/i.test(navigator.userAgent)) { finalSettings.isFacebookApp = true; } setSettings(finalSettings); const savedConversations = safeLocalStorageGet('ai_chat_conversations'); const parsedConvs = savedConversations ? JSON.parse(savedConversations) : []; setConversations(parsedConvs); if (finalSettings.startWithNewChat || parsedConvs.length === 0) { createNewConversation(finalSettings.currentPromptId, true); } else { const firstConv = parsedConvs[0]; setCurrentConversationId(firstConv.id); if (firstConv.messages.length > 0) { lastAutoReadMessageId.current = firstConv.messages[firstConv.messages.length - 1]?.timestamp; } } }, []);
+    
     const currentConversation = useMemo(() => conversations.find(c => c.id === currentConversationId), [conversations, currentConversationId]);
     useEffect(() => { if (isMounted) { safeLocalStorageSet('ai_chat_settings', JSON.stringify(settings)); safeLocalStorageSet('ai_chat_conversations', JSON.stringify(conversations)); } }, [settings, conversations, isMounted]);
     const scrollToBottom = useCallback((behavior = 'smooth') => { messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' }); }, []);
@@ -164,11 +169,136 @@ const AiChatAssistant = ({ onClose }) => {
     const triggerImageInput = () => { if (imageInputRef.current) { imageInputRef.current.removeAttribute('capture'); imageInputRef.current.click(); } };
     const triggerCameraInput = () => { if (imageInputRef.current) { imageInputRef.current.setAttribute('capture', 'environment'); imageInputRef.current.click(); } };
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
-    const handleSubmit = async (isRegenerate = false) => { if (!currentConversation || isLoading) return; const activeKey = (settings.apiKeys || []).find(k => k.id === settings.activeApiKeyId); if (!activeKey || !activeKey.key) { setError('请在设置中配置并激活一个有效的 API 密钥。'); return; } let messagesForApi = [...currentConversation.messages]; let textToProcess = userInput.trim(); if (isRegenerate) { if (messagesForApi.length > 0 && messagesForApi[messagesForApi.length - 1].role === 'ai') { messagesForApi.pop(); } } else { if (!textToProcess && selectedImages.length === 0) { setError('请输入文字或添加图片后再发送！'); return; } const userMessage = { role: 'user', content: textToProcess, images: selectedImages, timestamp: Date.now() }; const updatedMessages = [...messagesForApi, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages, promptId: c.promptId || settings.currentPromptId } : c)); messagesForApi = updatedMessages; setUserInput(''); setSelectedImages([]); } if (messagesForApi.length === 0) return; setIsLoading(true); setError(''); abortControllerRef.current = new AbortController(); try { const currentPrompt = (settings.prompts || []).find(p => p.id === currentConversation.promptId) || (settings.prompts || []).find(p => p.id === settings.currentPromptId) || DEFAULT_PROMPTS[0]; const modelInfo = (settings.chatModels || []).find(m => m.value === settings.selectedModel) || (settings.chatModels || [])[0]; const modelToUse = modelInfo.value; const contextLimit = modelInfo.maxContextTokens || 8192; const contextMessages = messagesForApi.slice(-contextLimit); let response; if (activeKey.provider === 'gemini') { const history = contextMessages.map(msg => { const parts = []; if (msg.content) parts.push({ text: msg.content }); if (msg.images) msg.images.forEach(img => parts.push({ inlineData: { mimeType: img.type, data: img.data } })); return { role: msg.role === 'user' ? 'user' : 'model', parts }; }); const contents = [ { role: 'user', parts: [{ text: currentPrompt.content }] }, { role: 'model', parts: [{ text: "好的，我明白了。" }] }, ...history ]; const generationConfig = { temperature: settings.temperature, maxOutputTokens: settings.maxOutputTokens }; if (settings.disableThinkingMode && modelToUse.includes('gemini-2.5')) { generationConfig.thinkingConfig = { thinkingBudget: 0 }; } const url = `${activeKey.url || 'https://generativelanguage.googleapis.com/v1beta/models/'}${modelToUse}:generateContent?key=${activeKey.key}`; response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents, generationConfig }), signal: abortControllerRef.current.signal }); } else if (activeKey.provider === 'openai') { const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ]; const url = `${activeKey.url || 'https://api.openai.com/v1'}/chat/completions`; response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeKey.key}` }, body: JSON.stringify({ model: modelToUse, messages, temperature: settings.temperature, max_tokens: settings.maxOutputTokens, stream: false }), signal: abortControllerRef.current.signal }); } if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error?.message || `请求失败 (状态码: ${response.status})`); } const data = await response.json(); let aiResponseContent; if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text; } else { aiResponseContent = data.choices?.[0]?.message?.content; } if (!aiResponseContent) throw new Error('AI未能返回有效内容。'); const aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true }; const finalMessages = [...messagesForApi, aiMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c)); } catch (err) { const finalMessages = [...messagesForApi]; let errorMessage = `请求错误: ${err.message}`; if (err.name === 'AbortError') errorMessage = '请求被中断，请检查网络连接。'; setError(errorMessage); finalMessages.push({ role: 'ai', content: `抱歉，出错了: ${errorMessage}`, timestamp: Date.now() }); setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c)); } finally { setIsLoading(false); } };
+    
+    // --- 4. handleSubmit 函数的最终版本 ---
+    const handleSubmit = async (isRegenerate = false) => {
+        if (!currentConversation || isLoading) return;
+        const activeKey = (settings.apiKeys || []).find(k => k.id === settings.activeApiKeyId);
+        if (!activeKey || !activeKey.key) { setError('请在设置中配置并激活一个有效的 API 密钥。'); return; }
+        let messagesForApi = [...currentConversation.messages];
+        let textToProcess = userInput.trim();
+        if (isRegenerate) { if (messagesForApi.length > 0 && messagesForApi[messagesForApi.length - 1].role === 'ai') { messagesForApi.pop(); } } else { if (!textToProcess && selectedImages.length === 0) { setError('请输入文字或添加图片后再发送！'); return; } const userMessage = { role: 'user', content: textToProcess, images: selectedImages, timestamp: Date.now() }; const updatedMessages = [...messagesForApi, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages, promptId: c.promptId || settings.currentPromptId } : c)); messagesForApi = updatedMessages; setUserInput(''); setSelectedImages([]); }
+        if (messagesForApi.length === 0) return;
+        setIsLoading(true); setError(''); abortControllerRef.current = new AbortController();
+        try {
+            const currentPrompt = (settings.prompts || []).find(p => p.id === currentConversation.promptId) || (settings.prompts || []).find(p => p.id === settings.currentPromptId) || DEFAULT_PROMPTS[0];
+            const modelInfo = (settings.chatModels || []).find(m => m.value === settings.selectedModel) || (settings.chatModels || [])[0];
+            const modelToUse = modelInfo.value;
+            const contextLimit = modelInfo.maxContextTokens || 8192;
+            const contextMessages = messagesForApi.slice(-contextLimit);
+            let response;
+            if (activeKey.provider === 'gemini') {
+                const history = contextMessages.map(msg => { const parts = []; if (msg.content) parts.push({ text: msg.content }); if (msg.images) msg.images.forEach(img => parts.push({ inlineData: { mimeType: img.type, data: img.data } })); return { role: msg.role === 'user' ? 'user' : 'model', parts }; });
+                const contents = [ { role: 'user', parts: [{ text: currentPrompt.content }] }, { role: 'model', parts: [{ text: "好的，我明白了。" }] }, ...history ];
+                const generationConfig = { temperature: settings.temperature, maxOutputTokens: settings.maxOutputTokens };
+                if (settings.disableThinkingMode && modelToUse.includes('gemini-2.5')) { generationConfig.thinkingConfig = { thinkingBudget: 0 }; }
+                const url = `${activeKey.url || 'https://generativelanguage.googleapis.com/v1beta/models/'}${modelToUse}:generateContent?key=${activeKey.key}`;
+                response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents, generationConfig }), signal: abortControllerRef.current.signal });
+            } else if (activeKey.provider === 'openai') {
+                const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ];
+                const url = `${activeKey.url || 'https://api.openai.com/v1'}/chat/completions`;
+                response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeKey.key}` }, body: JSON.stringify({ model: modelToUse, messages, temperature: settings.temperature, max_tokens: settings.maxOutputTokens, stream: false }), signal: abortControllerRef.current.signal });
+            }
+            if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error?.message || `请求失败 (状态码: ${response.status})`); }
+            const data = await response.json();
+            let aiResponseContent;
+            if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text; } else { aiResponseContent = data.choices?.[0]?.message?.content; }
+            if (!aiResponseContent) throw new Error('AI未能返回有效内容。');
+            
+            let aiMessage;
+            try {
+                let jsonString = aiResponseContent.trim();
+                if (jsonString.startsWith('```')) {
+                    const firstLineEnd = jsonString.indexOf('\n');
+                    const lastBackticks = jsonString.lastIndexOf('```');
+                    if (firstLineEnd !== -1 && lastBackticks !== -1) {
+                        jsonString = jsonString.substring(firstLineEnd + 1, lastBackticks).trim();
+                    }
+                }
+                const parsed = JSON.parse(jsonString);
+
+                if (parsed.component && parsed.props && componentMap[parsed.component]) {
+                    aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: parsed.props, isTyping: false };
+                } else {
+                    throw new Error("Not a component JSON");
+                }
+            } catch(e) {
+                aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true };
+            }
+            
+            const finalMessages = [...messagesForApi, aiMessage];
+            setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c));
+
+        } catch (err) {
+            const finalMessages = [...messagesForApi];
+            let errorMessage = `请求错误: ${err.message}`;
+            if (err.name === 'AbortError') errorMessage = '请求被中断，请检查网络连接。';
+            setError(errorMessage);
+            finalMessages.push({ role: 'ai', content: `抱歉，出错了: ${errorMessage}`, timestamp: Date.now() });
+            setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c));
+        } finally {
+            setIsLoading(false);
+        }
+    };
     const handleTypingComplete = useCallback(() => { setConversations(prev => prev.map(c => { if (c.id === currentConversationId) { const updatedMessages = c.messages.map((msg, index) => index === c.messages.length - 1 ? { ...msg, isTyping: false } : msg); return { ...c, messages: updatedMessages }; } return c; })); }, [currentConversationId]);
-    if (!isMounted) { return <div className="w-full h-full flex items-center justify-center bg-white dark:bg-gray-800"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div><p className="ml-3 text-gray-500 dark:text-gray-400">正在加载...</p></div>; } const showSendButton = userInput.trim().length > 0 || selectedImages.length > 0;
-    return ( <div className="w-full h-full flex flex-col bg-transparent text-gray-800 dark:text-gray-200"> <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${convertGitHubUrl(settings.chatBackgroundUrl)}')`, opacity: (settings.backgroundOpacity || 70) / 100, zIndex: -1 }}></div> <div className="absolute inset-0 bg-black/10 dark:bg-black/20" style={{ zIndex: -1 }}></div> <div className="relative flex flex-1 min-h-0"> <ChatSidebar isOpen={isSidebarOpen} conversations={conversations} currentId={currentConversationId} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onRename={handleRenameConversation} onNew={() => createNewConversation()} prompts={settings.prompts} settings={settings} /> {isSidebarOpen && ( <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/20 z-20 lg:hidden"></div> )} <div className="flex-1 flex flex-col h-full min-w-0"> <header className="flex items-center justify-between py-2 px-2 shrink-0 bg-white/40 dark:bg-black/20 backdrop-blur-lg shadow-sm border-b border-gray-200/50 dark:border-gray-800/50"> <div className="flex items-center gap-2"> <button onClick={onClose} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="关闭"><i className="fas fa-times"></i></button> <button onClick={() => setIsSidebarOpen(s => !s)} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="切换对话列表"><i className="fas fa-bars"></i></button> </div> <div className="text-center flex-grow"> <h2 className="text-lg font-semibold truncate">{currentConversation?.title || '聊天'}</h2></div> <div className="w-10 flex justify-end"> <button onClick={() => setShowSettings(true)} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="设置"><i className="fas fa-cog"></i></button> </div> </header> <main className="flex-grow p-4 overflow-y-auto"> <div className="space-y-1"> {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} /> </div> ))} </div> <div ref={messagesEndRef} /> </main> <footer className="flex-shrink-0 p-2 sm:p-4 pb-safe bg-gradient-to-t from-white/80 via-white/50 to-transparent dark:from-gray-800/80 dark:via-gray-800/50 z-10"> {error && <div className="mb-2 p-2 bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 rounded-lg text-center text-sm" onClick={()=>setError('')}>{error} <span className='text-xs'>(点击关闭)</span></div>} {selectedImages.length > 0 && (<div className="max-w-3xl mx-auto mb-2 px-2"> <div className="flex items-center gap-2 overflow-x-auto p-1 bg-gray-200/50 dark:bg-gray-900/50 rounded-lg"> {selectedImages.map((img, index) => ( <div key={index} className="relative shrink-0"> <img src={img.previewUrl} alt={`preview ${index}`} className="w-16 h-16 object-cover rounded-md" /> <button onClick={() => removeSelectedImage(index)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md">&times;</button> </div> ))} </div> </div>)} <div className="flex items-center justify-center gap-2 mb-2 max-w-3xl mx-auto"> <button onClick={() => createNewConversation()} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="新对话"> <i className="fas fa-plus mr-1"></i> <span>新对话</span> </button> <button type="button" onClick={() => setShowModelSelector(true)} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="切换模型"> <i className="fas fa-brain mr-1"></i> <span>模型</span> </button> <button type="button" onClick={() => setShowAssistantSelector(true)} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="更换助理"> <i className="fas fa-user-tie mr-1"></i> <span>助理</span> </button> </div> <form onSubmit={(e)=>{e.preventDefault();handleSubmit(false)}} className="flex items-end w-full max-w-3xl mx-auto p-2 bg-white dark:bg-gray-700 backdrop-blur-sm rounded-2xl border border-gray-200/80 dark:border-gray-600/80 transition-shadow duration-300 ease-in-out hover:shadow-2xl focus-within:shadow-2xl shadow-[0_-10px_25px_rgba(0,0,0,0.05),_0_-5px_10px_rgba(0,0,0,0.04)]"> <input type="file" ref={imageInputRef} onChange={handleImageSelection} accept="image/*" multiple className="hidden" /> <div className="flex items-center flex-shrink-0 mr-1"> <button type="button" onClick={triggerImageInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="选择图片"><i className="fas fa-image text-xl text-gray-500 dark:text-gray-400"></i></button> <button type="button" onClick={triggerCameraInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="拍照"><i className="fas fa-camera text-xl text-gray-500 dark:text-gray-400"></i></button> </div> <textarea ref={textareaRef} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(false); } }} placeholder="与 AI 聊天..." className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 text-base resize-none overflow-hidden mx-2 py-1 leading-6 max-h-36 placeholder-gray-500 dark:placeholder-gray-400" rows="1" style={{minHeight:'2.5rem'}} /> <div className="flex items-center flex-shrink-0 ml-1"> {!showSendButton ? ( <button type="button" onClick={isListening ? stopListening : startListening} className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'text-white bg-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-500/10 dark:hover:bg-white/10'}`} title="语音输入"> <i className="fas fa-microphone text-xl"></i> </button> ) : ( <button type="submit" className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 hover:bg-blue-700 disabled:opacity-50 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95" disabled={isLoading}> <i className="fas fa-arrow-up text-xl"></i> </button> )} </div> </form> </footer> </div> {showSettings && <SettingsModal settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />} {showAssistantSelector && <AssistantSelector prompts={settings. prompts} settings={settings} onSelect={handleAssistantSelect} onClose={() => setShowAssistantSelector(false)} />} {showModelSelector && <ModelSelector settings={settings} onSelect={(modelValue) => { setSettings(s => ({...s, selectedModel: modelValue})); setShowModelSelector(false); }} onClose={() => setShowModelSelector(false)} />} </div> </div> );
+
+    if (!isMounted) { return <div className="w-full h-full flex items-center justify-center bg-white dark:bg-gray-800"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div><p className="ml-3 text-gray-500 dark:text-gray-400">正在加载...</p></div>; }
+    const showSendButton = userInput.trim().length > 0 || selectedImages.length > 0;
+    
+    return (
+        <div className="w-full h-full flex flex-col bg-transparent text-gray-800 dark:text-gray-200">
+            <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${convertGitHubUrl(settings.chatBackgroundUrl)}')`, opacity: (settings.backgroundOpacity || 70) / 100, zIndex: -1 }}></div>
+            <div className="absolute inset-0 bg-black/10 dark:bg-black/20" style={{ zIndex: -1 }}></div>
+            <div className="relative flex flex-1 min-h-0">
+                <ChatSidebar isOpen={isSidebarOpen} conversations={conversations} currentId={currentConversationId} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onRename={handleRenameConversation} onNew={() => createNewConversation()} prompts={settings.prompts} settings={settings} />
+                {isSidebarOpen && ( <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/20 z-20 lg:hidden"></div> )}
+                <div className="flex-1 flex flex-col h-full min-w-0">
+                    <header className="flex items-center justify-between py-2 px-2 shrink-0 bg-white/40 dark:bg-black/20 backdrop-blur-lg shadow-sm border-b border-gray-200/50 dark:border-gray-800/50">
+                        <div className="flex items-center gap-2">
+                            <button onClick={onClose} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="关闭"><i className="fas fa-times"></i></button>
+                            <button onClick={() => setIsSidebarOpen(s => !s)} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="切换对话列表"><i className="fas fa-bars"></i></button>
+                        </div>
+                        <div className="text-center flex-grow"> <h2 className="text-lg font-semibold truncate">{currentConversation?.title || '聊天'}</h2></div>
+                        <div className="w-10 flex justify-end"> <button onClick={() => setShowSettings(true)} className="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/10" title="设置"><i className="fas fa-cog"></i></button> </div>
+                    </header>
+                    <main className="flex-grow p-4 overflow-y-auto">
+                        <div className="space-y-1">
+                            {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} /> </div> ))}
+                        </div>
+                        <div ref={messagesEndRef} />
+                    </main>
+                    <footer className="flex-shrink-0 p-2 sm:p-4 pb-safe bg-gradient-to-t from-white/80 via-white/50 to-transparent dark:from-gray-800/80 dark:via-gray-800/50 z-10">
+                        {error && <div className="mb-2 p-2 bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 rounded-lg text-center text-sm" onClick={()=>setError('')}>{error} <span className='text-xs'>(点击关闭)</span></div>}
+                        {selectedImages.length > 0 && (<div className="max-w-3xl mx-auto mb-2 px-2"> <div className="flex items-center gap-2 overflow-x-auto p-1 bg-gray-200/50 dark:bg-gray-900/50 rounded-lg"> {selectedImages.map((img, index) => ( <div key={index} className="relative shrink-0"> <img src={img.previewUrl} alt={`preview ${index}`} className="w-16 h-16 object-cover rounded-md" /> <button onClick={() => removeSelectedImage(index)} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow-md">&times;</button> </div> ))} </div> </div>)}
+                        <div className="flex items-center justify-center gap-2 mb-2 max-w-3xl mx-auto">
+                           <button onClick={() => createNewConversation()} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="新对话"> <i className="fas fa-plus mr-1"></i> <span>新对话</span> </button>
+                           <button type="button" onClick={() => setShowModelSelector(true)} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="切换模型"> <i className="fas fa-brain mr-1"></i> <span>模型</span> </button>
+                           <button type="button" onClick={() => setShowAssistantSelector(true)} className="px-3 py-1.5 bg-white dark:bg-gray-700 rounded-full text-xs text-gray-700 dark:text-gray-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_1px_3px_rgba(0,0,0,0.08)] dark:shadow-none hover:bg-gray-100 dark:hover:bg-gray-600 transition-all duration-200 active:scale-95" title="更换助理"> <i className="fas fa-user-tie mr-1"></i> <span>助理</span> </button>
+                        </div>
+                        <form onSubmit={(e)=>{e.preventDefault();handleSubmit(false)}} className="flex items-end w-full max-w-3xl mx-auto p-2 bg-white dark:bg-gray-700 backdrop-blur-sm rounded-2xl border border-gray-200/80 dark:border-gray-600/80 transition-shadow duration-300 ease-in-out hover:shadow-2xl focus-within:shadow-2xl shadow-[0_-10px_25px_rgba(0,0,0,0.05),_0_-5px_10px_rgba(0,0,0,0.04)]">
+                            <input type="file" ref={imageInputRef} onChange={handleImageSelection} accept="image/*" multiple className="hidden" />
+                             <div className="flex items-center flex-shrink-0 mr-1">
+                                <button type="button" onClick={triggerImageInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="选择图片"><i className="fas fa-image text-xl text-gray-500 dark:text-gray-400"></i></button>
+                                <button type="button" onClick={triggerCameraInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="拍照"><i className="fas fa-camera text-xl text-gray-500 dark:text-gray-400"></i></button>
+                            </div>
+                            <textarea ref={textareaRef} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(false); } }} placeholder="与 AI 聊天..." className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 text-base resize-none overflow-hidden mx-2 py-1 leading-6 max-h-36 placeholder-gray-500 dark:placeholder-gray-400" rows="1" style={{minHeight:'2.5rem'}} />
+                            <div className="flex items-center flex-shrink-0 ml-1">
+                                {!showSendButton ? ( <button type="button" onClick={isListening ? stopListening : startListening} className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'text-white bg-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-500/10 dark:hover:bg-white/10'}`} title="语音输入"> <i className="fas fa-microphone text-xl"></i> </button> ) : ( <button type="submit" className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 hover:bg-blue-700 disabled:opacity-50 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95" disabled={isLoading}> <i className="fas fa-arrow-up text-xl"></i> </button> )}
+                            </div>
+                        </form>
+                    </footer>
+                </div>
+                {showSettings && <SettingsModal settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
+                {showAssistantSelector && <AssistantSelector prompts={settings. prompts} settings={settings} onSelect={handleAssistantSelect} onClose={() => setShowAssistantSelector(false)} />}
+                {showModelSelector && <ModelSelector settings={settings} onSelect={(modelValue) => { setSettings(s => ({...s, selectedModel: modelValue})); setShowModelSelector(false); }} onClose={() => setShowModelSelector(false)} />}
+            </div>
+        </div>
+    );
 };
+
+// =================================================================================
+// AIChatDrawer Component (The Wrapper)
+// =================================================================================
 
 const AIChatDrawer = ({ isOpen, onClose }) => {
   return (
