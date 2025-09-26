@@ -1,4 +1,4 @@
-// components/Tixing/PaiXuTi.js (V16 - 终极完整修复版)
+// components/Tixing/PaiXuTi.js (V17 - 最终编译修复版)
 
 import React, { useState, useMemo, useEffect, useCallback, forwardRef } from 'react';
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
@@ -33,12 +33,11 @@ const styles = {
   explanationBox: { backgroundColor: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '10px', border: '1px solid #fcd34d', marginTop: '12px', textAlign: 'left', fontSize: '0.95rem', lineHeight: '1.6' },
   spinner: { animation: 'spin 1s linear infinite' },
 };
-
 let sounds = {};
 let ttsCache = new Map();
 if (typeof window !== 'undefined') { sounds.click = new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }); sounds.correct = new Howl({ src: ['/sounds/correct.mp3'], volume: 0.7 }); sounds.incorrect = new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }); }
 const playSound = (name) => { if (sounds[name]) sounds[name].play(); };
-const preloadTTS = async (text) => { if (ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-10`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
+const preloadTTS = async (text) => { if (ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-30`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
 const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); } };
 const buildCorrectionPrompt = (title, userOrderText, correctOrderText) => { return `你是一位专业的中文语法老师。一名学生做错了句子排序题，请用亲切、简单的方式为他解释。\n\n规则：\n1. 先鼓励学生。\n2. 指出学生的答案和正确答案。\n3. 详细解释语法点（如主谓宾）。\n4. 最后再次鼓励。\n\n题目信息：\n- 题目: "${title}"\n- 学生的错误答案: "${userOrderText}"\n- 正确答案: "${correctOrderText}"\n\n请开始你的解释：`; };
 
@@ -67,63 +66,18 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
   const [activeId, setActiveId] = useState(null);
   const [feedback, setFeedback] = useState({ shown: false, correct: false, showExplanation: false });
   const [isRequestingCorrection, setIsRequestingCorrection] = useState(false);
-
   const itemsWithColors = useMemo(() => { if (!initialItems) return []; return initialItems.map((item, index) => ({ ...item, color: keyColors[index % keyColors.length] })); }, [initialItems]);
   const shuffledItems = useMemo(() => [...itemsWithColors].sort(() => Math.random() - 0.5), [itemsWithColors]);
-
-  useEffect(() => {
-    if (itemsWithColors.length > 0) {
-      setPoolItems(shuffledItems);
-      setAnswerItems([]);
-      setFeedback({ shown: false, correct: false, showExplanation: false });
-      itemsWithColors.forEach(item => { if (!/^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(item.content.trim())) { preloadTTS(item.content); } });
-    }
-  }, [itemsWithColors, shuffledItems]);
-  
+  useEffect(() => { if (itemsWithColors.length > 0) { setPoolItems(shuffledItems); setAnswerItems([]); setFeedback({ shown: false, correct: false, showExplanation: false }); itemsWithColors.forEach(item => { if (!/^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(item.content.trim())) { preloadTTS(item.content); } }); } }, [itemsWithColors, shuffledItems]);
   useEffect(() => { setIsMounted(true); }, []);
-
   const sensors = useSensors( useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }) );
-
   const handleDragStart = useCallback((event) => { setActiveId(event.active.id); }, []);
   const handleDragEnd = useCallback((event) => { const { active, over } = event; if (over && active.id !== over.id) { setAnswerItems((items) => { const oldIndex = items.findIndex(({ id }) => id === active.id); const newIndex = items.findIndex(({ id }) => id === over.id); return arrayMove(items, oldIndex, newIndex); }); } setActiveId(null); }, []);
-  
-  const toggleItemPlacement = useCallback((itemToMove) => {
-    playSound('click');
-    if (answerItems.some(item => item.id === itemToMove.id)) {
-      setAnswerItems(prev => prev.filter(item => item.id !== itemToMove.id));
-      setPoolItems(prev => [...prev, itemToMove]);
-    } else {
-      setPoolItems(prev => prev.filter(item => item.id !== itemToMove.id));
-      setAnswerItems(prev => [...prev, itemToMove]);
-    }
-  }, [answerItems]);
-
-  const handleSubmit = useCallback(() => {
-    const isCorrect = answerItems.map(item => item.id).join(',') === correctOrder.join(',');
-    setFeedback({ shown: true, correct: isCorrect, showExplanation: !isCorrect });
-    playSound(isCorrect ? 'correct' : 'incorrect');
-    if (isCorrect) confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-  }, [answerItems, correctOrder]);
-
-  const handleReset = useCallback(() => {
-      const reShuffled = [...itemsWithColors].sort(() => Math.random() - 0.5);
-      setPoolItems(reShuffled);
-      setAnswerItems([]);
-      setFeedback({ shown: false, correct: false, showExplanation: false });
-  }, [itemsWithColors]);
-  
-  const handleAskForCorrection = useCallback(() => {
-    if (!onCorrectionRequest) return;
-    setIsRequestingCorrection(true);
-    const userOrderText = answerItems.map(item => item.content).join('');
-    const correctItems = correctOrder.map(id => itemsWithColors.find(item => item.id === id));
-    const correctOrderText = correctItems.map(item => item.content).join('');
-    const prompt = buildCorrectionPrompt(title, userOrderText, correctOrderText);
-    onCorrectionRequest(prompt);
-  }, [answerItems, correctOrder, itemsWithColors, onCorrectionRequest, title]);
-
+  const toggleItemPlacement = useCallback((itemToMove) => { playSound('click'); if (answerItems.some(item => item.id === itemToMove.id)) { setAnswerItems(prev => prev.filter(item => item.id !== itemToMove.id)); setPoolItems(prev => [...prev, itemToMove]); } else { setPoolItems(prev => prev.filter(item => item.id !== itemToMove.id)); setAnswerItems(prev => [...prev, itemToMove]); } }, [answerItems]);
+  const handleSubmit = useCallback(() => { const isCorrect = answerItems.map(item => item.id).join(',') === correctOrder.join(','); setFeedback({ shown: true, correct: isCorrect, showExplanation: !isCorrect }); playSound(isCorrect ? 'correct' : 'incorrect'); if (isCorrect) confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); }, [answerItems, correctOrder]);
+  const handleReset = useCallback(() => { const reShuffled = [...itemsWithColors].sort(() => Math.random() - 0.5); setPoolItems(reShuffled); setAnswerItems([]); setFeedback({ shown: false, correct: false, showExplanation: false }); }, [itemsWithColors]);
+  const handleAskForCorrection = useCallback(() => { if (!onCorrectionRequest) return; setIsRequestingCorrection(true); const userOrderText = answerItems.map(item => item.content).join(''); const correctItems = correctOrder.map(id => itemsWithColors.find(item => item.id === id)); const correctOrderText = correctItems.map(item => item.content).join(''); const prompt = buildCorrectionPrompt(title, userOrderText, correctOrderText); onCorrectionRequest(prompt); }, [answerItems, correctOrder, itemsWithColors, onCorrectionRequest, title]);
   const activeItem = useMemo(() => itemsWithColors.find(item => item.id === activeId), [activeId, itemsWithColors]);
-  
   if (!isMounted || !initialItems) return null;
   const spinAnimationStyle = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
 
@@ -137,3 +91,44 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
                 <SortableContext items={answerItems} strategy={rectSortingStrategy}>
                     {answerItems.map(item => <SortableCard key={item.id} id={item.id} content={item.content} color={item.color} onClick={() => toggleItemPlacement(item)} />)}
                 </SortableContext>
+            </div>
+            <DragOverlay modifiers={[restrictToParentElement, restrictToHorizontalAxis]}>
+              {activeId && activeItem ? <Card id={activeItem.id} content={activeItem.content} color={activeItem.color} style={styles.dragOverlay} /> : null}
+            </DragOverlay>
+        </DndContext>
+        <div style={styles.wordPool}>
+            {poolItems.map(item => <Card key={item.id} id={item.id} content={item.content} color={item.color} onClick={() => toggleItemPlacement(item)} />)}
+        </div>
+        <div style={styles.buttonContainer}>
+            {!feedback.shown ? (
+                <button style={styles.submitButton} onClick={handleSubmit}>检查答案</button>
+            ) : (
+                <>
+                    <div style={{ ...styles.feedback, ...(feedback.correct ? styles.feedbackCorrect : styles.feedbackIncorrect) }}>
+                        {feedback.correct ? <><FaCheck /> 完全正确！</> : <><FaTimes /> 再试一次吧！</>}
+                    </div>
+                    {feedback.showExplanation && aiExplanation && (
+                        <div style={styles.explanationBox}>{aiExplanation}</div>
+                    )}
+                    {feedback.correct && aiExplanation && !feedback.showExplanation && (
+                        <button style={{...styles.submitButton, backgroundColor: '#10b981'}} onClick={() => setFeedback(f => ({...f, showExplanation: true}))}>
+                            <FaLightbulb /> 查看语法点
+                        </button>
+                    )}
+                    {!feedback.correct && !aiExplanation && onCorrectionRequest && (
+                         <button style={{...styles.submitButton, backgroundColor: '#f59e0b'}} onClick={handleAskForCorrection} disabled={isRequestingCorrection}>
+                            {isRequestingCorrection ? <FaSpinner style={styles.spinner} /> : <><FaCommentAlt /> 请 AI 解释</>}
+                        </button>
+                    )}
+                    <button style={{...styles.submitButton, backgroundColor: '#64748b'}} onClick={handleReset}>
+                        <FaRedo /> 再试一次
+                    </button>
+                </>
+            )}
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default PaiXuTi;
