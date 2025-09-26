@@ -297,4 +297,29 @@ img {
   }
   @keyframes l1 {
   0% {background-position: right}
-  }
+}
+
+/* 添加的 CSS 规则 */
+.color-transition {
+  display: none !important;
+}
+
+#theme-heo > footer.relative.flex-shrink-0.bg-white.dark\:bg-\[\#1a191d\].justify-center.text-center.m-auto.w-full.leading-6.text-gray-600.dark\:text-gray-100.text-sm:last-child > div.w-full.h-24:nth-child(2) {
+  display: none !important;
+}
+
+#footer-bottom-left {
+  display: none !important;
+}
+
+#footer-bottom {
+  display: none !important;
+}
+
+#article-wrapper > div.m-1.overflow-x-auto:nth-child(3) {
+  display: none !important;
+}
+
+#article-wrapper > div.px-5:last-child > section.dark\:text-gray-300.mt-6.mx-1:first-child > ul.overflow-x-auto.whitespace-nowrap.text-sm.dark\:bg-gray-900.bg-gray-100.p-5.leading-8.border-l-2.border-indigo-500 {
+  display: none !important;
+}
