@@ -1,4 +1,4 @@
-// components/HanziModal.js - 独立的汉字笔顺动画组件
+// components/HanziModal.js - 独立的汉字笔顺动画组件 (修复版)
 
 import React, { useEffect, useRef } from 'react';
 import HanziWriter from 'hanzi-writer';
@@ -28,10 +28,14 @@ const HanziModal = ({ char, onClose }) => {
   const writerInstanceRef = useRef(null);
 
   useEffect(() => {
-    if (!char) return;
+    if (!char || !writerRef.current) return;
+    
+    // 清理旧实例
+    writerRef.current.innerHTML = ''; 
+    writerInstanceRef.current = null;
+    
     const initTimer = setTimeout(() => {
       if (writerRef.current) {
-        writerRef.current.innerHTML = ''; 
         const writer = HanziWriter.create(writerRef.current, char, {
           width: 260, height: 260, padding: 5, showOutline: true,
           strokeAnimationSpeed: 1, delayBetweenStrokes: 100,
@@ -39,9 +43,12 @@ const HanziModal = ({ char, onClose }) => {
         writerInstanceRef.current = writer;
         writer.animateCharacter();
       }
-    }, 150); // 稍微增加延迟以确保DOM就绪
+    }, 150); 
 
-    return () => { clearTimeout(initTimer); writerInstanceRef.current = null; };
+    return () => { 
+      clearTimeout(initTimer);
+      writerInstanceRef.current = null;
+    };
   }, [char]);
 
   const handleReplay = (e) => {
