@@ -1,4 +1,4 @@
-// components/Tixing/CiDianKa.js (V8 - 完整重写版，已修复多音频、交互与全屏等问题)
+// components/Tixing/CiDianKa.js (V8.1 - 已修复语法错误和交互逻辑)
 
 import React, { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
 import { useSprings, animated, to } from '@react-spring/web';
@@ -13,7 +13,6 @@ const styles = {
   fullScreen: {
     position: 'fixed', inset: 0, zIndex: 9999, background: '#f5f7fb',
     display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-    // 3d perspective for nicer flip
     perspective: '1400px',
   },
   container: {
@@ -59,12 +58,8 @@ const styles = {
   meaning: { fontSize: '1.25rem', fontWeight: 700, textAlign: 'center' },
   explanation: { marginTop: 10, fontStyle: 'italic', color: '#415161', borderLeft: '3px solid #3b82f6', paddingLeft: 10 },
   tiny: { fontSize: 12, color: '#6b7280' },
-
-  // Pronunciation feedback
   feedbackRow: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 },
   feedbackSyll: { fontSize: 16, padding: '4px 7px', borderRadius: 8 },
-
-  // HanziWriter modal
   modalBackdrop: { position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', zIndex: 10000 },
   modalBox: { background: '#fff', padding: 18, borderRadius: 12, width: '92%', maxWidth: 380 }
 };
@@ -72,9 +67,7 @@ const styles = {
 // ===================== TTS 单例管理（Howl） =====================
 let _howlInstance = null;
 const playTTS = (urlOrText) => {
-  // This function expects a text; build url for service
   if (!urlOrText) return;
-  // stop previous
   try { if (_howlInstance && _howlInstance.playing()) _howlInstance.stop(); } catch (e) {}
   const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(urlOrText)}&v=zh-CN-XiaoyouNeural&r=-15`;
   _howlInstance = new Howl({ src: [ttsUrl] });
@@ -82,18 +75,14 @@ const playTTS = (urlOrText) => {
 };
 const preloadTTS = async (text) => {
   if (!text) return;
-  // create Howl but don't play; reuse _howlInstance? keep separate small cache
-  // For simplicity we'll create and unload quickly
   try {
     const h = new Howl({ src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`] });
-    // load into browser cache
     h.once('load', () => { h.unload(); });
-  } catch (e) { /* ignore */ }
+  } catch (e) {}
 };
 
 // ===================== 拼音智能比对 =====================
 const comparePinyin = (correctStr, spokenStr) => {
-  // 先把汉字转拼音数组（依赖 pinyin-pro）
   const correctArr = pinyinConverter(correctStr, { type: 'array' }) || [];
   const userArr = pinyinConverter(spokenStr || '', { type: 'array' }) || [];
   return correctArr.map((c, i) => {
@@ -120,7 +109,7 @@ const HanziModal = ({ char, onClose }) => {
         writer.animateCharacter();
       } catch (e) { console.error(e); }
     }, 80);
-    return () => { clearTimeout(tid); if (writer && writer.target) writer.target.innerHTML = ''; };
+    return () => { clearTimeout(tid); };
   }, [char]);
   return (
     <div style={styles.modalBackdrop} onClick={onClose}>
@@ -136,14 +125,14 @@ const HanziModal = ({ char, onClose }) => {
 
 // ===================== PronunciationPractice 子组件 =====================
 const PronunciationPractice = ({ word, onResult }) => {
-  const [status, setStatus] = useState('idle'); // idle|listening|loading|feedback
+  const [status, setStatus] = useState('idle');
   const [feedback, setFeedback] = useState([]);
   const recognitionRef = useRef(null);
 
   const startListening = useCallback(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('浏览器不支持语音识别（Web Speech API）。请使用 Chrome 或 Edge。');
+      alert('浏览器不支持语音识别。');
       return;
     }
     if (status === 'listening') {
@@ -153,7 +142,6 @@ const PronunciationPractice = ({ word, onResult }) => {
     const rec = new SpeechRecognition();
     rec.lang = 'zh-CN';
     rec.interimResults = false;
-    rec.maxAlternatives = 1;
     rec.onstart = () => setStatus('listening');
     rec.onresult = (ev) => {
       setStatus('loading');
@@ -163,10 +151,7 @@ const PronunciationPractice = ({ word, onResult }) => {
       setStatus('feedback');
       if (onResult) onResult({ transcript: t, cmp });
     };
-    rec.onerror = (ev) => {
-      console.error('recognition error', ev);
-      setStatus('idle');
-    };
+    rec.onerror = () => setStatus('idle');
     rec.onend = () => { if (status === 'listening') setStatus('idle'); };
     rec.start();
     recognitionRef.current = rec;
@@ -174,23 +159,15 @@ const PronunciationPractice = ({ word, onResult }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <button
-        onClick={startListening}
-        style={{ ...styles.button, background: status === 'listening' ? '#ffefef' : '#eef2ff' }}
-      >
+      <button onClick={startListening} style={{ ...styles.button, background: status === 'listening' ? '#ffefef' : '#eef2ff' }}>
         <FaMicrophone /> {status === 'listening' ? '正在听...' : '开始练习'}
       </button>
-
       <div style={{ marginTop: 8 }}>
         {status === 'feedback' && (
           <div style={styles.feedbackRow}>
             {feedback.map((s, idx) => (
-              <div key={idx} style={{
-                ...styles.feedbackSyll,
-                background: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#dcfce7' : '#fee2e2',
-                color: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#166534' : '#991b1b'
-              }}>
-                {parsePinyin(s.correct).initial}{parsePinyin(s.correct).final}{/* 拼音片段 */}
+              <div key={idx} style={{...styles.feedbackSyll, background: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#dcfce7' : '#fee2e2', color: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#166534' : '#991b1b' }}>
+                {parsePinyin(s.correct).initial}{parsePinyin(s.correct).final}
                 <div style={{ fontSize: 12 }}>{s.spoken}</div>
               </div>
             ))}
@@ -206,45 +183,18 @@ const CardView = forwardRef(({ data, onOpenWriter, onPronounceClick, renderPract
   const { word, pinyin, meaning, example, aiExplanation } = data;
   return (
     <div style={styles.cardInner} ref={ref}>
-      {/* 正面 */}
       <animated.div style={{ ...styles.face }}>
-        <div style={styles.header}>
-          <div style={styles.pinyin}>{pinyin}</div>
-          <div style={styles.hanzi}>{word}</div>
-        </div>
-
-        <div style={styles.practiceArea}>
-          {renderPractice ? renderPractice() : <div style={styles.tiny}>点击底部「发音练习」开始</div>}
-        </div>
-
+        <div style={styles.header}><div style={styles.pinyin}>{pinyin}</div><div style={styles.hanzi}>{word}</div></div>
+        <div style={styles.practiceArea}>{renderPractice ? renderPractice() : <div style={styles.tiny}>点击底部「发音练习」开始</div>}</div>
         <div style={styles.footer} onPointerDown={(e) => e.stopPropagation()}>
-          <div style={styles.leftButtons}>
-            <button style={styles.button} onClick={(e) => { e.stopPropagation(); /* 占位：发音练习由 renderPractice 控制 */ }}>
-              <FaMicrophone /> 发音练习
-            </button>
-
-            <button style={styles.button} onClick={(e) => { e.stopPropagation(); onOpenWriter && onOpenWriter(word); }}>
-              <FaPenFancy /> 笔顺
-            </button>
-          </div>
-
-          <div>
-            {/* 右侧朗读按钮：仅此按钮会触发朗读 */}
-            <button style={styles.ttsButton} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(word); }}>
-              <FaVolumeUp />
-            </button>
-          </div>
+          <div style={styles.leftButtons}><button style={styles.button} onClick={(e) => { e.stopPropagation(); }}><FaMicrophone /> 发音练习</button><button style={styles.button} onClick={(e) => { e.stopPropagation(); onOpenWriter && onOpenWriter(word); }}><FaPenFancy /> 笔顺</button></div>
+          <div><button style={styles.ttsButton} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(word); }}><FaVolumeUp /></button></div>
         </div>
       </animated.div>
-
-      {/* 背面 */}
       <animated.div style={{ ...styles.face, ...styles.backFace }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
           <div style={styles.meaning}>{meaning}</div>
-          <div style={styles.example}>
-            <FaVolumeUp style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(example); }} />
-            <div style={styles.exampleText}>{example}</div>
-          </div>
+          <div style={styles.example}><FaVolumeUp style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(example); }} /><div style={styles.exampleText}>{example}</div></div>
           {aiExplanation && <div style={styles.explanation}>{aiExplanation}</div>}
         </div>
       </animated.div>
@@ -255,56 +205,92 @@ CardView.displayName = 'CardView';
 
 // ===================== 主组件 CiDianKa =====================
 const CiDianKa = ({ flashcards = [] }) => {
-  // keep a minimal defensive default
   const cards = Array.isArray(flashcards) && flashcards.length ? flashcards : [];
-
-  // springs for a stacked deck visual; each card has x, rot, scale, rotateY, zIndex
   const [springs, api] = useSprings(cards.length, i => ({
     x: 0, rot: 0, scale: 1, rotateY: 0, zIndex: cards.length - i, config: { mass: 1, tension: 300, friction: 30 }
   }));
-
-  const topIndexRef = useRef(0); // index of top-most interactive card
+  const topIndexRef = useRef(0);
   const [currentTop, setCurrentTop] = useState(0);
   topIndexRef.current = currentTop;
 
-  // flip states are stored in springs.rotateY; helper to get current rotateY value
   const getRotateY = (i) => {
     try { return springs[i]?.rotateY?.get() ?? 0; } catch { return 0; }
   };
 
-  // preload tts for performance
   useEffect(() => {
     cards.forEach(c => { if (c.word) preloadTTS(c.word); if (c.example) preloadTTS(c.example); });
   }, [cards]);
 
-  // play TTS when top card changes
   useEffect(() => {
     if (!cards.length) return;
     const w = cards[currentTop]?.word;
     if (w) {
-      // small delay to avoid overlapping UI interactions
       const t = setTimeout(() => playTTS(w), 180);
       return () => clearTimeout(t);
     }
   }, [currentTop, cards]);
 
-  // Hanzi modal
   const [writerChar, setWriterChar] = useState(null);
 
-  // gesture handling: only allow interacting with top card
-  const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap, last }) => {
-    // only top card can be dragged
+  const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap }) => {
     if (index !== topIndexRef.current) return;
-
-    // if currently flipped (rotateY != 0) do not allow drag
     const rotateYVal = getRotateY(index);
     if (rotateYVal && Math.abs(rotateYVal) > 10) {
-      // If user tapped while flipped, do nothing; but allow footer clicks (footer stops propagation)
-      if (tap && last) { /* nothing */ }
+      if (tap) api.start(i => (i === index ? { rotateY: 0 } : undefined));
       return;
     }
 
     if (down) {
-      // during drag, move card horizontally and rotate a little
       api.start(i => i === index ? { x: mx, rot: mx / 20, scale: 1.04 } : undefined);
-                                                                                                              }
+    } else {
+      // *** 核心修复区域：补全了这里的逻辑 ***
+      const trigger = vx > 0.2; // 滑动速度阈值
+      if (tap) {
+        api.start(i => (i === index ? { rotateY: 180, x: 0, rot: 0, scale: 1 } : undefined));
+      } else if (trigger) {
+        const dir = xDir < 0 ? -1 : 1;
+        api.start(i => {
+          if (i !== index) return;
+          const x = (200 + window.innerWidth) * dir;
+          const rot = mx / 10 + dir * 10 * vx;
+          return { x, rot, config: { friction: 50, tension: 200 } };
+        });
+        setCurrentTop((prev) => (prev + 1) % cards.length);
+      } else {
+        api.start(i => i === index ? { x: 0, rot: 0, scale: 1 } : undefined);
+      }
+    }
+  });
+
+  if (!cards.length) return null;
+
+  return (
+    <div style={styles.fullScreen}>
+      {writerChar && <HanziModal char={writerChar} onClose={() => setWriterChar(null)} />}
+      <div style={styles.container}>
+        {springs.map((props, i) => (
+          <animated.div
+            key={i}
+            style={{
+              ...styles.cardShell,
+              zIndex: props.zIndex,
+              transform: to([props.x, props.scale, props.rot], (x, s, r) => `translateX(${x}px) scale(${s}) rotateZ(${r}deg)`)
+            }}
+            {...bind(i)}
+          >
+            <animated.div style={{ width: '100%', height: '100%', transform: props.rotateY.to(r => `rotateY(${r}deg)`) }}>
+              <CardView
+                data={cards[i]}
+                onOpenWriter={setWriterChar}
+                onPronounceClick={playTTS}
+                renderPractice={() => <PronunciationPractice word={cards[i].word} />}
+              />
+            </animated.div>
+          </animated.div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default CiDianKa;
