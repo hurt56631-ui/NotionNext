@@ -45,7 +45,7 @@ const HanziModal = ({ char, onClose }) => {
   }, [char]);
 
   const handleReplay = (e) => {
-    e.stopPropagation(); // 防止点击重播按钮关闭Modal
+    e.stopPropagation(); 
     writerInstanceRef.current?.animateCharacter();
   };
 
