@@ -104,5 +104,152 @@ const PronunciationPractice = ({ word, onResult }) => {
 
         } catch (err) { onResult({ msg: '无法访问麦克风', pinyin: [], audioBlob: null }); }
     }, [status, word, onResult]);
+    
+    // <<<< 关键修复：修复了这里不完整的 return 语句
+    return (
+        <button
+            style={{ ...styles.button, background: 'rgba(255,255,255,0.2)' }}
+            onClick={handleListen}
+        >
+            <FaMicrophone /> {status === 'listening' ? '结束识别' : '发音练习'}
+        </button>
+    );
+};
 
-    return ( <button style={{...styles.button, background
+// ===================== 主组件 CiDianKa (V18.2 重构版) =====================
+const CiDianKa = ({ flashcards = [] }) => {
+    const processedCards = useMemo(() => flashcards.map(card => ({
+        ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' })
+    })), [flashcards]);
+    const cards = processedCards.length > 0 ? processedCards : [{ word: "示例", pinyin: "shì lì", meaning: "Example" }];
+    
+    const [gone] = useState(() => new Set());
+    const [isFlipped, setIsFlipped] = useState(false);
+    const [writerChar, setWriterChar] = useState(null);
+    const [showSettings, setShowSettings] = useState(false);
+    const [customBgs, setCustomBgs] = useState([]);
+    const fileInputRef = useRef(null);
+    const [adKey, setAdKey] = useState(0);
+    const [speechResult, setSpeechResult] = useState({ msg: '', pinyin: [], audioBlob: null });
+
+    const to = (i) => ({ x: 0, y: -i * 4, scale: 1 - i * 0.05, rot: 0, zIndex: i });
+    const from = (_i) => ({ x: 0, rot: 0, scale: 1.5, y: -1000, zIndex: 0 });
+    const [props, api] = useSprings(cards.length, i => ({ ...to(i), from: from(i) }));
+    
+    const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap }) => {
+        if (tap) { setIsFlipped(prev => !prev); return; }
+        if (isFlipped) return;
+
+        const trigger = vx > 0.2;
+        const dir = xDir < 0 ? -1 : 1;
+        if (!down && trigger) gone.add(index);
+        
+        api.start(i => {
+            if (index !== i) return;
+            const isGone = gone.has(index);
+            if (isGone) setIsFlipped(false);
+            const x = isGone ? (200 + window.innerWidth) * dir : down ? mx : 0;
+            const rot = mx / 100 + (isGone ? dir * 10 * vx : 0);
+            const scale = down ? 1.05 : 1;
+            return { x, rot, scale, zIndex: down ? cards.length : i, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
+        });
+
+        if (!down && gone.size === cards.length) {
+            setTimeout(() => { gone.clear(); api.start(i => to(i)); }, 600);
+        }
+    });
+
+    useEffect(() => {
+        const currentCard = cards[gone.size];
+        if (currentCard && !isFlipped) {
+            setSpeechResult({ msg: '', pinyin: [], audioBlob: null });
+            const timer = setTimeout(() => playTTS(currentCard.word), 400);
+            return () => clearTimeout(timer);
+        }
+    }, [gone.size, isFlipped, cards]);
+    
+    useEffect(() => { setAdKey(k => k + 1); }, [gone.size, isFlipped]);
+
+    const handleBgUpload = (event) => {
+        const files = Array.from(event.target.files);
+        const imageUrls = files.map(file => URL.createObjectURL(file));
+        setCustomBgs(imageUrls);
+        setShowSettings(false);
+    };
+
+    return (
+        <div style={styles.fullScreen}>
+            <AdComponent key={adKey} />
+            {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
+            <div style={styles.container}>
+                {props.map(({ x, y, rot, scale, zIndex }, i) => {
+                    if (i < gone.size - 2 || i > gone.size + 3) return null;
+                    const cardData = cards[i];
+                    const isCurrent = i === gone.size;
+                    const backgroundStyle = { backgroundImage: customBgs.length > 0 ? `url(${customBgs[i % customBgs.length]})` : gradients[i % gradients.length], boxShadow: customBgs.length > 0 ? 'inset 0 0 0 2000px rgba(0,0,0,0.3)' : '' };
+
+                    return (
+                        <animated.div style={{ ...styles.deck, x, y, zIndex }} key={i}>
+                            <div style={styles.cardContainer}>
+                                <animated.div {...(isCurrent ? bind(i) : {})} style={{ transform: scale.to(s => `scale(${s}) rotateZ(${rot}deg)`), flex: 1 }}>
+                                    <div style={{...styles.cardInner, transform: isFlipped && isCurrent ? 'rotateY(180deg)' : 'rotateY(0deg)'}}>
+                                        <div style={{...styles.face, ...backgroundStyle}}>
+                                            <div style={{...styles.mainContent, justifyContent: 'space-around'}}>
+                                                <div style={styles.header}>
+                                                    <div style={styles.pinyin}>{cardData.pinyin}</div>
+                                                    <div style={styles.hanzi}>{cardData.word}</div>
+                                                </div>
+                                                <div style={styles.feedbackArea}>
+                                                    <div style={styles.feedbackMessage}>
+                                                        {speechResult.msg}
+                                                        {speechResult.audioBlob && <FaPlay style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); new Audio(URL.createObjectURL(speechResult.audioBlob)).play()}}/>}
+                                                    </div>
+                                                    <div style={styles.feedbackPinyinRow}>
+                                                        {speechResult.pinyin.map((syl, idx) => (<div key={idx} style={{...styles.feedbackPinyinSyllable}}><span style={{color: syl.initialMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).initial}</span><span style={{color: syl.finalMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).final}</span><span style={{color: syl.toneMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).tone}</span><span style={{fontSize: '0.8rem', opacity: 0.7}}>{syl.spoken}</span></div>))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.face, ...styles.backFace}} >
+                                            <div style={{...styles.mainContent, justifyContent: 'space-around', padding: '20px 0'}}>
+                                                <div style={{...styles.header, marginBottom: '20px'}}>
+                                                    <div style={{...styles.pinyin, color: '#4a5568'}}>{cardData.pinyin}</div>
+                                                    <div style={{...styles.hanzi, color: '#1a202c'}}>{cardData.word}</div>
+                                                </div>
+                                                <div style={{...styles.meaning, color: '#2d3748'}}>
+                                                    {cardData.meaning}
+                                                    <FaVolumeUp style={{cursor: 'pointer', marginLeft: '10px'}} onClick={(e)=>{e.stopPropagation(); playTTS(cardData.meaning)}}/>
+                                                </div>
+                                                {cardData.example && (
+                                                    <div style={{...styles.example, marginTop: '20px'}}>
+                                                        <FaVolumeUp style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); playTTS(cardData.example)}}/> {cardData.example}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </animated.div>
+                                {isCurrent && (
+                                    <div style={styles.footer}>
+                                        <PronunciationPractice word={cardData.word} onResult={setSpeechResult} />
+                                        <button style={styles.button} onClick={() => setWriterChar(cardData.word)}><FaPenFancy /></button>
+                                        <button style={styles.button} onClick={() => playTTS(cardData.word)}><FaVolumeUp /></button>
+                                        <button style={styles.button} onClick={() => setShowSettings(s => !s)}><FaCog /></button>
+                                    </div>
+                                )}
+                            </div>
+                        </animated.div>
+                    )
+                })}
+            </div>
+            {showSettings && (
+                <div style={styles.settingsModal}>
+                    <input type="file" ref={fileInputRef} onChange={handleBgUpload} multiple accept="image/*" style={{display: 'none'}} />
+                    <button style={{...styles.button, background: '#e2e8f0', color: '#2d3748'}} onClick={() => fileInputRef.current.click()}> <FaImages /> 上传背景图 </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default CiDianKa;
