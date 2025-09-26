@@ -1,6 +1,6 @@
-// components/HanziModal.js - 支持多字词语的最终修复版
+// components/HanziModal.js - 支持多字词语的最终修复版 (已修复 useCallback 错误)
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react'; // <<<< 关键修复：在这里添加了 useCallback
 import HanziWriter from 'hanzi-writer';
 
 const styles = {
@@ -11,9 +11,8 @@ const styles = {
   modal: {
     background: 'white', padding: '25px', borderRadius: '16px',
     textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
-    width: '90%', maxWidth: '600px', // 宽度可以适当增加以容纳多字
+    width: '90%', maxWidth: '600px',
   },
-  // 新增：用于横向排列多个汉字动画的容器
   writerContainer: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -21,7 +20,7 @@ const styles = {
     gap: '10px',
   },
   writerTarget: {
-    width: '150px', // 每个字小一点，以容纳更多
+    width: '150px',
     height: '150px',
     border: '1px solid #eee',
     borderRadius: '8px',
@@ -34,29 +33,20 @@ const styles = {
 };
 
 const HanziModal = ({ word, onClose }) => {
-  // 从 'char' 改为 'word'
   const writerRefs = useRef([]);
   const wordChars = word ? word.split('') : [];
 
-  // 确保 refs 数组的长度与汉字数量一致
   useEffect(() => {
     writerRefs.current = writerRefs.current.slice(0, wordChars.length);
   }, [wordChars.length]);
 
-  // 核心动画逻辑
   const runAnimation = useCallback(() => {
     if (!word) return;
-
-    // 定义一个递归函数来依次播放动画
     const animateSequentially = (index) => {
-      // 如果所有字都播放完毕，则结束
       if (index >= wordChars.length) return;
-
       const char = wordChars[index];
       const targetEl = writerRefs.current[index];
-
       if (targetEl) {
-        // 清理上一次的渲染
         targetEl.innerHTML = '';
         const writer = HanziWriter.create(targetEl, char, {
           width: 150,
@@ -66,32 +56,24 @@ const HanziModal = ({ word, onClose }) => {
           strokeAnimationSpeed: 1,
           delayBetweenStrokes: 100,
         });
-
-        // 播放当前汉字的动画
         writer.animateCharacter({
-          // 当前动画播放完成后，调用自身来播放下一个汉字
           onComplete: () => {
-            setTimeout(() => animateSequentially(index + 1), 300); // 稍作停顿后播放下一个
+            setTimeout(() => animateSequentially(index + 1), 300);
           }
         });
       }
     };
-
-    // 从第一个字开始启动动画序列
     animateSequentially(0);
   }, [word, wordChars]);
   
-  // 组件加载时自动播放一次
   useEffect(() => {
-    // 增加延迟确保DOM元素完全准备好
     const timer = setTimeout(runAnimation, 200);
     return () => clearTimeout(timer);
   }, [runAnimation]);
 
-
   const handleReplay = (e) => {
     e.stopPropagation();
-    runAnimation(); // 点击重播时，重新从第一个字开始播放
+    runAnimation();
   };
 
   return (
@@ -102,7 +84,6 @@ const HanziModal = ({ word, onClose }) => {
           {wordChars.map((char, index) => (
             <div
               key={`${char}-${index}`}
-              // 使用 ref 回调函数来填充 refs 数组
               ref={el => writerRefs.current[index] = el}
               style={styles.writerTarget}
             ></div>
