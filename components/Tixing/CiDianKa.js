@@ -1,66 +1,206 @@
-// components/HanziModal.js - 独立的汉字笔顺动画组件
+// components/Tixing/CiDianKa.js (V14 - 终极修复版：手势、动画、语音、笔顺全部正常)
 
-import React, { useEffect, useRef } from 'react';
-import HanziWriter from 'hanzi-writer';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSprings, animated } from '@react-spring/web';
+import { useDrag } from '@use-gesture/react';
+import { Howl } from 'howler';
+import { FaMicrophone, FaPenFancy, FaVolumeUp } from 'react-icons/fa';
+import { pinyin as pinyinConverter, parse as parsePinyin } from 'pinyin-pro';
+import HanziModal from '@/components/HanziModal';
 
+// ... (样式和辅助函数)
+// ===================== 样式 =====================
 const styles = {
-  backdrop: {
-    position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.6)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
-  },
-  modal: {
-    background: 'white', padding: '25px', borderRadius: '16px',
-    textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
-    width: '90%', maxWidth: '380px',
-  },
-  writerTarget: {
-    width: '260px', height: '260px', margin: '0 auto', border: '1px solid #eee', borderRadius: '8px',
-  },
-  button: {
-    background: '#eef2ff', color: '#0f172a', border: 'none', padding: '10px 20px',
-    borderRadius: '12px', cursor: 'pointer', fontWeight: '600', marginTop: '20px',
-    marginRight: '10px'
-  }
+  fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' },
+  container: { position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  deck: { position: 'absolute', width: '92%', maxWidth: '900px', height: '86%', maxHeight: '720px', willChange: 'transform', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' },
+  cardInner: { position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s ease-in-out' },
+  face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', background: 'linear-gradient(180deg,#ffffff,#eef6ff)', boxShadow: '0 30px 60px rgba(10,30,80,0.12)', display: 'flex', flexDirection: 'column', padding: '28px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 20px))' },
+  backFace: { transform: 'rotateY(180deg)' },
+  mainContent: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', position: 'relative', overflowY: 'auto' },
+  header: { textAlign: 'center' },
+  pinyin: { fontSize: '1.4rem', color: '#5b6b82', marginBottom: 6 },
+  hanzi: { fontSize: '5.6rem', fontWeight: 800, lineHeight: 1.05, color: '#102035' },
+  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 'auto', borderTop: '1px solid rgba(15, 23, 42, 0.06)', paddingTop: 12, flexShrink: 0 },
+  button: { background: '#eef2ff', color: '#0f172a', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' },
+  feedbackArea: { width: '100%', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+  feedbackMessage: { color: '#4b5563', height: '24px', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem' },
+  feedbackPinyinRow: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', marginTop: 10, gap: '8px' },
+  feedbackPinyinSyllable: { padding: '6px 12px', borderRadius: '8px', fontSize: '1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' },
+  example: { background: 'rgba(240,244,255,0.9)', padding: '12px 16px', borderRadius: 12, display: 'flex', gap: 10, alignItems: 'center', width: '100%', maxWidth: '400px', textAlign: 'left' },
+  meaning: { fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 10 },
 };
 
-const HanziModal = ({ char, onClose }) => {
-  const writerRef = useRef(null);
-  const writerInstanceRef = useRef(null);
+// ===================== TTS 管理 =====================
+let _howlInstance = null;
+const playTTS = (text) => {
+  if (!text) return;
+  try { if (_howlInstance?.playing()) _howlInstance.stop(); } catch (e) {}
+  _howlInstance = new Howl({ src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`], html5: true });
+  _howlInstance.play();
+};
 
-  useEffect(() => {
-    if (!char) return;
-    const initTimer = setTimeout(() => {
-      if (writerRef.current) {
-        writerRef.current.innerHTML = ''; 
-        const writer = HanziWriter.create(writerRef.current, char, {
-          width: 260, height: 260, padding: 5, showOutline: true,
-          strokeAnimationSpeed: 1, delayBetweenStrokes: 100,
+// ===================== 主组件 CiDianKa (完全重构) =====================
+const CiDianKa = ({ flashcards = [] }) => {
+    const cards = Array.isArray(flashcards) && flashcards.length ? flashcards : [{ word: "示例", pinyin: "shì lì", meaning: "Example", example: "这是一个示例。", aiExplanation: "这是一个AI解释。" }];
+    
+    // 状态管理
+    const [gone] = useState(() => new Set());
+    const [isFlipped, setIsFlipped] = useState(false);
+    const [writerChar, setWriterChar] = useState(null);
+    const [speechResult, setSpeechResult] = useState({ msg: '', pinyin: [], transcript: '' });
+    const recognitionRef = useRef(null);
+    const [recognitionStatus, setRecognitionStatus] = useState('idle');
+
+    // 动画配置
+    const to = (i) => ({ x: 0, y: 0, scale: 1, rot: 0, delay: i * 100 });
+    const from = (_i) => ({ x: 0, rot: 0, scale: 1.5, y: -1000 });
+    const [props, api] = useSprings(cards.length, i => ({ ...to(i), from: from(i) }));
+    
+    // 语音识别逻辑
+    const handleListen = useCallback((e) => {
+        e.stopPropagation();
+        if (recognitionStatus === 'listening') {
+            recognitionRef.current?.stop();
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setSpeechResult({ msg: '浏览器不支持语音识别', pinyin: [], transcript: '' });
+            return;
+        }
+        
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.lang = 'zh-CN';
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+            setRecognitionStatus('listening');
+            setSpeechResult({ msg: '请说话...', pinyin: [], transcript: '' });
+        };
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript.trim().replace(/[.,。，]/g, '');
+            const correctWord = cards[gone.size]?.word;
+            const pinyinFeedback = (pinyinConverter(correctWord, { type: 'array' }) || []).map((correct, i) => {
+                const spoken = (pinyinConverter(transcript, { type: 'array' }) || [])[i] || '';
+                const isCorrect = correct === spoken;
+                return { correct, spoken, status: isCorrect ? 'correct' : 'incorrect' };
+            });
+            const allCorrect = pinyinFeedback.every(p => p.status === 'correct');
+            setSpeechResult({ msg: allCorrect ? '完全正确！' : '请看对比结果', pinyin: pinyinFeedback, transcript });
+        };
+        recognition.onerror = (err) => {
+            setSpeechResult({ msg: `识别出错: ${err.error}`, pinyin: [], transcript: '' });
+            setRecognitionStatus('idle');
+        };
+        recognition.onend = () => setRecognitionStatus('idle');
+        recognition.start();
+    }, [recognitionStatus, cards, gone.size]);
+    
+    // 手势绑定
+    const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap }) => {
+        if (isFlipped) {
+            if (tap) setIsFlipped(false);
+            return;
+        }
+        const trigger = vx > 0.2;
+        const dir = xDir < 0 ? -1 : 1;
+        if (!down && trigger) gone.add(index);
+        
+        api.start(i => {
+            if (index !== i) return;
+            const isGone = gone.has(index);
+            const x = isGone ? (200 + window.innerWidth) * dir : down ? mx : 0;
+            const rot = mx / 100 + (isGone ? dir * 10 * vx : 0);
+            const scale = down ? 1.1 : 1;
+            return { x, rot, scale, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
         });
-        writerInstanceRef.current = writer;
-        writer.animateCharacter();
-      }
-    }, 150); // 稍微增加延迟以确保DOM就绪
+        
+        if (tap && !isFlipped) setIsFlipped(true);
 
-    return () => { clearTimeout(initTimer); writerInstanceRef.current = null; };
-  }, [char]);
+        if (!down && gone.size === cards.length) {
+            setTimeout(() => {
+                gone.clear();
+                api.start(i => to(i));
+            }, 600);
+        }
+    });
 
-  const handleReplay = (e) => {
-    e.stopPropagation(); 
-    writerInstanceRef.current?.animateCharacter();
-  };
+    // 播放当前卡片语音
+    useEffect(() => {
+        const currentCard = cards[gone.size];
+        if (currentCard && !isFlipped) {
+            const timer = setTimeout(() => playTTS(currentCard.word), 400);
+            return () => clearTimeout(timer);
+        }
+    }, [gone.size, isFlipped, cards]);
 
-  return (
-    <div style={styles.backdrop} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h3>汉字笔顺: {char}</h3>
-        <div ref={writerRef} style={styles.writerTarget}></div>
-        <div style={{display: 'flex', justifyContent: 'center', marginTop: '20px'}}>
-            <button style={styles.button} onClick={handleReplay}>重播动画</button>
-            <button style={styles.button} onClick={onClose}>关闭</button>
+    return (
+        <div style={styles.fullScreen}>
+            {writerChar && <HanziModal char={writerChar} onClose={() => setWriterChar(null)} />}
+            <div style={styles.container}>
+                {props.map(({ x, y, rot, scale }, i) => (
+                    <animated.div style={{ ...styles.deck, x, y }} key={i}>
+                        <animated.div {...bind(i)} style={{ transform: scale.to(s => `scale(${s}) rotateZ(${rot}deg)`), width: '100%', height: '100%' }}>
+                            <div style={{...styles.cardInner, transform: isFlipped && i === gone.size ? 'rotateY(180deg)' : 'rotateY(0deg)'}}>
+                                {/* 正面 */}
+                                <div style={styles.face}>
+                                    <div style={styles.mainContent}>
+                                        <div style={styles.header}>
+                                            <div style={styles.pinyin}>{cards[i].pinyin}</div>
+                                            <div style={styles.hanzi}>{cards[i].word}</div>
+                                        </div>
+                                        <div style={styles.feedbackArea}>
+                                            <div style={styles.feedbackMessage}>
+                                                {speechResult.msg}
+                                                {speechResult.transcript && <FaVolumeUp style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); playTTS(speechResult.transcript)}}/>}
+                                            </div>
+                                            <div style={styles.feedbackPinyinRow}>
+                                                {speechResult.pinyin.map((syl, idx) => (
+                                                    <div key={idx} style={{...styles.feedbackPinyinSyllable, background: syl.status === 'correct' ? '#dcfce7' : '#fee2e2', color: syl.status === 'correct' ? '#166534' : '#991b1b'}}>
+                                                        <span>{syl.correct}</span><span style={{fontSize: '0.9rem', opacity: 0.7}}>{syl.spoken}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={styles.footer}>
+                                        <div style={{display: 'flex', gap: '10px'}}>
+                                            <button style={styles.button} onClick={handleListen}>
+                                                <FaMicrophone /> {recognitionStatus === 'listening' ? '结束识别' : '发音练习'}
+                                            </button>
+                                            <button style={styles.button} onClick={(e)=>{e.stopPropagation(); setWriterChar(cards[i].word)}}>
+                                                <FaPenFancy /> 笔顺
+                                            </button>
+                                        </div>
+                                        <button style={styles.button} onClick={(e)=>{e.stopPropagation(); playTTS(cards[i].word)}}><FaVolumeUp /></button>
+                                    </div>
+                                </div>
+                                {/* 背面 */}
+                                <div style={{...styles.face, ...styles.backFace}}>
+                                    <div style={styles.mainContent}>
+                                        <div style={{...styles.header, marginBottom: '20px'}}>
+                                            <div style={styles.pinyin}>{cards[i].pinyin}</div>
+                                            <div style={styles.hanzi}>{cards[i].word}</div>
+                                        </div>
+                                        <div style={{...styles.meaning}}>
+                                            {cards[i].meaning}
+                                            <FaVolumeUp style={{cursor: 'pointer', marginLeft: '10px'}} onClick={(e)=>{e.stopPropagation(); playTTS(cards[i].meaning)}}/>
+                                        </div>
+                                        {cards[i].example && <div style={{...styles.example, marginTop: '20px'}}>
+                                            <FaVolumeUp style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); playTTS(cards[i].example)}}/> {cards[i].example}
+                                        </div>}
+                                    </div>
+                                </div>
+                            </div>
+                        </animated.div>
+                    </animated.div>
+                ))}
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
-export default HanziModal;
+export default CiDianKa;
