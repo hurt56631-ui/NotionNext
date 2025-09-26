@@ -1,7 +1,7 @@
-// components/Tixing/CiDianKa.js (V5 - 全屏优化 & 声音修复 & 左右切换)
+// components/Tixing/CiDianKa.js (V6 - 全屏优化 & 立方体动画 & 手势修复 & 笔画动画修复)
 
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
-import { useSprings, animated } from '@react-spring/web';
+import { useSprings, animated, to } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp } from 'react-icons/fa';
@@ -9,11 +9,14 @@ import HanziWriter from 'hanzi-writer';
 
 // --- 样式 ---
 const styles = {
-  fullScreenWrapper: { position: 'fixed', inset: 0, zIndex: 50, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // 添加了 perspective 以实现 3D 效果
+  fullScreenWrapper: { position: 'fixed', inset: 0, zIndex: 50, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', perspective: '1500px' },
   wrapper: { position: 'relative', width: '100%', height: '100%', margin: 0, cursor: 'grab', touchAction: 'none' },
   card: { position: 'absolute', width: '100%', height: '100%', willChange: 'transform', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  cardInner: { width: '92%', height: '95%', position: 'relative', transformStyle: 'preserve-3d', display: 'flex' },
-  cardFace: { position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', background: 'linear-gradient(145deg, #ffffff 0%, #f7faff 100%)', borderRadius: '28px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)', padding: '24px', display: 'flex', flexDirection: 'column', color: '#1e2b3b', border: '1px solid rgba(255, 255, 255, 0.5)' },
+  // 修改了宽度和高度为 100%
+  cardInner: { width: '100%', height: '100%', position: 'relative', transformStyle: 'preserve-3d', display: 'flex' },
+  // 移除了 borderRadius
+  cardFace: { position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden', background: 'linear-gradient(145deg, #ffffff 0%, #f7faff 100%)', padding: '24px', display: 'flex', flexDirection: 'column', color: '#1e2b3b' },
   cardBack: { transform: 'rotateY(180deg)' },
   mainContent: { flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' },
   header: { textAlign: 'center', width: '100%' },
@@ -40,19 +43,34 @@ const playTTS = (text) => {
   currentSound.play();
 };
 
-// --- 汉字书写 Modal ---
+// --- 汉字书写 Modal (修复动画效果) ---
 const HanziWriterModal = ({ character, onClose }) => {
   const writerRef = useRef(null);
   useEffect(() => {
+    if (!writerRef.current) return;
+    
+    writerRef.current.innerHTML = ''; // 清空之前的实例
     let writer = null;
+
     const timeoutId = setTimeout(() => {
       if (writerRef.current) {
-        writer = HanziWriter.create(writerRef.current, character, { width: 280, height: 280, padding: 20, showOutline: true });
+        writer = HanziWriter.create(writerRef.current, character, {
+          width: 280,
+          height: 280,
+          padding: 20,
+          showOutline: true,
+          strokeAnimationSpeed: 1,
+          delayBetweenStrokes: 100,
+        });
         writer.animateCharacter();
       }
-    }, 100);
-    return () => { clearTimeout(timeoutId); if (writer && writer.target) writer.target.innerHTML = ''; };
+    }, 200); // 增加延迟确保数据加载
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [character]);
+
   return <div style={styles.modalBackdrop} onClick={onClose}><div style={styles.modalContent} onClick={(e) => e.stopPropagation()} ref={writerRef}></div></div>;
 };
 
@@ -71,7 +89,8 @@ const CardView = forwardRef(({ cardData, isFlipped, onFlip }, ref) => {
             <div style={styles.word}>{word}</div>
           </header>
         </div>
-        <footer style={styles.footer} onClick={(e) => e.stopPropagation()}>
+        {/* 为 footer 添加 onPointerDown 事件来阻止 useDrag 手势 */}
+        <footer style={styles.footer} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button style={styles.footerButton}><FaMicrophone /> 发音练习</button>
             <button style={styles.footerButton} onClick={() => setShowWriter(true)}><FaPenFancy /> 笔顺</button>
@@ -106,7 +125,7 @@ const CiDianKa = ({ flashcards = [] }) => {
   }, [currentIndex, flashcards]);
 
   const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
-    if (props[index].rotateY.get() !== 0) return; // 翻转时不允许滑动
+    if (props[index].rotateY.get() !== 0) return;
     const trigger = vx > 0.2;
     const dir = xDir < 0 ? -1 : 1;
     if (!down && trigger) {
@@ -117,7 +136,8 @@ const CiDianKa = ({ flashcards = [] }) => {
       if (index !== i) return;
       const isGone = gone.has(index);
       const x = isGone ? (200 + window.innerWidth) * dir : down ? mx : 0;
-      const rot = mx / 100 + (isGone ? dir * 10 * vx : 0);
+      // 修改 rot 计算以产生更明显的 Y 轴旋转
+      const rot = mx / 10 + (isGone ? dir * 45 * vx : 0);
       const scale = down ? 1.05 : 1;
       return { x, rot, scale, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
     });
@@ -137,7 +157,8 @@ const CiDianKa = ({ flashcards = [] }) => {
     <div style={styles.fullScreenWrapper}>
       <div style={styles.wrapper}>
         {props.map((springProps, i) => (
-          <animated.div key={i} style={{ ...styles.card, ...springProps, transform: springProps.x.to(x => `translateX(${x}px)`) }} {...bind(i)}>
+          // 修改 transform 属性以包含 rotateY
+          <animated.div key={i} style={{ ...styles.card, ...springProps, transform: to([springProps.x, springProps.rot], (x, r) => `translateX(${x}px) rotateY(${r}deg)`) }} {...bind(i)}>
             <animated.div style={{ width: '100%', height: '100%', transform: springProps.rotateY.to(r => `rotateY(${r}deg)`) }}>
               <CardView cardData={flashcards[i]} onFlip={() => handleFlip(i)} />
             </animated.div>
