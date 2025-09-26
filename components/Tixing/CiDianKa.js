@@ -1,4 +1,4 @@
-// components/Tixing/CiDianKa.js (V14 - 终极修复版：手势、动画、语音、笔顺全部正常)
+// components/Tixing/CiDianKa.js (V15 - 终极修复美化版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSprings, animated } from '@react-spring/web';
@@ -8,26 +8,34 @@ import { FaMicrophone, FaPenFancy, FaVolumeUp } from 'react-icons/fa';
 import { pinyin as pinyinConverter, parse as parsePinyin } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// ... (样式和辅助函数)
+// ===================== 美化：渐变色背景 =====================
+const gradients = [
+  'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+  'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+  'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
+];
+
 // ===================== 样式 =====================
 const styles = {
-  fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#f5f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' },
+  fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#e9eef3', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' },
   container: { position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   deck: { position: 'absolute', width: '92%', maxWidth: '900px', height: '86%', maxHeight: '720px', willChange: 'transform', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' },
   cardInner: { position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.6s ease-in-out' },
-  face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', background: 'linear-gradient(180deg,#ffffff,#eef6ff)', boxShadow: '0 30px 60px rgba(10,30,80,0.12)', display: 'flex', flexDirection: 'column', padding: '28px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 20px))' },
-  backFace: { transform: 'rotateY(180deg)' },
+  face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', color: '#1a202c', boxShadow: '0 30px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', padding: '28px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 20px))' },
+  backFace: { transform: 'rotateY(180deg)', background: '#ffffff' },
   mainContent: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', position: 'relative', overflowY: 'auto' },
   header: { textAlign: 'center' },
-  pinyin: { fontSize: '1.4rem', color: '#5b6b82', marginBottom: 6 },
-  hanzi: { fontSize: '5.6rem', fontWeight: 800, lineHeight: 1.05, color: '#102035' },
-  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 'auto', borderTop: '1px solid rgba(15, 23, 42, 0.06)', paddingTop: 12, flexShrink: 0 },
-  button: { background: '#eef2ff', color: '#0f172a', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' },
+  pinyin: { fontSize: '1.4rem', color: '#4a5568', marginBottom: 6 },
+  hanzi: { fontSize: '5.6rem', fontWeight: 800, lineHeight: 1.05 },
+  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 'auto', borderTop: '1px solid rgba(0, 0, 0, 0.08)', paddingTop: 12, flexShrink: 0 },
+  button: { background: 'rgba(255, 255, 255, 0.5)', color: '#2d3748', border: '1px solid rgba(0, 0, 0, 0.05)', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', backdropFilter: 'blur(5px)' },
   feedbackArea: { width: '100%', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
   feedbackMessage: { color: '#4b5563', height: '24px', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem' },
   feedbackPinyinRow: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', marginTop: 10, gap: '8px' },
   feedbackPinyinSyllable: { padding: '6px 12px', borderRadius: '8px', fontSize: '1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  example: { background: 'rgba(240,244,255,0.9)', padding: '12px 16px', borderRadius: 12, display: 'flex', gap: 10, alignItems: 'center', width: '100%', maxWidth: '400px', textAlign: 'left' },
+  example: { background: 'rgba(240,244,255,0.7)', padding: '12px 16px', borderRadius: 12, display: 'flex', gap: 10, alignItems: 'center', width: '100%', maxWidth: '400px', textAlign: 'left' },
   meaning: { fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 10 },
 };
 
@@ -42,7 +50,7 @@ const playTTS = (text) => {
 
 // ===================== 主组件 CiDianKa (完全重构) =====================
 const CiDianKa = ({ flashcards = [] }) => {
-    const cards = Array.isArray(flashcards) && flashcards.length ? flashcards : [{ word: "示例", pinyin: "shì lì", meaning: "Example", example: "这是一个示例。", aiExplanation: "这是一个AI解释。" }];
+    const cards = Array.isArray(flashcards) && flashcards.length ? flashcards : [{ word: "示例", pinyin: "shì lì", meaning: "Example", example: "这是一个示例。" }];
     
     // 状态管理
     const [gone] = useState(() => new Set());
@@ -53,13 +61,13 @@ const CiDianKa = ({ flashcards = [] }) => {
     const [recognitionStatus, setRecognitionStatus] = useState('idle');
 
     // 动画配置
-    const to = (i) => ({ x: 0, y: 0, scale: 1, rot: 0, delay: i * 100 });
+    const to = (i) => ({ x: 0, y: -i * 4, scale: 1, rot: -10 + Math.random() * 20, delay: i * 100 });
     const from = (_i) => ({ x: 0, rot: 0, scale: 1.5, y: -1000 });
     const [props, api] = useSprings(cards.length, i => ({ ...to(i), from: from(i) }));
     
     // 语音识别逻辑
     const handleListen = useCallback((e) => {
-        e.stopPropagation();
+        e.stopPropagation(); // 关键修复：阻止事件冒泡
         if (recognitionStatus === 'listening') {
             recognitionRef.current?.stop();
             return;
@@ -76,33 +84,25 @@ const CiDianKa = ({ flashcards = [] }) => {
         recognition.lang = 'zh-CN';
         recognition.interimResults = false;
 
-        recognition.onstart = () => {
-            setRecognitionStatus('listening');
-            setSpeechResult({ msg: '请说话...', pinyin: [], transcript: '' });
-        };
+        recognition.onstart = () => { setRecognitionStatus('listening'); setSpeechResult({ msg: '请说话...', pinyin: [], transcript: '' }); };
         recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript.trim().replace(/[.,。，]/g, '');
             const correctWord = cards[gone.size]?.word;
             const pinyinFeedback = (pinyinConverter(correctWord, { type: 'array' }) || []).map((correct, i) => {
                 const spoken = (pinyinConverter(transcript, { type: 'array' }) || [])[i] || '';
-                const isCorrect = correct === spoken;
-                return { correct, spoken, status: isCorrect ? 'correct' : 'incorrect' };
+                return { correct, spoken, status: correct === spoken ? 'correct' : 'incorrect' };
             });
-            const allCorrect = pinyinFeedback.every(p => p.status === 'correct');
-            setSpeechResult({ msg: allCorrect ? '完全正确！' : '请看对比结果', pinyin: pinyinFeedback, transcript });
+            setSpeechResult({ msg: pinyinFeedback.every(p => p.status === 'correct') ? '完全正确！' : '请看对比结果', pinyin: pinyinFeedback, transcript });
         };
-        recognition.onerror = (err) => {
-            setSpeechResult({ msg: `识别出错: ${err.error}`, pinyin: [], transcript: '' });
-            setRecognitionStatus('idle');
-        };
+        recognition.onerror = (err) => { setSpeechResult({ msg: `识别出错: ${err.error}`, pinyin: [], transcript: '' }); setRecognitionStatus('idle'); };
         recognition.onend = () => setRecognitionStatus('idle');
         recognition.start();
     }, [recognitionStatus, cards, gone.size]);
     
     // 手势绑定
     const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap }) => {
-        if (isFlipped) {
-            if (tap) setIsFlipped(false);
+        if (tap) {
+            setIsFlipped(prev => !prev);
             return;
         }
         const trigger = vx > 0.2;
@@ -117,8 +117,6 @@ const CiDianKa = ({ flashcards = [] }) => {
             const scale = down ? 1.1 : 1;
             return { x, rot, scale, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
         });
-        
-        if (tap && !isFlipped) setIsFlipped(true);
 
         if (!down && gone.size === cards.length) {
             setTimeout(() => {
@@ -143,10 +141,10 @@ const CiDianKa = ({ flashcards = [] }) => {
             <div style={styles.container}>
                 {props.map(({ x, y, rot, scale }, i) => (
                     <animated.div style={{ ...styles.deck, x, y }} key={i}>
-                        <animated.div {...bind(i)} style={{ transform: scale.to(s => `scale(${s}) rotateZ(${rot}deg)`), width: '100%', height: '100%' }}>
+                        <animated.div {...bind(i)} style={{ transform: scale.to(s => `scale(${s}) rotateZ(${rot}deg)`), width: '100%', height: '100%', cursor: 'grab' }}>
                             <div style={{...styles.cardInner, transform: isFlipped && i === gone.size ? 'rotateY(180deg)' : 'rotateY(0deg)'}}>
                                 {/* 正面 */}
-                                <div style={styles.face}>
+                                <div style={{...styles.face, background: gradients[i % gradients.length]}}>
                                     <div style={styles.mainContent}>
                                         <div style={styles.header}>
                                             <div style={styles.pinyin}>{cards[i].pinyin}</div>
