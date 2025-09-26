@@ -1,159 +1,310 @@
-// components/Tixing/CiDianKa.js (V7 - 交互、布局和动画完全修复)
+// components/Tixing/CiDianKa.js (V8 - 完整重写版，已修复多音频、交互与全屏等问题)
 
-import React, { useState, useEffect, useRef, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useCallback } from 'react';
 import { useSprings, animated, to } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp } from 'react-icons/fa';
+import { pinyin as pinyinConverter, parse as parsePinyin } from 'pinyin-pro';
 import HanziWriter from 'hanzi-writer';
 
-// --- 样式 ---
+// ===================== 样式 =====================
 const styles = {
-  fullScreenWrapper: { position: 'fixed', inset: 0, zIndex: 50, background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', perspective: '1500px' },
-  wrapper: { position: 'relative', width: '100%', height: '100%', cursor: 'grab', touchAction: 'none' },
-  card: { position: 'absolute', width: '100%', height: '100%', willChange: 'transform', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  cardInner: { width: '100%', height: '100%', position: 'relative', transformStyle: 'preserve-3d', display: 'flex' },
-  cardFace: {
-    position: 'absolute', width: '100%', height: '100%', backfaceVisibility: 'hidden',
-    background: 'linear-gradient(145deg, #ffffff 0%, #f7faff 100%)',
-    padding: '24px',
-    // 关键修复：为底部导航栏增加安全区域，防止遮挡
-    paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 24px))',
-    display: 'flex', flexDirection: 'column', color: '#1e2b3b'
+  fullScreen: {
+    position: 'fixed', inset: 0, zIndex: 9999, background: '#f5f7fb',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    // 3d perspective for nicer flip
+    perspective: '1400px',
   },
-  cardBack: { transform: 'rotateY(180deg)' },
-  mainContent: { flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' },
-  header: { textAlign: 'center', width: '100%' },
-  pinyin: { fontSize: '1.8rem', color: '#64748b', marginBottom: '12px' },
-  word: { fontSize: '6rem', fontWeight: 'bold', lineHeight: '1.1', marginBottom: '20px' },
-  footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid #e2e8f0', width: '100%', marginTop: 'auto', flexShrink: 0 },
-  footerButton: { background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '20px', padding: '10px 20px', cursor: 'pointer', fontWeight: '600', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' },
-  backSideContent: { display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', justifyContent: 'center', padding: '20px' },
-  meaning: { fontSize: '1.5rem', fontWeight: 'bold', textAlign: 'center' },
-  example: { fontSize: '1.1rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(240, 244, 255, 0.7)', padding: '12px', borderRadius: '12px' },
-  exampleText: { flexGrow: 1 },
-  ttsIconSmall: { cursor: 'pointer', color: '#64748b', fontSize: '1.2rem', flexShrink: 0 },
-  explanation: { fontSize: '1rem', color: '#475569', borderLeft: `3px solid #3b82f6`, paddingLeft: '12px', marginTop: '12px' },
-  modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(5px)' },
-  modalContent: { background: 'white', padding: '20px', borderRadius: '16px', width: '90%', maxWidth: '320px' },
+  container: {
+    position: 'relative', width: '100%', height: '100%',
+    touchAction: 'none',
+  },
+  cardShell: {
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', willChange: 'transform',
+  },
+  cardInner: {
+    width: '92%', maxWidth: '900px', height: '86%', maxHeight: '720px',
+    transformStyle: 'preserve-3d',
+  },
+  face: {
+    position: 'absolute', inset: 0, backfaceVisibility: 'hidden',
+    borderRadius: '20px',
+    background: 'linear-gradient(180deg,#ffffff,#eef6ff)',
+    boxShadow: '0 30px 60px rgba(10,30,80,0.12)',
+    display: 'flex', flexDirection: 'column', padding: '28px',
+    paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 20px))',
+  },
+  backFace: { transform: 'rotateY(180deg)' },
+  header: { textAlign: 'center', marginBottom: 8 },
+  pinyin: { fontSize: '1.4rem', color: '#5b6b82', marginBottom: 6 },
+  hanzi: { fontSize: '5.6rem', fontWeight: 800, lineHeight: 1.05, color: '#102035' },
+  practiceArea: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' },
+  footer: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    gap: 12, marginTop: 12, borderTop: '1px solid rgba(15, 23, 42, 0.06)', paddingTop: 12,
+  },
+  leftButtons: { display: 'flex', gap: 10 },
+  button: {
+    background: '#eef2ff', color: '#0f172a', border: 'none', padding: '10px 14px',
+    borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center'
+  },
+  ttsButton: {
+    background: '#e2e8f0', borderRadius: 14, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center'
+  },
+  example: {
+    background: 'rgba(240,244,255,0.9)', padding: 12, borderRadius: 12, display: 'flex', gap: 8, alignItems: 'center'
+  },
+  meaning: { fontSize: '1.25rem', fontWeight: 700, textAlign: 'center' },
+  explanation: { marginTop: 10, fontStyle: 'italic', color: '#415161', borderLeft: '3px solid #3b82f6', paddingLeft: 10 },
+  tiny: { fontSize: 12, color: '#6b7280' },
+
+  // Pronunciation feedback
+  feedbackRow: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 },
+  feedbackSyll: { fontSize: 16, padding: '4px 7px', borderRadius: 8 },
+
+  // HanziWriter modal
+  modalBackdrop: { position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', zIndex: 10000 },
+  modalBox: { background: '#fff', padding: 18, borderRadius: 12, width: '92%', maxWidth: 380 }
 };
 
-// --- TTS (单例播放) ---
-let currentSound = null;
-const playTTS = (text) => {
+// ===================== TTS 单例管理（Howl） =====================
+let _howlInstance = null;
+const playTTS = (urlOrText) => {
+  // This function expects a text; build url for service
+  if (!urlOrText) return;
+  // stop previous
+  try { if (_howlInstance && _howlInstance.playing()) _howlInstance.stop(); } catch (e) {}
+  const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(urlOrText)}&v=zh-CN-XiaoyouNeural&r=-15`;
+  _howlInstance = new Howl({ src: [ttsUrl] });
+  _howlInstance.play();
+};
+const preloadTTS = async (text) => {
   if (!text) return;
-  if (currentSound) currentSound.stop();
-  currentSound = new Howl({ src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`] });
-  currentSound.play();
+  // create Howl but don't play; reuse _howlInstance? keep separate small cache
+  // For simplicity we'll create and unload quickly
+  try {
+    const h = new Howl({ src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`] });
+    // load into browser cache
+    h.once('load', () => { h.unload(); });
+  } catch (e) { /* ignore */ }
 };
 
-// --- 汉字书写 Modal ---
-const HanziWriterModal = ({ character, onClose }) => {
-  const writerRef = useRef(null);
+// ===================== 拼音智能比对 =====================
+const comparePinyin = (correctStr, spokenStr) => {
+  // 先把汉字转拼音数组（依赖 pinyin-pro）
+  const correctArr = pinyinConverter(correctStr, { type: 'array' }) || [];
+  const userArr = pinyinConverter(spokenStr || '', { type: 'array' }) || [];
+  return correctArr.map((c, i) => {
+    const u = userArr[i] || '';
+    const cp = parsePinyin(c || '');
+    const up = parsePinyin(u || '');
+    const initial = cp.initial === up.initial ? 'ok' : 'bad';
+    const final = cp.final === up.final ? 'ok' : 'bad';
+    const tone = (cp.tone || '') === (up.tone || '') ? 'ok' : 'bad';
+    return { correct: c, spoken: u || '—', initial, final, tone };
+  });
+};
+
+// ===================== HanziWriter Modal =====================
+const HanziModal = ({ char, onClose }) => {
+  const ref = useRef(null);
   useEffect(() => {
     let writer = null;
-    const timeoutId = setTimeout(() => {
-      if (writerRef.current) {
-        writerRef.current.innerHTML = ''; // 清空旧实例
-        writer = HanziWriter.create(writerRef.current, character, { width: 280, height: 280, padding: 20, showOutline: true });
+    const tid = setTimeout(() => {
+      if (!ref.current) return;
+      ref.current.innerHTML = '';
+      try {
+        writer = HanziWriter.create(ref.current, char, { width: 260, height: 260, padding: 10, showOutline: true });
         writer.animateCharacter();
-      }
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [character]);
-  return <div style={styles.modalBackdrop} onClick={onClose}><div style={styles.modalContent} onClick={(e) => e.stopPropagation()} ref={writerRef}></div></div>;
+      } catch (e) { console.error(e); }
+    }, 80);
+    return () => { clearTimeout(tid); if (writer && writer.target) writer.target.innerHTML = ''; };
+  }, [char]);
+  return (
+    <div style={styles.modalBackdrop} onClick={onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div ref={ref} />
+        <div style={{ marginTop: 12, textAlign: 'center' }}>
+          <button style={styles.button} onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-// --- 单词卡 (移除手势相关逻辑，由父组件全权处理) ---
-const CardView = forwardRef(({ cardData }, ref) => {
-  const { word, pinyin, meaning, example, aiExplanation } = cardData;
-  const [showWriter, setShowWriter] = useState(false);
+// ===================== PronunciationPractice 子组件 =====================
+const PronunciationPractice = ({ word, onResult }) => {
+  const [status, setStatus] = useState('idle'); // idle|listening|loading|feedback
+  const [feedback, setFeedback] = useState([]);
+  const recognitionRef = useRef(null);
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('浏览器不支持语音识别（Web Speech API）。请使用 Chrome 或 Edge。');
+      return;
+    }
+    if (status === 'listening') {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = 'zh-CN';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setStatus('listening');
+    rec.onresult = (ev) => {
+      setStatus('loading');
+      const t = ev.results[0][0].transcript || '';
+      const cmp = comparePinyin(word, t);
+      setFeedback(cmp);
+      setStatus('feedback');
+      if (onResult) onResult({ transcript: t, cmp });
+    };
+    rec.onerror = (ev) => {
+      console.error('recognition error', ev);
+      setStatus('idle');
+    };
+    rec.onend = () => { if (status === 'listening') setStatus('idle'); };
+    rec.start();
+    recognitionRef.current = rec;
+  }, [status, word, onResult]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <button
+        onClick={startListening}
+        style={{ ...styles.button, background: status === 'listening' ? '#ffefef' : '#eef2ff' }}
+      >
+        <FaMicrophone /> {status === 'listening' ? '正在听...' : '开始练习'}
+      </button>
+
+      <div style={{ marginTop: 8 }}>
+        {status === 'feedback' && (
+          <div style={styles.feedbackRow}>
+            {feedback.map((s, idx) => (
+              <div key={idx} style={{
+                ...styles.feedbackSyll,
+                background: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#dcfce7' : '#fee2e2',
+                color: (s.initial === 'ok' && s.final === 'ok' && s.tone === 'ok') ? '#166534' : '#991b1b'
+              }}>
+                {parsePinyin(s.correct).initial}{parsePinyin(s.correct).final}{/* 拼音片段 */}
+                <div style={{ fontSize: 12 }}>{s.spoken}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ===================== CardView =====================
+const CardView = forwardRef(({ data, onOpenWriter, onPronounceClick, renderPractice }, ref) => {
+  const { word, pinyin, meaning, example, aiExplanation } = data;
   return (
     <div style={styles.cardInner} ref={ref}>
-      {showWriter && <HanziWriterModal character={word} onClose={() => setShowWriter(false)} />}
-      <animated.div style={{ ...styles.cardFace, transform: 'rotateY(0deg)' }}>
-        <div style={styles.mainContent}>
-          <header style={styles.header}><div style={styles.pinyin}>{pinyin}</div><div style={styles.word}>{word}</div></header>
+      {/* 正面 */}
+      <animated.div style={{ ...styles.face }}>
+        <div style={styles.header}>
+          <div style={styles.pinyin}>{pinyin}</div>
+          <div style={styles.hanzi}>{word}</div>
         </div>
-        <footer style={styles.footer} onPointerDown={(e) => e.stopPropagation()}>
-          <div style={{ display: 'flex', gap: '12px' }}><button style={styles.footerButton}><FaMicrophone /> 发音练习</button><button style={styles.footerButton} onClick={() => setShowWriter(true)}><FaPenFancy /> 笔顺</button></div>
-          <button style={styles.footerButton} onClick={() => playTTS(word)}><FaVolumeUp /></button>
-        </footer>
+
+        <div style={styles.practiceArea}>
+          {renderPractice ? renderPractice() : <div style={styles.tiny}>点击底部「发音练习」开始</div>}
+        </div>
+
+        <div style={styles.footer} onPointerDown={(e) => e.stopPropagation()}>
+          <div style={styles.leftButtons}>
+            <button style={styles.button} onClick={(e) => { e.stopPropagation(); /* 占位：发音练习由 renderPractice 控制 */ }}>
+              <FaMicrophone /> 发音练习
+            </button>
+
+            <button style={styles.button} onClick={(e) => { e.stopPropagation(); onOpenWriter && onOpenWriter(word); }}>
+              <FaPenFancy /> 笔顺
+            </button>
+          </div>
+
+          <div>
+            {/* 右侧朗读按钮：仅此按钮会触发朗读 */}
+            <button style={styles.ttsButton} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(word); }}>
+              <FaVolumeUp />
+            </button>
+          </div>
+        </div>
       </animated.div>
-      <animated.div style={{ ...styles.cardFace, ...styles.cardBack }}>
-        <div style={styles.backSideContent}><div style={styles.meaning}>{meaning}</div><div style={styles.example}><FaVolumeUp style={styles.ttsIconSmall} onClick={(e) => { e.stopPropagation(); playTTS(example); }} /><span style={styles.exampleText}>{example}</span></div>{aiExplanation && <div style={styles.explanation}>{aiExplanation}</div>}</div>
+
+      {/* 背面 */}
+      <animated.div style={{ ...styles.face, ...styles.backFace }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <div style={styles.meaning}>{meaning}</div>
+          <div style={styles.example}>
+            <FaVolumeUp style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onPronounceClick && onPronounceClick(example); }} />
+            <div style={styles.exampleText}>{example}</div>
+          </div>
+          {aiExplanation && <div style={styles.explanation}>{aiExplanation}</div>}
+        </div>
       </animated.div>
     </div>
   );
 });
 CardView.displayName = 'CardView';
 
-// --- 主组件 ---
+// ===================== 主组件 CiDianKa =====================
 const CiDianKa = ({ flashcards = [] }) => {
-  const [gone] = useState(() => new Set());
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [props, api] = useSprings(flashcards.length, i => ({ x: 0, rot: 0, scale: 1, rotateY: 0, zIndex: flashcards.length - i }));
+  // keep a minimal defensive default
+  const cards = Array.isArray(flashcards) && flashcards.length ? flashcards : [];
 
-  useEffect(() => { if (flashcards[currentIndex]) playTTS(flashcards[currentIndex].word); }, [flashcards]);
+  // springs for a stacked deck visual; each card has x, rot, scale, rotateY, zIndex
+  const [springs, api] = useSprings(cards.length, i => ({
+    x: 0, rot: 0, scale: 1, rotateY: 0, zIndex: cards.length - i, config: { mass: 1, tension: 300, friction: 30 }
+  }));
 
-  const handleFlip = (index) => api.start(i => i === index && { rotateY: props[i].rotateY.get() === 180 ? 0 : 180 });
+  const topIndexRef = useRef(0); // index of top-most interactive card
+  const [currentTop, setCurrentTop] = useState(0);
+  topIndexRef.current = currentTop;
 
-  const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx] }) => {
-    // 关键修复：整合手势，只允许操作顶层卡片
-    if (index !== currentIndex) return;
+  // flip states are stored in springs.rotateY; helper to get current rotateY value
+  const getRotateY = (i) => {
+    try { return springs[i]?.rotateY?.get() ?? 0; } catch { return 0; }
+  };
 
-    const trigger = vx > 0.2;
-    const dir = xDir < 0 ? -1 : 1;
+  // preload tts for performance
+  useEffect(() => {
+    cards.forEach(c => { if (c.word) preloadTTS(c.word); if (c.example) preloadTTS(c.example); });
+  }, [cards]);
 
-    // 如果卡片已翻转，则不允许滑动
-    if (props[index].rotateY.get() !== 0) return;
-
-    if (!down) { // 手势释放
-      if (trigger) { // 判定为有效滑动
-        gone.add(index);
-        api.start(i => {
-          if (i !== index) return;
-          return { x: (200 + window.innerWidth) * dir, rot: mx / 10 + dir * 45 * vx, config: { friction: 50, tension: 200 } };
-        });
-        // 动画开始后立即更新索引，准备下一张卡片
-        const nextIndex = (currentIndex + 1) % flashcards.length;
-        setCurrentIndex(nextIndex);
-        if (gone.size === flashcards.length) {
-            setTimeout(() => {
-                gone.clear();
-                api.start(i => ({ x: 0, rot: 0, scale: 1, delay: i * 50 }));
-                setCurrentIndex(0); // 重置索引
-            }, 600);
-        }
-      } else if (Math.abs(mx) < 5) { // 判定为轻点 (翻转卡片)
-        handleFlip(index);
-        api.start(i => i === index && { x: 0, rot: 0, scale: 1, config: { friction: 50, tension: 500 } });
-      } else { // 判定为无效滑动 (松手后弹回)
-        api.start(i => i === index && { x: 0, rot: 0, scale: 1, config: { friction: 50, tension: 500 } });
-      }
-    } else { // 手势进行中
-      const x = mx;
-      const rot = mx / 10;
-      const scale = 1.05;
-      api.start(i => i === index && { x, rot, scale, config: { friction: 50, tension: 800 } });
+  // play TTS when top card changes
+  useEffect(() => {
+    if (!cards.length) return;
+    const w = cards[currentTop]?.word;
+    if (w) {
+      // small delay to avoid overlapping UI interactions
+      const t = setTimeout(() => playTTS(w), 180);
+      return () => clearTimeout(t);
     }
-  });
+  }, [currentTop, cards]);
 
-  if (!flashcards || flashcards.length === 0) return <div>没有卡片数据。</div>;
+  // Hanzi modal
+  const [writerChar, setWriterChar] = useState(null);
 
-  return (
-    <div style={styles.fullScreenWrapper}>
-      <div style={styles.wrapper}>
-        {props.map((springProps, i) => (
-          <animated.div key={i} style={{ ...styles.card, zIndex: springProps.zIndex, transform: to([springProps.x, springProps.rot], (x, r) => `translateX(${x}px) rotateY(${r}deg)`) }} {...bind(i)}>
-            <animated.div style={{ width: '100%', height: '100%', transform: springProps.rotateY.to(r => `rotateY(${r}deg)`) }}>
-              <CardView cardData={flashcards[i]} />
-            </animated.div>
-          </animated.div>
-        ))}
-      </div>
-    </div>
-  );
-};
+  // gesture handling: only allow interacting with top card
+  const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap, last }) => {
+    // only top card can be dragged
+    if (index !== topIndexRef.current) return;
 
-export default CiDianKa;
+    // if currently flipped (rotateY != 0) do not allow drag
+    const rotateYVal = getRotateY(index);
+    if (rotateYVal && Math.abs(rotateYVal) > 10) {
+      // If user tapped while flipped, do nothing; but allow footer clicks (footer stops propagation)
+      if (tap && last) { /* nothing */ }
+      return;
+    }
+
+    if (down) {
+      // during drag, move card horizontally and rotate a little
+      api.start(i => i === index ? { x: mx, rot: mx / 20, scale: 1.04 } : undefined);
+                                                                                                              }
