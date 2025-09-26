@@ -1,6 +1,6 @@
-// components/Tixing/CiDianKa.js (V18.1 - 终极修复版：修复编译错误)
+// components/Tixing/CiDianKa.js (V18.2 - 布局与渲染最终修复版)
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // <<<< 关键修复：在这里添加了 useCallback
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSprings, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
@@ -25,8 +25,8 @@ const styles = {
   face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', color: '#1a202c', display: 'flex', flexDirection: 'column', padding: '28px', backgroundSize: 'cover', backgroundPosition: 'center' },
   backFace: { transform: 'rotateY(180deg)', background: '#ffffff' },
   mainContent: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', position: 'relative', overflowY: 'auto', cursor: 'grab' },
-  header: { textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.1)' },
-  pinyin: { fontSize: '1.4rem', color: 'rgba(255,255,255,0.9)', marginBottom: 6 },
+  header: { textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.25)' }, // 增强阴影
+  pinyin: { fontSize: '1.4rem', color: 'rgba(255,255,255,0.95)', marginBottom: 6, textShadow: '0 1px 3px rgba(0,0,0,0.2)' },
   hanzi: { fontSize: '5.6rem', fontWeight: 800, lineHeight: 1.05, color: 'white' },
   footer: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 'auto', paddingTop: 12, flexShrink: 0, background: 'rgba(255,255,255,0.1)', padding: '12px 28px', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' },
   button: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' },
@@ -35,6 +35,8 @@ const styles = {
   feedbackMessage: { color: 'white', height: '24px', textAlign: 'center', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem', marginBottom: '10px', textShadow: '0 1px 2px rgba(0,0,0,0.2)' },
   feedbackPinyinRow: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px' },
   feedbackPinyinSyllable: { padding: '6px 12px', borderRadius: '8px', fontSize: '1.2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(255,255,255,0.8)' },
+  example: { background: 'rgba(240,244,255,0.7)', padding: '12px 16px', borderRadius: 12, display: 'flex', gap: 10, alignItems: 'center', width: '100%', maxWidth: '400px', textAlign: 'left' },
+  meaning: { fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', gap: 10 },
 };
 // ===================== TTS 管理 =====================
 let _howlInstance = null;
@@ -103,131 +105,4 @@ const PronunciationPractice = ({ word, onResult }) => {
         } catch (err) { onResult({ msg: '无法访问麦克风', pinyin: [], audioBlob: null }); }
     }, [status, word, onResult]);
 
-    return ( <button style={{...styles.button, background: 'rgba(255,255,255,0.2)'}} onClick={handleListen}> <FaMicrophone /> {status === 'listening' ? '结束识别' : '发音练习'} </button> );
-};
-
-// ===================== 主组件 CiDianKa (V18 重构版) =====================
-const CiDianKa = ({ flashcards = [] }) => {
-    const processedCards = useMemo(() => flashcards.map(card => ({
-        ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' })
-    })), [flashcards]);
-    const cards = processedCards.length > 0 ? processedCards : [{ word: "示例", pinyin: "shì lì", meaning: "Example" }];
-    
-    const [gone] = useState(() => new Set());
-    const [isFlipped, setIsFlipped] = useState(false);
-    const [writerChar, setWriterChar] = useState(null);
-    const [showSettings, setShowSettings] = useState(false);
-    const [customBgs, setCustomBgs] = useState([]);
-    const fileInputRef = useRef(null);
-    const [adKey, setAdKey] = useState(0);
-    const [speechResult, setSpeechResult] = useState({ msg: '', pinyin: [], audioBlob: null });
-
-    const to = (i) => ({ x: 0, y: -i * 4, scale: 1 - i * 0.05, rot: 0, zIndex: i });
-    const from = (_i) => ({ x: 0, rot: 0, scale: 1.5, y: -1000, zIndex: 0 });
-    const [props, api] = useSprings(cards.length, i => ({ ...to(i), from: from(i) }));
-    
-    const bind = useDrag(({ args: [index], down, movement: [mx], direction: [xDir], velocity: [vx], tap }) => {
-        if (tap) { setIsFlipped(prev => !prev); return; }
-        if (isFlipped) return;
-
-        const trigger = vx > 0.2;
-        const dir = xDir < 0 ? -1 : 1;
-        if (!down && trigger) gone.add(index);
-        
-        api.start(i => {
-            if (index !== i) return;
-            const isGone = gone.has(index);
-            if (isGone) setIsFlipped(false);
-            const x = isGone ? (200 + window.innerWidth) * dir : down ? mx : 0;
-            const rot = mx / 100 + (isGone ? dir * 10 * vx : 0);
-            const scale = down ? 1.05 : 1;
-            return { x, rot, scale, zIndex: down ? cards.length : i, delay: undefined, config: { friction: 50, tension: down ? 800 : isGone ? 200 : 500 } };
-        });
-
-        if (!down && gone.size === cards.length) {
-            setTimeout(() => { gone.clear(); api.start(i => to(i)); }, 600);
-        }
-    });
-
-    useEffect(() => {
-        const currentCard = cards[gone.size];
-        if (currentCard && !isFlipped) {
-            setSpeechResult({ msg: '', pinyin: [], audioBlob: null });
-            const timer = setTimeout(() => playTTS(currentCard.word), 400);
-            return () => clearTimeout(timer);
-        }
-    }, [gone.size, isFlipped, cards]);
-    
-    useEffect(() => { setAdKey(k => k + 1); }, [gone.size, isFlipped]);
-
-    const handleBgUpload = (event) => {
-        const files = Array.from(event.target.files);
-        const imageUrls = files.map(file => URL.createObjectURL(file));
-        setCustomBgs(imageUrls);
-        setShowSettings(false);
-    };
-
-    return (
-        <div style={styles.fullScreen}>
-            <AdComponent key={adKey} />
-            {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
-            <div style={styles.container}>
-                {props.map(({ x, y, rot, scale, zIndex }, i) => {
-                    if (i < gone.size - 2 || i > gone.size + 3) return null;
-                    const cardData = cards[i];
-                    const isCurrent = i === gone.size;
-                    const backgroundStyle = { backgroundImage: customBgs.length > 0 ? `url(${customBgs[i % customBgs.length]})` : gradients[i % gradients.length], boxShadow: customBgs.length > 0 ? 'inset 0 0 0 2000px rgba(0,0,0,0.3)' : '' };
-
-                    return (
-                        <animated.div style={{ ...styles.deck, x, y, zIndex }} key={i}>
-                            <div style={styles.cardContainer}>
-                                <animated.div {...(isCurrent ? bind(i) : {})} style={{ transform: scale.to(s => `scale(${s}) rotateZ(${rot}deg)`), flex: 1 }}>
-                                    <div style={{...styles.cardInner, transform: isFlipped && isCurrent ? 'rotateY(180deg)' : 'rotateY(0deg)'}}>
-                                        <div style={{...styles.face, ...backgroundStyle}}>
-                                            <div style={styles.mainContent}>
-                                                <div style={styles.header}>
-                                                    <div style={styles.pinyin}>{cardData.pinyin}</div>
-                                                    <div style={styles.hanzi}>{cardData.word}</div>
-                                                </div>
-                                                <div style={styles.feedbackArea}>
-                                                    <div style={styles.feedbackMessage}>
-                                                        {speechResult.msg}
-                                                        {speechResult.audioBlob && <FaPlay style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); new Audio(URL.createObjectURL(speechResult.audioBlob)).play()}}/>}
-                                                    </div>
-                                                    <div style={styles.feedbackPinyinRow}>
-                                                        {speechResult.pinyin.map((syl, idx) => (<div key={idx} style={{...styles.feedbackPinyinSyllable}}><span style={{color: syl.initialMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).initial}</span><span style={{color: syl.finalMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).final}</span><span style={{color: syl.toneMatch ? 'green' : 'red'}}>{parsePinyin(syl.correct).tone}</span><span style={{fontSize: '0.8rem', opacity: 0.7}}>{syl.spoken}</span></div>))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div style={{...styles.face, ...styles.backFace}} onClick={() => isFlipped && setIsFlipped(false)}>
-                                            <div style={styles.mainContent}>
-                                                <div style={{...styles.meaning, color: '#2d3748'}}>{cardData.meaning} <FaVolumeUp style={{cursor: 'pointer'}} onClick={(e)=>{e.stopPropagation(); playTTS(cardData.meaning)}}/></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </animated.div>
-                                {isCurrent && (
-                                    <div style={styles.footer}>
-                                        <PronunciationPractice word={cardData.word} onResult={setSpeechResult} />
-                                        <button style={styles.button} onClick={() => setWriterChar(cardData.word)}><FaPenFancy /></button>
-                                        <button style={styles.button} onClick={() => playTTS(cardData.word)}><FaVolumeUp /></button>
-                                        <button style={styles.button} onClick={() => setShowSettings(s => !s)}><FaCog /></button>
-                                    </div>
-                                )}
-                            </div>
-                        </animated.div>
-                    )
-                })}
-            </div>
-            {showSettings && (
-                <div style={styles.settingsModal}>
-                    <input type="file" ref={fileInputRef} onChange={handleBgUpload} multiple accept="image/*" style={{display: 'none'}} />
-                    <button style={{...styles.button, background: '#e2e8f0', color: '#2d3748'}} onClick={() => fileInputRef.current.click()}> <FaImages /> 上传背景图 </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default CiDianKa;
+    return ( <button style={{...styles.button, background
