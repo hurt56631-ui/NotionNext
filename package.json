@@ -73,12 +73,16 @@
     "notion-utils": "7.4.3",
     "pinyin-pro": "^3.27.0",
     "react": "^18.3.1",
+    "react-copy-to-clipboard": "^5.1.0",
     "react-dom": "^18.3.1",
     "react-facebook": "^8.1.4",
     "react-hotkeys-hook": "^4.6.2",
     "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
     "react-notion-x": "7.4.2",
+    "react-player": "^3.3.3",
     "react-share": "^5.2.2",
+    "react-syntax-highlighter": "^15.6.6",
     "react-tweet-embed": "~2.0.0"
   },
   "devDependencies": {
