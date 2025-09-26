@@ -1,4 +1,4 @@
-// components/NotionPage.js - 最终修复版
+// components/NotionPage.js - 最终集成版
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -9,42 +9,32 @@ import dynamic from 'next/dynamic'
 import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
-// --- 1. 导入你的自定义组件 ---
-// 在这里导入所有你需要用 !include 调用的组件
+// --- 1. 导入你的所有自定义组件 ---
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
-// 以后有新组件，也加在这里。例如:
-// const TianKongTi = dynamic(() => import('@/components/Tixing/TianKongTi'), { ssr: false })
+const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false }) // <<<< 新增：导入单词卡组件
 
-
-// --- 2. 导入 react-notion-x 的原始组件，并重命名以备后用 ---
+// --- 2. 导入 react-notion-x 的原始组件 ---
 const DefaultCodeComponent = dynamic(() => import('react-notion-x/build/third-party/code').then(m => m.Code), { ssr: false });
 const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
 const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
 const Modal = dynamic(() => import('react-notion-x/build/third-party/modal').then(m => m.Modal), { ssr: false });
 const Pdf = dynamic(() => import('@/components/Pdf').then(m => m.Pdf), { ssr: false });
 const TweetEmbed = dynamic(() => import('react-tweet-embed'), { ssr: false });
-
-// 其他辅助组件
 const AdEmbed = dynamic(() => import('@/components/GoogleAdsense').then(m => m.AdEmbed), { ssr: true });
 const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
 const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
 
-
-// --- 3. 创建我们自己的、增强版的 Code 组件 ---
-// 这是核心逻辑：劫持代码块的渲染
+// --- 3. 增强版的 Code 组件 ---
 const CustomCode = (props) => {
   const blockContent = props.block.properties?.title?.[0]?.[0] || '';
 
-  // 检查代码块内容是否以 !include 开头
   if (blockContent.startsWith('!include')) {
-    // 正则表达式，用于解析出组件路径和 props
     const includeRegex = /!include\s+(\S+\.js)\s*({.*})?/s;
     const match = blockContent.match(includeRegex);
 
     if (match) {
-      const componentPath = match[1]; // e.g., /components/Tixing/PaiXuTi.js
-      const propsString = match[2] || '{}'; // The JSON part
-
+      const componentPath = match[1];
+      const propsString = match[2] || '{}';
       try {
         const parsedProps = JSON.parse(propsString);
         
@@ -52,29 +42,25 @@ const CustomCode = (props) => {
         if (componentPath === '/components/Tixing/PaiXuTi.js') {
           return <PaiXuTi {...parsedProps} />;
         }
-        // 以后有新组件，也加在这里。例如:
-        // if (componentPath === '/components/Tixing/TianKongTi.js') {
-        //   return <TianKongTi {...parsedProps} />;
-        // }
+        // <<<< 新增：增加对 CiDianKa 组件的判断
+        if (componentPath === '/components/Tixing/CiDianKa.js') {
+          return <CiDianKa {...parsedProps} />;
+        }
 
-        // 如果没有匹配的组件，可以返回一个提示
         return <div style={{ color: 'orange' }}>未找到组件: {componentPath}</div>;
 
       } catch (e) {
         console.error('!include JSON 解析失败:', e, `原始JSON字符串: "${propsString}"`);
-        return <div style={{ padding: '1rem', border: '2px dashed red', color: 'red' }}>!include 块的 JSON 配置错误，请检查 Notion 页面中的双引号和逗号。</div>;
+        return <div style={{ padding: '1rem', border: '2px dashed red', color: 'red' }}>!include 块的 JSON 配置错误，请检查。</div>;
       }
     }
   }
 
-  // 如果不是 !include 指令，就渲染一个正常的代码块
   return <DefaultCodeComponent {...props} />;
 };
 
-
-// --- 主页面组件 ---
+// --- 主页面组件 (无改动) ---
 const NotionPage = ({ post, className }) => {
-  // ... (这里的所有 Hooks 和 useEffect 代码都保持原样，无需改动) ...
   const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK')
   const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK')
   const SPOILER_TEXT_TAG = siteConfig('SPOILER_TEXT_TAG')
@@ -92,10 +78,7 @@ const NotionPage = ({ post, className }) => {
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
-          // --- 4. 将我们自定义的 Code 组件注册进去 ---
           Code: CustomCode,
-
-          // 注册其他标准组件
           Collection,
           Equation,
           Modal,
@@ -109,7 +92,7 @@ const NotionPage = ({ post, className }) => {
   )
 }
 
-// ... (这里的所有辅助函数也都保持原样，无需改动) ...
+// --- 辅助函数 (无改动) ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
 const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180) }
