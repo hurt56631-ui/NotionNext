@@ -1,4 +1,4 @@
-// components/Tixing/CiDianKa.js (V17 - 终极修复版：重构交互、修复UI、增加广告同步)
+// components/Tixing/CiDianKa.js (V17 - 终极修复版：重构交互、修复UI、加广告同步)
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'; // <<<< 关键修复：导入 useRef
 import { useTransition, animated } from '@react-spring/web';
