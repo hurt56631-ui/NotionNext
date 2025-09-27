@@ -15,6 +15,8 @@ const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
+const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
+
 
 // --- 2. 导入 react-notion-x 的原始组件 (保持不变) ---
 const DefaultCodeComponent = dynamic(() => import('react-notion-x/build/third-party/code').then(m => m.Code), { ssr: false });
@@ -53,6 +55,9 @@ const CustomCode = (props) => {
         }
         if (componentPath === '/components/Tixing/TingLiZhuJu.js') {
           return <TingLiZhuJu {...parsedProps} />;
+        }
+        if (componentPath === '/components/Tixing/PanDuanTi.js') {
+          return <PanDuanTi {...parsedProps} />;
         }
         if (componentPath === '/components/Tixing/CiDianKa.js') {
           return <CiDianKa {...parsedProps} />;
