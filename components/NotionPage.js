@@ -13,6 +13,7 @@ import { NotionRenderer } from 'react-notion-x'
 const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false }) 
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
+const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
 
 // --- 2. 导入 react-notion-x 的原始组件 (保持不变) ---
@@ -49,6 +50,9 @@ const CustomCode = (props) => {
         }
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
+        }
+        if (componentPath === '/components/Tixing/TingLiZhuJu.js') {
+          return <TingLiZhuJu {...parsedProps} />;
         }
         if (componentPath === '/components/Tixing/CiDianKa.js') {
           return <CiDianKa {...parsedProps} />;
