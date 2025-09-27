@@ -1,18 +1,19 @@
-// components/Tixing/CiDianKa.js (V26 - Fixed & Improved)
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+// components/Tixing/CiDianKa.js (V28 - User Request Refined)
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaUpload } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaUpload, FaTrash } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 import AdComponent from '@/components/AdComponent';
 
-// ===================== 音效资源（复用 Howl 实例） =====================
+// ===================== 音效资源 =====================
 const sounds = {
-  switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.7 }),
+  switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.6 }),
   correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
   incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
+  flip: new Howl({ src: ['/sounds/flip.mp3'], volume: 0.7 }),
 };
 let _howlInstance = null;
 const playTTS = (text, e) => {
@@ -23,15 +24,15 @@ const playTTS = (text, e) => {
   _howlInstance.play();
 };
 
-// ===================== 随机渐变色 =====================
+// ===================== 背景图与渐变色 =====================
+const defaultBackgrounds = [
+  'dancibeijingtu-1.jpg', 'dancibeijingtu-2.jpg', 'dancibeijingtu-3.jpg', 
+  'dancibeijingtu-4.jpg', 'dancibeijingtu-5.jpg'
+].map(name => `/backgrounds/${name}`); // Assuming they are in public/backgrounds
+
 const gradients = [
-  'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
-  'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
+  'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)', 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
   'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)',
-  'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)',
-  'linear-gradient(135deg, #a3bded 0%, #6991c7 100%)',
-  'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-  'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)',
 ];
 const getRandomGradient = () => gradients[Math.floor(Math.random() * gradients.length)];
 
@@ -42,7 +43,7 @@ const styles = {
   animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', perspective: '2000px' },
   cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column' },
   cardInner: { position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.8s cubic-bezier(0.68, -0.55, 0.27, 1.55)' },
-  face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', color: '#1a202c', boxShadow: '0 30px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', padding: '28px', backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden' },
+  face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', color: '#1a202c', boxShadow: '0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', padding: '28px', backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden' },
   glassOverlay: { position: 'absolute', inset: 0, background: 'rgba(255, 255, 255, 0.15)', backdropFilter: 'blur(8px) brightness(1.1)', WebkitBackdropFilter: 'blur(8px) brightness(1.1)', zIndex: 0 },
   backFace: { transform: 'rotateY(180deg)', background: '#f0f2f5', justifyContent: 'center' },
   mainContent: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', position: 'relative', overflowY: 'auto', cursor: 'grab', padding: '10px', zIndex: 1 },
@@ -53,329 +54,208 @@ const styles = {
   button: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' },
   iconButton: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '12px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px' },
   settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 },
-  settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
-  closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' },
-  uploadButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', padding: '15px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '15px' },
-  listeningText: { color: 'rgba(255, 255, 255, 0.9)', fontSize: '1.2rem', marginTop: '10px', textShadow: '1px 1px 2px rgba(0,0,0,0.2)' },
+  settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', position: 'relative' },
+  closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' },
+  uploadButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', padding: '12px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '15px' },
   pronunciationChecker: { width: 'calc(100% - 20px)', padding: '20px', marginTop: '16px', borderTop: '4px solid #3b82f6', borderRadius: '12px', background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', boxShadow: '0 8px 20px rgba(0,0,0,0.1)', color: '#1a202c', zIndex: 2 },
+  settingsGroup: { marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '20px' },
+  settingLabel: { fontWeight: 'bold', marginBottom: '10px', display: 'block' },
+  radioGroup: { display: 'flex', gap: '10px' },
+  radioLabel: { display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', cursor: 'pointer' },
 };
 
-// ===================== 拼音/声母表辅助函数 =====================
-// 常见汉语声母（包含复合声母）
+// ===================== 拼音/发音分析辅助函数... (无变动, 为简洁省略) =====================
 const INITIALS = ['zh','ch','sh','b','p','m','f','d','t','n','l','g','k','h','j','q','x','r','z','c','s','y','w'];
-
-// 将带数字声调形式的拼音（例如: shi4, shì 或 shi）拆分为 initial / final / tone
-function splitSyllable(pinyinWithToneNumeric) {
-  if (!pinyinWithToneNumeric) return { initial: '', final: '', tone: null, raw: '' };
-  // 先把可能的空白去掉
-  const raw = pinyinWithToneNumeric.trim();
-  // 如果末尾有数字 1-5，取出声调；否则设为 null
-  const toneMatch = raw.match(/([1-5])$/);
-  const tone = toneMatch ? Number(toneMatch[1]) : null;
-  const base = toneMatch ? raw.slice(0, -1) : raw;
-
-  // 找最长匹配声母（优先复合声母）
-  let initial = '';
-  for (const init of INITIALS.sort((a,b)=>b.length - a.length)) {
-    if (base.startsWith(init)) { initial = init; break; }
-  }
-  const final = initial ? base.slice(initial.length) : base;
-  return { initial, final, tone, raw };
-}
-
-// 将中文词/句转换为按字/音节的带数字声调拼音数组（优先用 pinyin-pro 输出数字声调）
-function toPinyinNumberArray(chineseText) {
-  if (!chineseText || typeof chineseText !== 'string') return [];
-  try {
-    // 尝试让 pinyin-pro 返回用数字表示声调并用空格分隔音节
-    const pinyinStr = pinyinConverter(chineseText, { toneType: 'num', heteronym: false, separator: ' ' });
-    // split by whitespace，去掉多余空项
-    return pinyinStr.split(/\s+/).filter(Boolean);
-  } catch (err) {
-    console.error('toPinyinNumberArray error', err);
-    return [];
-  }
-}
-
-// ===================== 发音比对逻辑（返回逐音节对比结果） =====================
-function analyzePronunciation(correctWord, userText) {
-  try {
-    if (!correctWord) return null;
-    // 把标准和用户发音都转为数字声调形式的拼音数组
-    const correctPys = toPinyinNumberArray(correctWord); // e.g. ['shi4','li4']
-    const userPys = toPinyinNumberArray(userText); // recognition 输出通常是汉字 -> pinyin-pro 能解析
-
-    if (userPys.length === 0 && userText && userText.length > 0) {
-      // 用户语音识别到非汉字或未能解析成拼音
-      return { error: '无法解析您的发音为可比拼音，请尝试更清晰朗读或检查识别结果', userRaw: userText };
-    }
-
-    const length = Math.max(correctPys.length, userPys.length);
-    let overallCorrect = true;
-    const details = [];
-    for (let i = 0; i < length; i++) {
-      const correctPy = correctPys[i] || '';
-      const userPy = userPys[i] || '';
-      const c = splitSyllable(correctPy);
-      const u = splitSyllable(userPy);
-      const initialCorrect = c.initial === u.initial;
-      const finalCorrect = c.final === u.final;
-      // 如果任意一方 tone 为 null，则用严格比较（null != number -> 不同）
-      const toneCorrect = (c.tone === u.tone);
-      if (!(initialCorrect && finalCorrect && toneCorrect)) overallCorrect = false;
-      details.push({
-        correct: { raw: c.raw, initial: c.initial, final: c.final, tone: c.tone },
-        user: { raw: u.raw, initial: u.initial, final: u.final, tone: u.tone },
-        flags: { initialCorrect, finalCorrect, toneCorrect }
-      });
-    }
-
-    return { details, overallCorrect, correctRaw: correctPys.join(' '), userRaw: userPys.join(' ') };
-  } catch (err) {
-    console.error('analyzePronunciation error', err);
-    return { error: '发音分析时发生错误' };
-  }
-}
-
-// ===================== 发音分析组件 =====================
-const DetailedPronunciationChecker = ({ correctWord, userText }) => {
+function splitSyllable(pinyin) { if (!pinyin) return { initial: '', final: '', tone: null, raw: '' }; const raw = pinyin.trim(); const toneMatch = raw.match(/([1-5])$/); const tone = toneMatch ? Number(toneMatch[1]) : null; const base = toneMatch ? raw.slice(0, -1) : raw; let initial = ''; for (const init of INITIALS.sort((a,b)=>b.length - a.length)) { if (base.startsWith(init)) { initial = init; break; } } const final = initial ? base.slice(initial.length) : base; return { initial, final, tone, raw }; }
+function toPinyinNumberArray(text) { if (!text) return []; try { const pinyinStr = pinyinConverter(text, { toneType: 'num', separator: ' ' }); return pinyinStr.split(/\s+/).filter(Boolean); } catch (err) { return []; } }
+function analyzePronunciation(correctWord, userText) { try { if (!correctWord) return null; const correctPys = toPinyinNumberArray(correctWord); const userPys = toPinyinNumberArray(userText); if (userPys.length === 0 && userText) { return { error: '无法解析您的发音', userRaw: userText }; } const length = Math.max(correctPys.length, userPys.length); let overallCorrect = true; const details = []; for (let i = 0; i < length; i++) { const c = splitSyllable(correctPys[i] || ''); const u = splitSyllable(userPys[i] || ''); const initialCorrect = c.initial === u.initial; const finalCorrect = c.final === u.final; const toneCorrect = c.tone === u.tone; if (!(initialCorrect && finalCorrect && toneCorrect)) overallCorrect = false; details.push({ correct: c, user: u, flags: { initialCorrect, finalCorrect, toneCorrect } }); } return { details, overallCorrect, correctRaw: correctPys.join(' '), userRaw: userPys.join(' ') }; } catch (err) { return { error: '发音分析时发生错误' }; } }
+const DetailedPronunciationChecker = ({ correctWord, userText, onCorrect }) => {
   const result = useMemo(() => analyzePronunciation(correctWord, userText), [correctWord, userText]);
-
-  useEffect(() => {
-    if (!result) return;
-    if (result.error) return;
-    (result.overallCorrect ? sounds.correct : sounds.incorrect).play();
-  }, [result]);
-
+  useEffect(() => { if (!result || result.error) return; (result.overallCorrect ? sounds.correct : sounds.incorrect).play(); if (result.overallCorrect && onCorrect) { const timer = setTimeout(() => onCorrect(), 1500); return () => clearTimeout(timer); } }, [result, onCorrect]);
   if (!result) return null;
-
-  return (
-    <div style={styles.pronunciationChecker} onClick={(e)=>e.stopPropagation()} data-no-flip="true">
-      <h3 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#1a202c' }}>发音分析</h3>
-      {result.error ? (
-        <p style={{ marginTop: 8, color: '#dc2626' }}>{result.error}</p>
-      ) : (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>标准发音:</span>
-            <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', color: '#16a34a', wordBreak: 'break-all' }}>
-              {result.correctRaw}
-            </span>
-          </div>
-          <div>
-            <span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>你的发音:</span>
-            <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', wordBreak: 'break-all' }}>
-              {result.details.map((d, idx) => {
-                // 显示：声母(红)/韵母(红)/声调(红) 的组合（错误时红色）
-                const initialColor = d.flags.initialCorrect ? '#1a202c' : '#dc2626';
-                const finalColor = d.flags.finalCorrect ? '#1a202c' : '#dc2626';
-                const toneColor = d.flags.toneCorrect ? '#1a202c' : '#dc2626';
-                return (
-                  <span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>
-                    <span style={{ color: initialColor }}>{d.user.initial}</span>
-                    <span style={{ color: finalColor }}>{d.user.final}</span>
-                    <sup style={{ marginLeft: 4, color: toneColor }}>{d.user.tone ?? ''}</sup>
-                  </span>
-                );
-              })}
-            </span>
-          </div>
-          {!result.overallCorrect && (
-            <p style={{ paddingTop: 8, color: '#ca8a04', borderTop: '1px solid #e2e8f0', marginTop: 8 }}>
-              提示：红色为不匹配项（声母/韵母/声调），请对比标准发音并重试。
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  return (<div style={styles.pronunciationChecker} onClick={(e)=>e.stopPropagation()} data-no-flip="true"><h3 style={{fontWeight:'bold',fontSize:'1.25rem'}}>发音分析</h3>{result.error?(<p style={{color:'#dc2626'}}>{result.error}</p>):(<div><div><span style={{fontWeight:600}}>标准:</span><span style={{fontWeight:'bold',color:'#16a34a'}}>{result.correctRaw}</span></div><div><span style={{fontWeight:600}}>你的:</span><span>{result.details.map((d,idx)=>(<span key={idx} style={{marginRight:10}}><span style={{color:d.flags.initialCorrect?'inherit':'#dc2626'}}>{d.user.initial}</span><span style={{color:d.flags.finalCorrect?'inherit':'#dc2626'}}>{d.user.final}</span><sup style={{color:d.flags.toneCorrect?'inherit':'#dc2626'}}>{d.user.tone??''}</sup></span>))}</span></div></div>)}</div>);
 };
+const TextWithPinyin = ({ text }) => { const pinyinResult = useMemo(() => { try { if (!text) return []; const resultFromLib = pinyinConverter(text, { segment: true, group: true }); if (!Array.isArray(resultFromLib)) { const whole = pinyinConverter(text, { separator: ' ' }); return [{ surface: text, pinyin: whole }]; } return resultFromLib.map(seg => (seg.type === 'other') ? { surface: seg.surface, pinyin: null } : { surface: seg.surface, pinyin: seg.pinyin.join(' ') }); } catch (error) { return [{ surface: text, pinyin: null }]; } }, [text]); return (<span>{pinyinResult.map((item, index) => (item.pinyin ? (<ruby key={index}><rt style={{fontSize:'0.8em'}}>{item.pinyin}</rt>{item.surface}</ruby>) : (<span key={index}>{item.surface}</span>)))}</span>);};
 
-// ===================== 带拼音的文本组件（展示用） =====================
-const TextWithPinyin = ({ text }) => {
-  const pinyinResult = useMemo(() => {
-    try {
-      if (typeof text !== 'string' || !text) return text ? [{ surface: text, pinyin: null }] : [];
-      // 使用 pinyin-pro 分词并得到拼音（带声调标记）
-      const resultFromLib = pinyinConverter(text, { toneType: 'mark', segment: true, group: true });
-      // resultFromLib 有时返回字符串或数组，兼容处理
-      if (!Array.isArray(resultFromLib)) {
-        // fallback：整个句子的拼音
-        const whole = pinyinConverter(text, { toneType: 'mark', separator: ' ' });
-        return [{ surface: text, pinyin: whole }];
-      }
-      return resultFromLib.map(segment => (segment.type === 'other') ? { surface: segment.surface, pinyin: null } : { surface: segment.surface, pinyin: segment.pinyin.join(' ') });
-    } catch (error) {
-      console.error("TextWithPinyin Error:", error, { text });
-      return [{ surface: text, pinyin: null }];
-    }
-  }, [text]);
 
-  return (
-    <span style={{ lineHeight: 2.2 }}>
-      {pinyinResult.map((item, index) => (item.pinyin ? (
-        <ruby key={index} style={{ margin: '0 2px' }}>
-          <rt style={{ fontSize: '0.8em', userSelect: 'none' }}>{item.pinyin}</rt>
-          {item.surface}
-        </ruby>
-      ) : (
-        <span key={index}>{item.surface}</span>
-      )))}
-    </span>
-  );
-};
-
-// ===================== 主组件 CiDianKa (V26) =====================
+// ===================== 主组件 CiDianKa =====================
 const CiDianKa = ({ flashcards = [] }) => {
   const processedCards = useMemo(() => {
     try {
       if (!Array.isArray(flashcards)) return [];
       return flashcards
-        .filter(card => card && typeof card === 'object' && typeof card.word === 'string' && card.word)
+        .filter(card => card && typeof card === 'object' && card.word)
         .map(card => ({ ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' }) }));
     } catch (error) {
-      console.error("CRITICAL ERROR processing 'flashcards':", error, flashcards);
+      console.error("Error processing flashcards:", error);
       return [];
     }
   }, [flashcards]);
 
-  const cards = processedCards.length > 0 ? processedCards : [{ word: "示例", pinyin: "shì lì", meaning: "数据加载中或为空...", example: "请检查数据源或稍后再试。" }];
+  const [playOrder, setPlayOrder] = useState(() => localStorage.getItem('cidianka_playOrder') || 'sequential');
+  const [displayedCards, setDisplayedCards] = useState([]);
+  
+  useEffect(() => {
+    let cardsToDisplay = [...processedCards];
+    if (playOrder === 'random') {
+      for (let i = cardsToDisplay.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cardsToDisplay[i], cardsToDisplay[j]] = [cardsToDisplay[j], cardsToDisplay[i]];
+      }
+    }
+    setDisplayedCards(cardsToDisplay);
+    setCurrentIndex(0);
+    localStorage.setItem('cidianka_playOrder', playOrder);
+  }, [processedCards, playOrder]);
+  
+  const cards = displayedCards.length > 0 ? displayedCards : [{ word: "示例", pinyin: "shì lì", meaning: "数据加载中...", example: "请检查数据源。" }];
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [writerChar, setWriterChar] = useState(null);
   const [adKey, setAdKey] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [backgroundImages, setBackgroundImages] = useState([]);
+  const [userBackgrounds, setUserBackgrounds] = useState([]);
   const [currentBg, setCurrentBg] = useState(() => getRandomGradient());
+  const allBackgrounds = useMemo(() => [...defaultBackgrounds, ...userBackgrounds], [userBackgrounds]);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const recognitionRef = useRef(null);
   const [swipeDirection, setSwipeDirection] = useState(1);
 
+  useEffect(() => {
+    try {
+      const cachedImages = JSON.parse(localStorage.getItem('cidianka_userBackgrounds') || '[]');
+      setUserBackgrounds(cachedImages);
+    } catch(e) {
+      localStorage.removeItem('cidianka_userBackgrounds');
+    }
+  }, []);
+
   const transitions = useTransition(currentIndex, {
-    from: { opacity: 0, transform: `translateX(${swipeDirection * 50}%) scale(0.8) rotateY(${-swipeDirection * 90}deg)` },
-    enter: { opacity: 1, transform: `translateX(0%) scale(1) rotateY(0deg)` },
-    leave: { opacity: 0, transform: `translateX(${-swipeDirection * 50}%) scale(0.8) rotateY(${swipeDirection * 90}deg)` },
+    from: { opacity: 0, transform: `translateX(${swipeDirection * 50}%) scale(0.8)` },
+    enter: { opacity: 1, transform: `translateX(0%) scale(1)` },
+    leave: { opacity: 0, transform: `translateX(${-swipeDirection * 50}%) scale(0.8)` },
     config: { mass: 1, tension: 210, friction: 20 },
-    onStart: () => { if (currentIndex !== 0) { sounds.switch.play(); } },
+    onStart: () => { if (currentIndex !== 0) sounds.switch.play(); },
     onRest: () => { setIsFlipped(false); setRecognizedText(''); },
   });
 
-  const navigate = (direction) => {
+  const navigate = useCallback((direction) => {
     setSwipeDirection(direction);
     setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
-  };
+  }, [cards.length]);
 
-  // 手势：分离 tap(翻转) 与 swipe(切换)
+  const handleCorrectPronunciation = useCallback(() => {
+    navigate(1);
+  }, [navigate]);
+
+  // 手势绑定
   const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx], tap, event }) => {
-    // tap -> 仅在非标记为 data-no-flip 元素时触发翻转
+    // 1. 处理点击翻转
     if (tap) {
-      if (event && event.target && event.target.closest && event.target.closest('[data-no-flip="true"]')) return;
-      if (recognizedText) return;
+      if (event.target.closest('[data-no-flip="true"]')) return;
+      if (recognizedText) {
+        setRecognizedText('');
+        return;
+      }
+      sounds.flip.play();
       setIsFlipped(prev => !prev);
       return;
     }
 
-    // swipe trigger: 更灵敏（根据你的反馈，这里提高灵敏度）
-    const trigger = (vx > 0.5) || (Math.abs(mx) > 70);
+    // 2. 处理滑动切换 (更高灵敏度)
+    // 当滑动速度 > 0.4 或 滑动距离 > 60px 时触发
+    const trigger = (vx > 0.4) || (Math.abs(mx) > 60);
     if (!down && trigger) {
-      const dir = xDir < 0 ? 1 : -1; // 左滑 xDir < 0 -> 下一张(1)
+      const dir = xDir < 0 ? 1 : -1; // 向左滑 (xDir为负) -> 下一张 (dir=1)
       if (isFlipped) {
-        // 如果背面打开，先合回正面再切换，给视觉连贯性
         setIsFlipped(false);
-        setTimeout(() => navigate(dir), 150);
+        setTimeout(() => navigate(dir), 150); // 先翻回去再切换
       } else {
         navigate(dir);
       }
     }
   });
 
-  // 前面自动朗读词（打开正面时）
+  // 自动朗读
   useEffect(() => {
     const currentCard = cards[currentIndex];
-    if (currentCard && !isFlipped) {
+    if (currentCard && !isFlipped && !isListening) {
       const timer = setTimeout(() => playTTS(currentCard.word), 600);
       return () => clearTimeout(timer);
     }
-  }, [currentIndex, isFlipped, cards]);
-
-  // 背面打开时朗读释义（短延迟）
-  useEffect(() => {
-    if (isFlipped) {
-      const currentCard = cards[currentIndex];
-      if (currentCard && currentCard.meaning) {
-        const timer = setTimeout(() => playTTS(currentCard.meaning), 400);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [isFlipped, currentIndex, cards]);
-
+  }, [currentIndex, isFlipped, cards, isListening]);
+  
   useEffect(() => {
     setAdKey(k => k + 1);
-    if (backgroundImages.length > 0) {
-      setCurrentBg(backgroundImages[Math.floor(Math.random() * backgroundImages.length)]);
+    if (allBackgrounds.length > 0) {
+      setCurrentBg(allBackgrounds[currentIndex % allBackgrounds.length]); // Use sequential bg for predictability
     } else {
       setCurrentBg(getRandomGradient());
     }
-  }, [currentIndex, backgroundImages]);
+  }, [currentIndex, allBackgrounds]);
 
   useEffect(() => {
-    return () => { if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch(e){}; recognitionRef.current = null; } };
+    return () => { recognitionRef.current?.stop(); };
   }, []);
 
-  // 语音识别
-  const handleListen = () => {
+  const handleListen = (e) => {
+    e.stopPropagation();
     if (isListening) { recognitionRef.current?.stop(); return; }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { alert('抱歉，您的浏览器不支持语音识别。'); return; }
     const recognition = new SpeechRecognition();
     recognition.lang = 'zh-CN';
+    recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
-    recognition.onstart = () => { setIsListening(true); setRecognizedText(''); };
+    recognition.onstart = () => setIsListening(true);
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript.trim().replace(/[.,。，]/g, '');
+      const confidence = event.results[0][0].confidence;
+      if (confidence < 0.4) {
+        setRecognizedText(`[识别不清: ${transcript}]`);
+        return;
+      }
       setRecognizedText(transcript);
     };
-    recognition.onerror = (event) => {
-      let errorMessage = `识别出错: ${event.error}`;
-      if (event.error === 'network') errorMessage = '网络错误';
-      else if (event.error === 'no-speech') errorMessage = '未检测到语音';
-      setRecognizedText(`[错误: ${errorMessage}]`);
-    };
+    recognition.onerror = (event) => setRecognizedText(`[错误: ${event.error}]`);
     recognition.onend = () => { setIsListening(false); recognitionRef.current = null; };
     recognition.start();
   };
 
-  // 处理背景图片上传
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files || []);
-    if (files.length > 0) {
-      const imageUrls = files.map(file => URL.createObjectURL(file));
-      setBackgroundImages(prev => [...prev, ...imageUrls]);
-      // 立刻设置当前背景为最新上传的第一张
-      setCurrentBg(imageUrls[0]);
-      setIsSettingsOpen(false);
-    }
+    if (files.length === 0) return;
+    const newImages = [];
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        newImages.push(e.target.result); // base64 string
+        if (newImages.length === files.length) {
+          const updatedImages = [...userBackgrounds, ...newImages];
+          setUserBackgrounds(updatedImages);
+          localStorage.setItem('cidianka_userBackgrounds', JSON.stringify(updatedImages));
+          setCurrentBg(newImages[0]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    setIsSettingsOpen(false);
   };
   const fileInputRef = useRef(null);
 
-  const handleScreenClick = (e) => {
-    if (recognizedText) {
-      e.stopPropagation();
-      setRecognizedText('');
+  const clearCachedImages = () => {
+    if (window.confirm('确定要清除所有您上传的背景图片吗？')) {
+      setUserBackgrounds([]);
+      localStorage.removeItem('cidianka_userBackgrounds');
     }
   };
 
-  // 背景渲染助手：支持 linear-gradient 或 图片 URL
   const getBgStyle = (bgValue) => {
     if (!bgValue) return {};
-    if (typeof bgValue === 'string' && bgValue.startsWith('linear-gradient')) {
-      return { backgroundImage: bgValue };
-    }
-    // 可能是 image url
+    if (bgValue.startsWith('linear-gradient')) return { backgroundImage: bgValue };
     return { backgroundImage: `url(${bgValue})` };
   };
 
@@ -386,10 +266,21 @@ const CiDianKa = ({ flashcards = [] }) => {
         <div style={styles.settingsModal} onClick={() => setIsSettingsOpen(false)}>
           <div style={styles.settingsContent} onClick={(e)=>e.stopPropagation()}>
             <button style={styles.closeButton} onClick={() => setIsSettingsOpen(false)}><FaTimes /></button>
-            <h3>自定义卡片背景</h3>
-            <p>上传的图片仅在您的浏览器中生效。</p>
-            <input type="file" multiple accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageUpload} />
-            <button style={styles.uploadButton} onClick={() => fileInputRef.current && fileInputRef.current.click()}><FaUpload /> 选择图片</button>
+            <h3>设置</h3>
+            <div style={styles.settingsGroup}>
+              <label style={styles.settingLabel}>单词顺序</label>
+              <div style={styles.radioGroup}>
+                <label style={{...styles.radioLabel, background: playOrder === 'sequential' ? '#eef2ff' : 'transparent'}}><input type="radio" name="playOrder" value="sequential" checked={playOrder === 'sequential'} onChange={(e) => setPlayOrder(e.target.value)} /> 按顺序</label>
+                <label style={{...styles.radioLabel, background: playOrder === 'random' ? '#eef2ff' : 'transparent'}}><input type="radio" name="playOrder" value="random" checked={playOrder === 'random'} onChange={(e) => setPlayOrder(e.target.value)} /> 随机单词</label>
+              </div>
+            </div>
+            <div style={styles.settingsGroup}>
+               <label style={styles.settingLabel}>自定义卡片背景</label>
+               <p style={{fontSize: '0.9rem', color: '#6b7280', margin: '0 0 10px'}}>上传的图片会缓存在您的浏览器中。</p>
+               <input type="file" multiple accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageUpload} />
+               <button style={styles.uploadButton} onClick={() => fileInputRef.current?.click()}><FaUpload /> 上传图片</button>
+               {userBackgrounds.length > 0 && <button style={{...styles.uploadButton, background: '#ef4444', marginTop: 10}} onClick={clearCachedImages}><FaTrash /> 清除缓存图片</button>}
+            </div>
           </div>
         </div>
       )}
@@ -401,54 +292,26 @@ const CiDianKa = ({ flashcards = [] }) => {
           return (
             <animated.div key={i} style={{ ...styles.animatedCardShell, ...style, zIndex: cards.length - i }}>
               <div style={styles.cardContainer}>
-                <div style={{ width: '100%', height: '100%', flex: 1 }} {...bind()} onClickCapture={handleScreenClick}>
+                <div style={{ width: '100%', height: '100%', flex: 1 }} {...bind()}>
                   <div style={{ ...styles.cardInner, transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
                     {/* 正面 */}
                     <div style={{ ...styles.face, ...backgroundStyle }}>
                       <div style={styles.glassOverlay}></div>
                       <div style={styles.mainContent}>
-                        <div style={styles.header}>
+                        <div>
                           <div style={styles.pinyin}>{cardData.pinyin}</div>
                           <div style={styles.hanzi}>{cardData.word}</div>
                         </div>
-                        {isListening && <div style={styles.listeningText}>正在听...</div>}
-                        {recognizedText && <DetailedPronunciationChecker correctWord={cardData.word} userText={recognizedText} />}
+                        {isListening && <div style={{color:'white', marginTop:10}}>正在听...</div>}
+                        {recognizedText && <DetailedPronunciationChecker correctWord={cardData.word} userText={recognizedText} onCorrect={handleCorrectPronunciation} />}
                       </div>
                     </div>
-
                     {/* 背面 */}
                     <div style={{ ...styles.face, ...styles.backFace }}>
                       <div style={styles.mainContent}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', color: '#2d3748', fontSize: '1.2rem' }}>
-                            <div style={{ flex: 1, paddingRight: 10 }}>
-                              <TextWithPinyin text={cardData.meaning} />
-                            </div>
-                            <FaVolumeUp
-                              data-no-flip="true"
-                              style={{ cursor: 'pointer', color: '#667eea' }}
-                              size={24}
-                              onPointerDown={(e) => { e.stopPropagation(); }}
-                              onClick={(e) => { e.stopPropagation(); playTTS(cardData.meaning, e); }}
-                              title="朗读释义"
-                            />
-                          </div>
-
-                          {cardData.example && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', color: '#4a5568', fontSize: '1.1rem', borderTop: '1px solid #ddd', paddingTop: 20 }}>
-                              <div style={{ flex: 1, paddingRight: 10 }}>
-                                <TextWithPinyin text={cardData.example} />
-                              </div>
-                              <FaVolumeUp
-                                data-no-flip="true"
-                                style={{ cursor: 'pointer', color: '#667eea' }}
-                                size={24}
-                                onPointerDown={(e) => { e.stopPropagation(); }}
-                                onClick={(e) => { e.stopPropagation(); playTTS(cardData.example, e); }}
-                                title="朗读例句"
-                              />
-                            </div>
-                          )}
+                          <div style={{fontSize: '1.4rem', textAlign: 'center'}}><TextWithPinyin text={cardData.meaning} /></div>
+                          {cardData.example && <div style={{fontSize: '1.2rem', color: '#4a5568', borderTop: '1px solid #ddd', paddingTop: 20, textAlign: 'center'}}><TextWithPinyin text={cardData.example} /></div>}
                         </div>
                         <AdComponent key={adKey + '_back'} />
                       </div>
@@ -458,10 +321,10 @@ const CiDianKa = ({ flashcards = [] }) => {
 
                 {/* 底部控制 */}
                 <div style={styles.footer}>
-                  <button style={styles.iconButton} onClick={() => setIsSettingsOpen(true)} title="设置" data-no-flip="true"><FaCog size={20} /></button>
-                  <button style={{ ...styles.button, background: isListening ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.1)' }} onClick={(e) => { e.stopPropagation(); handleListen(); }} data-no-flip="true"><FaMicrophone /> {isListening ? '停止' : '发音练习'}</button>
+                  <button style={styles.iconButton} onClick={(e) => {e.stopPropagation(); setIsSettingsOpen(true)}} title="设置" data-no-flip="true"><FaCog size={20} /></button>
+                  <button style={{ ...styles.button, background: isListening ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.1)' }} onClick={handleListen} data-no-flip="true"><FaMicrophone /> {isListening ? '停止' : '发音练习'}</button>
                   <button style={styles.iconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(cardData.word); }} title="笔顺" data-no-flip="true"><FaPenFancy size={20} /></button>
-                  <button style={styles.iconButton} onClick={(e) => { e.stopPropagation(); playTTS(cardData.word, e); }} title="朗读" data-no-flip="true"><FaVolumeUp size={20} /></button>
+                  <button style={styles.iconButton} onClick={(e) => {e.stopPropagation(); playTTS(isFlipped ? (cardData.example || cardData.meaning) : cardData.word, e);}} title="朗读" data-no-flip="true"><FaVolumeUp size={20} /></button>
                 </div>
 
                 <AdComponent key={adKey + '_front'} />
