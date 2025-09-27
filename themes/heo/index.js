@@ -4,18 +4,19 @@
  *  > 主题开发者 [tangly1024](https://github.com/tangly1024)
  *  1. 开启方式 在blog.config.js 将主题配置为 `HEO`
  *  2. 更多说明参考此[文档](https://docs.tangly1024.com/article/notionnext-heo)
- * 
- *  =============== 修改说明 ===============
- *  根据您的要求，已移除：
+ *
+ *  =============== V2 修改说明 ===============
+ *  根据您的要求，已修改：
+ *  1. 仅在首页显示页脚(Footer)，其他所有页面（文章、归档、404等）均不显示。
+ *
+ *  =============== V1 修改说明 ===============
+ *  已移除：
  *  1. 文章页顶栏背景图
  *  2. 上一篇、下一篇文章链接
  *  3. 分享按钮
  *  4. 版权说明
  *  5. 文章推荐、相关文章
  *  6. 404页面底部的最新文章
- * 
- *  未能修改：
- *  - “顶栏随机文章”按钮：此功能位于 Header 组件内部，需要直接修改 /themes/heo/components/Header.js 文件。
  */
 
 import Comment from '@/components/Comment'
@@ -25,7 +26,6 @@ import LazyImage from '@/components/LazyImage'
 import LoadingCover from '@/components/LoadingCover'
 import replaceSearchResult from '@/components/Mark'
 import NotionPage from '@/components/NotionPage'
-import ShareBar from '@/components/ShareBar'
 import WWAds from '@/components/WWAds'
 import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
@@ -43,13 +43,9 @@ import FloatTocButton from './components/FloatTocButton'
 import Footer from './components/Footer'
 import Header from './components/Header'
 import Hero from './components/Hero'
-import LatestPostsGroup from './components/LatestPostsGroup'
 import { NoticeBar } from './components/NoticeBar'
-import PostAdjacent from './components/PostAdjacent'
-import PostCopyright from './components/PostCopyright'
 import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
-import PostRecommend from './components/PostRecommend'
 import SearchNav from './components/SearchNav'
 import SideRight from './components/SideRight'
 import CONFIG from './config'
@@ -136,8 +132,8 @@ const LayoutBase = props => {
         </div>
       </main>
 
-      {/* 页脚 */}
-      <Footer />
+      {/* 页脚 (修改：仅在首页 '/' 显示页脚) */}
+      {router.route === '/' && <Footer />}
 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -329,16 +325,11 @@ const LayoutSlug = props => {
               </section>
 
               {/* 以下内容已根据您的要求移除 */}
-              {/* 上一篇\下一篇文章 */}
               {/* <PostAdjacent {...props} /> */}
-
-              {/* 分享 */}
               {/* <ShareBar post={post} /> */}
               {/* {post?.type === 'Post' && (
                 <div className='px-5'>
-
                   <PostCopyright {...props} />
-
                   <PostRecommend {...props} />
                 </div>
               )} */}
@@ -525,4 +516,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-    }
+                  }
