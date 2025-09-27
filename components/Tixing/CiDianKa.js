@@ -1,21 +1,22 @@
-// components/Tixing/CiDianKa.js (V21 - 终极稳定版 by Gemini)
+// components/Tixing/CiDianKa.js (V20 - 新发音分析版 by Gemini)
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaUpload } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaUpload, FaArrowRight } from 'react-icons/fa'; // 引入新图标
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 import AdComponent from '@/components/AdComponent';
 
 // ===================== 音效资源 =====================
+// 切换卡片音效
 const switchSound = new Howl({
-    src: ['/sounds/switch-card.mp3'], // 请确保音效文件存在
+    src: ['/sounds/switch-card.mp3'], // 请将音效文件放置在 public/sounds/ 目录下
     volume: 0.7
 });
 
-// ===================== 样式 (保持不变) =====================
+// ===================== 样式 (部分新增) =====================
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#e9eef3', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' },
     container: { position: 'relative', width: '92%', maxWidth: '900px', height: '86%', maxHeight: '720px' },
@@ -32,12 +33,26 @@ const styles = {
     footer: { display: 'flex', justifyContent: 'space-around', alignItems: 'center', gap: 12, marginTop: 'auto', paddingTop: 12, flexShrink: 0, background: 'rgba(255,255,255,0.1)', padding: '12px 28px', margin: '0 -28px -28px', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' },
     button: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' },
     iconButton: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '12px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px' },
+    nextButton: { position: 'absolute', bottom: '20px', right: '20px', background: 'rgba(0,0,0,0.08)', color: '#4a5568', border: 'none', borderRadius: '50%', width: '45px', height: '45px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' },
     uploadButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', padding: '15px', background: '#4299e1', color: 'white', border: 'none', borderRadius: '10px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '15px' },
-    recognitionResult: { marginTop: '15px', fontSize: '1.5rem', fontWeight: 'bold', textAlign: 'center', color: '#fff', textShadow: '1px 1px 2px rgba(0,0,0,0.2)' },
     listeningText: { color: 'rgba(255, 255, 255, 0.9)', fontSize: '1.2rem', marginTop: '10px', textShadow: '1px 1px 2px rgba(0,0,0,0.2)' },
+    // >>> 新增：发音分析器样式
+    pronunciationChecker: {
+        width: 'calc(100% - 20px)',
+        padding: '20px',
+        marginTop: '16px',
+        borderTop: '4px solid #3b82f6',
+        borderRadius: '12px',
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        boxShadow: '0 8px 20px rgba(0,0,0,0.1)',
+        color: '#1a202c',
+        zIndex: 2,
+    },
 };
 
 // ===================== TTS 管理 =====================
@@ -50,31 +65,73 @@ const playTTS = (text, e) => {
     _howlInstance.play();
 };
 
-// ===================== 辅助组件与函数 =====================
+// ===================== 新的发音分析组件 =====================
+const PronunciationChecker = ({ correctWord, userText }) => {
+    const result = useMemo(() => {
+        if (!userText || !correctWord) return null;
+        
+        if (userText.startsWith('[错误:')) {
+            return { error: userText.replace(/\[错误: |\]/g, '') };
+        }
 
-// (RecognitionResult and comparePinyin remain unchanged)
-const comparePinyin = (correctWord, userText) => { /* ... no changes ... */ };
-const RecognitionResult = ({ result }) => { /* ... no changes ... */ };
+        const correctPinyin = pinyinConverter(correctWord, { toneType: 'symbol' });
+        const userPinyin = pinyinConverter(userText, { toneType: 'symbol' });
 
-// <<< 关键修复：为 TextWithPinyin 组件增加对 pinyinConverter 库返回值的健壮性检查
+        return {
+            isCorrect: correctPinyin === userPinyin,
+            correctPinyin,
+            userPinyin,
+        };
+    }, [correctWord, userText]);
+
+    if (!result) return null;
+
+    if (result.error) {
+        return (
+            <div style={styles.pronunciationChecker}>
+                 <h3 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#dc2626' }}>识别错误</h3>
+                 <p style={{ marginTop: '8px', color: '#4a5568' }}>{result.error}</p>
+            </div>
+        )
+    }
+
+    return (
+        <div style={styles.pronunciationChecker}>
+            <h3 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#1a202c' }}>发音分析</h3>
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '600', width: '90px', color: '#4a5568' }}>标准发音:</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '1.5rem', fontWeight: 'bold', color: '#16a34a', wordBreak: 'break-all' }}>{result.correctPinyin}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '600', width: '90px', color: '#4a5568' }}>你的发音:</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '1.5rem', fontWeight: 'bold', color: result.isCorrect ? '#16a34a' : '#dc2626', wordBreak: 'break-all' }}>
+                        {result.userPinyin}
+                    </span>
+                </div>
+                {!result.isCorrect && (
+                    <p style={{ paddingTop: '8px', color: '#ca8a04', borderTop: '1px solid #e2e8f0', marginTop: '8px' }}>
+                        提示：请注意发音差异，并尝试模仿标准发音。
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ===================== 带拼音的文本组件 (保持不变) =====================
 const TextWithPinyin = ({ text }) => {
     const pinyinResult = useMemo(() => {
         if (!text) return [];
-
-        const resultFromLib = pinyinConverter(text, { segment: true, group: true });
-
-        // --- 安全检查 ---
-        if (!Array.isArray(resultFromLib)) {
-            console.error("pinyin-pro did not return an array for text:", text, "Received:", resultFromLib);
-            // 返回一个安全的回退值，直接显示原文，避免程序崩溃
-            return [{ surface: text, pinyin: null }];
-        }
-
-        return resultFromLib.map(segment => (
-            segment.type === 'other'
-                ? { surface: segment.surface, pinyin: null }
-                : { surface: segment.surface, pinyin: segment.pinyin.join(' ') }
-        ));
+        return pinyinConverter(text, { segment: true, group: true }).map(segment => {
+            if (segment.type === 'other') {
+                return { surface: segment.surface, pinyin: null };
+            }
+            return {
+                surface: segment.surface,
+                pinyin: segment.pinyin.join(' '),
+            };
+        });
     }, [text]);
 
     return (
@@ -82,7 +139,8 @@ const TextWithPinyin = ({ text }) => {
             {pinyinResult.map((item, index) => (
                 item.pinyin ? (
                     <ruby key={index} style={{ margin: '0 2px' }}>
-                        {item.surface}<rt style={{ fontSize: '0.8em', userSelect: 'none' }}>{item.pinyin}</rt>
+                        {item.surface}
+                        <rt style={{ fontSize: '0.8em', userSelect: 'none' }}>{item.pinyin}</rt>
                     </ruby>
                 ) : (
                     <span key={index}>{item.surface}</span>
@@ -92,158 +150,104 @@ const TextWithPinyin = ({ text }) => {
     );
 };
 
-// ===================== 主组件 CiDianKa (V21) =====================
-const CiDianKa = ({ flashcards = [] }) => { // 默认值设为 []，增加一层保护
-    
-    // <<< 关键修复：在处理 prop 的最开始就进行严格的数组验证
-    const processedCards = useMemo(() => {
-        if (!Array.isArray(flashcards)) {
-            // 在控制台打印错误，帮助追溯问题源头（例如API）
-            console.error("CiDianKa component received a non-array prop for 'flashcards'. Received:", flashcards);
-            return []; // 返回一个空数组，确保后续代码不会因 .map() 而崩溃
-        }
-        return flashcards.map(card => ({
-            ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' })
-        }));
-    }, [flashcards]);
 
-    const cards = processedCards.length > 0 ? processedCards : [{ word: "示例", pinyin: "shì lì", meaning: "这是一个示例卡片。", example: "如果看到此卡片，说明数据加载失败或为空。" }];
+// ===================== 主组件 CiDianKa (V20) =====================
+const CiDianKa = ({ flashcards = [] }) => {
+    const processedCards = useMemo(() => (Array.isArray(flashcards) ? flashcards : []).map(card => ({
+        ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' })
+    })), [flashcards]);
 
-    // --- 状态和 Hooks (大部分保持不变) ---
+    const cards = processedCards.length > 0 ? processedCards : [{ word: "示例", pinyin: "shì lì", meaning: "这是一个示例卡片。", example: "请点击左下角的设置按钮上传自定义背景图片。" }];
+
+    // --- 状态管理 ---
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
-    // ... 其他状态 ...
     const [writerChar, setWriterChar] = useState(null);
     const [adKey, setAdKey] = useState(0);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [backgroundImages, setBackgroundImages] = useState([]);
     const [currentBg, setCurrentBg] = useState(null);
     const [isListening, setIsListening] = useState(false);
-    const [recognitionResult, setRecognitionResult] = useState(null);
+    const [recognizedText, setRecognizedText] = useState(''); // <<< 修改：新的状态
     const recognitionRef = useRef(null);
 
-    const navigate = (direction) => {
-        setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
-    };
-    
+    // --- 动画与手势 ---
     const transitions = useTransition(currentIndex, {
         from: { opacity: 0, transform: `translateX(50%) scale(0.8) rotateY(-90deg)` },
         enter: { opacity: 1, transform: `translateX(0%) scale(1) rotateY(0deg)` },
         leave: { opacity: 0, transform: `translateX(-50%) scale(0.8) rotateY(90deg)` },
         config: { mass: 1, tension: 210, friction: 20 },
-        onStart: () => { if (currentIndex !== 0) { switchSound.play(); } },
-        onRest: () => { setIsFlipped(false); setRecognitionResult(null); },
+        onStart: () => {
+             if (currentIndex !== 0) {
+                switchSound.play();
+            }
+        },
+        onRest: () => {
+            setIsFlipped(false);
+            setRecognizedText(''); // <<< 修改：重置新状态
+        },
     });
+    
+    const navigate = (direction) => {
+        setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
+    };
 
     const bind = useDrag(({ down, movement: [mx], direction: [xDir], velocity: [vx], tap, event }) => {
-        if (tap && event.target.closest('button, svg, a, rt')) return;
-        if (tap) { setIsFlipped(prev => !prev); return; }
+        if (tap && event.target.closest('button, svg, a, rt')) {
+            return;
+        }
+        if (tap) {
+            setIsFlipped(prev => !prev);
+            return;
+        }
+        if (isFlipped) return;
+
         const trigger = vx > 0.2;
         if (!down && trigger) {
-            const dir = xDir < 0 ? 1 : -1;
-            if (isFlipped) {
-                setIsFlipped(false);
-                setTimeout(() => navigate(dir), 150);
-            } else {
-                navigate(dir);
-            }
+            navigate(xDir < 0 ? 1 : -1);
         }
     });
 
+    // --- 副作用 Hooks ---
     useEffect(() => {
         const currentCard = cards[currentIndex];
-        if (currentCard) {
+        if (currentCard && !isFlipped) {
             const timer = setTimeout(() => playTTS(currentCard.word), 600);
             return () => clearTimeout(timer);
         }
-    }, [currentIndex, cards]);
+    }, [currentIndex, isFlipped, cards]);
     
     useEffect(() => {
         setAdKey(k => k + 1);
         if (backgroundImages.length > 0) {
-            setCurrentBg(backgroundImages[Math.floor(Math.random() * backgroundImages.length)]);
+            const randomIndex = Math.floor(Math.random() * backgroundImages.length);
+            setCurrentBg(backgroundImages[randomIndex]);
         } else {
             setCurrentBg(null);
         }
     }, [currentIndex, backgroundImages]);
 
-    // --- 功能函数 (保持不变) ---
-    const handleListen = () => { /* ... no changes ... */ };
-    const handleImageUpload = (event) => { /* ... no changes ... */ };
-    const fileInputRef = useRef(null);
+    // 添加清理函数，以防组件卸载时语音识别仍在运行
+    useEffect(() => {
+        return () => {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+                recognitionRef.current = null;
+            }
+        };
+    }, []);
 
-    // --- 渲染 ---
-    // (渲染部分的 JSX 保持不变)
-    return (
-        <div style={styles.fullScreen}>
-            {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
-            {isSettingsOpen && (
-                <div style={styles.settingsModal} onClick={() => setIsSettingsOpen(false)}>
-                    {/* ... settings modal content ... */}
-                </div>
-            )}
-            <div style={styles.container}>
-                {transitions((style, i) => {
-                    const cardData = cards[i];
-                    if (!cardData) return null; // 增加一道额外的安全防线
-                    const backgroundStyle = currentBg 
-                        ? { backgroundImage: `url(${currentBg})` }
-                        : { backgroundImage: `linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)` };
+    // --- 功能函数 ---
+    const handleListen = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+            return;
+        }
 
-                    return (
-                        <animated.div style={{ ...styles.animatedCardShell, ...style, zIndex: cards.length - i }}>
-                           {/* ... card structure ... */}
-                            <div style={styles.cardContainer}>
-                                <div style={{ width: '100%', height: '100%', flex: 1 }} {...bind()}>
-                                    <div style={{...styles.cardInner, transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'}}>
-                                        {/* 正面 */}
-                                        <div style={{...styles.face, ...backgroundStyle}}>
-                                            <div style={styles.glassOverlay}></div>
-                                            <div style={styles.mainContent}>
-                                                <div style={styles.header}>
-                                                    <div style={styles.pinyin}>{cardData.pinyin}</div>
-                                                    <div style={styles.hanzi}>{cardData.word}</div>
-                                                </div>
-                                                {isListening && <div style={styles.listeningText}>正在听...</div>}
-                                                <RecognitionResult result={recognitionResult} />
-                                            </div>
-                                        </div>
-                                        {/* 背面 */}
-                                        <div style={{...styles.face, ...styles.backFace}}>
-                                            <div style={styles.mainContent}>
-                                                <div style={{...styles.header, marginBottom: '20px'}}>
-                                                    <div style={{...styles.pinyin, color: '#4a5568'}}>{cardData.pinyin}</div>
-                                                    <div style={{...styles.hanzi, color: '#1a202c'}}>{cardData.word}</div>
-                                                </div>
-                                                <div style={{color: '#2d3748', fontSize: '1.2rem', lineHeight: 1.6, textAlign: 'left', width: '100%'}}>
-                                                    <FaVolumeUp style={{cursor: 'pointer', marginRight: '8px', color: '#667eea'}} onClick={(e)=>playTTS(cardData.meaning, e)}/>
-                                                    <TextWithPinyin text={cardData.meaning} />
-                                                </div>
-                                                {cardData.example && <div style={{marginTop: '20px', fontSize: '1.1rem', color: '#4a5568', lineHeight: 1.6, textAlign: 'left', width: '100%'}}>
-                                                    <FaVolumeUp style={{cursor: 'pointer', marginRight: '8px', color: '#667eea'}} onClick={(e)=>playTTS(cardData.example, e)}/> 
-                                                    <TextWithPinyin text={cardData.example} />
-                                                </div>}
-                                                <AdComponent key={adKey + '_back'} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style={styles.footer}>
-                                    <button style={styles.iconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
-                                    <button style={{...styles.button, background: isListening ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,0,0.1)'}} onClick={handleListen}>
-                                        <FaMicrophone /> {isListening ? '停止' : '发音练习'}
-                                    </button>
-                                    <button style={styles.iconButton} onClick={() => setWriterChar(cardData.word)} title="笔顺"><FaPenFancy size={20} /></button>
-                                    <button style={styles.iconButton} onClick={(e) => playTTS(cardData.word, e)} title="朗读"><FaVolumeUp size={20} /></button>
-                                </div>
-                                <AdComponent key={adKey + '_front'} />
-                            </div>
-                        </animated.div>
-                    )
-                })}
-            </div>
-        </div>
-    );
-};
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('抱歉，您的浏览器不支持语音识别。请尝试使用Chrome浏览器。');
+            return;
+        }
 
-export default CiDianKa;
+        const recognition 
