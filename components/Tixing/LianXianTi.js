@@ -167,4 +167,4 @@ const LianXianTi = ({ title, columnA, columnB, pairs }) => {
   );
 };
 
-export default LianXianTi;```
+export default LianXianTi;
