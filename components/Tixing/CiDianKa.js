@@ -1,4 +1,4 @@
-// components/Tixing/CiDianKa.js (V28 - Polished & Fixed)
+// components/Tixing/CiDianKa.js (V29 - Final Animation & Logic Fixes)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -17,39 +17,27 @@ const sounds = {
 let _howlInstance = null;
 const playTTS = (text, onEndCallback, e) => {
   if (e && e.stopPropagation) e.stopPropagation();
-  if (!text) {
-    if (onEndCallback) onEndCallback();
-    return;
-  }
+  if (!text) { if (onEndCallback) onEndCallback(); return; }
   try { if (_howlInstance?.playing()) _howlInstance.stop(); } catch (err) {}
-  _howlInstance = new Howl({
-    src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`],
-    html5: true,
-    onend: onEndCallback,
-  });
+  _howlInstance = new Howl({ src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=-15`], html5: true, onend: onEndCallback });
   _howlInstance.play();
 };
 
 // ===================== 预设背景图 =====================
-const predefinedBackgrounds = [
-  '/images/dancibeijingtu-1.jpg',
-  '/images/dancibeijingtu-2.jpg',
-  '/images/dancibeijingtu-3.jpg',
-  '/images/dancibeijingtu-4.jpg',
-  '/images/dancibeijingtu-5.jpg',
-  '/images/dancibeijingtu-6.jpg',
-];
+const predefinedBackgrounds = ['/images/dancibeijingtu-1.jpg', '/images/dancibeijingtu-2.jpg', '/images/dancibeijingtu-3.jpg', '/images/dancibeijingtu-4.jpg', '/images/dancibeijingtu-5.jpg', '/images/dancibeijingtu-6.jpg', '/images/dancibeijingtu-7.jpg', '/images/dancibeijingtu-8.jpg', '/images/dancibeijingtu-9.jpg'];
 
-// ===================== 样式 =====================
+// ===================== 样式 (包含动画修改) =====================
 const styles = {
   fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#e9eef3', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' },
   container: { position: 'relative', width: '92%', maxWidth: '900px', height: '86%', maxHeight: '720px' },
   animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', perspective: '2500px' },
   cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column' },
-  cardInner: { position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 1s cubic-bezier(0.6, -0.28, 0.74, 1.55)' },
+  // 动画修改 1: 书本翻页效果
+  cardInner: { position: 'relative', width: '100%', height: '100%', transformStyle: 'preserve-3d', transition: 'transform 0.8s cubic-bezier(0.6, 0, 0.4, 1)', transformOrigin: 'left center' },
   face: { position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: '20px', color: '#1a202c', boxShadow: '0 30px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', padding: '28px', backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden' },
   glassOverlay: { position: 'absolute', inset: 0, background: 'rgba(255, 255, 255, 0.15)', backdropFilter: 'blur(8px) brightness(1.1)', WebkitBackdropFilter: 'blur(8px) brightness(1.1)', zIndex: 0 },
-  backFace: { transform: 'rotateY(180deg)', background: '#f0f2f5', justifyContent: 'center' },
+  // 动画修改 1.1: 背面需要设置不同的 transform-origin 才能正确翻转
+  backFace: { transform: 'rotateY(-180deg)', background: '#f0f2f5', justifyContent: 'center', transformOrigin: 'left center' },
   mainContent: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', position: 'relative', overflowY: 'auto', cursor: 'grab', padding: '10px', zIndex: 1 },
   header: { textAlign: 'center' },
   pinyin: { marginBottom: 6 },
@@ -72,74 +60,28 @@ const styles = {
 const INITIALS = ['zh','ch','sh','b','p','m','f','d','t','n','l','g','k','h','j','q','x','r','z','c','s','y','w'];
 function splitSyllable(pinyinWithToneNumeric) { if (!pinyinWithToneNumeric) return { initial: '', final: '', tone: null, raw: '' }; const raw = pinyinWithToneNumeric.trim(); const toneMatch = raw.match(/([1-5])$/); const tone = toneMatch ? Number(toneMatch[1]) : null; const base = toneMatch ? raw.slice(0, -1) : raw; let initial = ''; for (const init of INITIALS.sort((a,b)=>b.length - a.length)) { if (base.startsWith(init)) { initial = init; break; } } const final = initial ? base.slice(initial.length) : base; return { initial, final, tone, raw }; }
 function toPinyinNumberArray(chineseText) { if (!chineseText || typeof chineseText !== 'string') return []; try { const pinyinStr = pinyinConverter(chineseText, { toneType: 'num', heteronym: false, separator: ' ' }); return pinyinStr.split(/\s+/).filter(Boolean); } catch (err) { console.error('toPinyinNumberArray error', err); return []; } }
-function analyzePronunciation(correctWord, userText) { try { if (!correctWord) return null; const correctPys = toPinyinNumberArray(correctWord); const userPys = toPinyinNumberArray(userText); if (userPys.length === 0 && userText && userText.length > 0) { return { error: '无法解析您的发音为可比拼音，请尝试更清晰朗读或检查识别结果', userRaw: userText }; } const length = Math.max(correctPys.length, userPys.length); let overallCorrect = true; const details = []; for (let i = 0; i < length; i++) { const correctPy = correctPys[i] || ''; const userPy = userPys[i] || ''; const c = splitSyllable(correctPy); const u = splitSyllable(userPy); const initialCorrect = c.initial === u.initial; const finalCorrect = c.final === u.final; const toneCorrect = (c.tone === u.tone); if (!(initialCorrect && finalCorrect && toneCorrect)) overallCorrect = false; details.push({ correct: { raw: c.raw, initial: c.initial, final: c.final, tone: c.tone }, user: { raw: u.raw, initial: u.initial, final: u.final, tone: u.tone }, flags: { initialCorrect, finalCorrect, toneCorrect } }); } return { details, overallCorrect, correctRaw: correctPys.join(' '), userRaw: userPys.join(' ') }; } catch (err) { console.error('analyzePronunciation error', err); return { error: '发音分析时发生错误' }; } }
+function analyzePronunciation(correctWord, userText) { try { if (!correctWord) return null; const correctPys = toPinyinNumberArray(correctWord); const userPys = toPinyinNumberArray(userText); if (userPys.length === 0 && userText && userText.length > 0) { return { error: '无法解析您的发音为可比拼音', userRaw: userText }; } const length = Math.max(correctPys.length, userPys.length); let overallCorrect = true; const details = []; for (let i = 0; i < length; i++) { const correctPy = correctPys[i] || ''; const userPy = userPys[i] || ''; const c = splitSyllable(correctPy); const u = splitSyllable(userPy); const initialCorrect = c.initial === u.initial; const finalCorrect = c.final === u.final; const toneCorrect = (c.tone === u.tone); if (!(initialCorrect && finalCorrect && toneCorrect)) overallCorrect = false; details.push({ correct: { raw: c.raw, initial: c.initial, final: c.final, tone: c.tone }, user: { raw: u.raw, initial: u.initial, final: u.final, tone: u.tone }, flags: { initialCorrect, finalCorrect, toneCorrect } }); } return { details, overallCorrect, correctRaw: correctPys.join(' '), userRaw: userPys.join(' ') }; } catch (err) { console.error('analyzePronunciation error', err); return { error: '发音分析时发生错误' }; } }
 
 
-// ===================== 自定义 Hook: 管理设置 =====================
+// ===================== 自定义 Hook: 管理设置 - 无改动 =====================
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
       const savedSettings = localStorage.getItem('ciDianKaSettings');
-      const defaultSettings = {
-        order: 'sequential',
-        autoPlayFront: true,
-        autoPlayBack: true,
-        frontFontSize: '6rem',
-        frontColor: '#ffffff',
-        // 更新：使用更清晰的阴影效果代替描边
-        frontShadow: '1px 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7)',
-        backFontSize: '1.2rem',
-        backColor: '#2d3748',
-        backShadow: 'none',
-      };
+      const defaultSettings = { order: 'sequential', autoPlayFront: true, autoPlayBack: true, frontFontSize: '6rem', frontColor: '#ffffff', frontShadow: '1px 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7)', backFontSize: '1.2rem', backColor: '#2d3748', backShadow: 'none' };
       return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
-    } catch (error) {
-      console.error("Failed to load settings from localStorage", error);
-      return { order: 'sequential', autoPlayFront: true, autoPlayBack: true, frontFontSize: '6rem', frontColor: '#ffffff', frontShadow: '1px 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7)', backFontSize: '1.2rem', backColor: '#2d3748', backShadow: 'none' };
-    }
+    } catch (error) { console.error("Failed to load settings", error); return { order: 'sequential', autoPlayFront: true, autoPlayBack: true, frontFontSize: '6rem', frontColor: '#ffffff', frontShadow: '1px 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7)', backFontSize: '1.2rem', backColor: '#2d3748', backShadow: 'none' }; }
   });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('ciDianKaSettings', JSON.stringify(settings));
-    } catch (error) {
-      console.error("Failed to save settings to localStorage", error);
-    }
-  }, [settings]);
-
+  useEffect(() => { try { localStorage.setItem('ciDianKaSettings', JSON.stringify(settings)); } catch (error) { console.error("Failed to save settings", error); } }, [settings]);
   return [settings, setSettings];
 };
 
 // ===================== 发音分析组件 - 无改动 =====================
 const DetailedPronunciationChecker = ({ correctWord, userText, onCorrect }) => {
   const result = useMemo(() => analyzePronunciation(correctWord, userText), [correctWord, userText]);
-  useEffect(() => {
-    if (!result || result.error) return;
-    if (result.overallCorrect) {
-      sounds.correct.play();
-      const timer = setTimeout(() => { onCorrect(); }, 800);
-      return () => clearTimeout(timer);
-    } else {
-      sounds.incorrect.play();
-    }
-  }, [result, onCorrect]);
+  useEffect(() => { if (!result || result.error) return; if (result.overallCorrect) { sounds.correct.play(); const timer = setTimeout(() => { onCorrect(); }, 800); return () => clearTimeout(timer); } else { sounds.incorrect.play(); } }, [result, onCorrect]);
   if (!result) return null;
-  return (
-    <div style={styles.pronunciationChecker} onClick={(e)=>e.stopPropagation()} data-no-flip="true">
-       <h3 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#1a202c' }}>发音分析</h3>
-      {result.error ? (<p style={{ marginTop: 8, color: '#dc2626' }}>{result.error}</p>) : (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div><span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>标准发音:</span><span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', color: '#16a34a', wordBreak: 'break-all' }}>{result.correctRaw}</span></div>
-          <div><span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>你的发音:</span><span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', wordBreak: 'break-all' }}>
-              {result.details.map((d, idx) => {
-                const initialColor = d.flags.initialCorrect ? '#1a202c' : '#dc2626'; const finalColor = d.flags.finalCorrect ? '#1a202c' : '#dc2626'; const toneColor = d.flags.toneCorrect ? '#1a202c' : '#dc2626';
-                return (<span key={idx} style={{ display: 'inline-block', marginRight: 10 }}><span style={{ color: initialColor }}>{d.user.initial}</span><span style={{ color: finalColor }}>{d.user.final}</span><sup style={{ marginLeft: 4, color: toneColor }}>{d.user.tone ?? ''}</sup></span>);
-              })}</span></div>
-          {!result.overallCorrect && (<p style={{ paddingTop: 8, color: '#ca8a04', borderTop: '1px solid #e2e8f0', marginTop: 8 }}>提示：红色为不匹配项（声母/韵母/声调），请对比标准发音并重试。</p>)}
-        </div>
-      )}
-    </div>
-  );
+  return (<div style={styles.pronunciationChecker} onClick={(e)=>e.stopPropagation()} data-no-flip="true"><h3 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: '#1a202c' }}>发音分析</h3>{result.error?(<p style={{ marginTop: 8, color: '#dc2626' }}>{result.error}</p>):(<div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}><div><span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>标准发音:</span><span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', color: '#16a34a', wordBreak: 'break-all' }}>{result.correctRaw}</span></div><div><span style={{ fontWeight: 600, width: 90, color: '#4a5568', display: 'inline-block' }}>你的发音:</span><span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: 'bold', wordBreak: 'break-all' }}>{result.details.map((d, idx) => { const iColor = d.flags.initialCorrect ? '#1a202c' : '#dc2626'; const fColor = d.flags.finalCorrect ? '#1a202c' : '#dc2626'; const tColor = d.flags.toneCorrect ? '#1a202c' : '#dc2626'; return (<span key={idx} style={{ display: 'inline-block', marginRight: 10 }}><span style={{ color: iColor }}>{d.user.initial}</span><span style={{ color: fColor }}>{d.user.final}</span><sup style={{ marginLeft: 4, color: tColor }}>{d.user.tone ?? ''}</sup></span>); })}</span></div>{!result.overallCorrect && (<p style={{ paddingTop: 8, color: '#ca8a04', borderTop: '1px solid #e2e8f0', marginTop: 8 }}>提示：红色为不匹配项，请重试。</p>)}</div>)}</div>);
 };
 
 // ===================== 带拼音的文本组件 - 无改动 =====================
@@ -155,36 +97,38 @@ const TextWithPinyin = ({ text, style }) => {
   return (<span style={{ lineHeight: 2.2, ...style }}>{pinyinResult.map((item, index) => (item.pinyin ? (<ruby key={index} style={{ margin: '0 2px' }}><rt style={{ fontSize: '0.8em', userSelect: 'none' }}>{item.pinyin}</rt>{item.surface}</ruby>) : (<span key={index}>{item.surface}</span>)))}</span>);
 };
 
+// ===================== 新增: 智能文本渲染器 =====================
+const SmartTextRenderer = ({ text, style }) => {
+  if (typeof text !== 'string' || !text) return null;
+  // 正则表达式检测文本中是否含有中文字符
+  const containsChinese = /[\u4e00-\u9fa5]/.test(text);
+  
+  if (containsChinese) {
+    return <TextWithPinyin text={text} style={style} />;
+  }
+  
+  // 如果不含中文，直接渲染普通文本
+  return <span style={{...style, lineHeight: 1.6 }}>{text}</span>;
+};
+
+
 // ===================== 设置面板组件 - 无改动 =====================
 const SettingsPanel = ({ settings, setSettings, onBgUpload, onClose }) => {
   const fileInputRef = useRef(null);
   const handleImageUpload = (event) => { const files = Array.from(event.target.files || []); if (files.length > 0) { onBgUpload(files); onClose(); } };
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
-  return (
-    <div style={styles.settingsModal} onClick={onClose}>
-      <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
-        <button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>设置</h2>
-        <div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.button, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.button, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div>
-        <div style={styles.settingGroup}><label style={styles.settingLabel}>自动朗读</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayFront} onChange={(e) => handleSettingChange('autoPlayFront', e.target.checked)} /> 正面</label><label><input type="checkbox" checked={settings.autoPlayBack} onChange={(e) => handleSettingChange('autoPlayBack', e.target.checked)} /> 背面</label></div></div>
-        <div style={styles.settingGroup}><label style={styles.settingLabel}>卡片背景</label><input type="file" multiple accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageUpload} /><button style={{...styles.button, width: '100%', justifyContent: 'center'}} onClick={() => fileInputRef.current?.click()}><FaUpload /> 从本地上传图片</button></div>
-        <div style={styles.settingGroup}><label style={styles.settingLabel}>正面样式</label><div style={{...styles.settingControl, flexDirection: 'column', alignItems: 'stretch'}}><input type="text" value={settings.frontFontSize} onChange={e => handleSettingChange('frontFontSize', e.target.value)} placeholder="字体大小 (e.g., 6rem)" style={styles.settingInput} /><input type="text" value={settings.frontColor} onChange={e => handleSettingChange('frontColor', e.target.value)} placeholder="颜色 (e.g., #ffffff)" style={styles.settingInput} /><input type="text" value={settings.frontShadow} onChange={e => handleSettingChange('frontShadow', e.target.value)} placeholder="文字描边/阴影" style={styles.settingInput} /></div></div>
-        <div style={styles.settingGroup}><label style={styles.settingLabel}>背面样式</label><div style={{...styles.settingControl, flexDirection: 'column', alignItems: 'stretch'}}><input type="text" value={settings.backFontSize} onChange={e => handleSettingChange('backFontSize', e.target.value)} placeholder="字体大小 (e.g., 1.2rem)" style={styles.settingInput} /><input type="text" value={settings.backColor} onChange={e => handleSettingChange('backColor', e.target.value)} placeholder="颜色 (e.g., #2d3748)" style={styles.settingInput} /><input type="text" value={settings.backShadow} onChange={e => handleSettingChange('backShadow', e.target.value)} placeholder="文字描边/阴影" style={styles.settingInput} /></div></div>
-      </div>
-    </div>
-  );
+  return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.button, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.button, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动朗读</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayFront} onChange={(e) => handleSettingChange('autoPlayFront', e.target.checked)} /> 正面</label><label><input type="checkbox" checked={settings.autoPlayBack} onChange={(e) => handleSettingChange('autoPlayBack', e.target.checked)} /> 背面</label></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>卡片背景</label><input type="file" multiple accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageUpload} /><button style={{...styles.button, width: '100%', justifyContent: 'center'}} onClick={() => fileInputRef.current?.click()}><FaUpload /> 从本地上传图片</button></div><div style={styles.settingGroup}><label style={styles.settingLabel}>正面样式</label><div style={{...styles.settingControl, flexDirection: 'column', alignItems: 'stretch'}}><input type="text" value={settings.frontFontSize} onChange={e => handleSettingChange('frontFontSize', e.target.value)} placeholder="字体大小" style={styles.settingInput} /><input type="text" value={settings.frontColor} onChange={e => handleSettingChange('frontColor', e.target.value)} placeholder="颜色" style={styles.settingInput} /><input type="text" value={settings.frontShadow} onChange={e => handleSettingChange('frontShadow', e.target.value)} placeholder="文字阴影" style={styles.settingInput} /></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>背面样式</label><div style={{...styles.settingControl, flexDirection: 'column', alignItems: 'stretch'}}><input type="text" value={settings.backFontSize} onChange={e => handleSettingChange('backFontSize', e.target.value)} placeholder="字体大小" style={styles.settingInput} /><input type="text" value={settings.backColor} onChange={e => handleSettingChange('backColor', e.target.value)} placeholder="颜色" style={styles.settingInput} /><input type="text" value={settings.backShadow} onChange={e => handleSettingChange('backShadow', e.target.value)} placeholder="文字阴影" style={styles.settingInput} /></div></div></div></div>);
 };
 
 
-// ===================== 主组件 CiDianKa (V28) =====================
+// ===================== 主组件 CiDianKa (V29) =====================
 const CiDianKa = ({ flashcards = [] }) => {
   const [settings, setSettings] = useCardSettings();
   
   const processedCards = useMemo(() => {
     try {
       if (!Array.isArray(flashcards)) return [];
-      const validCards = flashcards
-        .filter(card => card && typeof card === 'object' && typeof card.word === 'string' && card.word)
-        .map(card => ({ ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' }) }));
+      const validCards = flashcards.filter(card => card && typeof card.word === 'string' && card.word).map(card => ({ ...card, pinyin: card.pinyin || pinyinConverter(card.word, { toneType: 'mark', separator: ' ' }) }));
       if (settings.order === 'random') { for (let i = validCards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; } }
       return validCards;
     } catch (error) { console.error("CRITICAL ERROR processing 'flashcards':", error, flashcards); return []; }
@@ -202,21 +146,19 @@ const CiDianKa = ({ flashcards = [] }) => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const recognitionRef = useRef(null);
-  const [swipeDirection, setSwipeDirection] = useState(1);
-  // 新增：用于存储自动播放计时器的引用
   const autoPlayTimerRef = useRef(null);
 
   const navigate = useCallback((direction) => {
-    setSwipeDirection(direction);
     setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
   }, [cards.length]);
 
+  // 动画修改 2: 切换单词动画改为“背景到前景”
   const transitions = useTransition(currentIndex, {
-    from: { opacity: 0, transform: `translateX(${swipeDirection * 60}%) scale(0.8) rotateY(${-swipeDirection * 45}deg)` },
-    enter: { opacity: 1, transform: `translateX(0%) scale(1) rotateY(0deg)` },
-    leave: { opacity: 0, transform: `translateX(${-swipeDirection * 60}%) scale(0.8) rotateY(${swipeDirection * 45}deg)` },
-    config: { mass: 1, tension: 210, friction: 20 },
-    onStart: () => { if (currentIndex !== 0 || swipeDirection !== 1) { sounds.switch.play(); } },
+    from: { opacity: 0, transform: 'scale(0.8)' },
+    enter: { opacity: 1, transform: 'scale(1)' },
+    leave: { opacity: 0, transform: 'scale(0.8)', position: 'absolute' },
+    config: { mass: 1, tension: 280, friction: 25 },
+    onStart: () => { sounds.switch.play(); },
     onRest: () => { setIsFlipped(false); setRecognizedText(''); },
   });
 
@@ -227,48 +169,30 @@ const CiDianKa = ({ flashcards = [] }) => {
       setIsFlipped(prev => !prev);
       return;
     }
-    const trigger = vx > 0.4 && Math.abs(mx) > 60;
+    const trigger = vx > 0.3 && Math.abs(mx) > 50;
     if (!down && trigger) {
       const dir = xDir < 0 ? 1 : -1;
       if (isFlipped) { setIsFlipped(false); setTimeout(() => navigate(dir), 150); } else { navigate(dir); }
     }
   });
 
-  // 正面自动朗读
+  // 正面/背面自动朗读逻辑 - 无改动
   useEffect(() => {
     const currentCard = cards[currentIndex];
-    if (settings.autoPlayFront && currentCard && !isFlipped) {
-      const timer = setTimeout(() => playTTS(currentCard.word), 600);
-      return () => clearTimeout(timer);
-    }
+    if (settings.autoPlayFront && currentCard && !isFlipped) { const timer = setTimeout(() => playTTS(currentCard.word), 600); return () => clearTimeout(timer); }
   }, [currentIndex, isFlipped, cards, settings.autoPlayFront]);
-
-  // 背面自动朗读 (释义 + 例句)
   useEffect(() => {
-    // 清除上一个计时器，以防状态变化过快
     clearTimeout(autoPlayTimerRef.current);
     if (settings.autoPlayBack && isFlipped) {
       const currentCard = cards[currentIndex];
-      if (currentCard) {
-        const playExample = () => { if (currentCard.example) { playTTS(currentCard.example); } };
-        autoPlayTimerRef.current = setTimeout(() => playTTS(currentCard.meaning, playExample), 400);
-      }
+      if (currentCard) { const playExample = () => { if (currentCard.example) { playTTS(currentCard.example); } }; autoPlayTimerRef.current = setTimeout(() => playTTS(currentCard.meaning, playExample), 400); }
     }
     return () => clearTimeout(autoPlayTimerRef.current);
   }, [isFlipped, currentIndex, cards, settings.autoPlayBack]);
 
-  // 切换背景
-  useEffect(() => {
-    setAdKey(k => k + 1);
-    if (backgroundImages.length > 0) {
-      setCurrentBg(backgroundImages[Math.floor(Math.random() * backgroundImages.length)]);
-    }
-  }, [currentIndex, backgroundImages]);
-
-  // 语音识别
-  useEffect(() => {
-    return () => { if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch(e){}; recognitionRef.current = null; } };
-  }, []);
+  // 其他 Hooks - 无改动
+  useEffect(() => { setAdKey(k => k + 1); if (backgroundImages.length > 0) { setCurrentBg(backgroundImages[Math.floor(Math.random() * backgroundImages.length)]); } }, [currentIndex, backgroundImages]);
+  useEffect(() => { return () => { if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch(e){}; recognitionRef.current = null; } }; }, []);
 
   const handleListen = (e) => {
     e.stopPropagation();
@@ -286,24 +210,14 @@ const CiDianKa = ({ flashcards = [] }) => {
     recognitionRef.current = recognition;
   };
   
-  // 新增：手动播放处理函数，用于解决冲突
   const handleManualPlay = (text, e) => {
     e.stopPropagation();
-    // 立即取消任何待处理的自动播放
     clearTimeout(autoPlayTimerRef.current);
     playTTS(text);
   };
 
-  const handleImageUpload = (files) => {
-    const imageUrls = files.map(file => URL.createObjectURL(file));
-    setBackgroundImages(prev => [...prev, ...imageUrls]);
-    setCurrentBg(imageUrls[0]);
-  };
-
-  const handleCorrectPronunciation = useCallback(() => {
-    setTimeout(() => navigate(1), 300);
-  }, [navigate]);
-
+  const handleImageUpload = (files) => { const imageUrls = files.map(file => URL.createObjectURL(file)); setBackgroundImages(prev => [...prev, ...imageUrls]); setCurrentBg(imageUrls[0]); };
+  const handleCorrectPronunciation = useCallback(() => { setTimeout(() => navigate(1), 300); }, [navigate]);
   const getBgStyle = (bgValue) => ({ backgroundImage: `url(${bgValue})` });
 
   // 动态样式
@@ -322,12 +236,13 @@ const CiDianKa = ({ flashcards = [] }) => {
           if (!cardData) return null;
           const backgroundStyle = getBgStyle(currentBg);
           return (
-            <animated.div key={i} style={{ ...styles.animatedCardShell, ...style, zIndex: cards.length - i }}>
+            <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
               <div style={styles.cardContainer}>
                 <div style={{ width: '100%', height: '100%', flex: 1 }} {...bind()} onClickCapture={e => recognizedText && setRecognizedText('')}>
-                  <div style={{ ...styles.cardInner, transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
+                  {/* 动画修改 1.2: 翻转变换从 rotateY(180deg) 改为 rotateY(-180deg) 以匹配左侧轴心 */}
+                  <div style={{ ...styles.cardInner, transform: isFlipped ? 'rotateY(-180deg)' : 'rotateY(0deg)' }}>
                     {/* 正面 */}
-                    <div style={{ ...styles.face, ...backgroundStyle }}>
+                    <div style={{ ...styles.face, ...backgroundStyle, transformOrigin: 'left center' }}>
                       <div style={styles.glassOverlay}></div>
                       <div style={styles.mainContent}><div style={styles.header}><div style={pinyinStyle}>{cardData.pinyin}</div><div style={hanziStyle}>{cardData.word}</div></div>{isListening && <div style={styles.listeningText}>正在听...</div>}{recognizedText && <DetailedPronunciationChecker correctWord={cardData.word} userText={recognizedText} onCorrect={handleCorrectPronunciation} />}</div>
                     </div>
@@ -337,15 +252,17 @@ const CiDianKa = ({ flashcards = [] }) => {
                       <div style={styles.mainContent}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <div style={{ flex: 1, paddingRight: 10 }}><TextWithPinyin text={cardData.meaning} style={backTextStyle} /></div>
-                            {/* 更新：使用新的 handleManualPlay 函数并添加 onPointerDown */}
-                            <FaVolumeUp data-no-flip="true" style={{ cursor: 'pointer', color: '#667eea', flexShrink: 0 }} size={24} onPointerDown={e => e.stopPropagation()} onClick={(e) => handleManualPlay(cardData.meaning, e)} title="朗读释义" />
+                            {/* 更新: 使用 SmartTextRenderer */}
+                            <div style={{ flex: 1, paddingRight: 10 }}><SmartTextRenderer text={cardData.meaning} style={backTextStyle} /></div>
+                            {/* 修复: 添加 onClickCapture 阻止翻页 */}
+                            <FaVolumeUp data-no-flip="true" style={{ cursor: 'pointer', color: '#667eea', flexShrink: 0 }} size={24} onPointerDown={e => e.stopPropagation()} onClickCapture={e => e.stopPropagation()} onClick={(e) => handleManualPlay(cardData.meaning, e)} title="朗读释义" />
                           </div>
                           {cardData.example && (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', borderTop: '1px solid #ddd', paddingTop: 20 }}>
-                              <div style={{ flex: 1, paddingRight: 10 }}><TextWithPinyin text={cardData.example} style={backTextStyle} /></div>
-                               {/* 更新：使用新的 handleManualPlay 函数并添加 onPointerDown */}
-                              <FaVolumeUp data-no-flip="true" style={{ cursor: 'pointer', color: '#667eea', flexShrink: 0 }} size={24} onPointerDown={e => e.stopPropagation()} onClick={(e) => handleManualPlay(cardData.example, e)} title="朗读例句" />
+                              {/* 更新: 使用 SmartTextRenderer */}
+                              <div style={{ flex: 1, paddingRight: 10 }}><SmartTextRenderer text={cardData.example} style={backTextStyle} /></div>
+                               {/* 修复: 添加 onClickCapture 阻止翻页 */}
+                              <FaVolumeUp data-no-flip="true" style={{ cursor: 'pointer', color: '#667eea', flexShrink: 0 }} size={24} onPointerDown={e => e.stopPropagation()} onClickCapture={e => e.stopPropagation()} onClick={(e) => handleManualPlay(cardData.example, e)} title="朗读例句" />
                             </div>
                           )}
                         </div>
