@@ -1,4 +1,4 @@
-// components/Tixing/PanDuanTi.js (V1 - 万能判断题)
+// components/Tixing/PanDuanTi.js (V2 - 已修复编译错误)
 
 import React, { useState, useEffect } from 'react';
 import { Howl } from 'howler';
@@ -23,14 +23,15 @@ const styles = {
   disabledButton: { cursor: 'default', opacity: 0.7 },
   selectedCorrect: { transform: 'scale(1.1)', boxShadow: '0 0 20px #22c55e' },
   selectedIncorrect: { transform: 'scale(1.1)', boxShadow: '0 0 20px #ef4444' },
-  feedbackContainer: { marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  feedbackBox: { padding: '14px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
+  feedbackContainer: { marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' },
+  feedbackBox: { width: '100%', padding: '14px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
   feedbackCorrect: { backgroundColor: '#dcfce7', color: '#166534' },
   feedbackIncorrect: { backgroundColor: '#fee2e2', color: '#991b1b' },
-  explanationBox: { backgroundColor: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '10px', border: '1px solid #fcd34d', textAlign: 'left', fontSize: '0.95rem', lineHeight: '1.6' },
+  explanationBox: { width: '100%', backgroundColor: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '10px', border: '1px solid #fcd34d', textAlign: 'left', fontSize: '0.95rem', lineHeight: '1.6' },
+  submitButton: { width: '80%', padding: '14px', borderRadius: '12px', border: 'none', color: 'white', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }
 };
 
-// --- 音效 & TTS ---
+// --- 音效 ---
 let sounds = {
   correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 1.0 }),
   incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }),
@@ -39,7 +40,7 @@ const playSound = (name) => sounds[name]?.play();
 
 // --- 主组件 ---
 const PanDuanTi = ({ question, isCorrect, aiExplanation }) => {
-  const [userAnswer, setUserAnswer] = useState(null); // null, true, or false
+  const [userAnswer, setUserAnswer] = useState(null);
   const [showExplanation, setShowExplanation] = useState(false);
 
   const hasAnswered = userAnswer !== null;
@@ -100,7 +101,11 @@ const PanDuanTi = ({ question, isCorrect, aiExplanation }) => {
 
       {hasAnswered && (
         <div style={styles.feedbackContainer}>
-            <div style={isAnswerCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect} style={{...styles.feedbackBox, ...(isAnswerCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect)}}>
+            {/* 【核心修复】合并了两个 style 属性 */}
+            <div style={{
+              ...styles.feedbackBox, 
+              ...(isAnswerCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect)
+            }}>
                 {isAnswerCorrect ? '回答正确！' : '回答错误！'}
             </div>
 
@@ -113,7 +118,7 @@ const PanDuanTi = ({ question, isCorrect, aiExplanation }) => {
                     <FaLightbulb /> {showExplanation ? '隐藏解析' : '查看解析'}
                 </button>
             )}
-            {showExplanation && aiExplanation && (
+            {showExplanation && aiExplanation && isAnswerCorrect && (
                  <div style={styles.explanationBox}>{aiExplanation}</div>
             )}
             
