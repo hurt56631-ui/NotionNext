@@ -1,15 +1,16 @@
 // components/VideoEmbed.js
 import React from 'react';
-// 【已修改】将 'react-player/lazy' 改为 'react-player' 以适配 v3 版本
 import ReactPlayer from 'react-player';
 
 /**
  * VideoEmbed - 一个简单安全、响应式的 react-player 封装
+ * 已根据 react-player v3 迁移指南进行修正
  */
 export default function VideoEmbed({
   url,
   controls = true,
-  light = false,
+  // 【已移除】'light' 属性在 v3 中有重大变更，为避免冲突，暂时移除。
+  // light = false, 
   playing = false,
   muted = false,
   aspectRatio = '56.25%', // 16:9
@@ -38,7 +39,8 @@ export default function VideoEmbed({
         height="100%"
         style={playerStyle}
         controls={controls}
-        light={light}
+        // 【已移除】不再传递 light 属性，让播放器使用 v3 的默认行为。
+        // light={light}
         playing={playing}
         muted={muted}
         config={{
