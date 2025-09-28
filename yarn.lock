@@ -6946,6 +6946,11 @@ react-tweet-embed@~2.0.0:
   resolved "https://registry.npmmirror.com/react-tweet-embed/-/react-tweet-embed-2.0.0.tgz"
   integrity sha512-g2kfPjSRTOKeJtaQF5EMuSTmp/q8I0qdDs/pZ2qLXZjCWExDT/JgjxSlyM65NyNzsz8072PDpvlO/sIXwwVpdQ==
 
+react-virtualized-auto-sizer@^1.0.26:
+  version "1.0.26"
+  resolved "https://registry.yarnpkg.com/react-virtualized-auto-sizer/-/react-virtualized-auto-sizer-1.0.26.tgz#e9470ef6a778dc4f1d5fd76305fa2d8b610c357a"
+  integrity sha512-CblNyiNVw2o+hsa5/49NH2ogGxZ+t+3aweRvNSq7TVjDIlwk7ir4lencEg5HxHeSzwNarSkNkiu0qJSOXtxm5A==
+
 react-window@^2.1.2:
   version "2.1.2"
   resolved "https://registry.yarnpkg.com/react-window/-/react-window-2.1.2.tgz#f18900ab9e60a7c6549e670cded4845f656ae382"
