@@ -1,4 +1,3 @@
-// themes/heo/components/PostItem.js
 import React, { forwardRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
@@ -124,7 +123,8 @@ function PostItemInner(props, ref) {
         </div>
       </div>
 
-      <Link href={`/forum/post/${post.id}`} passHref>
+      {/*【已修改】将 href 中的 /forum/post/ 改为 /community/ */}
+      <Link href={`/community/${post.id}`} passHref>
         <a className="space-y-2 block my-3">
           <h2 className="text-lg font-bold hover:text-blue-500 dark:text-gray-100">{post.title}</h2>
 
@@ -137,7 +137,8 @@ function PostItemInner(props, ref) {
       </Link>
 
       {videoId && (
-        <Link href={`/forum/post/${post.id}`} passHref>
+        /*【已修改】将 href 中的 /forum/post/ 改为 /community/ */
+        <Link href={`/community/${post.id}`} passHref>
           <a className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group mt-2 block">
             <img
               src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
@@ -165,7 +166,8 @@ function PostItemInner(props, ref) {
           <i className="far fa-thumbs-down text-lg" />
         </button>
 
-        <Link href={`/forum/post/${post.id}#comments`} passHref>
+        {/*【已修改】将 href 中的 /forum/post/ 改为 /community/ */}
+        <Link href={`/community/${post.id}#comments`} passHref>
           <a className="flex items-center space-x-2 hover:text-green-500 transition-colors" aria-label="评论">
             <i className="far fa-comment-dots text-lg" />
             <span className="text-sm font-semibold">{post.commentCount || 0}</span>
