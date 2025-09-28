@@ -8,7 +8,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
 // 确保所有在客户端渲染的组件都使用 dynamic import 和 ssr: false
-const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
+const PostItem = dynamic(() => import('@/themes/heo/components/PostItem'), { ssr: false });
 const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); 
