@@ -1,40 +1,45 @@
-// pages/community/[id].js (带有调试日志的版本)
+// pages/community/[id].js (最终修正版)
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 
+// 动态导入所需组件
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const CommentItem = dynamic(() => import('@/components/CommentItem'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
 
+/**
+ * 【优化】更健壮的视频链接解析函数
+ *  - 不再按行分割，而是搜索整个文本内容。
+ *  - 查找所有 URL，并返回第一个匹配视频平台的链接。
+ */
 const parseVideoUrl = (text = '') => {
-  // 【调试日志 1】打印传入的原始文本
-  console.log('[parseVideoUrl] Received content to parse:', text);
+  if (!text) return null;
+  
+  const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
+  const allUrls = text.match(urlRegex); // 找出所有 URL
 
-  const lines = text.split('\n');
-  for (const line of lines) {
-    const url = line.trim();
-    const urlRegex = /(https?:\/\/[^\s<>"'()]+)/;
-    const match = url.match(urlRegex);
-    if (match) {
-      const potentialUrl = match[0];
-      const videoPatterns = [ /youtube\.com|youtu\.be/, /vimeo\.com/, /bilibili\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
-      if (videoPatterns.some(p => p.test(potentialUrl))) {
-        // 【调试日志 2】打印成功找到的 URL
-        console.log('[parseVideoUrl] Found video URL:', potentialUrl);
-        return potentialUrl;
-      }
+  if (!allUrls) {
+    return null; // 如果没有任何 URL，直接返回 null
+  }
+
+  const videoPatterns = [ /youtube\.com|youtu\.be/, /vimeo\.com/, /bilibili\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
+
+  // 遍历所有找到的 URL，返回第一个是视频的链接
+  for (const url of allUrls) {
+    if (videoPatterns.some(p => p.test(url))) {
+      return url;
     }
   }
-  // 【调试日志 3】如果没找到，也打印出来
-  console.log('[parseVideoUrl] No video URL found, returning null.');
-  return null;
+
+  return null; // 如果所有 URL 都不是视频链接，返回 null
 };
+
 
 const PostDetailPage = () => {
   const router = useRouter();
@@ -46,36 +51,29 @@ const PostDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // ... 其他 state 和 ref ...
   const [commentContent, setCommentContent] = useState('');
   const [isCommenting, setIsCommenting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const postRef = useRef(post);
   useEffect(() => { postRef.current = post; }, [post]);
-  
-  // ... 数据获取函数保持不变 ...
+
+  // 【优化】使用 useMemo 来计算 videoUrl，更高效、更清晰
+  const videoUrl = useMemo(() => {
+    return post ? parseVideoUrl(post.content) : null;
+  }, [post]);
+
+  // --- 数据获取和操作函数 (保持不变) ---
   const fetchPost = useCallback(async () => { if (!id || typeof window === 'undefined' || !db) { setLoading(false); return; } try { const docRef = doc(db, 'posts', id); const docSnap = await getDoc(docRef); if (docSnap.exists()) { setPost({ id: docSnap.id, ...docSnap.data() }); } else { setError('抱歉，帖子不存在或已被删除。'); setPost(null); } } catch (err) { setError('加载帖子失败，请稍后再试。'); setPost(null); } }, [id]);
   const fetchComments = useCallback(() => { if (!id || typeof window === 'undefined' || !db) { setLoading(false); return () => {}; } const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc')); const unsubscribe = onSnapshot(q, (snapshot) => { const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); setComments(data); setLoading(false); const currentPost = postRef.current; if (currentPost && currentPost.commentsCount !== data.length) { updateDoc(doc(db, 'posts', id), { commentsCount: data.length }); } }, (err) => { setError('加载评论失败，请稍后再试。'); setComments([]); setLoading(false); }); return unsubscribe; }, [id]);
   useEffect(() => { if (id) { setLoading(true); setError(''); const unsub = fetchComments(); fetchPost(); return () => unsub(); } }, [id]);
   const handleCommentSubmit = async (e) => { e.preventDefault(); if (!commentContent.trim() || !user) { if(!user) setShowLoginModal(true); return; } setIsCommenting(true); try { await addDoc(collection(db, 'comments'), { postId: id, content: commentContent.trim(), authorId: user.uid, authorName: user.displayName || '匿名用户', authorAvatar: user.photoURL, createdAt: new Date() }); setCommentContent(''); } finally { setIsCommenting(false); } };
   const handleLike = async () => { if (!user || !post) { if(!user) setShowLoginModal(true); return; } setIsLiking(true); try { await updateDoc(doc(db, 'posts', id), { likesCount: increment(1) }); setPost(p => ({ ...p, likesCount: (p.likesCount || 0) + 1 })); } finally { setIsLiking(false); } };
 
-
-  // 【调试日志 4】在组件渲染时打印 post 状态和解析结果
-  if (post) {
-      console.log('COMPONENT RENDER: Full post data is:', post);
-      const videoUrl = parseVideoUrl(post.content);
-      console.log('COMPONENT RENDER: Final videoUrl passed to VideoEmbed is:', videoUrl);
-  }
-
-  // ... 加载和错误 UI 保持不变 ...
+  // --- 加载和错误状态的 UI (保持不变) ---
   if (authLoading || loading) return <LayoutBaseDynamic><div className="flex justify-center items-center min-h-screen">正在加载帖子...</div></LayoutBaseDynamic>;
   if (error || !post) return <LayoutBaseDynamic><div className="flex justify-center items-center min-h-screen text-red-500">{error || '帖子不存在或已被删除。'}</div></LayoutBaseDynamic>;
 
-  // 在 return 语句中再次计算 videoUrl，确保 UI 正确
-  const videoUrl = post ? parseVideoUrl(post.content) : null;
-  
   return (
     <LayoutBaseDynamic>
       <div className="bg-gray-50 dark:bg-black min-h-screen pt-10 pb-20">
@@ -91,8 +89,10 @@ const PostDetailPage = () => {
             
             <div className="content-wrapper mb-8">
               {videoUrl ? (
+                // 如果成功解析出视频链接，就渲染视频播放器
                 <VideoEmbed url={videoUrl} />
               ) : (
+                // 否则，渲染帖子的纯文本内容
                 <div className="prose dark:prose-invert max-w-none">
                   {(post.content || '').split('\n').map((paragraph, index) => (
                     <p key={index}>{paragraph}</p>
@@ -101,9 +101,25 @@ const PostDetailPage = () => {
               )}
             </div>
             
-            <div className="flex justify-end">{/* ... 点赞按钮 ... */}</div>
+            <div className="flex justify-end">
+              <button onClick={handleLike} disabled={isLiking} className="flex items-center px-4 py-2 rounded-full transition-colors duration-200 bg-red-100 text-red-600 hover:bg-red-200">
+                <i className="fas fa-heart mr-2" /> 
+                <span>{post.likesCount || 0}</span>
+              </button>
+            </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8">{/* ... 评论区 ... */}</div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8">
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">评论 ({comments.length})</h2>
+            <div className="mb-6">
+              {comments.length > 0 ? comments.map(c => <CommentItem key={c.id} comment={c} />) : <p className="text-gray-500 dark:text-gray-400 text-center">还没有人评论，快来抢沙发吧！</p>}
+            </div>
+            <form onSubmit={handleCommentSubmit} className="space-y-4">
+              <textarea value={commentContent} onChange={e => setCommentContent(e.target.value)} placeholder={user ? "发表你的看法..." : "请登录后发表评论..."} rows="4" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-y" disabled={!user || isCommenting}></textarea>
+              <button type="submit" disabled={!user || isCommenting} className="w-full py-2 px-4 rounded-lg shadow-md font-semibold text-white transition-colors duration-200 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
+                {isCommenting ? '提交中...' : '发表评论'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
       <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
