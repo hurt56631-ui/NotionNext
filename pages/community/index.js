@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 导航/排序组件 (无修改)
+// 导航/排序组件
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
     const sortOptions = ['默认', '最新', '最热'];
@@ -58,17 +58,18 @@ const CommunityPage = () => {
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
     const categoryIndexRef = useRef(0);
-    
+
     useEffect(() => {
         categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
     }, [currentCategory]);
 
     const updateLastVisible = useCallback((newDoc) => { lastVisibleRef.current = newDoc; }, []);
 
-    // fetchPosts 函数保持不变，但现在由无限滚动触发
+    // fetchPosts
     const fetchPosts = useCallback(async (isInitial = false) => {
-        if (loadingMore) return; // 防止重复加载
-        if (isInitial) { setLoading(true); setPosts([]); updateLastVisible(null); setHasMore(true); } else { setLoadingMore(true); }
+        if (loadingMore) return;
+        if (isInitial) { setLoading(true); setPosts([]); updateLastVisible(null); setHasMore(true); } 
+        else { setLoadingMore(true); }
         if (typeof window === 'undefined' || !db) { setLoading(false); setLoadingMore(false); return; }
         try {
             const postsRef = collection(db, 'posts');
@@ -83,36 +84,35 @@ const CommunityPage = () => {
             const newLastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
             updateLastVisible(newLastVisibleDoc);
             setHasMore(documentSnapshots.docs.length >= POSTS_PER_PAGE);
-        } catch (error) { console.error("获取帖子失败:", error); setPosts([]); setHasMore(false);
-        } finally { if (isInitial) { setLoading(false); } else { setLoadingMore(false); } }
+        } catch (error) { 
+            console.error("获取帖子失败:", error); 
+            setPosts([]); 
+            setHasMore(false);
+        } finally { 
+            if (isInitial) { setLoading(false); } 
+            else { setLoadingMore(false); } 
+        }
     }, [currentCategory, currentSort, db, updateLastVisible, loadingMore]);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && db) { fetchPosts(true); }
         else { setLoading(false); }
-    }, [currentCategory, currentSort, db]); // fetchPosts 不再是依赖项，避免循环
+    }, [currentCategory, currentSort, db]);
 
-    // 【手势修复】更稳健的手势处理逻辑
-    const bind = useDrag(({ active, movement: [mx, my], direction: [dx], cancel, canceled }) => {
-        // 如果垂直拖拽的意图更明显，则立即取消水平手势，让页面可以正常滚动
-        if (Math.abs(my) > Math.abs(mx)) {
-            cancel();
-            return;
-        }
-
-        if (!active && !canceled) {
-            if (Math.abs(mx) > window.innerWidth * 0.25) { // 稍微增加滑动阈值
-                const direction = dx > 0 ? -1 : 1;
-                const currentIndex = categoryIndexRef.current;
-                const nextIndex = currentIndex + direction;
-                if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
-                    setSwipeDirection(direction);
-                    setCurrentCategory(CATEGORIES[nextIndex]);
-                }
+    // 【手势修复】保证多次滑动有效 & 不影响垂直滚动
+    const bind = useDrag(({ last, movement: [mx, my], direction: [dx], cancel }) => {
+        if (Math.abs(my) > Math.abs(mx)) { cancel(); return; } // 保证垂直滚动不受干扰
+        if (last && Math.abs(mx) > window.innerWidth * 0.25) {
+            const direction = dx > 0 ? -1 : 1;
+            const currentIndex = categoryIndexRef.current;
+            const nextIndex = currentIndex + direction;
+            if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
+                setSwipeDirection(direction);
+                setCurrentCategory(CATEGORIES[nextIndex]);
             }
         }
-    }, { axis: 'x', filterTaps: true, threshold: 20 });
-    
+    }, { axis: 'x', filterTaps: true, threshold: 15 });
+
     const transitions = useTransition(currentCategory, {
         from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
         enter: { opacity: 1, transform: 'translateX(0%)' },
@@ -120,8 +120,8 @@ const CommunityPage = () => {
         config: { tension: 220, friction: 30 },
         exitBeforeEnter: true,
     });
-    
-    // 【无限滚动】逻辑实现
+
+    // 无限滚动
     const observer = useRef();
     const loadMoreRef = useCallback(node => {
         if (loading) return;
@@ -145,16 +145,17 @@ const CommunityPage = () => {
     return (
         <LayoutBase>
             <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
-                {/* 【美化】顶部区域 */}
-                <div className="relative h-56 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
-                        <div className="animate-fade-in">
-                            <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">
-                                中文学习社区
-                            </h1>
-                            <p className="mt-4 text-base md:text-lg font-light text-white/80 drop-shadow">
-                                · 学如逆水行舟，不进则退 ·
+                {/* 顶部封面 + 名言 */}
+                <div className="relative h-60 md:h-72 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
+                        <h1 className="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg tracking-wide">
+                            中文学习社区
+                        </h1>
+                        <div className="mt-4 relative">
+                            <p className="text-lg md:text-xl font-light text-white/90 italic px-4">
+                                「 学如逆水行舟，不进则退 」
                             </p>
+                            <div className="w-24 h-0.5 bg-white/40 mx-auto mt-3 rounded-full"></div>
                         </div>
                     </div>
                 </div>
@@ -174,13 +175,12 @@ const CommunityPage = () => {
                         ))}
                     </div>
 
-                    {/* 【无限滚动】的UI部分 */}
+                    {/* 无限滚动 UI */}
                     <div className="text-center py-8">
                         {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
                         {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
                     </div>
 
-                    {/* 这个空的 div 是用来被 IntersectionObserver 观察的 */}
                     <div ref={loadMoreRef} style={{ height: '1px' }} />
                 </div>
                 
