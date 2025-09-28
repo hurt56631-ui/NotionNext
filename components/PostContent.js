@@ -1,6 +1,7 @@
 // components/PostContent.js
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 
 // 动态导入 VideoEmbed，确保只在客户端加载
 const VideoEmbed = dynamic(() => import('./VideoEmbed'), { 
