@@ -1,29 +1,24 @@
-// components/ForumCategoryTabs.js (最终正确UI版)
+// components/ForumCategoryTabs.js (独立的、UI正确的分类/排序组件)
 
 import { useState } from 'react';
 
 const ForumCategoryTabs = ({ onCategoryChange, onSortChange }) => {
-  // 状态管理：分别跟踪当前选中的分类和排序
   const [activeCategory, setActiveCategory] = useState('推荐');
   const [activeSort, setActiveSort] = useState('默认');
   
-  // 数据定义：分类和排序的选项列表
   const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
   const sorts = ['默认', '最新', '最热'];
 
-  // 事件处理：当点击分类时，更新状态并通知父组件
   const handleCategoryClick = (category) => {
     setActiveCategory(category);
     onCategoryChange(category);
   };
   
-  // 事件处理：当点击排序时，更新状态并通知父组件
   const handleSortClick = (sort) => {
     setActiveSort(sort);
     onSortChange(sort);
   };
 
-  // 渲染UI：严格按照您截图的两行式布局
   return (
     <div className="bg-white dark:bg-gray-800 rounded-t-lg shadow-md px-4 pt-2">
       {/* 第一行：主分类 */}
