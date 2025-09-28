@@ -1,4 +1,4 @@
-// components/Footer.js (已绑定 Firebase 登录功能的完整代码)
+// components/Footer.js (最终完整版，已修正布局并集成 Firebase)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -29,7 +29,7 @@ const Footer = () => {
   // 判断是否为文章详情页
   const isArticlePage = router.pathname.startsWith('/article/') || router.pathname.startsWith('/post/')
 
-  // 2. 获取全局用户状态、加载状态和登出函数
+  // 2. 获取全局用户状态和加载状态
   const { user, loading } = useAuth()
   
   // 3. 创建控制登录弹窗显示/隐藏的状态
@@ -61,10 +61,10 @@ const Footer = () => {
     return () => {
       window.removeEventListener('popstate', handleHashChange)
     }
-  }, [])
+  }, []) // 空依赖数组确保只在组件挂载和卸载时运行
   // --- AI 助手抽屉逻辑 结束 ---
 
-  // 4. 创建 "我" 按钮的点击处理函数
+  // 4. "我" 按钮的点击处理函数
   const handleMyButtonClick = (e) => {
     // 如果用户未登录
     if (!user) {
@@ -76,9 +76,9 @@ const Footer = () => {
     // 如果用户已登录，则不执行任何操作，让 Link 组件正常跳转到 /me
   }
 
-
   return (
     <>
+      {/* 桌面端页脚 */}
       <footer className='relative flex-shrink-0 bg-white dark:bg-[#1a191d] justify-center text-center m-auto w-full leading-6 text-gray-600 dark:text-gray-100 text-sm'>
         {/* 颜色过度区 */}
         <div
@@ -118,12 +118,18 @@ const Footer = () => {
               </>
             )}
             <BeiAnGongAn />
+            <span className='hidden busuanzi_container_site_pv'>
+              <i className='fas fa-eye' /><span className='px-1 busuanzi_value_site_pv'></span>
+            </span>
+            <span className='pl-2 hidden busuanzi_container_site_uv'>
+              <i className='fas fa-users' /><span className='px-1 busuanzi_value_site_uv'></span>
+            </span>
           </div>
         </div>
       </footer>
 
       {/* 移动端底部导航栏 (仅在 lg 以下屏幕显示) */}
-      <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-14 flex justify-around items-center'>
+      <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-14 flex justify-around items-center px-2'>
         <Link href='/' className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
           <i className='fas fa-home text-lg'></i>
           <span>主页</span>
@@ -141,20 +147,18 @@ const Footer = () => {
           <span>消息</span>
         </Link>
         
-        {/* 5. 修改 "我" 按钮 */}
-        <Link href='/me' onClick={handleMyButtonClick} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1 w-1/5'>
-          <div className='h-6 w-6 flex items-center justify-center'>
-            { loading ? (
-                // 加载时显示一个占位符
-                <div className='w-5 h-5 bg-gray-200 rounded-full animate-pulse'></div>
-            ) : user ? (
-                // 登录后显示用户头像
-                <img src={user.photoURL} alt={user.displayName} className='w-6 h-6 rounded-full' />
-            ) : (
-                // 未登录时显示默认图标
-                <i className='fas fa-user text-lg'></i>
-            )}
-          </div>
+        {/* 修正后的 "我" 按钮 */}
+        <Link href='/me' onClick={handleMyButtonClick} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
+          { loading ? (
+              // 加载时显示一个占位符，保持图标位置不跳动
+              <div className='w-6 h-6 flex items-center justify-center'><div className='w-5 h-5 bg-gray-200 rounded-full animate-pulse'></div></div>
+          ) : user ? (
+              // 登录后显示用户头像
+              <img src={user.photoURL} alt='user avatar' className='w-6 h-6 rounded-full' />
+          ) : (
+              // 未登录时显示原来的 fa-user 图标
+              <i className='fas fa-user text-lg'></i>
+          )}
           <span>我</span>
         </Link>
       </div>
@@ -162,7 +166,7 @@ const Footer = () => {
       {/* AI 聊天助手抽屉组件实例 */}
       <AiChatAssistant isOpen={isDrawerOpen} onClose={handleCloseDrawer} />
       
-      {/* 6. 放置登录弹窗组件实例 */}
+      {/* 登录弹窗组件实例 */}
       <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </>
   )
