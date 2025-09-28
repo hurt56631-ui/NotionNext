@@ -1,6 +1,7 @@
 // components/VideoEmbed.js
 import React from 'react';
-import ReactPlayer from 'react-player/lazy';
+// 【已修改】将 'react-player/lazy' 改为 'react-player' 以适配 v3 版本
+import ReactPlayer from 'react-player';
 
 /**
  * VideoEmbed - 一个简单安全、响应式的 react-player 封装
