@@ -1,4 +1,4 @@
-// components/Footer.js (修改后，作为 BottomNav 用)
+// components/Footer.js (已绑定 Firebase 登录功能的完整代码)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -8,7 +8,14 @@ import SocialButton from './SocialButton'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import React, { useState, useEffect } from 'react'
-import AiChatAssistant from '@/components/AiChatAssistant' // 1. 导入新的 AI 助手组件
+import AiChatAssistant from '@/components/AiChatAssistant'
+
+// 1. 导入 Firebase 相关的 Hooks 和组件
+import { useAuth } from '@/lib/AuthContext'
+import dynamic from 'next/dynamic'
+
+// 使用 dynamic import 动态加载登录弹窗，避免服务端渲染问题
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
  * 页脚，现在同时包含桌面版页脚和移动版底部导航
@@ -22,46 +29,53 @@ const Footer = () => {
   // 判断是否为文章详情页
   const isArticlePage = router.pathname.startsWith('/article/') || router.pathname.startsWith('/post/')
 
+  // 2. 获取全局用户状态、加载状态和登出函数
+  const { user, loading } = useAuth()
+  
+  // 3. 创建控制登录弹窗显示/隐藏的状态
+  const [showLoginModal, setShowLoginModal] = useState(false)
+
   // --- AI 助手抽屉逻辑 开始 ---
   const [isDrawerOpen, setDrawerOpen] = useState(false)
 
-  // 打开抽屉的处理函数
   const handleOpenDrawer = () => {
-    // 使用 shallow routing 在不重新加载页面的情况下更改 URL，添加 hash
     router.push(router.pathname + '#ai-chat', undefined, { shallow: true })
     setDrawerOpen(true)
   }
 
-  // 关闭抽屉的处理函数
   const handleCloseDrawer = () => {
-    // 检查 hash 是否存在，如果存在则通过 router.back() 返回，这会移除 hash 并触发 popstate
     if (window.location.hash === '#ai-chat') {
       router.back()
     } else {
-      // 如果是通过点击关闭按钮等方式，直接设置状态
       setDrawerOpen(false)
     }
   }
 
-  // 监听 URL hash 的变化来处理手势返回
   useEffect(() => {
     const handleHashChange = () => {
-      // 当 hash 不再是 #ai-chat 时，关闭抽屉
       if (window.location.hash !== '#ai-chat') {
         setDrawerOpen(false)
       }
     }
-    
-    // 监听 popstate 事件，它能捕获浏览器的前进/后退操作（包括手势）
     window.addEventListener('popstate', handleHashChange)
-    
-    // 组件卸载时移除监听器
     return () => {
       window.removeEventListener('popstate', handleHashChange)
     }
-  }, []) // 空依赖数组确保只在组件挂载和卸载时运行
-
+  }, [])
   // --- AI 助手抽屉逻辑 结束 ---
+
+  // 4. 创建 "我" 按钮的点击处理函数
+  const handleMyButtonClick = (e) => {
+    // 如果用户未登录
+    if (!user) {
+      // 阻止 Link 组件的默认跳转行为
+      e.preventDefault()
+      // 打开登录弹窗
+      setShowLoginModal(true)
+    }
+    // 如果用户已登录，则不执行任何操作，让 Link 组件正常跳转到 /me
+  }
+
 
   return (
     <>
@@ -104,12 +118,6 @@ const Footer = () => {
               </>
             )}
             <BeiAnGongAn />
-            <span className='hidden busuanzi_container_site_pv'>
-              <i className='fas fa-eye' /><span className='px-1 busuanzi_value_site_pv'></span>
-            </span>
-            <span className='pl-2 hidden busuanzi_container_site_uv'>
-              <i className='fas fa-users' /><span className='px-1 busuanzi_value_site_uv'></span>
-            </span>
           </div>
         </div>
       </footer>
@@ -120,7 +128,6 @@ const Footer = () => {
           <i className='fas fa-home text-lg'></i>
           <span>主页</span>
         </Link>
-        {/* AI 助手按钮，点击打开抽屉 */}
         <button onClick={handleOpenDrawer} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
           <i className='fas fa-robot text-lg'></i>
           <span>AI助手</span>
@@ -133,14 +140,30 @@ const Footer = () => {
           <i className='fas fa-comment-alt text-lg'></i>
           <span>消息</span>
         </Link>
-        <Link href='/me' className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
-          <i className='fas fa-user text-lg'></i>
+        
+        {/* 5. 修改 "我" 按钮 */}
+        <Link href='/me' onClick={handleMyButtonClick} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1 w-1/5'>
+          <div className='h-6 w-6 flex items-center justify-center'>
+            { loading ? (
+                // 加载时显示一个占位符
+                <div className='w-5 h-5 bg-gray-200 rounded-full animate-pulse'></div>
+            ) : user ? (
+                // 登录后显示用户头像
+                <img src={user.photoURL} alt={user.displayName} className='w-6 h-6 rounded-full' />
+            ) : (
+                // 未登录时显示默认图标
+                <i className='fas fa-user text-lg'></i>
+            )}
+          </div>
           <span>我</span>
         </Link>
       </div>
 
       {/* AI 聊天助手抽屉组件实例 */}
       <AiChatAssistant isOpen={isDrawerOpen} onClose={handleCloseDrawer} />
+      
+      {/* 6. 放置登录弹窗组件实例 */}
+      <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </>
   )
 }
