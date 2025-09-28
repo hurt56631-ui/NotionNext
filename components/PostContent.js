@@ -1,137 +1,129 @@
-// components/PostContent.js
-import React, { useEffect, useState } from 'react';
+// components/PostContent.js (最终版，智能转换 TikTok 链接)
+
+import React, { useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-// 动态导入 VideoEmbed 组件
-const VideoEmbed = dynamic(() => import('./VideoEmbed'), {
-  ssr: false,
-  loading: () => <div className="py-6 text-center text-gray-500">视频加载中…</div>
-});
+const VideoEmbed = dynamic(() => import('./VideoEmbed'), { ssr: false });
 
-// 正则表达式，用于匹配 URL
-const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
+// 【修改】解析函数现在会返回视频的类型和 ID
+const parseVideoInfo = (text = '') => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const url = line.trim();
+    const urlRegex = /(https?:\/\/[^\s<>"'()]+)/;
+    const match = url.match(urlRegex);
 
-// 判断 URL 是否为支持的视频平台
-function isVideoUrl(url) {
-  const patterns = [
-    /youtube\.com|youtu\.be/,
-    /vimeo\.com/,
-    /facebook\.com|fb\.watch/,
-    /tiktok\.com|vm\.tiktok\.com/,
-    /twitch\.tv/,
-    /dailymotion\.com|dai\.ly/,
-    /streamable\.com/,
-    /bilibili\.com/,
-    /ixigua\.com/,
-  ];
-  return patterns.some((r) => r.test(url));
-}
+    if (match) {
+      const potentialUrl = match[0];
 
-// 专门为 YouTube 提取视频 ID 以生成缩略图
-function getYouTubeId(url = '') {
-  const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
+      // 1. 检查是否为 TikTok 链接
+      const tiktokMatch = potentialUrl.match(/tiktok\.com\/.*\/video\/(\d+)/);
+      if (tiktokMatch && tiktokMatch[1]) {
+        return { type: 'tiktok', url: potentialUrl, videoId: tiktokMatch[1] };
+      }
 
-export default function PostContent({ content = '', preview = false, previewLink = null }) {
-  const [safeIframeHtml, setSafeIframeHtml] = useState(null);
+      // 2. 检查是否为 YouTube 链接
+      const youtubeMatch = potentialUrl.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+      if (youtubeMatch && youtubeMatch[1]) {
+        return { type: 'youtube', url: potentialUrl, videoId: youtubeMatch[1] };
+      }
 
-  // 处理用户直接粘贴的 <iframe> 嵌入代码
-  useEffect(() => {
-    if (typeof window === 'undefined' || !content || !content.includes('<iframe')) {
-      setSafeIframeHtml(null);
-      return;
+      // 3. 检查其他普通视频平台
+      const otherVideoPatterns = [ /vimeo\.com/, /bilibili\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
+      if (otherVideoPatterns.some(p => p.test(potentialUrl))) {
+        return { type: 'other', url: potentialUrl };
+      }
     }
-    import('dompurify').then((DOMPurifyModule) => {
-      const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
-      const clean = DOMPurify.sanitize(content, {
-        ADD_TAGS: ['iframe'],
-        ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling', 'style', 'loading'],
-      });
-      setSafeIframeHtml(clean);
-    });
-  }, [content]);
+  }
+  return null;
+};
 
-  // 如果内容是 iframe，则优先渲染
-  if (safeIframeHtml) {
-    return <div className="post-content" dangerouslySetInnerHTML={{ __html: safeIframeHtml }} />;
+
+export default function PostContent({ post, preview = false }) {
+  // 【修改】使用新的、更强大的解析函数
+  const videoInfo = useMemo(() => parseVideoInfo(post.content), [post.content]);
+
+  // 判断内容是否为用户直接粘贴的 TikTok 嵌入代码
+  const isPastedTikTokEmbed = post.content?.includes('class="tiktok-embed"');
+
+  // 【核心逻辑】判断是否需要加载 TikTok 的官方脚本
+  const needsTikTokScript = videoInfo?.type === 'tiktok' || isPastedTikTokEmbed;
+
+  // 处理 TikTok 脚本加载的 Effect
+  useEffect(() => {
+    if (needsTikTokScript && typeof window !== 'undefined') {
+      if (!document.querySelector('script[src="https://www.tiktok.com/embed.js"]')) {
+        const script = document.createElement('script');
+        script.src = 'https://www.tiktok.com/embed.js';
+        script.async = true;
+        document.body.appendChild(script);
+      }
+    }
+  }, [needsTikTokScript]);
+
+  // 1. 如果是 TikTok 链接 或 嵌入代码，统一处理
+  if (needsTikTokScript) {
+    // 动态生成 TikTok 嵌入式 HTML
+    const tiktokEmbedHtml = isPastedTikTokEmbed ? post.content : `
+      <blockquote class="tiktok-embed" cite="${videoInfo.url}" data-video-id="${videoInfo.videoId}" style="max-width: 605px; min-width: 325px;">
+        <section></section>
+      </blockquote>
+    `;
+
+    // 在详情页直接渲染
+    if (!preview) {
+        return <div dangerouslySetInnerHTML={{ __html: tiktokEmbedHtml }} />;
+    }
+    // 在列表页，显示一个可点击的占位符
+    return (
+        <Link href={`/community/${post.id}`} passHref>
+            <a className="block p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-center text-gray-600 dark:text-gray-300">
+                包含一个 TikTok 视频，点击查看
+            </a>
+        </Link>
+    )
   }
 
-  // 主要的渲染逻辑
-  const renderContent = () => {
-    // 按换行符分割成段落，并过滤掉空段落
-    const paragraphs = (content || '').split('\n').filter(p => p.trim() !== '');
-    if (paragraphs.length === 0 && !preview) {
-      // 如果没有内容且不是预览模式，显示原始内容以防万一
-      return <p>{content}</p>;
-    }
+  // ===== 以下是处理 YouTube 和其他平台链接的逻辑 =====
 
-    let hasRenderedVideo = false;
+  // 2. 详情页逻辑 (非 TikTok)
+  if (!preview) {
+    return videoInfo?.url ? <VideoEmbed url={videoInfo.url} /> : (
+      <div className="prose dark:prose-invert max-w-none">
+        {(post.content || '').split('\n').map((p, i) => <p key={i}>{p}</p>)}
+      </div>
+    );
+  }
 
-    return paragraphs.map((paragraph, pIndex) => {
-      // 在每个段落中寻找 URL
-      const parts = paragraph.split(urlRegex).filter(part => part);
+  // 3. 列表页预览逻辑 (非 TikTok)
+  if (videoInfo?.type === 'youtube') {
+    return (
+      <Link href={`/community/${post.id}`} passHref>
+        <a className="block relative w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden group mt-2">
+          <img src={`https://i.ytimg.com/vi/${videoInfo.videoId}/hqdefault.jpg`} alt={post.title} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30"><i className="fas fa-play text-white text-4xl" /></div>
+        </a>
+      </Link>
+    );
+  }
+  
+  if (videoInfo?.type === 'other') {
+     return (
+      <Link href={`/community/${post.id}`} passHref>
+        <a className="block relative w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden group mt-2">
+           <div className="w-full h-full flex items-center justify-center"><span className="text-gray-500 dark:text-gray-400">观看视频</span></div>
+           <div className="absolute inset-0 flex items-center justify-center bg-black/30"><i className="fas fa-play text-white text-4xl" /></div>
+        </a>
+      </Link>
+    );
+  }
 
-      // 找到段落中的第一个视频链接
-      const videoUrlPart = parts.find(part => urlRegex.test(part) && isVideoUrl(part));
-
-      // ===== 详情页逻辑 (preview = false) =====
-      if (videoUrlPart && !preview && !hasRenderedVideo) {
-        hasRenderedVideo = true; // 标记已渲染视频，确保只渲染第一个
-        return <VideoEmbed key={`video-${pIndex}`} url={videoUrlPart} />;
-      }
-
-      // ===== 列表页预览逻辑 (preview = true) =====
-      if (videoUrlPart && preview) {
-        const ytId = getYouTubeId(videoUrlPart);
-        const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
-        const Wrapper = ({ children }) =>
-          previewLink ? (
-            <Link href={previewLink} passHref><a>{children}</a></Link>
-          ) : (
-            <a href={videoUrlPart} target="_blank" rel="noopener noreferrer">{children}</a>
-          );
-
-        return (
-          <Wrapper key={`preview-${pIndex}`}>
-            <div className="block overflow-hidden rounded-lg shadow-sm relative group bg-gray-200 dark:bg-gray-800">
-              {thumb ? (
-                <img src={thumb} alt="视频预览" className="w-full h-auto object-cover" />
-              ) : (
-                <div className="w-full aspect-video flex items-center justify-center">
-                  <span className="text-gray-500 dark:text-gray-300">视频预览</span>
-                </div>
-              )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
-                <i className="fas fa-play text-white text-4xl"></i>
-              </div>
-            </div>
-          </Wrapper>
-        );
-      }
-
-      // ===== 渲染普通文本和链接的段落 =====
-      // (如果本段没有视频，或者视频已在详情页渲染过，或者是在预览模式下)
-      if (paragraph.trim()) {
-        return (
-          <p key={`p-${pIndex}`}>
-            {parts.map((part, partIndex) => {
-              if (urlRegex.test(part)) {
-                return (
-                  <a key={`a-${partIndex}`} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-all">
-                    {part}
-                  </a>
-                );
-              }
-              return <span key={`s-${partIndex}`}>{part}</span>;
-            })}
-          </p>
-        );
-      }
-      return null;
-    });
-  };
-
-  return <div className="post-content space-y-4">{renderContent()}</div>;
+  // 4. 如果没有任何视频，显示纯文本摘要
+  return (
+    <p className="text-gray-800 dark:text-gray-200 text-base line-clamp-2">
+      {post.content}
+    </p>
+  );
 }
