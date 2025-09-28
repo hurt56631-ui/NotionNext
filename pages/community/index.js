@@ -12,7 +12,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 
 // --- 动态导入自定义组件 ---
 // 【关键修正】确保导入路径指向正确的 PostItem 位置
-const PostItem = dynamic(() => import('@/themes/heo/components/PostItem'), { ssr: false });
+const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
 // 【关键修正】导入独立的 ForumCategoryTabs 组件，并使用不同的变量名
 const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 
