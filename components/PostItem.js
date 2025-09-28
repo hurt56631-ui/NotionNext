@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 // import { siteConfig } from '@/lib/config'; // 移除了 siteConfig 因为分享功能已去掉
 // import { FacebookShareButton, TelegramShareButton } from 'react-share'; // 移除分享库
-import StartChatButton from './StartChatButton';
 
 // 只保留 YouTube 链接的ID提取函数
 const getYouTubeId = (url) => {
