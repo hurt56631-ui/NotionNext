@@ -1,4 +1,4 @@
-// pages/community/index.js (已修复 ReferenceError: self is not defined)
+// pages/community/index.js (更严格的动态导入，解决 ReferenceError: self is not defined)
 
 import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
@@ -6,13 +6,16 @@ import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'f
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
-import PostItem from '@/components/PostItem';
-import ForumCategoryTabs from '@/components/ForumCategoryTabs';
-import { LayoutBase } from '@/themes/heo'; // 确保你的主题有 LayoutBase 或使用你自己的布局组件
+
+// ✨✨ 核心修复 ✨✨
+// 所有可能包含客户端代码的组件都使用 dynamic import 和 ssr: false
 import dynamic from 'next/dynamic';
 
-// AuthModal 已经使用 ssr: false 动态导入，确保它不在服务器端渲染
+const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
+const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
+const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); // 确保 LayoutBase 也只在客户端渲染
+
 const POSTS_PER_PAGE = 10; // 每次加载10条帖子
 
 const CommunityPage = () => {
@@ -29,11 +32,10 @@ const CommunityPage = () => {
 
   // 封装获取帖子的核心逻辑
   const fetchPosts = useCallback(async (isInitial = false) => {
-    // ✨✨ 核心修复 1 ✨✨
     // 确保只有在浏览器环境中才尝试从 Firestore 获取数据
     if (typeof window === 'undefined' || !db) {
         // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
-        console.warn("Firestore instance (db) is not available or running on server. Skipping fetchPosts.");
+        // console.warn("Firestore instance (db) is not available or running on server. Skipping fetchPosts."); // 生产环境可以注释掉
         if (isInitial) setLoading(false); // 确保在 SSR 时，loading 状态能被正确处理
         else setLoadingMore(false);
         setPosts([]); // 在服务器端确保帖子为空，防止意外数据
@@ -92,13 +94,9 @@ const CommunityPage = () => {
   }, [currentCategory, currentSort, lastVisible]);
 
   useEffect(() => {
-    // ✨✨ 核心修复 2 ✨✨
     // 确保 useEffect 内部的客户端数据获取逻辑只在浏览器中执行
     if (typeof window !== 'undefined') {
-        const unsubscribe = fetchPosts(true);
-        // 如果 fetchPosts 返回了 unsubscribe 函数（仅在使用 onSnapshot 时），则清理
-        // 但这里我们使用的是 getDocs，所以没有 unsubscribe
-        return () => { /* clean up if onSnapshot was used */ };
+        fetchPosts(true); // 初始加载
     } else {
         // 在服务器端，立即将 loading 设为 false，防止页面卡住，并确保不会尝试获取数据
         setLoading(false);
@@ -120,7 +118,7 @@ const CommunityPage = () => {
   };
 
   return (
-    <LayoutBase>
+    <LayoutBase> {/* LayoutBase 也会被动态导入，只在客户端渲染 */}
       <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
         {/* 头部背景图 */}
         <div
