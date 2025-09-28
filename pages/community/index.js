@@ -1,4 +1,4 @@
-// pages/community/index.js (最终版: 精确UI + 动态虚拟列表 + 无限滚动 + 吸顶)
+// pages/community/index.js (最终版1: 精确UI + 动态虚拟列表 + 无限滚动 + 吸顶)
 
 import { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
