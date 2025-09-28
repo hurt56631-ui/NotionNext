@@ -15,7 +15,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 // 【UI修正】导入新的、独立的ForumCategoryTabs组件
 const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 // 确保PostItem的导入路径正确，并且它已使用 forwardRef 包裹
-const PostItem = dynamic(() => import('@/themes/heo/components/PostItem'), { ssr: false });
+const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
 
