@@ -1,4 +1,4 @@
-// components/Footer.js (最终完整版，已修正布局并集成 Firebase)
+// components/Footer.js (最终完整版，已修正布局并集成 Firebase，并统一“我”按钮图标风格)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -138,6 +138,7 @@ const Footer = () => {
           <i className='fas fa-robot text-lg'></i>
           <span>AI助手</span>
         </button>
+        {/* 社区按钮 - 确保链接正确 */}
         <Link href='/community' className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
           <i className='fas fa-users text-lg'></i>
           <span>社区</span>
@@ -147,16 +148,13 @@ const Footer = () => {
           <span>消息</span>
         </Link>
         
-        {/* 修正后的 "我" 按钮 */}
+        {/* 修正后的 "我" 按钮 - 无论登录与否都显示 fas fa-user 图标 */}
         <Link href='/me' onClick={handleMyButtonClick} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'>
           { loading ? (
               // 加载时显示一个占位符，保持图标位置不跳动
               <div className='w-6 h-6 flex items-center justify-center'><div className='w-5 h-5 bg-gray-200 rounded-full animate-pulse'></div></div>
-          ) : user ? (
-              // 登录后显示用户头像
-              <img src={user.photoURL} alt='user avatar' className='w-6 h-6 rounded-full' />
           ) : (
-              // 未登录时显示原来的 fa-user 图标
+              // 无论登录与否，都显示 fas fa-user 图标
               <i className='fas fa-user text-lg'></i>
           )}
           <span>我</span>
