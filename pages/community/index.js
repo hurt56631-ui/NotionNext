@@ -1,8 +1,7 @@
-// pages/community/index.js (确保所有客户端组件都动态导入)
+// pages/community/index.js (修复无限加载循环)
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; // 【新增】导入 useRef
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
-// db 在服务器端可能为 null，这是正常的，我们已在 lib/firebase.js 中处理
 import { db } from '@/lib/firebase'; 
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
@@ -21,20 +20,31 @@ const CommunityPage = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true); 
   const [loadingMore, setLoadingMore] = useState(false);
-  const [lastVisible, setLastVisible] = useState(null); 
+  // 【修改】lastVisible 不再直接用于 useEffect 依赖，而是通过 ref 间接访问
+  const [lastVisibleState, setLastVisibleState] = useState(null); // 用于页面重新渲染，但不用于 useCallback 依赖
+  const lastVisibleRef = useRef(null); // 【新增】使用 useRef 来保存 lastVisible 的当前值，用于 fetchPosts 内部
+  
   const [hasMore, setHasMore] = useState(true); 
   
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState('推荐');
   const [currentSort, setCurrentSort] = useState('最新');
 
+  // 【新增】一个更新 lastVisible 状态和 ref 的回调函数，保持其稳定性
+  const updateLastVisible = useCallback((newDoc) => {
+    lastVisibleRef.current = newDoc;
+    setLastVisibleState(newDoc); // 更新状态以触发组件重新渲染（例如更新“加载更多”按钮状态）
+  }, []); // 这个 useCallback 没有任何依赖，因此它是稳定的
+
+  // 封装获取帖子的核心逻辑
+  // 【修改】fetchPosts 的 useCallback 依赖不再包含 lastVisibleState
   const fetchPosts = useCallback(async (isInitial = false) => {
-    console.log(`[CommunityPage - fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}`);
+    console.log(`[CommunityPage - fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}, lastVisibleRef.current:`, lastVisibleRef.current ? lastVisibleRef.current.id : null);
     
     if (isInitial) {
       setLoading(true);
       setPosts([]);
-      setLastVisible(null);
+      updateLastVisible(null); // 【修改】重置 ref 和 state
       setHasMore(true);
       console.log("[CommunityPage - fetchPosts] 初始加载，重置状态。");
     } else {
@@ -59,7 +69,9 @@ const CommunityPage = () => {
       let q;
       const baseConditions = [orderClause, limit(POSTS_PER_PAGE)];
       const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
-      const paginationCondition = !isInitial && lastVisible ? [startAfter(lastVisible)] : [];
+      
+      // 【修改】使用 lastVisibleRef.current 来进行分页查询
+      const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
       
       q = query(postsRef, ...categoryCondition, ...baseConditions, ...paginationCondition);
 
@@ -74,8 +86,8 @@ const CommunityPage = () => {
 
       setPosts(prevPosts => isInitial ? newPosts : [...prevPosts, ...newPosts]);
       
-      const lastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
-      setLastVisible(lastVisibleDoc);
+      const newLastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
+      updateLastVisible(newLastVisibleDoc); // 【修改】更新 ref 和 state
       
       if (documentSnapshots.docs.length < POSTS_PER_PAGE) {
         setHasMore(false);
@@ -99,27 +111,32 @@ const CommunityPage = () => {
         console.log("[CommunityPage - fetchPosts] 加载更多完成，setLoadingMore(false)。");
       }
     }
-  }, [currentCategory, currentSort, lastVisible, db]); // 依赖项中添加 db
+  }, [currentCategory, currentSort, db, updateLastVisible, setPosts, setLoading, setLoadingMore, setHasMore]); 
+  // 【修改】fetchPosts 的依赖项现在只包含那些会改变函数逻辑的外部状态，
+  // 并且 updateLastVisible 是一个稳定的回调，不会导致 fetchPosts 重新创建。
 
+  // 【修改】useEffect 的依赖项不再包含 fetchPosts，而是直接响应 category/sort/db 的变化
   useEffect(() => {
-    console.log("[CommunityPage - useEffect] 社区页面挂载/依赖更新。");
-    if (typeof window !== 'undefined') {
+    console.log("[CommunityPage - useEffect] 社区页面挂载/分类或排序更新。");
+    // 确保只有在浏览器环境中且 db 实例可用时才触发初始数据获取
+    if (typeof window !== 'undefined' && db) { 
         console.log("[CommunityPage - useEffect] 运行在浏览器环境，触发 fetchPosts(true)。");
         fetchPosts(true); 
-    } else {
+    } else if (typeof window === 'undefined') {
+        // 在服务器端，立即将 loading 设为 false，防止页面卡住
         console.log("[CommunityPage - useEffect] 运行在服务器端，setLoading(false)。");
         setLoading(false);
     }
-  }, [fetchPosts]); 
+  }, [currentCategory, currentSort, db]); // 【修改】useEffect 的依赖项更精简，避免了无限循环
 
   const handleLoadMore = () => {
     console.log("[CommunityPage - handleLoadMore] 点击加载更多。");
     if (!loadingMore && hasMore) {
-      fetchPosts(false);
+      fetchPosts(false); // 【修改】直接调用 fetchPosts(false)
     } else if (loadingMore) {
       console.log("[CommunityPage - handleLoadMore] 正在加载中，请稍候。");
     } else if (!hasMore) {
-      console.log("[CommunityPage - handleLoadMore] 已经没有更多帖子了。");
+      console.log("[handleLoadMore] 已经没有更多帖子了。");
     }
   };
   
@@ -176,14 +193,17 @@ const CommunityPage = () => {
           
           <div className="text-center py-8">
             {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
-            {!loadingMore && hasMore && posts.length > 0 && (
+            {/* 【修改】只有当 hasMore 且 posts.length > 0 时才显示加载更多按钮 */}
+            {!loadingMore && hasMore && posts.length > 0 && ( 
               <button onClick={handleLoadMore} className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors">
                 加载更多
               </button>
             )}
-            {!hasMore && posts.length > 0 && (
+            {/* 【修改】只有当没有更多且 posts.length > 0 时才显示到底啦 */}
+            {!hasMore && posts.length > 0 && ( 
               <p className="text-gray-400">—— 到底啦 ——</p>
             )}
+            {/* 如果 posts.length === 0 且 !loading，renderPostsContent 已经处理了“空空如也” */}
           </div>
         </div>
 
