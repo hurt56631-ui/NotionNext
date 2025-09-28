@@ -1,4 +1,4 @@
-// pages/community/index.js (已按要求修改)
+// pages/community/index.js (已按新样式要求修改)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
@@ -7,64 +7,66 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 新增的导航/排序组件，替代原有的 ForumCategoryTabs
+// 新的导航/排序组件，实现图二的玻璃磨砂效果和新布局
 const StickyNavTabs = ({ onCategoryChange, onSortChange }) => {
-  // 根据图二的样式定义分类和排序选项
   const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
-  const sortOptions = ['默认', '最热'];
+  const sortOptions = ['默认', '最新', '最热'];
 
-  // 使用内部 state 来管理激活的按钮样式
   const [activeCategory, setActiveCategory] = useState('推荐');
   const [activeSort, setActiveSort] = useState('默认');
 
   const handleCategoryClick = (category) => {
     setActiveCategory(category);
-    onCategoryChange(category); // 调用父组件传递过来的函数，更新父组件的状态
+    onCategoryChange(category);
   };
 
   const handleSortClick = (sort) => {
     setActiveSort(sort);
-    // 父组件的排序逻辑是基于 '最新' 和 '最热'。
-    // 我们在这里将UI上的 '默认' 映射为逻辑上的 '最新'。
-    onSortChange(sort === '默认' ? '最新' : sort);
+    // 将UI上的 '默认' 和 '最新' 都映射为后端的 'createdAt' 排序
+    // 只有 '最热' 对应 'likesCount'
+    if (sort === '最热') {
+      onSortChange('最热');
+    } else {
+      onSortChange('最新'); // '默认' 和 '最新' 都视为按时间倒序
+    }
   };
 
   return (
-    // 组件外部是一个白色/暗色背景的卡片，带有阴影
-    <div className="bg-white dark:bg-gray-800 p-2 rounded-xl shadow-md">
-      <div className="flex justify-between items-center">
-        {/* 左侧：分类选项卡，在小屏幕上可以横向滚动 */}
-        <div className="flex space-x-2 overflow-x-auto whitespace-nowrap pb-2 scrollbar-hide">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => handleCategoryClick(category)}
-              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors duration-200 ease-in-out ${
-                activeCategory === category
-                  ? 'bg-blue-600 text-white shadow' // 激活状态
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600' // 非激活状态
-              }`}
-            >
+    // 使用 backdrop-blur 实现玻璃磨砂效果，并设置半透明背景色
+    <div className="rounded-xl shadow-md backdrop-blur-lg bg-gray-100/80 dark:bg-gray-900/70 p-3">
+      {/* 上半部分：分类 */}
+      <div className="flex items-center overflow-x-auto whitespace-nowrap scrollbar-hide border-b border-gray-200/80 dark:border-gray-700/80">
+        {categories.map((category) => (
+          <button
+            key={category}
+            onClick={() => handleCategoryClick(category)}
+            className="relative px-4 py-2 text-base font-medium transition-colors duration-200 ease-in-out focus:outline-none"
+          >
+            <span className={activeCategory === category ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white'}>
               {category}
-            </button>
-          ))}
-        </div>
-        {/* 右侧：排序按钮 */}
-        <div className="flex-shrink-0 flex items-center space-x-2 pl-4">
-          {sortOptions.map((sort) => (
-            <button
-              key={sort}
-              onClick={() => handleSortClick(sort)}
-              className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors duration-200 ease-in-out ${
-                activeSort === sort
-                  ? 'bg-gray-200 dark:bg-gray-600 text-black dark:text-white' // 激活状态
-                  : 'bg-transparent text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700' // 非激活状态
-              }`}
-            >
-              {sort}
-            </button>
-          ))}
-        </div>
+            </span>
+            {/* 蓝色的指示条，仅在激活时显示 */}
+            {activeCategory === category && (
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-blue-600 rounded-full"></span>
+            )}
+          </button>
+        ))}
+      </div>
+      {/* 下半部分：排序 */}
+      <div className="flex justify-end items-center pt-2 space-x-2">
+        {sortOptions.map((sort) => (
+          <button
+            key={sort}
+            onClick={() => handleSortClick(sort)}
+            className={`px-4 py-1 text-xs rounded-lg transition-colors duration-200 ease-in-out ${
+              activeSort === sort
+                ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold' // 激活状态
+                : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300' // 非激活状态
+            }`}
+          >
+            {sort}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -73,7 +75,6 @@ const StickyNavTabs = ({ onCategoryChange, onSortChange }) => {
 
 // 确保所有在客户端渲染的组件都使用 dynamic import 和 ssr: false
 const PostItem = dynamic(() => import('@/themes/heo/components/PostItem'), { ssr: false });
-// const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false }); // 【已移除】不再使用旧组件
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
 
@@ -88,7 +89,6 @@ const CommunityPage = () => {
   const lastVisibleRef = useRef(null);
   const [hasMore, setHasMore] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  // 状态的初始值与 StickyNavTabs 中的初始值保持一致
   const [currentCategory, setCurrentCategory] = useState('推荐');
   const [currentSort, setCurrentSort] = useState('最新');
 
@@ -237,7 +237,7 @@ const CommunityPage = () => {
         {/* 主要内容容器 */}
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
           
-          {/* 【新增】固定的导航/排序面板容器 */}
+          {/* 固定的导航/排序面板容器 */}
           <div className="sticky top-0 z-30 bg-transparent py-3">
              <StickyNavTabs 
                 onCategoryChange={setCurrentCategory} 
