@@ -1,4 +1,5 @@
-// pages/me.js (修复版)
+// pages/me.js (已添加随机背景图功能)
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
@@ -62,11 +63,15 @@ const PostList = ({ posts, type, author }) => {
           key={post.id}
           role="button"
           tabIndex={0}
-          onClick={() => router.push(`/forum/post/${post.id}`)}
-          onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/forum/post/${post.id}`); }}
+          onClick={() => router.push(`/community/${post.id}`)} {/* 【修改】跳转路径为 /community/${post.id} */}
+          onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/community/${post.id}`); }} {/* 【修改】跳转路径 */}
           className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow p-3 flex flex-col h-full cursor-pointer"
         >
           <div className="flex items-center gap-3 mb-2">
+            {/* 【注意】这里的 author 头像和名字，通常应该用 post.authorAvatar 和 post.authorName
+                       但因为你传入的是外部的 `author` 对象，我暂时保留 `author?.photoURL`
+                       如果你希望显示帖子本身的作者信息，需要 PostList 接收的 post 对象包含这些字段
+            */}
             <img src={author?.photoURL || 'https://www.gravatar.com/avatar?d=mp'} alt={author?.displayName} className="w-10 h-10 rounded-full object-cover" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
@@ -98,12 +103,9 @@ const PostList = ({ posts, type, author }) => {
 const MyProfilePage = () => {
   const router = useRouter();
   const { user: currentUser, logout, loading: authLoading } = useAuth();
-
-  // --------- 所有 hooks 必须在组件顶层统一声明（避免条件调用） ---------
+  
   const [profileUser, setProfileUser] = useState(null);
   const [pageLoading, setPageLoading] = useState(true);
-
-  // 页内交互相关状态（也放顶层）
   const [activeTab, setActiveTab] = useState('posts');
   const [isEditing, setIsEditing] = useState(false);
   const [tabContent, setTabContent] = useState([]);
@@ -111,11 +113,42 @@ const MyProfilePage = () => {
   const [modalType, setModalType] = useState('following');
   const [sortBy, setSortBy] = useState('latest');
 
-  // --------------------------------------------------------------------
+  // 【新增】用于存储随机背景图片URL的状态
+  const [randomBgImage, setRandomBgImage] = useState('');
+
+  // 【新增】获取随机背景图片的 useEffect
+  useEffect(() => {
+    const fetchRandomImage = async () => {
+      // 尝试从 localStorage 获取缓存的图片URL
+      const cachedImage = localStorage.getItem('profileBgImage');
+      const cacheTimestamp = localStorage.getItem('profileBgImageTimestamp');
+      const now = new Date().getTime();
+      const ONE_DAY = 24 * 60 * 60 * 1000; // 一天
+
+      if (cachedImage && cacheTimestamp && (now - parseInt(cacheTimestamp, 10) < ONE_DAY)) {
+        setRandomBgImage(cachedImage);
+      } else {
+        // 使用 Unsplash 的随机图片 API
+        // 建议：如果你有 Unsplash API Key，可以更稳定地获取高质量图片
+        // `https://api.unsplash.com/photos/random?query=nature,technology&orientation=landscape&client_id=YOUR_UNSPLASH_ACCESS_KEY`
+        // 如果没有 API Key，使用 /photos/random 会被限速，
+        // 也可以直接用 source.unsplash.com，它更适合直接在 img src 或 background-image 中使用，但无法控制类别
+        // 例如：https://source.unsplash.com/random/1600x900/?nature,technology,abstract,sky
+        const imageUrl = `https://source.unsplash.com/random/1600x900/?nature,abstract`; // 随机风景或抽象图，尺寸1600x900
+        
+        // 简单模拟网络请求，获取一个实际的 URL
+        // 实际上 source.unsplash.com 会直接重定向到图片URL，可以直接用
+        setRandomBgImage(imageUrl);
+        localStorage.setItem('profileBgImage', imageUrl);
+        localStorage.setItem('profileBgImageTimestamp', now.toString());
+      }
+    };
+
+    fetchRandomImage();
+  }, []); // 仅在组件挂载时运行一次
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
-      // 如果未登录，跳回首页（或你想放的登录页）
       router.push('/');
     }
   }, [currentUser, authLoading, router]);
@@ -142,11 +175,8 @@ const MyProfilePage = () => {
     if (currentUser) {
       fetchUserProfile();
     }
-    // intentionally not including fetchUserProfile in deps to avoid redef each render
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]);
+  }, [currentUser]); // fetchUserProfile 现在是一个稳定的函数，可以作为依赖项
 
-  // 加载 tab 内容（包括 posts / favorites / footprints）
   useEffect(() => {
     if (!currentUser?.uid || !profileUser) {
       setTabContent([]);
@@ -158,10 +188,10 @@ const MyProfilePage = () => {
 
     const fetchAndSetPosts = async (fetcher) => {
       try {
-        const postIds = await fetcher(currentUser.uid);
+        const ids = await fetcher(currentUser.uid);
         if (!mounted) return;
-        if (postIds && postIds.length > 0) {
-          const postsData = await getPostsByIds(postIds);
+        if (ids && ids.length > 0) {
+          const postsData = await getPostsByIds(ids);
           if (!mounted) return;
           setTabContent(postsData || []);
         } else {
@@ -174,7 +204,6 @@ const MyProfilePage = () => {
     };
 
     if (activeTab === 'posts') {
-      // getPostsByUser 返回一个 unsubscribe 回调或直接设置 tabContent（与你后端实现有关）
       unsubscribe = getPostsByUser(currentUser.uid, setTabContent);
     } else if (activeTab === 'favorites') {
       fetchAndSetPosts(getFavoritesByUser);
@@ -210,7 +239,6 @@ const MyProfilePage = () => {
     return tabContent;
   }, [sortBy, tabContent]);
 
-  // 加载状态处理（在 hooks 后面）
   if (authLoading || pageLoading) {
     return <LayoutBase><div className="p-10 text-center">正在加载用户资料...</div></LayoutBase>;
   }
@@ -218,10 +246,19 @@ const MyProfilePage = () => {
     return <LayoutBase><div className="p-10 text-center text-red-500">无法加载您的信息，请尝试重新登录。</div></LayoutBase>;
   }
 
+  // 构建背景图片URL，优先使用用户自定义的，其次是随机获取的
+  const backgroundImageUrl = profileUser?.backgroundImageUrl || randomBgImage || '/images/zhuyetu.jpg';
+
   return (
     <LayoutBase>
       <div className="flex flex-col min-h-screen">
-        <header className="relative w-full bg-cover bg-center text-white p-4 flex flex-col justify-end" style={{ backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.6), transparent), url(${profileUser?.backgroundImageUrl || '/images/zhuyetu.jpg'})`, minHeight: '30vh' }}>
+        <header 
+          className="relative w-full bg-cover bg-center text-white p-4 flex flex-col justify-end" 
+          style={{ 
+            backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.6), transparent), url(${backgroundImageUrl})`, 
+            minHeight: '30vh' 
+          }}
+        >
           <div className="relative z-10 container mx-auto">
             <div className="flex items-start gap-4">
               <img src={profileUser?.photoURL || 'https://www.gravatar.com/avatar?d=mp'} alt={profileUser?.displayName} className="w-20 h-20 rounded-full border-2 border-white/80 object-cover" />
