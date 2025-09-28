@@ -1,7 +1,8 @@
-// pages/community/index.js
+// pages/community/index.js (已修复 ReferenceError: self is not defined)
 
 import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
+// 注意：db 在服务器端可能为 null，这是正常的，我们会通过 typeof window 检查来处理
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
@@ -10,11 +11,12 @@ import ForumCategoryTabs from '@/components/ForumCategoryTabs';
 import { LayoutBase } from '@/themes/heo'; // 确保你的主题有 LayoutBase 或使用你自己的布局组件
 import dynamic from 'next/dynamic';
 
+// AuthModal 已经使用 ssr: false 动态导入，确保它不在服务器端渲染
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const POSTS_PER_PAGE = 10; // 每次加载10条帖子
 
 const CommunityPage = () => {
-  const { user } = useAuth();
+  const { user } = useAuth(); // user 在 SSR 期间为 null，loading 为 true
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -27,6 +29,17 @@ const CommunityPage = () => {
 
   // 封装获取帖子的核心逻辑
   const fetchPosts = useCallback(async (isInitial = false) => {
+    // ✨✨ 核心修复 1 ✨✨
+    // 确保只有在浏览器环境中才尝试从 Firestore 获取数据
+    if (typeof window === 'undefined' || !db) {
+        // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
+        console.warn("Firestore instance (db) is not available or running on server. Skipping fetchPosts.");
+        if (isInitial) setLoading(false); // 确保在 SSR 时，loading 状态能被正确处理
+        else setLoadingMore(false);
+        setPosts([]); // 在服务器端确保帖子为空，防止意外数据
+        return;
+    }
+
     if (isInitial) {
       setLoading(true);
       setPosts([]);
@@ -78,10 +91,19 @@ const CommunityPage = () => {
     }
   }, [currentCategory, currentSort, lastVisible]);
 
-  // 当分类或排序改变时，触发初始加载
   useEffect(() => {
-    fetchPosts(true);
-  }, [currentCategory, currentSort]); // fetchPosts 已经被 useCallback 缓存
+    // ✨✨ 核心修复 2 ✨✨
+    // 确保 useEffect 内部的客户端数据获取逻辑只在浏览器中执行
+    if (typeof window !== 'undefined') {
+        const unsubscribe = fetchPosts(true);
+        // 如果 fetchPosts 返回了 unsubscribe 函数（仅在使用 onSnapshot 时），则清理
+        // 但这里我们使用的是 getDocs，所以没有 unsubscribe
+        return () => { /* clean up if onSnapshot was used */ };
+    } else {
+        // 在服务器端，立即将 loading 设为 false，防止页面卡住，并确保不会尝试获取数据
+        setLoading(false);
+    }
+  }, [fetchPosts]); // fetchPosts 已经被 useCallback 缓存
 
   const handleLoadMore = () => {
     if (!loadingMore && hasMore) {
