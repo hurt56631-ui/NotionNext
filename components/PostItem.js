@@ -1,19 +1,18 @@
-// themes/heo/components/PostItem.js (已增加“发布于多久之前”功能)
+// themes/heo/components/PostItem.js (已增加“发布于多久之前”功能，并使用 forwardRef)
 
 import { useMemo, forwardRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 
-// 【新增】导入 dayjs 库和相关插件
+// 【确保这里！】dayjs 及其插件的导入
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn'; // 导入中文语言包
 
-// 【新增】配置 dayjs
+// 配置 dayjs
 dayjs.extend(relativeTime);
 dayjs.locale('zh-cn'); // 设置全局语言为中文
 
-// 您的辅助函数保持不变
 const getYouTubeId = (url) => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
@@ -21,7 +20,7 @@ const getYouTubeId = (url) => {
   return (match && match[2].length === 11) ? match[2] : null;
 };
 
-const PostItem = forwardRef(({ post }, ref) => {
+const PostItemComponent = ({ post }, ref) => { // 【注意】这里是 PostItemComponent
   const { user } = useAuth();
   const hasLiked = user && post.likers?.includes(user.uid);
 
@@ -37,14 +36,12 @@ const PostItem = forwardRef(({ post }, ref) => {
     return null;
   }, [post.content]);
 
-  // 【新增】计算相对时间的 memo
   const timeAgo = useMemo(() => {
     if (post.createdAt?.toDate) {
       return dayjs(post.createdAt.toDate()).fromNow();
     }
     return '不久前';
   }, [post.createdAt]);
-
 
   const handleLike = async () => { /* 您的点赞逻辑 */ };
 
@@ -70,7 +67,6 @@ const PostItem = forwardRef(({ post }, ref) => {
                 )}
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {/* 【修改】使用新的 timeAgo 变量 */}
                 {timeAgo}
                 {post.city && ` · ${post.city}`}
               </p>
@@ -128,7 +124,8 @@ const PostItem = forwardRef(({ post }, ref) => {
       </div>
     </div>
   );
-});
+};
 
+const PostItem = forwardRef(PostItemComponent); // 【注意】使用 PostItemComponent
 PostItem.displayName = 'PostItem';
 export default PostItem;
