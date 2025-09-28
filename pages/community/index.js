@@ -1,244 +1,218 @@
-// pages/community/index.js (最终版1: 精确UI + 动态虚拟列表 + 无限滚动 + 吸顶)
+// pages/community/index.js (修复 "正在努力加载..." 问题)
 
-import { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/lib/firebase'; // db 在服务器端可能为 null，这是正常的，我们已在 lib/firebase.js 中处理
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 【核心】从库中导入所需组件
-import { VariableSizeList as List } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
-
-// --- 动态导入自定义组件 ---
-// 【重要】修改PostItem导入，使其能被forwardRef包裹
-const PostItem = dynamic(() => import('@/components/PostItem').then(mod => mod.default), { ssr: false });
+// 所有可能包含客户端代码的组件都使用 dynamic import 和 ssr: false
+const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
+const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
-const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
+// 假设 LayoutBase 是你的主题布局，也用 dynamic ssr: false 确保客户端渲染
+const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); 
 
-const POSTS_PER_PAGE = 10;
-
-// 【UI重构】将分类和排序栏抽离成一个独立的、高度定制化的组件
-const ForumCategoryTabs = ({ onCategoryChange, onSortChange }) => {
-  const [activeCategory, setActiveCategory] = useState('推荐');
-  const [activeSort, setActiveSort] = useState('默认');
-  
-  const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
-  const sorts = ['默认', '最新', '最热'];
-
-  const handleCategoryClick = (category) => {
-    setActiveCategory(category);
-    onCategoryChange(category);
-  };
-  
-  const handleSortClick = (sort) => {
-    setActiveSort(sort);
-    onSortChange(sort);
-  };
-
-  return (
-    <div className="flex justify-between items-center h-16">
-      {/* 左侧：纯文本分类 */}
-      <div className="flex items-center space-x-6">
-        {categories.map(category => (
-          <span
-            key={category}
-            onClick={() => handleCategoryClick(category)}
-            className={`cursor-pointer text-base transition-colors duration-200 ${
-              activeCategory === category 
-              ? 'text-blue-500 font-semibold border-b-2 border-blue-500 pb-1' 
-              : 'text-gray-600 dark:text-gray-300 hover:text-blue-500'
-            }`}
-          >
-            {category}
-          </span>
-        ))}
-      </div>
-      {/* 右侧：小字号、淡色排序 */}
-      <div className="flex items-center space-x-4">
-        {sorts.map(sort => (
-          <span
-            key={sort}
-            onClick={() => handleSortClick(sort)}
-            className={`cursor-pointer text-sm transition-colors duration-200 ${
-              activeSort === sort
-              ? 'text-gray-800 dark:text-gray-100 font-medium'
-              : 'text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-gray-100'
-            }`}
-          >
-            {sort}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
-
+const POSTS_PER_PAGE = 10; // 每次加载10条帖子
 
 const CommunityPage = () => {
-  const { user } = useAuth();
+  const { user } = useAuth(); // user 在 SSR 期间为 null，loading 为 true
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(true); // 初始为 true
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [lastVisible, setLastVisible] = useState(null); // 用于分页的游标
+  const [hasMore, setHasMore] = useState(true); // 是否还有更多帖子
+  
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState('推荐');
-  const [currentSort, setCurrentSort] = useState('默认');
-  
-  const lastVisibleRef = useRef(null);
-  const isFetching = useRef(false);
-  const tabsRef = useRef(null);
-  const [isTabsSticky, setIsTabsSticky] = useState(false);
+  const [currentSort, setCurrentSort] = useState('最新');
 
-  // 【虚拟列表核心】用于 VariableSizeList 的 Refs
-  const listRef = useRef(null);
-  const itemSizeCache = useRef({}); // 缓存每个列表项的高度
-
-  // --- 数据获取逻辑 (保持不变) ---
+  // 封装获取帖子的核心逻辑
   const fetchPosts = useCallback(async (isInitial = false) => {
-    if (isFetching.current || (!isInitial && !hasMore)) return;
-    isFetching.current = true;
-    if (isInitial) { setLoading(true); setPosts([]); lastVisibleRef.current = null; setHasMore(true); }
+    console.log(`[fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}`);
+    
+    if (isInitial) {
+      setLoading(true);
+      setPosts([]);
+      setLastVisible(null);
+      setHasMore(true);
+      console.log("[fetchPosts] 初始加载，重置状态。");
+    } else {
+      setLoadingMore(true);
+      console.log("[fetchPosts] 加载更多。");
+    }
+
+    // 确保只有在浏览器环境中且 db 实例可用时才尝试从 Firestore 获取数据
+    if (typeof window === 'undefined' || !db) {
+        console.warn("[fetchPosts] Firestore instance (db) is not available or running on server. Skipping fetchPosts.");
+        // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
+        setLoading(false); // 确保在任何情况下，loading 状态最终都会变为 false
+        setLoadingMore(false);
+        setPosts([]); // 确保在服务器端帖子为空
+        setHasMore(false); // 没有 db 实例，就没有更多数据
+        return;
+    }
 
     try {
       const postsRef = collection(db, 'posts');
       const orderClause = currentSort === '最热' ? orderBy('likesCount', 'desc') : orderBy('createdAt', 'desc');
+      
+      let q;
+      const baseConditions = [orderClause, limit(POSTS_PER_PAGE)];
       const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
-      const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
-      const q = query(postsRef, ...categoryCondition, orderClause, limit(POSTS_PER_PAGE), ...paginationCondition);
+      const paginationCondition = !isInitial && lastVisible ? [startAfter(lastVisible)] : [];
       
-      const snapshots = await getDocs(q);
-      const newPosts = snapshots.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      q = query(postsRef, ...categoryCondition, ...baseConditions, ...paginationCondition);
+
+      const documentSnapshots = await getDocs(q);
       
-      setPosts(p => isInitial ? newPosts : [...p, ...newPosts]);
-      lastVisibleRef.current = snapshots.docs[snapshots.docs.length - 1];
-      if (snapshots.docs.length < POSTS_PER_PAGE) setHasMore(false);
+      const newPosts = documentSnapshots.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
 
-    } catch (error) { console.error("获取帖子失败:", error); setHasMore(false); } 
-    finally { setLoading(false); isFetching.current = false; }
-  }, [currentCategory, currentSort, hasMore]);
+      console.log(`[fetchPosts] 获取到 ${newPosts.length} 条新帖子。`);
 
-  // --- Effect: 初始加载和分类/排序切换 ---
+      setPosts(prevPosts => isInitial ? newPosts : [...prevPosts, ...newPosts]);
+      
+      const lastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
+      setLastVisible(lastVisibleDoc);
+      
+      if (documentSnapshots.docs.length < POSTS_PER_PAGE) {
+        setHasMore(false);
+        console.log("[fetchPosts] 没有更多帖子了。");
+      } else {
+        setHasMore(true);
+        console.log("[fetchPosts] 可能还有更多帖子。");
+      }
+
+    } catch (error) {
+      console.error("[fetchPosts] 获取帖子失败:", error);
+      // 捕获错误时也要确保加载状态结束
+      setPosts([]); // 错误时清空帖子
+      setHasMore(false);
+    } finally {
+      // 无论成功失败，确保加载状态最终关闭
+      if (isInitial) {
+        setLoading(false);
+        console.log("[fetchPosts] 初始加载完成，setLoading(false)。");
+      }
+      else {
+        setLoadingMore(false);
+        console.log("[fetchPosts] 加载更多完成，setLoadingMore(false)。");
+      }
+    }
+  }, [currentCategory, currentSort, lastVisible]);
+
   useEffect(() => {
-    // 重置缓存和列表状态
-    itemSizeCache.current = {};
-    if(listRef.current) listRef.current.resetAfterIndex(0);
-    fetchPosts(true);
-  }, [fetchPosts]);
+    console.log("[useEffect] 社区页面挂载/依赖更新。");
+    // 确保 useEffect 内部的客户端数据获取逻辑只在浏览器中执行
+    if (typeof window !== 'undefined') {
+        console.log("[useEffect] 运行在浏览器环境，触发 fetchPosts(true)。");
+        fetchPosts(true); // 初始加载
+    } else {
+        console.log("[useEffect] 运行在服务器端，setLoading(false)。");
+        // 在服务器端，立即将 loading 设为 false，防止页面卡住，并确保不会尝试获取数据
+        setLoading(false);
+    }
+    // ⚠️ 如果 fetchPosts 使用 onSnapshot，这里需要返回 cleanup 函数。
+    // 由于这里使用 getDocs，所以不需要返回 cleanup。
+  }, [fetchPosts]); // fetchPosts 已经被 useCallback 缓存
 
-  // --- Effect: 实现分类栏吸顶 (保持不变) ---
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => setIsTabsSticky(!entry.isIntersecting), { rootMargin: '-1px 0px 0px 0px', threshold: 1.0 });
-    const currentTabsRef = tabsRef.current;
-    if (currentTabsRef) observer.observe(currentTabsRef);
-    return () => { if (currentTabsRef) observer.unobserve(currentTabsRef); };
-  }, []);
-
-  // 【虚拟列表核心】获取或估算列表项高度的函数
-  const getItemSize = index => {
-    return itemSizeCache.current[index] || 150; // 如果有缓存高度则使用，否则使用预估高度150px
-  };
-
-  // 【虚拟列表核心】渲染虚拟列表的每一行，并测量其实际高度
-  const PostRow = ({ index, style }) => {
-    const post = posts[index];
-    const rowRef = useRef(null);
-
-    // 使用 ResizeObserver 测量每个列表项的实际高度并缓存
-    useEffect(() => {
-        const observer = new ResizeObserver(([entry]) => {
-            const newHeight = entry.contentRect.height;
-            if (itemSizeCache.current[index] !== newHeight) {
-                itemSizeCache.current[index] = newHeight;
-                // 高度变化后，通知list重新计算布局
-                if (listRef.current) listRef.current.resetAfterIndex(index);
-            }
-        });
-
-        const currentRowRef = rowRef.current;
-        if (currentRowRef) observer.observe(currentRowRef);
-
-        return () => observer.disconnect();
-    }, [index]);
-
-    if (!post) return null;
-
-    return (
-      <div style={style}>
-        {/* 【重要】PostItem 组件需要使用 forwardRef 才能接收这个 ref */}
-        <PostItem ref={rowRef} post={post} />
-      </div>
-    );
+  const handleLoadMore = () => {
+    console.log("[handleLoadMore] 点击加载更多。");
+    if (!loadingMore && hasMore) {
+      fetchPosts(false);
+    } else if (loadingMore) {
+      console.log("[handleLoadMore] 正在加载中，请稍候。");
+    } else if (!hasMore) {
+      console.log("[handleLoadMore] 已经没有更多帖子了。");
+    }
   };
   
+  // 点击发帖按钮时的登录拦截
+  const handleNewPostClick = (e) => {
+    if (!user) {
+      console.log("[handleNewPostClick] 用户未登录，阻止跳转，打开登录弹窗。");
+      e.preventDefault();
+      setShowLoginModal(true);
+    } else {
+      console.log("[handleNewPostClick] 用户已登录，允许跳转到发帖页。");
+    }
+  };
+
+  // 渲染逻辑：根据 loading 和 posts 长度决定显示什么
+  const renderPostsContent = () => {
+    if (loading) {
+      return (
+        <div className="p-12 text-center text-gray-500">
+          <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...
+        </div>
+      );
+    } else if (posts.length > 0) {
+      return posts.map((post) => <PostItem key={post.id} post={post} />);
+    } else { // loading 为 false 且 posts.length 为 0
+      return (
+        <div className="p-12 text-center text-gray-500">
+          <p className="text-lg">这里空空如也 🤔</p>
+          <p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p>
+        </div>
+      );
+    }
+  };
+
+
   return (
     <LayoutBase>
-      <div className="bg-stone-50 dark:bg-black min-h-screen flex flex-col">
-        {/* --- 顶部头图 (样式已更新) --- */}
-        <div className="relative h-48 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1488998427799-e3362cec87c3?q=80&w=2070&auto=format&fit=crop')" }}>
-          <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-            <h1 className="text-4xl font-bold text-white text-shadow-lg">中文社区</h1>
+      <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
+        {/* 头部背景图 */}
+        <div
+          className="relative h-52 md:h-64 bg-cover bg-center"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex items-center justify-center">
+            <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg animate-fade-in">
+              中文学习社区
+            </h1>
           </div>
         </div>
 
-        <div className="container mx-auto px-2 md:px-4 -mt-16 relative z-10 flex flex-col flex-grow">
-          {/* --- 分类栏吸顶实现 --- */}
-          <div ref={tabsRef} className="h-16" />
-          <div className={`transition-all duration-300 w-full ${isTabsSticky ? 'fixed top-0 left-0 right-0 z-30 bg-white/80 dark:bg-black/80 backdrop-blur-sm shadow-md' : 'relative -mt-16'}`}>
-            <div className="container mx-auto px-2 md:px-4">
-              <ForumCategoryTabs onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
-            </div>
+        {/* 内容主体 */}
+        <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
+          <ForumCategoryTabs onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
+
+          <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
+            {renderPostsContent()} {/* 使用单独的函数来渲染内容 */}
           </div>
           
-          {/* --- 【核心改造】使用 AutoSizer 包裹的动态虚拟列表 --- */}
-          <div className="mt-4 flex-grow">
-            {loading ? (
-              <div className="p-12 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> ...</div>
-            ) : posts.length > 0 ? (
-              <AutoSizer>
-                {({ height, width }) => (
-                  <List
-                    ref={listRef}
-                    height={height}
-                    width={width}
-                    itemCount={hasMore ? posts.length + 1 : posts.length} // 如果有更多，多渲染一个加载项
-                    itemSize={getItemSize}
-                    // 【无限滚动触发】
-                    onItemsRendered={({ visibleStopIndex }) => {
-                      if (visibleStopIndex >= posts.length - 1 && hasMore) {
-                        fetchPosts(false);
-                      }
-                    }}
-                  >
-                    {({ index, style }) => {
-                      // 渲染帖子项或底部的加载中提示
-                      if (index < posts.length) {
-                        return <PostRow index={index} style={style} />;
-                      }
-                      return (
-                        <div style={style} className="flex justify-center items-center">
-                          <p className="text-gray-400">
-                            {isFetching.current ? <i className="fas fa-spinner fa-spin mr-2"></i> : '加载更多...'}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  </List>
-                )}
-              </AutoSizer>
-            ) : (
-              <div className="p-12 text-center text-gray-500">这里空空如也 🤔...</div>
+          {/* 加载更多按钮 */}
+          <div className="text-center py-8">
+            {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
+            {!loadingMore && hasMore && posts.length > 0 && ( // 只有当有更多且有帖子时才显示加载更多按钮
+              <button onClick={handleLoadMore} className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors">
+                加载更多
+              </button>
             )}
+            {!hasMore && posts.length > 0 && ( // 只有当没有更多且有帖子时才显示到底啦
+              <p className="text-gray-400">—— 到底啦 ——</p>
+            )}
+            {/* 如果 posts.length === 0 且 !loading，renderPostsContent 已经处理了“空空如也” */}
           </div>
         </div>
 
-        {/* --- 发布按钮 --- */}
+        {/* 发布新帖悬浮按钮 */}
         <Link href="/community/new" passHref>
-          <a onClick={!user ? (e) => { e.preventDefault(); setShowLoginModal(true); } : undefined} className="fixed bottom-20 right-5 z-40 h-14 w-14 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-600 ...">
+          <a
+            onClick={handleNewPostClick}
+            className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95"
+            aria-label="发布新帖"
+          >
             <i className="fas fa-pen text-xl"></i>
           </a>
         </Link>
       </div>
+
       <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </LayoutBase>
   );
