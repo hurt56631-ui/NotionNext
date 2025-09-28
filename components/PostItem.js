@@ -1,9 +1,13 @@
 import React, { forwardRef, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
+// 【第一步：新增】导入我们创建的 PostContent 组件
+import PostContent from '@/components/PostContent';
+
 
 /**
  * helper: 提取 YouTube id（支持短链 / watch / embed / shorts）
+ * (这个函数现在不再被直接使用，因为 PostContent 会处理所有视频链接，但我们暂时保留它以防万一)
  */
 const getYouTubeId = (url) => {
   if (!url) return null;
@@ -34,7 +38,6 @@ const formatTimestamp = (ts) => {
 
 /**
  * 简单的私信按钮实现（内置在组件中，避免未定义导致的 React 错误）
- * 如果项目中已经有全局 StartChatButton，你可以把这里替换成动态 import 或直接删除此定义并 import 真正组件
  */
 const StartChatButton = ({ targetUserId }) => {
   if (!targetUserId) return null;
@@ -53,7 +56,6 @@ const StartChatButton = ({ targetUserId }) => {
 
 /**
  * PostItem 主体（支持 ref 转发）
- * 如果你在外层已经把 ref 绑到容器上（更推荐的做法），PostItem 也能正常工作。
  */
 function PostItemInner(props, ref) {
   const { post } = props || {};
@@ -64,6 +66,9 @@ function PostItemInner(props, ref) {
   // 安全判定 likers（可能为 undefined）
   const hasLiked = !!(user && Array.isArray(post.likers) && post.likers.includes(user.uid));
 
+  // 【第二步：移除】下面的 videoId 和 useMemo 不再需要，因为 PostContent 会处理一切。
+  // 我们将其注释掉，而不是直接删除，以便你理解变化。
+  /*
   const videoId = useMemo(() => {
     if (!post.content) return null;
     const lines = post.content.split('\n');
@@ -73,10 +78,10 @@ function PostItemInner(props, ref) {
     }
     return null;
   }, [post.content]);
+  */
 
   const handleLike = async (e) => {
     e?.preventDefault?.();
-    // 这里只是占位：真实项目可在外层注入 onLike 或直接调用 firebase 更新
     if (!user) {
       console.log('请先登录再进行点赞');
       return;
@@ -87,6 +92,7 @@ function PostItemInner(props, ref) {
 
   return (
     <div ref={ref} className="p-4 border-b border-gray-100 dark:border-gray-800">
+      {/* 用户信息部分保持不变 */}
       <div className="flex items-center mb-3">
         <Link href={`/profile/${post.authorId || ''}`} passHref>
           <a className="flex items-center cursor-pointer group">
@@ -114,44 +120,31 @@ function PostItemInner(props, ref) {
             </div>
           </a>
         </Link>
-
         <div className="ml-auto">
-          {/* 如果作者存在且当前用户不是作者则显示私信按钮 */}
           {post.authorId && user && user.uid !== post.authorId && (
             <StartChatButton targetUserId={post.authorId} />
           )}
         </div>
       </div>
 
-      {/*【已修改】将 href 中的 /forum/post/ 改为 /community/ */}
-      <Link href={`/community/${post.id}`} passHref>
-        <a className="space-y-2 block my-3">
-          <h2 className="text-lg font-bold hover:text-blue-500 dark:text-gray-100">{post.title}</h2>
+      {/* 【第三步：修改】用 PostContent 替换掉之前复杂的 Link 和 videoId 判断逻辑 */}
+      <div className="space-y-2 block my-3">
+        {/* 标题部分，单独作为一个链接 */}
+        <h2 className="text-lg font-bold hover:text-blue-500 dark:text-gray-100 transition-colors">
+            <Link href={`/community/${post.id}`} passHref>
+                <a>{post.title}</a>
+            </Link>
+        </h2>
 
-          {!videoId && (
-            <p className="text-gray-800 dark:text-gray-200 text-base line-clamp-2">
-              {post.content}
-            </p>
-          )}
-        </a>
-      </Link>
+        {/* 使用 PostContent 来渲染正文。它会自动处理文本、链接和视频预览 */}
+        <PostContent
+            content={post.content || ''}
+            preview={true} // 告诉组件使用预览模式
+            previewLink={`/community/${post.id}`} // 点击预览图时跳转的链接
+        />
+      </div>
 
-      {videoId && (
-        /*【已修改】将 href 中的 /forum/post/ 改为 /community/ */
-        <Link href={`/community/${post.id}`} passHref>
-          <a className="relative w-full aspect-video bg-black rounded-lg overflow-hidden group mt-2 block">
-            <img
-              src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
-              alt={post.title || '视频封面'}
-              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-              <i className="fas fa-play text-white text-4xl bg-black/50 p-4 rounded-full" />
-            </div>
-          </a>
-        </Link>
-      )}
-
+      {/* 底部操作按钮部分保持不变 */}
       <div className="flex justify-center items-center space-x-8 mt-4 text-gray-600 dark:text-gray-400">
         <button
           onClick={handleLike}
@@ -166,7 +159,6 @@ function PostItemInner(props, ref) {
           <i className="far fa-thumbs-down text-lg" />
         </button>
 
-        {/*【已修改】将 href 中的 /forum/post/ 改为 /community/ */}
         <Link href={`/community/${post.id}#comments`} passHref>
           <a className="flex items-center space-x-2 hover:text-green-500 transition-colors" aria-label="评论">
             <i className="far fa-comment-dots text-lg" />
