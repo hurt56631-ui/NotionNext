@@ -1,27 +1,25 @@
-// pages/community/index.js (更严格的动态导入，解决 ReferenceError: self is not defined)
+// pages/community/index.js (修复 "正在努力加载..." 问题)
 
 import { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
-// 注意：db 在服务器端可能为 null，这是正常的，我们会通过 typeof window 检查来处理
-import { db } from '@/lib/firebase';
+import { db } from '@/lib/firebase'; // db 在服务器端可能为 null，这是正常的，我们已在 lib/firebase.js 中处理
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
-
-// ✨✨ 核心修复 ✨✨
-// 所有可能包含客户端代码的组件都使用 dynamic import 和 ssr: false
 import dynamic from 'next/dynamic';
 
+// 所有可能包含客户端代码的组件都使用 dynamic import 和 ssr: false
 const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
 const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
-const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); // 确保 LayoutBase 也只在客户端渲染
+// 假设 LayoutBase 是你的主题布局，也用 dynamic ssr: false 确保客户端渲染
+const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); 
 
 const POSTS_PER_PAGE = 10; // 每次加载10条帖子
 
 const CommunityPage = () => {
   const { user } = useAuth(); // user 在 SSR 期间为 null，loading 为 true
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // 初始为 true
   const [loadingMore, setLoadingMore] = useState(false);
   const [lastVisible, setLastVisible] = useState(null); // 用于分页的游标
   const [hasMore, setHasMore] = useState(true); // 是否还有更多帖子
@@ -32,23 +30,28 @@ const CommunityPage = () => {
 
   // 封装获取帖子的核心逻辑
   const fetchPosts = useCallback(async (isInitial = false) => {
-    // 确保只有在浏览器环境中才尝试从 Firestore 获取数据
-    if (typeof window === 'undefined' || !db) {
-        // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
-        // console.warn("Firestore instance (db) is not available or running on server. Skipping fetchPosts."); // 生产环境可以注释掉
-        if (isInitial) setLoading(false); // 确保在 SSR 时，loading 状态能被正确处理
-        else setLoadingMore(false);
-        setPosts([]); // 在服务器端确保帖子为空，防止意外数据
-        return;
-    }
-
+    console.log(`[fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}`);
+    
     if (isInitial) {
       setLoading(true);
       setPosts([]);
       setLastVisible(null);
       setHasMore(true);
+      console.log("[fetchPosts] 初始加载，重置状态。");
     } else {
       setLoadingMore(true);
+      console.log("[fetchPosts] 加载更多。");
+    }
+
+    // 确保只有在浏览器环境中且 db 实例可用时才尝试从 Firestore 获取数据
+    if (typeof window === 'undefined' || !db) {
+        console.warn("[fetchPosts] Firestore instance (db) is not available or running on server. Skipping fetchPosts.");
+        // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
+        setLoading(false); // 确保在任何情况下，loading 状态最终都会变为 false
+        setLoadingMore(false);
+        setPosts([]); // 确保在服务器端帖子为空
+        setHasMore(false); // 没有 db 实例，就没有更多数据
+        return;
     }
 
     try {
@@ -56,13 +59,8 @@ const CommunityPage = () => {
       const orderClause = currentSort === '最热' ? orderBy('likesCount', 'desc') : orderBy('createdAt', 'desc');
       
       let q;
-      // 基础查询
       const baseConditions = [orderClause, limit(POSTS_PER_PAGE)];
-      
-      // 分类筛选
       const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
-
-      // 分页查询
       const paginationCondition = !isInitial && lastVisible ? [startAfter(lastVisible)] : [];
       
       q = query(postsRef, ...categoryCondition, ...baseConditions, ...paginationCondition);
@@ -74,51 +72,99 @@ const CommunityPage = () => {
         ...doc.data()
       }));
 
-      // 更新状态
+      console.log(`[fetchPosts] 获取到 ${newPosts.length} 条新帖子。`);
+
       setPosts(prevPosts => isInitial ? newPosts : [...prevPosts, ...newPosts]);
       
-      // 更新分页游标和状态
       const lastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
       setLastVisible(lastVisibleDoc);
       
       if (documentSnapshots.docs.length < POSTS_PER_PAGE) {
         setHasMore(false);
+        console.log("[fetchPosts] 没有更多帖子了。");
+      } else {
+        setHasMore(true);
+        console.log("[fetchPosts] 可能还有更多帖子。");
       }
 
     } catch (error) {
-      console.error("获取帖子失败:", error);
+      console.error("[fetchPosts] 获取帖子失败:", error);
+      // 捕获错误时也要确保加载状态结束
+      setPosts([]); // 错误时清空帖子
+      setHasMore(false);
     } finally {
-      if (isInitial) setLoading(false);
-      else setLoadingMore(false);
+      // 无论成功失败，确保加载状态最终关闭
+      if (isInitial) {
+        setLoading(false);
+        console.log("[fetchPosts] 初始加载完成，setLoading(false)。");
+      }
+      else {
+        setLoadingMore(false);
+        console.log("[fetchPosts] 加载更多完成，setLoadingMore(false)。");
+      }
     }
   }, [currentCategory, currentSort, lastVisible]);
 
   useEffect(() => {
+    console.log("[useEffect] 社区页面挂载/依赖更新。");
     // 确保 useEffect 内部的客户端数据获取逻辑只在浏览器中执行
     if (typeof window !== 'undefined') {
+        console.log("[useEffect] 运行在浏览器环境，触发 fetchPosts(true)。");
         fetchPosts(true); // 初始加载
     } else {
+        console.log("[useEffect] 运行在服务器端，setLoading(false)。");
         // 在服务器端，立即将 loading 设为 false，防止页面卡住，并确保不会尝试获取数据
         setLoading(false);
     }
+    // ⚠️ 如果 fetchPosts 使用 onSnapshot，这里需要返回 cleanup 函数。
+    // 由于这里使用 getDocs，所以不需要返回 cleanup。
   }, [fetchPosts]); // fetchPosts 已经被 useCallback 缓存
 
   const handleLoadMore = () => {
+    console.log("[handleLoadMore] 点击加载更多。");
     if (!loadingMore && hasMore) {
       fetchPosts(false);
+    } else if (loadingMore) {
+      console.log("[handleLoadMore] 正在加载中，请稍候。");
+    } else if (!hasMore) {
+      console.log("[handleLoadMore] 已经没有更多帖子了。");
     }
   };
   
   // 点击发帖按钮时的登录拦截
   const handleNewPostClick = (e) => {
     if (!user) {
+      console.log("[handleNewPostClick] 用户未登录，阻止跳转，打开登录弹窗。");
       e.preventDefault();
       setShowLoginModal(true);
+    } else {
+      console.log("[handleNewPostClick] 用户已登录，允许跳转到发帖页。");
     }
   };
 
+  // 渲染逻辑：根据 loading 和 posts 长度决定显示什么
+  const renderPostsContent = () => {
+    if (loading) {
+      return (
+        <div className="p-12 text-center text-gray-500">
+          <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...
+        </div>
+      );
+    } else if (posts.length > 0) {
+      return posts.map((post) => <PostItem key={post.id} post={post} />);
+    } else { // loading 为 false 且 posts.length 为 0
+      return (
+        <div className="p-12 text-center text-gray-500">
+          <p className="text-lg">这里空空如也 🤔</p>
+          <p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p>
+        </div>
+      );
+    }
+  };
+
+
   return (
-    <LayoutBase> {/* LayoutBase 也会被动态导入，只在客户端渲染 */}
+    <LayoutBase>
       <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
         {/* 头部背景图 */}
         <div
@@ -137,31 +183,21 @@ const CommunityPage = () => {
           <ForumCategoryTabs onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
 
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
-            {loading ? (
-              <div className="p-12 text-center text-gray-500">
-                <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...
-              </div>
-            ) : posts.length > 0 ? (
-              posts.map((post) => <PostItem key={post.id} post={post} />)
-            ) : (
-              <div className="p-12 text-center text-gray-500">
-                <p className="text-lg">这里空空如也 🤔</p>
-                <p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p>
-              </div>
-            )}
+            {renderPostsContent()} {/* 使用单独的函数来渲染内容 */}
           </div>
           
           {/* 加载更多按钮 */}
           <div className="text-center py-8">
             {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
-            {!loadingMore && hasMore && posts.length > 0 && (
+            {!loadingMore && hasMore && posts.length > 0 && ( // 只有当有更多且有帖子时才显示加载更多按钮
               <button onClick={handleLoadMore} className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors">
                 加载更多
               </button>
             )}
-            {!hasMore && posts.length > 0 && (
+            {!hasMore && posts.length > 0 && ( // 只有当没有更多且有帖子时才显示到底啦
               <p className="text-gray-400">—— 到底啦 ——</p>
             )}
+            {/* 如果 posts.length === 0 且 !loading，renderPostsContent 已经处理了“空空如也” */}
           </div>
         </div>
 
