@@ -1,4 +1,4 @@
-// pages/community/index.js (最终版本，正确导入 PostItem)
+// pages/community/index.js (已修复手势滑动和排序颜色问题)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 导航/排序组件 (无修改)
+// 导航/排序组件 (已修改样式)
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
     const sortOptions = ['默认', '最新', '最热'];
@@ -30,7 +30,8 @@ const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
             </div>
             <div className="flex justify-end items-center pt-2 space-x-2">
                 {sortOptions.map((sort) => (
-                    <button key={sort} onClick={() => handleSortClick(sort)} className={`px-4 py-1 text-xs rounded-lg transition-colors duration-200 ease-in-out ${activeSort === sort ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'}`}>
+                    // 【修改】加深了未选中项的文字颜色
+                    <button key={sort} onClick={() => handleSortClick(sort)} className={`px-4 py-1 text-xs rounded-lg transition-colors duration-200 ease-in-out ${activeSort === sort ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}`}>
                         {sort}
                     </button>
                 ))}
@@ -39,7 +40,6 @@ const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     );
 };
 
-// 【重要】恢复对外部 PostItem 组件的动态导入
 const PostItem = dynamic(() => import('@/themes/heo/components/PostItem'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
@@ -58,6 +58,12 @@ const CommunityPage = () => {
     const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
+
+    // 【新增】使用 Ref 来解决手势滑动中的陈旧状态（stale state）问题
+    const categoryIndexRef = useRef(0);
+    useEffect(() => {
+        categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
+    }, [currentCategory]);
 
     const updateLastVisible = useCallback((newDoc) => { lastVisibleRef.current = newDoc; }, []);
 
@@ -86,18 +92,23 @@ const CommunityPage = () => {
         else { setLoading(false); }
     }, [currentCategory, currentSort, db, fetchPosts]);
 
-    const handleSwipe = (direction) => {
-        const currentIndex = CATEGORIES.indexOf(currentCategory);
-        const nextIndex = currentIndex + direction;
-        if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
-            setSwipeDirection(direction);
-            setCurrentCategory(CATEGORIES[nextIndex]);
-        }
-    };
+    const bind = useDrag(({ active, movement: [mx], direction: [dx], cancel }) => {
+        // 当拖拽结束时
+        if (!active) {
+            // 检查水平位移是否超过阈值
+            if (Math.abs(mx) > window.innerWidth * 0.2) {
+                const direction = dx > 0 ? -1 : 1; // -1 向左滑（上一个），1 向右滑（下一个）
+                
+                // 【修改】使用 Ref 来获取最新的分类索引
+                const currentIndex = categoryIndexRef.current;
+                const nextIndex = currentIndex + direction;
 
-    const bind = useDrag(({ active, movement: [mx], direction: [dx] }) => {
-        if (!active && Math.abs(mx) > window.innerWidth * 0.2) {
-            handleSwipe(dx > 0 ? -1 : 1);
+                // 边界检查
+                if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
+                    setSwipeDirection(direction);
+                    setCurrentCategory(CATEGORIES[nextIndex]);
+                }
+            }
         }
     }, { axis: 'x', filterTaps: true, threshold: 20 });
 
