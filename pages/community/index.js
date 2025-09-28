@@ -1,4 +1,4 @@
-// pages/community/index.js (手势、美观度、无限滚动综合修复版)
+// pages/community/index.js (修复 ReferenceError: transitions is not defined 错误)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 导航/排序组件 (无修改，因为之前已经调整过颜色和间距)
+// 导航/排序组件
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
     const sortOptions = ['默认', '最新', '最热'];
@@ -57,9 +57,14 @@ const CommunityPage = () => {
     const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
-
-    // 使用 useRef 确保在 useDrag 回调中获取到最新的 categoryIndex
     const categoryIndexRef = useRef(0);
+
+    // 【新增】判断是否在浏览器环境
+    const [isBrowser, setIsBrowser] = useState(false);
+    useEffect(() => {
+      setIsBrowser(typeof window !== 'undefined');
+    }, []);
+
     useEffect(() => {
         categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
     }, [currentCategory]);
@@ -67,7 +72,6 @@ const CommunityPage = () => {
     const updateLastVisible = useCallback((newDoc) => { lastVisibleRef.current = newDoc; }, []);
 
     const fetchPosts = useCallback(async (isInitial = false) => {
-        // 确保不会在加载中或没有更多时重复触发
         if (loadingMore || (!hasMore && !isInitial)) return; 
 
         if (isInitial) { 
@@ -79,10 +83,10 @@ const CommunityPage = () => {
             setLoadingMore(true); 
         }
         
-        if (typeof window === 'undefined' || !db) { 
+        if (!db) { // 检查 db 是否可用
             setLoading(false); 
             setLoadingMore(false); 
-            console.warn("[CommunityPage] Firestore 实例不可用或运行在服务器端。");
+            console.warn("[CommunityPage] Firestore 实例不可用。");
             return; 
         }
         try {
@@ -111,53 +115,59 @@ const CommunityPage = () => {
             if (isInitial) { setLoading(false); } 
             else { setLoadingMore(false); } 
         }
-    }, [currentCategory, currentSort, db, updateLastVisible, loadingMore, hasMore]); // 【新增】hasMore 到依赖数组
+    }, [currentCategory, currentSort, db, updateLastVisible, loadingMore, hasMore]); 
 
     useEffect(() => {
-        if (typeof window !== 'undefined' && db) { fetchPosts(true); }
-        else { setLoading(false); }
-    }, [currentCategory, currentSort, db]); // fetchPosts 应该通过 `fetchPosts(true)` 明确触发，而不是作为依赖项
-
-    // 【手势修复】更精准的 useDrag 配置
-    const bind = useDrag(({ last, movement: [mx, my], direction: [dx], cancel }) => {
-        // 优先处理垂直滚动：如果垂直移动距离大于水平移动距离，则取消水平拖拽，让页面正常滚动
-        if (Math.abs(my) > Math.abs(mx) && !last) { 
-            cancel();
-            return; 
+        // 【修改】仅在浏览器环境或 db 可用时才触发初始数据获取
+        if (isBrowser && db) { 
+             fetchPosts(true); 
+        } else if (!isBrowser) { // 如果不是浏览器环境，直接设置 loading 为 false，以便 SSG/SSR 顺利完成
+            setLoading(false);
         }
+    }, [currentCategory, currentSort, db, isBrowser]); 
 
-        // 只有当手势结束 (last) 且水平移动距离达到阈值时才切换分类
-        if (last && Math.abs(mx) > window.innerWidth * 0.25) { // 阈值可以根据实际体验调整
-            const direction = dx > 0 ? -1 : 1; // dx > 0 表示手指向右滑 (内容向左移)，切换到上一个分类（索引-1）
-                                               // dx < 0 表示手指向左滑 (内容向右移)，切换到下一个分类（索引+1）
-            
-            const currentIndex = categoryIndexRef.current; // 使用 useRef 获取最新索引
-            const nextIndex = currentIndex + direction;
+    // 【手势修复】将 useDrag 和 useTransition 仅在浏览器端定义和使用
+    let bind = () => ({});
+    let transitions = [];
 
-            // 边界检查
-            if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
-                setSwipeDirection(direction); // 设置动画方向
-                setCurrentCategory(CATEGORIES[nextIndex]); // 切换分类，触发数据加载和动画
+    if (isBrowser) {
+        bind = useDrag(({ last, movement: [mx, my], direction: [dx], cancel }) => {
+            if (Math.abs(my) > Math.abs(mx) && !last) { 
+                cancel();
+                return; 
             }
-        }
-        // 【注意】不需要重置 swipeDirection 到 0。
-        // useTransition 在 exitBeforeEnter 模式下，会在旧内容离开后，再让新内容从 from 状态进入。
-        // 此时 from 会再次根据 swipeDirection 的当前值来计算初始位置，所以保持其值是正确的。
-        // 重置为 0 反而可能导致动画方向不正确（总是从中心出现）。
-    }, { 
-        axis: 'x', 
-        filterTaps: true, 
-        threshold: 15, // 触发手势的最小移动距离
-        // 【重要】阻止浏览器默认的触摸行为，防止与边缘滑动等手势冲突
-        // touch-action 已经在父 div 上设置了 pan-y，这里可以进一步确认或优化
-        preventDefault: true, // 阻止默认行为，尤其是触摸事件
-        event: { passive: false } // 让事件非被动，允许我们调用 preventDefault
-    });
+
+            if (last && Math.abs(mx) > window.innerWidth * 0.25) { 
+                const direction = dx > 0 ? -1 : 1; 
+                const currentIndex = categoryIndexRef.current; 
+                const nextIndex = currentIndex + direction;
+
+                if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
+                    setSwipeDirection(direction); 
+                    setCurrentCategory(CATEGORIES[nextIndex]); 
+                }
+            }
+        }, { 
+            axis: 'x', 
+            filterTaps: true, 
+            threshold: 15, 
+            preventDefault: true, 
+            event: { passive: false } 
+        });
+
+        transitions = useTransition(currentCategory, {
+            from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
+            enter: { opacity: 1, transform: 'translateX(0%)' },
+            leave: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '-50%' : '50%'})`, position: 'absolute' },
+            config: { tension: 220, friction: 30 },
+            exitBeforeEnter: true,
+        });
+    }
 
     // 无限滚动逻辑
     const observer = useRef();
     const loadMoreRef = useCallback(node => {
-        if (loading || loadingMore || !hasMore) return; // 【修改】增加 loadingMore 和 hasMore 判断
+        if (loading || loadingMore || !hasMore || !isBrowser) return; // 【修改】增加 isBrowser 判断
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && hasMore && !loadingMore) {
@@ -165,7 +175,7 @@ const CommunityPage = () => {
             }
         });
         if (node) observer.current.observe(node);
-    }, [loading, loadingMore, hasMore, fetchPosts]); // 【新增】loadingMore 和 hasMore 作为依赖项
+    }, [loading, loadingMore, hasMore, fetchPosts, isBrowser]);
 
     const handleNewPostClick = (e) => { if (!user) { e.preventDefault(); setShowLoginModal(true); } };
 
@@ -178,7 +188,7 @@ const CommunityPage = () => {
     return (
         <LayoutBase>
             <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
-                {/* 顶部封面 + 名言 (已美化) */}
+                {/* 顶部封面 + 名言 */}
                 <div className="relative h-60 md:h-72 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
                     <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
                         <h1 className="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg tracking-wide">
@@ -198,14 +208,21 @@ const CommunityPage = () => {
                         <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
                     </div>
 
-                    <div {...bind()} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
-                        {transitions((style, item) => (
+                    {/* 【修改】只有在浏览器端才绑定手势和渲染动画 */}
+                    <div {...(isBrowser ? bind() : {})} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
+                        {isBrowser && transitions((style, item) => (
                             <animated.div key={item} style={{ ...style, width: '100%' }}>
                                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
                                     {renderPostsContent()}
                                 </div>
                             </animated.div>
                         ))}
+                        {/* 【新增】如果在 SSR 阶段，直接渲染内容而不带动画 */}
+                        {!isBrowser && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
+                                {renderPostsContent()}
+                            </div>
+                        )}
                     </div>
 
                     {/* 无限滚动 UI */}
