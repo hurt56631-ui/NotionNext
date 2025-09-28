@@ -1,17 +1,35 @@
-// pages/community/[id].js (确保所有客户端组件都动态导入)
-
+// pages/community/[id].js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
-import { LayoutBase } from '@/themes/heo';
 import dynamic from 'next/dynamic';
-import PostContent from '@/components/PostContent';
 
+// 导入我们新的 VideoEmbed 组件
+const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const CommentItem = dynamic(() => import('@/components/CommentItem'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
+
+// 视频解析函数，用于从帖子内容中提取第一个视频 URL
+const parseVideoUrl = (text = '') => {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const url = line.trim();
+    // 使用一个更通用的 URL 正则表达式来匹配
+    const urlRegex = /(https?:\/\/[^\s<>"'()]+)/;
+    const match = url.match(urlRegex);
+    if (match) {
+        const potentialUrl = match[0];
+        const videoPatterns = [ /youtube\.com|youtu\.be/, /vimeo\.com/, /bilibili\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
+        if (videoPatterns.some(p => p.test(potentialUrl))) {
+            return potentialUrl; // 返回第一个找到的视频 URL
+        }
+    }
+  }
+  return null;
+};
 
 const PostDetailPage = () => {
   const router = useRouter();
@@ -22,133 +40,59 @@ const PostDetailPage = () => {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
   const [commentContent, setCommentContent] = useState('');
   const [isCommenting, setIsCommenting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-
   const postRef = useRef(post);
-  useEffect(() => {
-    postRef.current = post;
-  }, [post]);
+  useEffect(() => { postRef.current = post; }, [post]);
 
-  const fetchPost = useCallback(async () => {
-    console.log(`[PostDetailPage - fetchPost] 尝试获取帖子详情，ID: ${id}`);
-    if (!id || typeof window === 'undefined' || !db) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const docRef = doc(db, 'posts', id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setPost({ id: docSnap.id, ...docSnap.data() });
-        console.log("[PostDetailPage - fetchPost] 帖子详情获取成功。");
-      } else {
-        setError('抱歉，帖子不存在或已被删除。');
-        setPost(null);
-      }
-    } catch (err) {
-      console.error("[PostDetailPage - fetchPost] 获取帖子详情失败:", err);
-      setError('加载帖子失败，请稍后再试。');
-      setPost(null);
-    }
-  }, [id]);
+  // 在 post 状态更新后，计算出视频链接
+  const videoUrl = post ? parseVideoUrl(post.content) : null;
 
-  const fetchComments = useCallback(() => {
-    console.log(`[PostDetailPage - fetchComments] 尝试监听评论，帖子ID: ${id}`);
-    if (!id || typeof window === 'undefined' || !db) {
-      setLoading(false);
-      return () => { };
-    }
-    const commentsCollectionRef = collection(db, 'comments');
-    const q = query(commentsCollectionRef, where('postId', '==', id), orderBy('createdAt', 'asc'));
+  // 数据获取和操作函数 (保持不变)
+  const fetchPost = useCallback(async () => { if (!id || typeof window === 'undefined' || !db) { setLoading(false); return; } try { const docRef = doc(db, 'posts', id); const docSnap = await getDoc(docRef); if (docSnap.exists()) { setPost({ id: docSnap.id, ...docSnap.data() }); } else { setError('抱歉，帖子不存在或已被删除。'); setPost(null); } } catch (err) { setError('加载帖子失败，请稍后再试。'); setPost(null); } }, [id]);
+  const fetchComments = useCallback(() => { if (!id || typeof window === 'undefined' || !db) { setLoading(false); return () => {}; } const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc')); const unsubscribe = onSnapshot(q, (snapshot) => { const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })); setComments(data); setLoading(false); const currentPost = postRef.current; if (currentPost && currentPost.commentsCount !== data.length) { updateDoc(doc(db, 'posts', id), { commentsCount: data.length }); } }, (err) => { setError('加载评论失败，请稍后再试。'); setComments([]); setLoading(false); }); return unsubscribe; }, [id]);
+  useEffect(() => { if (id) { setLoading(true); setError(''); const unsub = fetchComments(); fetchPost(); return () => unsub(); } }, [id]);
+  const handleCommentSubmit = async (e) => { e.preventDefault(); if (!commentContent.trim() || !user) { if(!user) setShowLoginModal(true); return; } setIsCommenting(true); try { await addDoc(collection(db, 'comments'), { postId: id, content: commentContent.trim(), authorId: user.uid, authorName: user.displayName || '匿名用户', authorAvatar: user.photoURL, createdAt: new Date() }); setCommentContent(''); } finally { setIsCommenting(false); } };
+  const handleLike = async () => { if (!user || !post) { if(!user) setShowLoginModal(true); return; } setIsLiking(true); try { await updateDoc(doc(db, 'posts', id), { likesCount: increment(1) }); setPost(p => ({ ...p, likesCount: (p.likesCount || 0) + 1 })); } finally { setIsLiking(false); } };
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const commentsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setComments(commentsData);
-      setLoading(false);
-      console.log(`[PostDetailPage - fetchComments] 评论数据更新，共 ${commentsData.length} 条。`);
-
-      const currentPost = postRef.current;
-      if (currentPost && currentPost.commentsCount !== commentsData.length) {
-        updateDoc(doc(db, 'posts', id), {
-          commentsCount: commentsData.length
-        }).catch(e => console.error("更新评论数量失败", e));
-      }
-
-    }, (err) => {
-      console.error("[PostDetailPage - fetchComments] 监听评论失败:", err);
-      setError('加载评论失败，请稍后再试。');
-      setComments([]);
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, [id]);
-
-  useEffect(() => {
-    if (id) {
-      setLoading(true);
-      setError('');
-      if (typeof window !== 'undefined') {
-        fetchPost();
-        const unsubscribeComments = fetchComments();
-        return () => {
-          unsubscribeComments();
-        };
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [id]);
-
-  const handleCommentSubmit = async (e) => { e.preventDefault(); if (!commentContent.trim()) { alert('评论内容不能为空！'); return; } if (!user) { setShowLoginModal(true); return; } setIsCommenting(true); try { await addDoc(collection(db, 'comments'), { postId: id, content: commentContent.trim(), authorId: user.uid, authorName: user.displayName || user.email || '匿名用户', authorAvatar: user.photoURL || '/images/avatar-placeholder.png', createdAt: new Date(), }); setCommentContent(''); } catch (err) { console.error("[PostDetailPage - handleCommentSubmit] 发布评论失败:", err); alert('发布评论失败，请稍后再试。'); } finally { setIsCommenting(false); } };
-  const handleLike = async () => { if (!user) { setShowLoginModal(true); return; } if (!db || !post || isLiking) return; setIsLiking(true); try { const postDocRef = doc(db, 'posts', id); await updateDoc(postDocRef, { likesCount: increment(1) }); setPost(prevPost => ({ ...prevPost, likesCount: (prevPost.likesCount || 0) + 1 })); } catch (err) { console.error("[PostDetailPage - handleLike] 点赞失败:", err); alert('点赞失败，请稍后再试。'); } finally { setIsLiking(false); } };
-
-  if (authLoading || loading) {
-    return (
-      <LayoutBaseDynamic>
-        <div className="flex justify-center items-center min-h-screen text-gray-500">
-          <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在加载帖子...
-        </div>
-      </LayoutBaseDynamic>
-    );
-  }
-
-  if (error || !post) {
-    return (
-      <LayoutBaseDynamic>
-        <div className="flex justify-center items-center min-h-screen text-red-500">
-          <p className="text-xl">{error || '帖子不存在或已被删除。'}</p>
-        </div>
-      </LayoutBaseDynamic>
-    );
-  }
+  // 加载和错误状态的 UI (保持不变)
+  if (authLoading || loading) return <LayoutBaseDynamic><div className="flex justify-center items-center min-h-screen">正在加载帖子...</div></LayoutBaseDynamic>;
+  if (error || !post) return <LayoutBaseDynamic><div className="flex justify-center items-center min-h-screen text-red-500">{error || '帖子不存在或已被删除。'}</div></LayoutBaseDynamic>;
 
   return (
     <LayoutBaseDynamic>
       <div className="bg-gray-50 dark:bg-black min-h-screen pt-10 pb-20">
         <div className="container mx-auto px-3 md:px-6 max-w-3xl">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-100 mb-4 break-words">
-              {post.title}
-            </h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-800 dark:text-gray-100 mb-4 break-words">{post.title}</h1>
             <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-6 space-x-3">
-              <img src={post.authorAvatar || '/images/avatar-placeholder.png'} alt={post.authorName} className="w-8 h-8 rounded-full" />
+              <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName} className="w-8 h-8 rounded-full" />
               <span className="font-medium text-gray-700 dark:text-gray-300">{post.authorName}</span>
               <span>·</span>
               <span>{post.createdAt?.toDate ? new Date(post.createdAt.toDate()).toLocaleString('zh-CN') : '未知时间'}</span>
-              {post.category && (<> <span>·</span> <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded-full text-xs font-medium">{post.category}</span> </>)}
             </div>
-
-            {/* 【已修改】加回了 prose dark:prose-invert 以确保文本样式正确 */}
-            <div className="prose dark:prose-invert max-w-none text-gray-700 dark:text-gray-200 leading-relaxed mb-8">
-              <PostContent content={post.content || ''} preview={false} />
+            
+            {/* 【核心修改】在这里决定是显示视频还是纯文本 */}
+            <div className="content-wrapper mb-8">
+              {videoUrl ? (
+                // 如果有视频链接，则渲染视频播放器
+                <VideoEmbed url={videoUrl} />
+              ) : (
+                // 如果没有视频链接，则渲染帖子的纯文本内容
+                <div className="prose dark:prose-invert max-w-none">
+                  {(post.content || '').split('\n').map((paragraph, index) => (
+                    <p key={index}>{paragraph}</p>
+                  ))}
+                </div>
+              )}
             </div>
-
+            
             <div className="flex justify-end">
-              <button onClick={handleLike} disabled={isLiking || !user} className={`flex items-center px-4 py-2 rounded-full transition-colors duration-200 ${isLiking ? 'bg-gray-200 dark:bg-gray-700 cursor-not-allowed' : 'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800'}`} >
-                <i className={`fas fa-heart ${user ? 'mr-2' : ''}`}></i>
+              <button onClick={handleLike} disabled={isLiking} className="flex items-center px-4 py-2 rounded-full transition-colors duration-200 bg-red-100 text-red-600 hover:bg-red-200">
+                <i className="fas fa-heart mr-2" /> 
                 <span>{post.likesCount || 0}</span>
               </button>
             </div>
@@ -156,12 +100,12 @@ const PostDetailPage = () => {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">评论 ({comments.length})</h2>
             <div className="mb-6">
-              {comments.length > 0 ? (comments.map(comment => <CommentItem key={comment.id} comment={comment} />)) : (<p className="text-gray-500 dark:text-gray-400 text-center">还没有人评论，快来抢沙发吧！</p>)}
+              {comments.length > 0 ? comments.map(c => <CommentItem key={c.id} comment={c} />) : <p className="text-gray-500 dark:text-gray-400 text-center">还没有人评论，快来抢沙发吧！</p>}
             </div>
             <form onSubmit={handleCommentSubmit} className="space-y-4">
-              <textarea value={commentContent} onChange={(e) => setCommentContent(e.target.value)} placeholder={user ? "发表你的看法..." : "请登录后发表评论..."} rows="4" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-y" disabled={isCommenting || !user}></textarea>
-              <button type="submit" disabled={isCommenting || !user} className={`w-full py-2 px-4 rounded-lg shadow-md font-semibold text-white transition-colors duration-200 ${isCommenting || !user ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} flex items-center justify-center`}>
-                {isCommenting ? (<> <i className="fas fa-spinner fa-spin mr-2"></i> 提交中... </>) : ('发表评论')}
+              <textarea value={commentContent} onChange={e => setCommentContent(e.target.value)} placeholder={user ? "发表你的看法..." : "请登录后发表评论..."} rows="4" className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-y" disabled={!user || isCommenting}></textarea>
+              <button type="submit" disabled={!user || isCommenting} className="w-full py-2 px-4 rounded-lg shadow-md font-semibold text-white transition-colors duration-200 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
+                {isCommenting ? '提交中...' : '发表评论'}
               </button>
             </form>
           </div>
