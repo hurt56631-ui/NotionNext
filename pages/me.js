@@ -1,4 +1,4 @@
-// pages/me.js (已添加随机背景图功能)
+// pages/me.js (已修复编译错误和优化)
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -63,8 +63,11 @@ const PostList = ({ posts, type, author }) => {
           key={post.id}
           role="button"
           tabIndex={0}
-          onClick={() => router.push(`/community/${post.id}`)} {/* 【修改】跳转路径为 /community/${post.id} */}
-          onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/community/${post.id}`); }} {/* 【修改】跳转路径 */}
+          // 【修复】JSX 中的注释问题
+          onClick={() => router.push(`/community/${post.id}`)} 
+          onKeyDown={(e) => { 
+            if (e.key === 'Enter') router.push(`/community/${post.id}`); 
+          }} 
           className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow p-3 flex flex-col h-full cursor-pointer"
         >
           <div className="flex items-center gap-3 mb-2">
@@ -119,7 +122,6 @@ const MyProfilePage = () => {
   // 【新增】获取随机背景图片的 useEffect
   useEffect(() => {
     const fetchRandomImage = async () => {
-      // 尝试从 localStorage 获取缓存的图片URL
       const cachedImage = localStorage.getItem('profileBgImage');
       const cacheTimestamp = localStorage.getItem('profileBgImageTimestamp');
       const now = new Date().getTime();
@@ -128,16 +130,7 @@ const MyProfilePage = () => {
       if (cachedImage && cacheTimestamp && (now - parseInt(cacheTimestamp, 10) < ONE_DAY)) {
         setRandomBgImage(cachedImage);
       } else {
-        // 使用 Unsplash 的随机图片 API
-        // 建议：如果你有 Unsplash API Key，可以更稳定地获取高质量图片
-        // `https://api.unsplash.com/photos/random?query=nature,technology&orientation=landscape&client_id=YOUR_UNSPLASH_ACCESS_KEY`
-        // 如果没有 API Key，使用 /photos/random 会被限速，
-        // 也可以直接用 source.unsplash.com，它更适合直接在 img src 或 background-image 中使用，但无法控制类别
-        // 例如：https://source.unsplash.com/random/1600x900/?nature,technology,abstract,sky
-        const imageUrl = `https://source.unsplash.com/random/1600x900/?nature,abstract`; // 随机风景或抽象图，尺寸1600x900
-        
-        // 简单模拟网络请求，获取一个实际的 URL
-        // 实际上 source.unsplash.com 会直接重定向到图片URL，可以直接用
+        const imageUrl = `https://source.unsplash.com/random/1600x900/?nature,abstract`; 
         setRandomBgImage(imageUrl);
         localStorage.setItem('profileBgImage', imageUrl);
         localStorage.setItem('profileBgImageTimestamp', now.toString());
@@ -145,7 +138,7 @@ const MyProfilePage = () => {
     };
 
     fetchRandomImage();
-  }, []); // 仅在组件挂载时运行一次
+  }, []); 
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
@@ -175,7 +168,7 @@ const MyProfilePage = () => {
     if (currentUser) {
       fetchUserProfile();
     }
-  }, [currentUser]); // fetchUserProfile 现在是一个稳定的函数，可以作为依赖项
+  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser?.uid || !profileUser) {
@@ -246,7 +239,6 @@ const MyProfilePage = () => {
     return <LayoutBase><div className="p-10 text-center text-red-500">无法加载您的信息，请尝试重新登录。</div></LayoutBase>;
   }
 
-  // 构建背景图片URL，优先使用用户自定义的，其次是随机获取的
   const backgroundImageUrl = profileUser?.backgroundImageUrl || randomBgImage || '/images/zhuyetu.jpg';
 
   return (
