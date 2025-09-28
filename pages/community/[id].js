@@ -7,37 +7,35 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 
-// 动态导入所需组件
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const CommentItem = dynamic(() => import('@/components/CommentItem'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false });
 
 /**
- * 【优化】更健壮的视频链接解析函数
- *  - 不再按行分割，而是搜索整个文本内容。
- *  - 查找所有 URL，并返回第一个匹配视频平台的链接。
+ * 【核心修正】采用 PostItem.js 中已被验证成功的、更可靠的逐行解析逻辑
  */
 const parseVideoUrl = (text = '') => {
   if (!text) return null;
-  
-  const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
-  const allUrls = text.match(urlRegex); // 找出所有 URL
 
-  if (!allUrls) {
-    return null; // 如果没有任何 URL，直接返回 null
-  }
+  const lines = text.split('\n'); // 按行分割
+  for (const line of lines) {
+    const url = line.trim(); // 去除每行首尾的空格
+    
+    // 在干净的行中匹配 URL
+    const urlRegex = /(https?:\/\/[^\s<>"'()]+)/;
+    const match = url.match(urlRegex);
 
-  const videoPatterns = [ /youtube\.com|youtu\.be/, /vimeo\.com/, /bilibili\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
-
-  // 遍历所有找到的 URL，返回第一个是视频的链接
-  for (const url of allUrls) {
-    if (videoPatterns.some(p => p.test(url))) {
-      return url;
+    if (match) {
+      const potentialUrl = match[0];
+      const videoPatterns = [ /youtube\.com|youtu\.be/, /vimeo\.com/, /bilibili\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/ ];
+      if (videoPatterns.some(p => p.test(potentialUrl))) {
+        return potentialUrl; // 找到第一个视频链接就立即返回
+      }
     }
   }
 
-  return null; // 如果所有 URL 都不是视频链接，返回 null
+  return null; // 如果所有行都没有找到视频链接，返回 null
 };
 
 
@@ -58,7 +56,6 @@ const PostDetailPage = () => {
   const postRef = useRef(post);
   useEffect(() => { postRef.current = post; }, [post]);
 
-  // 【优化】使用 useMemo 来计算 videoUrl，更高效、更清晰
   const videoUrl = useMemo(() => {
     return post ? parseVideoUrl(post.content) : null;
   }, [post]);
@@ -89,10 +86,8 @@ const PostDetailPage = () => {
             
             <div className="content-wrapper mb-8">
               {videoUrl ? (
-                // 如果成功解析出视频链接，就渲染视频播放器
                 <VideoEmbed url={videoUrl} />
               ) : (
-                // 否则，渲染帖子的纯文本内容
                 <div className="prose dark:prose-invert max-w-none">
                   {(post.content || '').split('\n').map((paragraph, index) => (
                     <p key={index}>{paragraph}</p>
