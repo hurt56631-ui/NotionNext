@@ -1,4 +1,4 @@
-// pages/community/index.js (已修复手势滑动和排序颜色问题)
+// pages/community/index.js (美学升级 & 无限滚动 & 手势修复最终版)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 导航/排序组件 (已修改样式)
+// 导航/排序组件 (无修改)
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
     const sortOptions = ['默认', '最新', '最热'];
@@ -30,7 +30,6 @@ const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
             </div>
             <div className="flex justify-end items-center pt-2 space-x-2">
                 {sortOptions.map((sort) => (
-                    // 【修改】加深了未选中项的文字颜色
                     <button key={sort} onClick={() => handleSortClick(sort)} className={`px-4 py-1 text-xs rounded-lg transition-colors duration-200 ease-in-out ${activeSort === sort ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}`}>
                         {sort}
                     </button>
@@ -58,16 +57,17 @@ const CommunityPage = () => {
     const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
-
-    // 【新增】使用 Ref 来解决手势滑动中的陈旧状态（stale state）问题
     const categoryIndexRef = useRef(0);
+    
     useEffect(() => {
         categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
     }, [currentCategory]);
 
     const updateLastVisible = useCallback((newDoc) => { lastVisibleRef.current = newDoc; }, []);
 
+    // fetchPosts 函数保持不变，但现在由无限滚动触发
     const fetchPosts = useCallback(async (isInitial = false) => {
+        if (loadingMore) return; // 防止重复加载
         if (isInitial) { setLoading(true); setPosts([]); updateLastVisible(null); setHasMore(true); } else { setLoadingMore(true); }
         if (typeof window === 'undefined' || !db) { setLoading(false); setLoadingMore(false); return; }
         try {
@@ -85,25 +85,26 @@ const CommunityPage = () => {
             setHasMore(documentSnapshots.docs.length >= POSTS_PER_PAGE);
         } catch (error) { console.error("获取帖子失败:", error); setPosts([]); setHasMore(false);
         } finally { if (isInitial) { setLoading(false); } else { setLoadingMore(false); } }
-    }, [currentCategory, currentSort, db, updateLastVisible]);
+    }, [currentCategory, currentSort, db, updateLastVisible, loadingMore]);
 
     useEffect(() => {
         if (typeof window !== 'undefined' && db) { fetchPosts(true); }
         else { setLoading(false); }
-    }, [currentCategory, currentSort, db, fetchPosts]);
+    }, [currentCategory, currentSort, db]); // fetchPosts 不再是依赖项，避免循环
 
-    const bind = useDrag(({ active, movement: [mx], direction: [dx], cancel }) => {
-        // 当拖拽结束时
-        if (!active) {
-            // 检查水平位移是否超过阈值
-            if (Math.abs(mx) > window.innerWidth * 0.2) {
-                const direction = dx > 0 ? -1 : 1; // -1 向左滑（上一个），1 向右滑（下一个）
-                
-                // 【修改】使用 Ref 来获取最新的分类索引
+    // 【手势修复】更稳健的手势处理逻辑
+    const bind = useDrag(({ active, movement: [mx, my], direction: [dx], cancel, canceled }) => {
+        // 如果垂直拖拽的意图更明显，则立即取消水平手势，让页面可以正常滚动
+        if (Math.abs(my) > Math.abs(mx)) {
+            cancel();
+            return;
+        }
+
+        if (!active && !canceled) {
+            if (Math.abs(mx) > window.innerWidth * 0.25) { // 稍微增加滑动阈值
+                const direction = dx > 0 ? -1 : 1;
                 const currentIndex = categoryIndexRef.current;
                 const nextIndex = currentIndex + direction;
-
-                // 边界检查
                 if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
                     setSwipeDirection(direction);
                     setCurrentCategory(CATEGORIES[nextIndex]);
@@ -111,7 +112,7 @@ const CommunityPage = () => {
             }
         }
     }, { axis: 'x', filterTaps: true, threshold: 20 });
-
+    
     const transitions = useTransition(currentCategory, {
         from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
         enter: { opacity: 1, transform: 'translateX(0%)' },
@@ -119,12 +120,24 @@ const CommunityPage = () => {
         config: { tension: 220, friction: 30 },
         exitBeforeEnter: true,
     });
+    
+    // 【无限滚动】逻辑实现
+    const observer = useRef();
+    const loadMoreRef = useCallback(node => {
+        if (loading) return;
+        if (observer.current) observer.current.disconnect();
+        observer.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting && hasMore && !loadingMore) {
+                fetchPosts(false);
+            }
+        });
+        if (node) observer.current.observe(node);
+    }, [loading, loadingMore, hasMore, fetchPosts]);
 
-    const handleLoadMore = () => { if (!loadingMore && hasMore) { fetchPosts(false); } };
     const handleNewPostClick = (e) => { if (!user) { e.preventDefault(); setShowLoginModal(true); } };
 
     const renderPostsContent = () => {
-        if (loading) return <div className="p-12 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...</div>;
+        if (loading && posts.length === 0) return <div className="p-12 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...</div>;
         if (posts.length > 0) return posts.map((post) => <PostItem key={post.id} post={post} />);
         return <div className="p-12 text-center text-gray-500"><p className="text-lg">这里空空如也 🤔</p><p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p></div>;
     };
@@ -132,15 +145,25 @@ const CommunityPage = () => {
     return (
         <LayoutBase>
             <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
-                <div className="relative h-52 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex items-center justify-center">
-                        <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg animate-fade-in">中文学习社区</h1>
+                {/* 【美化】顶部区域 */}
+                <div className="relative h-56 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
+                        <div className="animate-fade-in">
+                            <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">
+                                中文学习社区
+                            </h1>
+                            <p className="mt-4 text-base md:text-lg font-light text-white/80 drop-shadow">
+                                · 学如逆水行舟，不进则退 ·
+                            </p>
+                        </div>
                     </div>
                 </div>
+
                 <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
                     <div className="sticky top-0 z-30 bg-transparent py-3">
                         <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
                     </div>
+
                     <div {...bind()} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
                         {transitions((style, item) => (
                             <animated.div key={item} style={{ ...style, width: '100%' }}>
@@ -150,12 +173,17 @@ const CommunityPage = () => {
                             </animated.div>
                         ))}
                     </div>
+
+                    {/* 【无限滚动】的UI部分 */}
                     <div className="text-center py-8">
                         {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
-                        {!loadingMore && hasMore && posts.length > 0 && <button onClick={handleLoadMore} className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors">加载更多</button>}
                         {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
                     </div>
+
+                    {/* 这个空的 div 是用来被 IntersectionObserver 观察的 */}
+                    <div ref={loadMoreRef} style={{ height: '1px' }} />
                 </div>
+                
                 <Link href="/community/new" passHref>
                     <a onClick={handleNewPostClick} className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95" aria-label="发布新帖">
                         <i className="fas fa-pen text-xl"></i>
