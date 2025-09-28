@@ -1,56 +1,64 @@
-// pages/community/index.js (修复 "正在努力加载..." 问题)
+// pages/community/index.js (修复无限加载循环)
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react'; // 【新增】导入 useRef
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // db 在服务器端可能为 null，这是正常的，我们已在 lib/firebase.js 中处理
+import { db } from '@/lib/firebase'; 
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 所有可能包含客户端代码的组件都使用 dynamic import 和 ssr: false
+// 确保所有在客户端渲染的组件都使用 dynamic import 和 ssr: false
 const PostItem = dynamic(() => import('@/components/PostItem'), { ssr: false });
 const ForumCategoryTabs = dynamic(() => import('@/components/ForumCategoryTabs'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
-// 假设 LayoutBase 是你的主题布局，也用 dynamic ssr: false 确保客户端渲染
 const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBase), { ssr: false }); 
 
 const POSTS_PER_PAGE = 10; // 每次加载10条帖子
 
 const CommunityPage = () => {
-  const { user } = useAuth(); // user 在 SSR 期间为 null，loading 为 true
+  const { user, loading: authLoading } = useAuth(); 
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true); // 初始为 true
+  const [loading, setLoading] = useState(true); 
   const [loadingMore, setLoadingMore] = useState(false);
-  const [lastVisible, setLastVisible] = useState(null); // 用于分页的游标
-  const [hasMore, setHasMore] = useState(true); // 是否还有更多帖子
+  // 【修改】lastVisible 不再直接用于 useEffect 依赖，而是通过 ref 间接访问
+  const [lastVisibleState, setLastVisibleState] = useState(null); // 用于页面重新渲染，但不用于 useCallback 依赖
+  const lastVisibleRef = useRef(null); // 【新增】使用 useRef 来保存 lastVisible 的当前值，用于 fetchPosts 内部
+  
+  const [hasMore, setHasMore] = useState(true); 
   
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState('推荐');
   const [currentSort, setCurrentSort] = useState('最新');
 
+  // 【新增】一个更新 lastVisible 状态和 ref 的回调函数，保持其稳定性
+  const updateLastVisible = useCallback((newDoc) => {
+    lastVisibleRef.current = newDoc;
+    setLastVisibleState(newDoc); // 更新状态以触发组件重新渲染（例如更新“加载更多”按钮状态）
+  }, []); // 这个 useCallback 没有任何依赖，因此它是稳定的
+
   // 封装获取帖子的核心逻辑
+  // 【修改】fetchPosts 的 useCallback 依赖不再包含 lastVisibleState
   const fetchPosts = useCallback(async (isInitial = false) => {
-    console.log(`[fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}`);
+    console.log(`[CommunityPage - fetchPosts] 尝试获取帖子，isInitial: ${isInitial}, currentCategory: ${currentCategory}, currentSort: ${currentSort}, lastVisibleRef.current:`, lastVisibleRef.current ? lastVisibleRef.current.id : null);
     
     if (isInitial) {
       setLoading(true);
       setPosts([]);
-      setLastVisible(null);
+      updateLastVisible(null); // 【修改】重置 ref 和 state
       setHasMore(true);
-      console.log("[fetchPosts] 初始加载，重置状态。");
+      console.log("[CommunityPage - fetchPosts] 初始加载，重置状态。");
     } else {
       setLoadingMore(true);
-      console.log("[fetchPosts] 加载更多。");
+      console.log("[CommunityPage - fetchPosts] 加载更多。");
     }
 
     // 确保只有在浏览器环境中且 db 实例可用时才尝试从 Firestore 获取数据
     if (typeof window === 'undefined' || !db) {
-        console.warn("[fetchPosts] Firestore instance (db) is not available or running on server. Skipping fetchPosts.");
-        // 在服务器端或 db 未初始化时（db 在 SSR 时为 null），不执行 Firestore 操作
-        setLoading(false); // 确保在任何情况下，loading 状态最终都会变为 false
+        console.warn("[CommunityPage - fetchPosts] Firestore 实例 (db) 不可用或运行在服务器端。跳过获取帖子。");
+        setLoading(false); 
         setLoadingMore(false);
-        setPosts([]); // 确保在服务器端帖子为空
-        setHasMore(false); // 没有 db 实例，就没有更多数据
+        setPosts([]); 
+        setHasMore(false); 
         return;
     }
 
@@ -61,7 +69,9 @@ const CommunityPage = () => {
       let q;
       const baseConditions = [orderClause, limit(POSTS_PER_PAGE)];
       const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
-      const paginationCondition = !isInitial && lastVisible ? [startAfter(lastVisible)] : [];
+      
+      // 【修改】使用 lastVisibleRef.current 来进行分页查询
+      const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
       
       q = query(postsRef, ...categoryCondition, ...baseConditions, ...paginationCondition);
 
@@ -72,77 +82,74 @@ const CommunityPage = () => {
         ...doc.data()
       }));
 
-      console.log(`[fetchPosts] 获取到 ${newPosts.length} 条新帖子。`);
+      console.log(`[CommunityPage - fetchPosts] 获取到 ${newPosts.length} 条新帖子。`);
 
       setPosts(prevPosts => isInitial ? newPosts : [...prevPosts, ...newPosts]);
       
-      const lastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
-      setLastVisible(lastVisibleDoc);
+      const newLastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
+      updateLastVisible(newLastVisibleDoc); // 【修改】更新 ref 和 state
       
       if (documentSnapshots.docs.length < POSTS_PER_PAGE) {
         setHasMore(false);
-        console.log("[fetchPosts] 没有更多帖子了。");
+        console.log("[CommunityPage - fetchPosts] 没有更多帖子了。");
       } else {
         setHasMore(true);
-        console.log("[fetchPosts] 可能还有更多帖子。");
+        console.log("[CommunityPage - fetchPosts] 可能还有更多帖子。");
       }
 
     } catch (error) {
-      console.error("[fetchPosts] 获取帖子失败:", error);
-      // 捕获错误时也要确保加载状态结束
-      setPosts([]); // 错误时清空帖子
+      console.error("[CommunityPage - fetchPosts] 获取帖子失败:", error);
+      setPosts([]); 
       setHasMore(false);
     } finally {
-      // 无论成功失败，确保加载状态最终关闭
       if (isInitial) {
         setLoading(false);
-        console.log("[fetchPosts] 初始加载完成，setLoading(false)。");
+        console.log("[CommunityPage - fetchPosts] 初始加载完成，setLoading(false)。");
       }
       else {
         setLoadingMore(false);
-        console.log("[fetchPosts] 加载更多完成，setLoadingMore(false)。");
+        console.log("[CommunityPage - fetchPosts] 加载更多完成，setLoadingMore(false)。");
       }
     }
-  }, [currentCategory, currentSort, lastVisible]);
+  }, [currentCategory, currentSort, db, updateLastVisible, setPosts, setLoading, setLoadingMore, setHasMore]); 
+  // 【修改】fetchPosts 的依赖项现在只包含那些会改变函数逻辑的外部状态，
+  // 并且 updateLastVisible 是一个稳定的回调，不会导致 fetchPosts 重新创建。
 
+  // 【修改】useEffect 的依赖项不再包含 fetchPosts，而是直接响应 category/sort/db 的变化
   useEffect(() => {
-    console.log("[useEffect] 社区页面挂载/依赖更新。");
-    // 确保 useEffect 内部的客户端数据获取逻辑只在浏览器中执行
-    if (typeof window !== 'undefined') {
-        console.log("[useEffect] 运行在浏览器环境，触发 fetchPosts(true)。");
-        fetchPosts(true); // 初始加载
-    } else {
-        console.log("[useEffect] 运行在服务器端，setLoading(false)。");
-        // 在服务器端，立即将 loading 设为 false，防止页面卡住，并确保不会尝试获取数据
+    console.log("[CommunityPage - useEffect] 社区页面挂载/分类或排序更新。");
+    // 确保只有在浏览器环境中且 db 实例可用时才触发初始数据获取
+    if (typeof window !== 'undefined' && db) { 
+        console.log("[CommunityPage - useEffect] 运行在浏览器环境，触发 fetchPosts(true)。");
+        fetchPosts(true); 
+    } else if (typeof window === 'undefined') {
+        // 在服务器端，立即将 loading 设为 false，防止页面卡住
+        console.log("[CommunityPage - useEffect] 运行在服务器端，setLoading(false)。");
         setLoading(false);
     }
-    // ⚠️ 如果 fetchPosts 使用 onSnapshot，这里需要返回 cleanup 函数。
-    // 由于这里使用 getDocs，所以不需要返回 cleanup。
-  }, [fetchPosts]); // fetchPosts 已经被 useCallback 缓存
+  }, [currentCategory, currentSort, db]); // 【修改】useEffect 的依赖项更精简，避免了无限循环
 
   const handleLoadMore = () => {
-    console.log("[handleLoadMore] 点击加载更多。");
+    console.log("[CommunityPage - handleLoadMore] 点击加载更多。");
     if (!loadingMore && hasMore) {
-      fetchPosts(false);
+      fetchPosts(false); // 【修改】直接调用 fetchPosts(false)
     } else if (loadingMore) {
-      console.log("[handleLoadMore] 正在加载中，请稍候。");
+      console.log("[CommunityPage - handleLoadMore] 正在加载中，请稍候。");
     } else if (!hasMore) {
       console.log("[handleLoadMore] 已经没有更多帖子了。");
     }
   };
   
-  // 点击发帖按钮时的登录拦截
   const handleNewPostClick = (e) => {
     if (!user) {
-      console.log("[handleNewPostClick] 用户未登录，阻止跳转，打开登录弹窗。");
+      console.log("[CommunityPage - handleNewPostClick] 用户未登录，阻止跳转，打开登录弹窗。");
       e.preventDefault();
       setShowLoginModal(true);
     } else {
-      console.log("[handleNewPostClick] 用户已登录，允许跳转到发帖页。");
+      console.log("[CommunityPage - handleNewPostClick] 用户已登录，允许跳转到发帖页。");
     }
   };
 
-  // 渲染逻辑：根据 loading 和 posts 长度决定显示什么
   const renderPostsContent = () => {
     if (loading) {
       return (
@@ -152,7 +159,7 @@ const CommunityPage = () => {
       );
     } else if (posts.length > 0) {
       return posts.map((post) => <PostItem key={post.id} post={post} />);
-    } else { // loading 为 false 且 posts.length 为 0
+    } else {
       return (
         <div className="p-12 text-center text-gray-500">
           <p className="text-lg">这里空空如也 🤔</p>
@@ -166,7 +173,6 @@ const CommunityPage = () => {
   return (
     <LayoutBase>
       <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
-        {/* 头部背景图 */}
         <div
           className="relative h-52 md:h-64 bg-cover bg-center"
           style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}
@@ -178,30 +184,29 @@ const CommunityPage = () => {
           </div>
         </div>
 
-        {/* 内容主体 */}
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
           <ForumCategoryTabs onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
 
           <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
-            {renderPostsContent()} {/* 使用单独的函数来渲染内容 */}
+            {renderPostsContent()}
           </div>
           
-          {/* 加载更多按钮 */}
           <div className="text-center py-8">
             {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
-            {!loadingMore && hasMore && posts.length > 0 && ( // 只有当有更多且有帖子时才显示加载更多按钮
+            {/* 【修改】只有当 hasMore 且 posts.length > 0 时才显示加载更多按钮 */}
+            {!loadingMore && hasMore && posts.length > 0 && ( 
               <button onClick={handleLoadMore} className="bg-blue-600 text-white px-6 py-2 rounded-full hover:bg-blue-700 transition-colors">
                 加载更多
               </button>
             )}
-            {!hasMore && posts.length > 0 && ( // 只有当没有更多且有帖子时才显示到底啦
+            {/* 【修改】只有当没有更多且 posts.length > 0 时才显示到底啦 */}
+            {!hasMore && posts.length > 0 && ( 
               <p className="text-gray-400">—— 到底啦 ——</p>
             )}
             {/* 如果 posts.length === 0 且 !loading，renderPostsContent 已经处理了“空空如也” */}
           </div>
         </div>
 
-        {/* 发布新帖悬浮按钮 */}
         <Link href="/community/new" passHref>
           <a
             onClick={handleNewPostClick}
