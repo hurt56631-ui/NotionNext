@@ -1,4 +1,4 @@
-// themes/heo/components/PrivateChat.js (全新重构完整版)
+// themes/heo/components/PrivateChat.js (全新重完整版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { auth, db } from "@/lib/firebase";
