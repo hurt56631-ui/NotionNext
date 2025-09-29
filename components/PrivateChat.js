@@ -306,13 +306,12 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
         <footer className="flex-shrink-0 p-2 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-t dark:border-gray-700/50">
           <div className="flex items-end gap-2">
             <div className="flex-1 relative flex items-center">
-              <TextareaAutosize
+              <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                 placeholder="输入消息..."
-                minRows={1}
-                maxRows={5}
+                rows={4}
                 className="w-full pl-4 pr-12 py-2.5 text-base rounded-2xl border bg-gray-100 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold resize-none"
               />
               <button onClick={handleTranslateMyInput} disabled={isTranslating || !input.trim()} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 disabled:opacity-30">
