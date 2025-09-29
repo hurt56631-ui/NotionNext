@@ -1,17 +1,18 @@
-// pages/community/index.js (美学升级 & 无限滚动 & 手势修复 & 私信功能集成最终版)
+// pages/community/index.js (私信功能完全集成最终版)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-// 【新增】从 firebase/firestore 引入聊天功能所需的所有模块
-import { collection, query, where, orderBy, limit, getDocs, startAfter, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+// 【新增】从 framer-motion 引入 AnimatePresence 以支持组件的入场和退场动画
+import { AnimatePresence } from 'framer-motion';
 
-// 【新增】动态引入我们之前创建的 Chat 组件
-const Chat = dynamic(() => import('@/themes/heo/components/Chat'), { ssr: false });
+// 【新增】动态引入我们功能强大的 PrivateChat 组件
+const PrivateChat = dynamic(() => import('@/themes/heo/components/PrivateChat'), { ssr: false });
 
 // 导航/排序组件 (无修改)
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
@@ -62,10 +63,9 @@ const CommunityPage = () => {
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
     const categoryIndexRef = useRef(0);
-
-    // 【新增】管理聊天窗口状态的 State
-    const [activeChatId, setActiveChatId] = useState(null);
-    const [isChatOpen, setIsChatOpen] = useState(false);
+    
+    // 【新增】创建一个 state 来存储当前要聊天的对象信息。null 表示没有活动的聊天窗口。
+    const [chatTarget, setChatTarget] = useState(null); // 例如: { uid: 'some-user-id', displayName: '张三' }
     
     useEffect(() => {
         categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
@@ -100,7 +100,7 @@ const CommunityPage = () => {
         else { setLoading(false); }
     }, [currentCategory, currentSort, db]);
 
-    // 【手势修复】逻辑保持不变
+    // 手势逻辑保持不变
     const bind = useDrag(({ active, movement: [mx, my], direction: [dx], cancel, canceled }) => {
         if (Math.abs(my) > Math.abs(mx)) { cancel(); return; }
         if (!active && !canceled) {
@@ -124,7 +124,7 @@ const CommunityPage = () => {
         exitBeforeEnter: true,
     });
     
-    // 【无限滚动】逻辑保持不变
+    // 无限滚动逻辑保持不变
     const observer = useRef();
     const loadMoreRef = useCallback(node => {
         if (loading) return;
@@ -137,69 +137,35 @@ const CommunityPage = () => {
         if (node) observer.current.observe(node);
     }, [loading, loadingMore, hasMore, fetchPosts]);
 
-
-    // 【新增】开启或创建一对一聊天的核心函数
-    const handleOpenChat = async (targetUserId) => {
-        if (!user) {
-            setShowLoginModal(true); // 如果用户未登录，则弹出登录框
-            return;
-        }
-        if (user.uid === targetUserId) return; // 禁止与自己聊天
-
-        // 查找是否已存在包含这两个参与者的聊天室
-        const chatsRef = collection(db, 'chats');
-        // Firestore 的 `in` 查询可以非常高效地检查两种顺序的数组
-        const q = query(chatsRef, where('participants', 'in', [[user.uid, targetUserId], [targetUserId, user.uid]]));
-        
-        try {
-            const querySnapshot = await getDocs(q);
-            let chatId = null;
-
-            if (querySnapshot.empty) {
-                // 如果聊天室不存在，则创建一个新的
-                console.log("未找到现有聊天，正在创建新聊天...");
-                const newChatDoc = await addDoc(chatsRef, {
-                    participants: [user.uid, targetUserId], // 存储参与者的UID
-                    createdAt: serverTimestamp(),
-                    isEstablished: true,
-                    lastMessage: "我们已经是好友啦，开始聊天吧！",
-                    lastMessageTimestamp: serverTimestamp(),
-                    // 初始化 lastRead 状态，用于实现未读消息功能
-                    lastRead: {
-                        [user.uid]: serverTimestamp(),
-                        [targetUserId]: new Date(0) // 将对方的已读时间设置为一个很早的过去
-                    }
-                });
-                chatId = newChatDoc.id;
-            } else {
-                // 如果已存在，直接获取其 ID
-                chatId = querySnapshot.docs[0].id;
-                console.log("找到现有聊天，ID:", chatId);
-            }
-
-            // 更新状态，以显示聊天窗口
-            setActiveChatId(chatId);
-            setIsChatOpen(true);
-
-        } catch (error) {
-            console.error("打开或创建聊天失败:", error);
-            alert("无法开启聊天，请稍后重试。");
-        }
+    // 【新增】处理开启聊天窗口的函数
+    const handleOpenChat = (targetUser) => {
+      // 检查用户是否登录
+      if (!user) {
+        setShowLoginModal(true);
+        return;
+      }
+      // 检查是否在和自己聊天
+      if (user.uid === targetUser.uid) {
+        alert("不能和自己聊天哦！");
+        return;
+      }
+      console.log("正在开启与", targetUser.displayName, "的聊天");
+      // 更新 state，以显示聊天窗口
+      setChatTarget(targetUser);
     };
 
-    // 【新增】关闭聊天窗口的函数
+    // 【新增】处理关闭聊天窗口的函数
     const handleCloseChat = () => {
-        setIsChatOpen(false);
-        setActiveChatId(null);
+      // 将 state 重置为 null，以隐藏聊天窗口
+      setChatTarget(null);
     };
-
 
     const handleNewPostClick = (e) => { if (!user) { e.preventDefault(); setShowLoginModal(true); } };
 
     const renderPostsContent = () => {
         if (loading && posts.length === 0) return <div className="p-12 text-center text-gray-500"><i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...</div>;
         if (posts.length > 0) {
-            // 【修改】在这里将 onOpenChat 函数传递给每一个 PostItem
+            // 【修改】将 handleOpenChat 函数作为 prop 传递给每一个 PostItem 组件
             return posts.map((post) => <PostItem key={post.id} post={post} onOpenChat={handleOpenChat} />);
         }
         return <div className="p-12 text-center text-gray-500"><p className="text-lg">这里空空如也 🤔</p><p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p></div>;
@@ -209,7 +175,7 @@ const CommunityPage = () => {
         <LayoutBase>
             <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
                 {/* 顶部区域 (无修改) */}
-                <div className="relative h-56 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
+                <div className="relative h-56 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto.format&fit=crop')" }}>
                     <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
                         <div className="animate-fade-in">
                             <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">中文学习社区</h1>
@@ -233,7 +199,6 @@ const CommunityPage = () => {
                         ))}
                     </div>
 
-                    {/* 无限滚动UI (无修改) */}
                     <div className="text-center py-8">
                         {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
                         {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
@@ -241,21 +206,30 @@ const CommunityPage = () => {
                     <div ref={loadMoreRef} style={{ height: '1px' }} />
                 </div>
                 
-                {/* 发布新帖按钮 (无修改) */}
                 <Link href="/community/new" passHref>
                     <a onClick={handleNewPostClick} className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95" aria-label="发布新帖">
                         <i className="fas fa-pen text-xl"></i>
                     </a>
                 </Link>
             </div>
-
-            {/* 登录模态框 (无修改) */}
             <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
-            {/* 【新增】根据状态条件性地渲染聊天窗口 */}
-            {isChatOpen && activeChatId && (
-                <Chat chatId={activeChatId} onClose={handleCloseChat} />
-            )}
+            {/* 【新增】这是魔法发生的地方！当 chatTarget 不为空时，渲染 PrivateChat 组件 */}
+            <AnimatePresence>
+              {chatTarget && (
+                  <PrivateChat
+                      // 使用 key 确保切换聊天对象时组件会正确地重新渲染
+                      key={chatTarget.uid} 
+                      // 传入对方的用户信息
+                      peerUid={chatTarget.uid}
+                      peerDisplayName={chatTarget.displayName}
+                      // 传入当前登录的用户信息，以优化组件内的身份验证流程
+                      currentUser={user}
+                      // 传入关闭函数，让聊天组件可以通知主页关闭自己
+                      onClose={handleCloseChat}
+                  />
+              )}
+            </AnimatePresence>
         </LayoutBase>
     );
 };
