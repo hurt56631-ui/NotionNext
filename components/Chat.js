@@ -10,7 +10,7 @@ const Chat = ({ chatId }) => {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
 
-  // 滚动到底部
+  // 滚动发到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
