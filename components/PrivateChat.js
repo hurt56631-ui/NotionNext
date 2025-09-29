@@ -7,7 +7,6 @@ import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp,
 import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, Languages, Music, ArrowLeft, Bot, Sparkles, X } from "lucide-react";
-import TextareaAutosize from 'react-textarea-autosize';
 
 // 【TTS模块】(无变动)
 const ttsCache = new Map();
