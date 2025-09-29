@@ -1,4 +1,4 @@
-// themes/heo/components/PostItem.js (已修复 TypeError: Cannot read properties of undefined (reading 'content'))
+// themes/heo/components/PostItem.js (已修复 TypeError: Cannot read properties of undefined (reading 'content') V2)
 
 import React, { forwardRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -8,7 +8,6 @@ import dynamic from 'next/dynamic';
 import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-// 【新增】导入 VideoEmbed 和 PostContent
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
@@ -25,12 +24,6 @@ const formatTimeAgo = (ts) => {
   }
 };
 
-/**
- * 【优化】视频链接解析函数
- *  - 优先从 post.videoUrl 字段获取。
- *  - 如果 post.videoUrl 为空，则从 post.content 文本内容中查找第一个视频链接。
- *  - 增加了对 postData 和 postData.content 的防御性检查。
- */
 const parseVideoUrl = (postData) => {
   if (!postData) return null; // 【关键修复】如果 postData 为空，直接返回
   
@@ -62,7 +55,6 @@ const parseVideoUrl = (postData) => {
   return null;
 };
 
-// 【优化】去除文本中特定 URL 的函数
 const removeUrlFromText = (text, urlToRemove) => {
     if (!text || !urlToRemove || typeof text !== 'string') return text;
     const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
@@ -89,26 +81,30 @@ function PostItemInner({ post, onOpenChat }, ref) {
   const { user } = useAuth();
   const router = useRouter(); 
 
-  // 【关键修复】在组件开始处进行防御性检查
+  // 【关键修复】在组件开始处进行防御性检查，如果 post 为空，直接返回 null
+  // 理论上父组件 CommunityPostsWithGesture 应该确保只传递有效的 post 对象，但这里增加一层防御。
   if (!post) {
-      console.warn("PostItem: post prop is null or undefined, skipping render.");
+      // console.warn("PostItem: post prop is null or undefined, skipping render.");
       return null; 
   }
 
   // 使用 useMemo 获取视频URL和清理后的内容
   const videoUrl = useMemo(() => {
-    return parseVideoUrl(post); // post 此时已经通过上面的检查，确保不为 null
+    // 【关键修复】在 useMemo 内部再次检查 post
+    if (!post) return null; 
+    return parseVideoUrl(post); 
   }, [post]);
 
   const cleanedContent = useMemo(() => {
-    if (!post.content) return ''; // 【关键修复】如果 post.content 为空，返回空字符串
+    // 【关键修复】在 useMemo 内部再次检查 post.content
+    if (!post || !post.content) return ''; 
     const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
     const previewLength = 150; 
     if (fullCleanedContent.length > previewLength) {
       return fullCleanedContent.substring(0, previewLength) + '...';
     }
     return fullCleanedContent;
-  }, [post.content, videoUrl]); // 【修改】依赖项改为 post.content
+  }, [post, videoUrl]); // 依赖项依然是 post 和 videoUrl (videoUrl 依赖 post，所以没问题)
 
 
   const hasLiked = useMemo(() => {
@@ -139,21 +135,21 @@ function PostItemInner({ post, onOpenChat }, ref) {
   }, [user, post, hasLiked]);
 
 
-  const handleCardClick = () => {
+  const handleCardClick = useCallback(() => { // 【优化】使用 useCallback 包裹
     router.push(`/community/${post.id}`);
-  };
+  }, [router, post.id]);
 
-  const handleActionClick = (e, callback) => {
+  const handleActionClick = useCallback((e, callback) => { // 【优化】使用 useCallback 包裹
     e.stopPropagation(); 
     if (callback) callback(e);
-  };
+  }, []);
   
 
   return (
     <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
       <div className="flex items-start mb-3">
         <Link href={`/me?profileId=${post.authorId || ''}`} passHref> 
-          <a onClick={(e) => handleActionClick(e)} className="relative z-10 flex items-center cursor-pointer group">
+          <a onClick={handleActionClick} className="relative z-10 flex items-center cursor-pointer group">
             <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-12 h-12 rounded-full object-cover" />
             <div className="ml-3 flex-grow">
               <p className="font-semibold text-gray-800 dark:text-gray-200 group-hover:text-blue-500">{post.authorName || '匿名用户'}</p>
@@ -185,8 +181,7 @@ function PostItemInner({ post, onOpenChat }, ref) {
         )}
 
         <div className="text-sm text-gray-700 dark:text-gray-300">
-          {/* 【关键修复】确保 PostContent 接收 content prop 且能处理空字符串 */}
-          <PostContent content={cleanedContent} />
+          <PostContent content={cleanedContent} /> {/* 传递 content prop */}
         </div>
       </div>
 
@@ -195,13 +190,13 @@ function PostItemInner({ post, onOpenChat }, ref) {
             <i className={`${hasLiked ? 'fas' : 'far'} fa-heart text-lg`} />
             <span>{post.likesCount || 0}</span>
         </button>
-        <button onClick={(e) => handleActionClick(e)} className="relative z-10 flex items-center space-x-1 hover:text-gray-500">
+        <button onClick={handleActionClick} className="relative z-10 flex items-center space-x-1 hover:text-gray-500">
             <i className="far fa-thumbs-down text-lg" />
         </button>
         <Link href={`/community/${post.id}#comments`} passHref>
-            <a onClick={(e) => e.stopPropagation()} className="relative z-10 flex items-center space-x-2 hover:text-green-500">
+            <a onClick={handleActionClick} className="relative z-10 flex items-center space-x-2 hover:text-green-500">
                 <i className="far fa-comment-dots text-lg" />
-                <span>{post.commentsCount || 0}</span>
+                <span>{post.commentCount || 0}</span>
             </a>
         </Link>
       </div>
