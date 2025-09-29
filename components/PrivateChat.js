@@ -1,4 +1,4 @@
-// themes/heo/components/PrivateChat.js (语法错误修复 - 最终完整版)
+// themes/heo/components/PrivateChat.js (最终完整版 - 包含所有提示词)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { auth, db } from "@/lib/firebase";
@@ -7,6 +7,7 @@ import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp,
 import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, Languages, Music, ArrowLeft, Bot, Sparkles, X } from "lucide-react";
+import TextareaAutosize from 'react-textarea-autosize';
 
 // 【TTS模块】(无变动)
 const ttsCache = new Map();
@@ -144,9 +145,57 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     finally { setSending(false); }
   };
   
-  // ----- 提示词 (无变动) -----
-  const MyInputPrompt = `...`; // 省略，保持您的原样
-  const PeerMessagePrompt = `...`; // 省略，保持您的原样
+  // ----- 【修复】提示词恢复完整版 -----
+  const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：
+严格规则：
+你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。
+所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。
+所有缅甸语字体必须【加粗显示】。
+排版清晰，易于阅读。
+当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。
+
+📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
+- **[此处为加粗的缅甸语翻译]**
+- 中文意思
+
+💬 **口语版**，采用缅甸年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕迹:
+- **[此处为加粗的缅甸语翻译]**
+- 中文意思
+
+💡 **自然意译版**，遵循缅甸语的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:
+- **[此处为加粗的缅甸语翻译]**
+- 中文意思
+
+🐼 **通顺意译**,将句子翻译成符合缅甸人日常表达习惯的、流畅自然的中文。
+- **[此处为加粗的缅甸语翻译]**
+- 中文意思
+
+🌸 **文化版**，充分考量缅甸的文化、礼仪及社会习俗，提供最得体、最显尊重的表达方式:
+- **[此处为加粗的缅甸语翻译]**
+- 中文意思
+
+👨 **功能与情感对等翻译 (核心)**: 思考：缅甸年轻人在类似“轻松随意聊天”情境下，想表达完全相同的情感、语气、意图和功能，会如何表达？提供此类对等表达及其缅文翻译，强调其自然和口语化程度。（提供3-5个）
+- [对应的中文对等表达]
+  - **[对应的加粗缅甸语翻译]**
+`;
+
+  const PeerMessagePrompt = `你现在处于“汉缅翻译模式”。当接收到用户输入的缅甸语时，你将提供以下维度的中文解析：
+
+🐶 **逐字直译**: 严格按照缅甸语的词汇和语序进行一对一翻译，保留其原始句子结构。
+- 【中文翻译】
+
+📖 **直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
+- [中文翻译]
+
+🐼 **通顺意译**: 将句子翻译成符合中国人日常表达习惯的、流畅自然的中文。
+- [中文翻译]
+
+🦁 **情景口语**: 模拟在真实对话场景中，这句话最可能对应的中文口语表达。
+- [中文口语表达]
+
+**文化解读**: 剖析句子背后可能蕴含的缅甸文化背景、社交习俗或言外之意。
+- [文化解读内容]
+`;
 
   // ----- AI Translation Logic (无变动) -----
   const handleTranslateMessage = async (message) => {
@@ -166,7 +215,7 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
 
-  // ----- 【修复】Long Press Menu Component - 恢复完整代码 -----
+  // ----- Long Press Menu Component (无变动) -----
   const LongPressMenu = ({ message, onClose }) => (
     <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={onClose}>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-2 flex flex-col gap-1" onClick={e => e.stopPropagation()}>
@@ -177,7 +226,7 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     </div>
   );
 
-  // ----- 【修复】Message Row Component - 恢复完整代码 -----
+  // ----- Message Row Component (无变动) -----
   const MessageRow = ({ message }) => {
     const mine = message.uid === user?.uid;
     const longPressTimer = useRef();
@@ -200,7 +249,7 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
           <p className="whitespace-pre-wrap break-words font-bold">{message.text}</p>
           {translationResult && translationResult.messageId === message.id && (
             <div className="mt-2 pt-2 border-t border-gray-500/30">
-                <p className="text-sm font-bold opacity-80">{translationResult.text}</p>
+                <p className="text-sm font-bold opacity-80 whitespace-pre-wrap">{translationResult.text}</p>
             </div>
           )}
         </div>
