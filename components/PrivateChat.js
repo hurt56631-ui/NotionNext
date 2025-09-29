@@ -8,7 +8,7 @@ import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, ArrowLeft, X, Volume2, Pencil, Check } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
-import TextareaAutosize from 'react-textarea-autosize';
+//import TextareaAutosize from 'react-textarea-autosize';
 
 // ------------------------------------------------------------------
 // 新增组件与图标
