@@ -1,4 +1,4 @@
-// pages/community/index.js (修复 ReferenceError: transitions is not defined 错误)
+// pages/community/index.js (美学升级 & 无限滚动 & 手势修复最终版)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
-// 导航/排序组件
+// 导航/排序组件 (无修改)
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
     const categories = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
     const sortOptions = ['默认', '最新', '最热'];
@@ -58,37 +58,18 @@ const CommunityPage = () => {
     const [currentSort, setCurrentSort] = useState('最新');
     const [swipeDirection, setSwipeDirection] = useState(0);
     const categoryIndexRef = useRef(0);
-
-    // 【新增】判断是否在浏览器环境
-    const [isBrowser, setIsBrowser] = useState(false);
-    useEffect(() => {
-      setIsBrowser(typeof window !== 'undefined');
-    }, []);
-
+    
     useEffect(() => {
         categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
     }, [currentCategory]);
 
     const updateLastVisible = useCallback((newDoc) => { lastVisibleRef.current = newDoc; }, []);
 
+    // fetchPosts 函数保持不变，但现在由无限滚动触发
     const fetchPosts = useCallback(async (isInitial = false) => {
-        if (loadingMore || (!hasMore && !isInitial)) return; 
-
-        if (isInitial) { 
-            setLoading(true); 
-            setPosts([]); 
-            updateLastVisible(null); 
-            setHasMore(true); 
-        } else { 
-            setLoadingMore(true); 
-        }
-        
-        if (!db) { // 检查 db 是否可用
-            setLoading(false); 
-            setLoadingMore(false); 
-            console.warn("[CommunityPage] Firestore 实例不可用。");
-            return; 
-        }
+        if (loadingMore) return; // 防止重复加载
+        if (isInitial) { setLoading(true); setPosts([]); updateLastVisible(null); setHasMore(true); } else { setLoadingMore(true); }
+        if (typeof window === 'undefined' || !db) { setLoading(false); setLoadingMore(false); return; }
         try {
             const postsRef = collection(db, 'posts');
             const orderClause = currentSort === '最热' ? orderBy('likesCount', 'desc') : orderBy('createdAt', 'desc');
@@ -96,78 +77,54 @@ const CommunityPage = () => {
             const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
             const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
             const q = query(postsRef, ...categoryCondition, ...baseConditions, ...paginationCondition);
-            
             const documentSnapshots = await getDocs(q);
             const newPosts = documentSnapshots.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
             setPosts(prevPosts => isInitial ? newPosts : [...prevPosts, ...newPosts]);
-            
             const newLastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
             updateLastVisible(newLastVisibleDoc);
-            
             setHasMore(documentSnapshots.docs.length >= POSTS_PER_PAGE);
-
-        } catch (error) { 
-            console.error("获取帖子失败:", error); 
-            setPosts([]); 
-            setHasMore(false);
-        } finally { 
-            if (isInitial) { setLoading(false); } 
-            else { setLoadingMore(false); } 
-        }
-    }, [currentCategory, currentSort, db, updateLastVisible, loadingMore, hasMore]); 
+        } catch (error) { console.error("获取帖子失败:", error); setPosts([]); setHasMore(false);
+        } finally { if (isInitial) { setLoading(false); } else { setLoadingMore(false); } }
+    }, [currentCategory, currentSort, db, updateLastVisible, loadingMore]);
 
     useEffect(() => {
-        // 【修改】仅在浏览器环境或 db 可用时才触发初始数据获取
-        if (isBrowser && db) { 
-             fetchPosts(true); 
-        } else if (!isBrowser) { // 如果不是浏览器环境，直接设置 loading 为 false，以便 SSG/SSR 顺利完成
-            setLoading(false);
+        if (typeof window !== 'undefined' && db) { fetchPosts(true); }
+        else { setLoading(false); }
+    }, [currentCategory, currentSort, db]); // fetchPosts 不再是依赖项，避免循环
+
+    // 【手势修复】更稳健的手势处理逻辑
+    const bind = useDrag(({ active, movement: [mx, my], direction: [dx], cancel, canceled }) => {
+        // 如果垂直拖拽的意图更明显，则立即取消水平手势，让页面可以正常滚动
+        if (Math.abs(my) > Math.abs(mx)) {
+            cancel();
+            return;
         }
-    }, [currentCategory, currentSort, db, isBrowser]); 
 
-    // 【手势修复】将 useDrag 和 useTransition 仅在浏览器端定义和使用
-    let bind = () => ({});
-    let transitions = [];
-
-    if (isBrowser) {
-        bind = useDrag(({ last, movement: [mx, my], direction: [dx], cancel }) => {
-            if (Math.abs(my) > Math.abs(mx) && !last) { 
-                cancel();
-                return; 
-            }
-
-            if (last && Math.abs(mx) > window.innerWidth * 0.25) { 
-                const direction = dx > 0 ? -1 : 1; 
-                const currentIndex = categoryIndexRef.current; 
+        if (!active && !canceled) {
+            if (Math.abs(mx) > window.innerWidth * 0.25) { // 稍微增加滑动阈值
+                const direction = dx > 0 ? -1 : 1;
+                const currentIndex = categoryIndexRef.current;
                 const nextIndex = currentIndex + direction;
-
                 if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
-                    setSwipeDirection(direction); 
-                    setCurrentCategory(CATEGORIES[nextIndex]); 
+                    setSwipeDirection(direction);
+                    setCurrentCategory(CATEGORIES[nextIndex]);
                 }
             }
-        }, { 
-            axis: 'x', 
-            filterTaps: true, 
-            threshold: 15, 
-            preventDefault: true, 
-            event: { passive: false } 
-        });
-
-        transitions = useTransition(currentCategory, {
-            from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
-            enter: { opacity: 1, transform: 'translateX(0%)' },
-            leave: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '-50%' : '50%'})`, position: 'absolute' },
-            config: { tension: 220, friction: 30 },
-            exitBeforeEnter: true,
-        });
-    }
-
-    // 无限滚动逻辑
+        }
+    }, { axis: 'x', filterTaps: true, threshold: 20 });
+    
+    const transitions = useTransition(currentCategory, {
+        from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
+        enter: { opacity: 1, transform: 'translateX(0%)' },
+        leave: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '-50%' : '50%'})`, position: 'absolute' },
+        config: { tension: 220, friction: 30 },
+        exitBeforeEnter: true,
+    });
+    
+    // 【无限滚动】逻辑实现
     const observer = useRef();
     const loadMoreRef = useCallback(node => {
-        if (loading || loadingMore || !hasMore || !isBrowser) return; // 【修改】增加 isBrowser 判断
+        if (loading) return;
         if (observer.current) observer.current.disconnect();
         observer.current = new IntersectionObserver(entries => {
             if (entries[0].isIntersecting && hasMore && !loadingMore) {
@@ -175,7 +132,7 @@ const CommunityPage = () => {
             }
         });
         if (node) observer.current.observe(node);
-    }, [loading, loadingMore, hasMore, fetchPosts, isBrowser]);
+    }, [loading, loadingMore, hasMore, fetchPosts]);
 
     const handleNewPostClick = (e) => { if (!user) { e.preventDefault(); setShowLoginModal(true); } };
 
@@ -188,17 +145,16 @@ const CommunityPage = () => {
     return (
         <LayoutBase>
             <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
-                {/* 顶部封面 + 名言 */}
-                <div className="relative h-60 md:h-72 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
-                        <h1 className="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg tracking-wide">
-                            中文学习社区
-                        </h1>
-                        <div className="mt-4 relative">
-                            <p className="text-lg md:text-xl font-light text-white/90 italic px-4">
-                                「 学如逆水行舟，不进则退 」
+                {/* 【美化】顶部区域 */}
+                <div className="relative h-56 md:h-64 bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}>
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
+                        <div className="animate-fade-in">
+                            <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">
+                                中文学习社区
+                            </h1>
+                            <p className="mt-4 text-base md:text-lg font-light text-white/80 drop-shadow">
+                                · 学如逆水行舟，不进则退 ·
                             </p>
-                            <div className="w-24 h-0.5 bg-white/40 mx-auto mt-3 rounded-full"></div>
                         </div>
                     </div>
                 </div>
@@ -208,29 +164,23 @@ const CommunityPage = () => {
                         <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
                     </div>
 
-                    {/* 【修改】只有在浏览器端才绑定手势和渲染动画 */}
-                    <div {...(isBrowser ? bind() : {})} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
-                        {isBrowser && transitions((style, item) => (
+                    <div {...bind()} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
+                        {transitions((style, item) => (
                             <animated.div key={item} style={{ ...style, width: '100%' }}>
                                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
                                     {renderPostsContent()}
                                 </div>
                             </animated.div>
                         ))}
-                        {/* 【新增】如果在 SSR 阶段，直接渲染内容而不带动画 */}
-                        {!isBrowser && (
-                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
-                                {renderPostsContent()}
-                            </div>
-                        )}
                     </div>
 
-                    {/* 无限滚动 UI */}
+                    {/* 【无限滚动】的UI部分 */}
                     <div className="text-center py-8">
                         {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
                         {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
                     </div>
 
+                    {/* 这个空的 div 是用来被 IntersectionObserver 观察的 */}
                     <div ref={loadMoreRef} style={{ height: '1px' }} />
                 </div>
                 
