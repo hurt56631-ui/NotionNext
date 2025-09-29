@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // 【图标库更新】Music 用于新的朗读图标，Smile 用于表情按钮
 import { Send, Settings, Languages, Music, Smile, ImageIcon, ArrowLeft } from "lucide-react";
 // 【新增】引入新的表情选择器库
-import EmojiPicker from 'react-simple-emojipicker';
+//import EmojiPicker from 'react-simple-emojipicker';
 
 // 【TTS模块】完全采用您提供的新TTS逻辑
 const ttsCache = new Map();
