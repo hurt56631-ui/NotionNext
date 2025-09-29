@@ -122,12 +122,4 @@ const MessagesPageContent = () => {
   );
 };
 
-export default MessagesPageContent;```
-
-### 总结：您需要做的全部事情
-
-1.  **替换 `/pages/messages/index.js`**: 使用上面提供的**第一段代码**，替换这个文件的全部内容。这个文件现在变得非常简洁。
-2.  **创建 `/components/MessagesPageContent.js`**: 创建这个**新文件**，并粘贴入上面提供的**第二段完整代码**。
-3.  **重新编译**：再次运行 `yarn run build`。
-
-这个终极方案通过创建一个“干净”的页面外壳，并利用 `useEffect` 确保只在客户端加载包含复杂依赖（如`LayoutBase`）的真实页面内容，从而从根本上避免了在Node.js服务器端执行任何可能导致 `self is not defined` 错误的代码。这次一定可以解决问题。
+export default MessagesPageContent;
