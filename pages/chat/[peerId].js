@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'; // 引入 dynamic
 
 // 【核心修复】将 PrivateChat 动态导入，并禁用 SSR
 const PrivateChatWithNoSSR = dynamic(
-  () => import('@components/PrivateChat'),
+  () => import('@/components/PrivateChat'),
   { ssr: false }
 );
 
