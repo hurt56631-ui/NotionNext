@@ -1,4 +1,4 @@
-// themes/heo/components/PostItem.js (最终修改版，用于集成 PrivateChat.js)
+// themes/heo/components/PostItem.js (最终修改版)
 
 import React, { forwardRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -7,12 +7,34 @@ import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Volume2 } from 'lucide-react'; // 引入喇叭图标
 
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+
+// --- TTS 朗读功能模块 ---
+const ttsCache = new Map();
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
+  try {
+    // 使用了您提供的最新接口参数 r=-20
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) { ttsCache.get(text).play(); }
+  else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); }
+};
+// --- TTS 模块结束 ---
+
 
 const formatTimeAgo = (ts) => {
   if (!ts) return '不久前';
@@ -60,14 +82,11 @@ const removeUrlFromText = (text, urlToRemove) => {
     return text.replace(regex, '').trim();
 };
 
-// 【修改】StartChatButton 现在接收一个完整的 targetUser 对象
 const StartChatButton = ({ targetUser, onOpenChat }) => {
-  // 【修改】判断条件改为检查 targetUser 对象及其 uid 属性
   if (!targetUser || !targetUser.uid) return null;
 
   const handleClick = (e) => {
     e.stopPropagation();
-    // 【修改】将完整的 targetUser 对象传递给 onOpenChat 函数
     onOpenChat(targetUser); 
   };
   return (
@@ -136,11 +155,16 @@ function PostItemInner({ post, onOpenChat }, ref) {
     if (callback) callback(e);
   }, []);
   
+  const handleTtsClick = useCallback((e, text) => {
+    e.stopPropagation();
+    playCachedTTS(text);
+  }, []);
 
   return (
     <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
       <div className="flex items-start mb-3">
-        <Link href={`/me?profileId=${post.authorId || ''}`} passHref> 
+        {/* 【已修复】点击头像和名字现在指向用户的个人主页，而不是 /me */}
+        <Link href={`/profile/${post.authorId}`} passHref> 
           <a onClick={handleActionClick} className="relative z-10 flex items-center cursor-pointer group">
             <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-12 h-12 rounded-full object-cover" />
             <div className="ml-3 flex-grow">
@@ -150,7 +174,6 @@ function PostItemInner({ post, onOpenChat }, ref) {
           </a>
         </Link>
         <div className="ml-auto">
-          {/* 【修改】这里将一个包含 uid 和 displayName 的对象传递给 StartChatButton */}
           {post.authorId && user && user.uid !== post.authorId && 
             <StartChatButton 
               targetUser={{ uid: post.authorId, displayName: post.authorName || '匿名用户' }} 
@@ -160,13 +183,25 @@ function PostItemInner({ post, onOpenChat }, ref) {
         </div>
       </div>
 
-      <div className="space-y-2 block my-3">
-        <h2 className="text-lg font-bold dark:text-gray-100 group-hover:text-blue-500">
-          {post.title}
-        </h2>
+      {/* 【已修复】移除了外层 div 的 my-3，减少了垂直间距 */}
+      <div className="space-y-3 block">
+        <div className="flex items-center justify-between gap-2">
+            {/* 【已新增】为标题增加TTS朗读按钮 */}
+            <h2 className="text-lg font-bold dark:text-gray-100 group-hover:text-blue-500">
+              {post.title}
+            </h2>
+            <button
+                onClick={(e) => handleTtsClick(e, post.title)}
+                className="relative z-10 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 flex-shrink-0"
+                aria-label="朗读标题"
+            >
+                <Volume2 size={18} />
+            </button>
+        </div>
         
         {videoUrl && (
-          <div className="relative pt-[56.25%] overflow-hidden rounded-lg mb-4 shadow-md"> 
+          // 【已修复】移除了 mb-4，让 space-y-3 控制间距
+          <div className="relative pt-[56.25%] overflow-hidden rounded-lg shadow-md"> 
             <VideoEmbed 
               url={videoUrl} 
               playing={false} 
@@ -178,7 +213,8 @@ function PostItemInner({ post, onOpenChat }, ref) {
           </div>
         )}
 
-        <div className="text-sm text-gray-700 dark:text-gray-300">
+        {/* 【已修复】字体加大加粗 */}
+        <div className="text-base font-semibold text-gray-700 dark:text-gray-300">
           <PostContent content={cleanedContent} />
         </div>
       </div>
