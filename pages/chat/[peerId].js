@@ -1,31 +1,45 @@
-// /pages/chat/[peerId].js
+// /pages/chat/[peerId].js (已修复 self is not defined 错误)
 
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
-import PrivateChat from '@/components/PrivateChat';
+import dynamic from 'next/dynamic'; // 引入 dynamic
+
+// 【核心修复】将 PrivateChat 动态导入，并禁用 SSR
+const PrivateChatWithNoSSR = dynamic(
+  () => import('@/themes/heo/components/PrivateChat'),
+  { ssr: false }
+);
 
 const ChatPage = () => {
     const router = useRouter();
     const { user } = useAuth();
     
-    // 从路由中获取对方的用户信息
     const { peerId, peerDisplayName } = router.query;
 
-    // 如果数据还没加载好，可以显示一个加载状态
-    if (!peerId || !user) {
+    // 使用 router.isReady 确保 query 参数已加载
+    if (!router.isReady || !user) {
         return (
-            <div className="fixed inset-0 flex items-center justify-center bg-gray-100 dark:bg-black">
-                正在加载聊天...
+            <div className="fixed inset-0 flex items-center justify-center bg-gray-100 dark:bg-black text-gray-500">
+                正在加载聊天室...
+            </div>
+        );
+    }
+    
+    if (!peerId) {
+        return (
+            <div className="fixed inset-0 flex flex-col items-center justify-center bg-gray-100 dark:bg-black text-gray-500">
+                <p>无法加载聊天对象。</p>
+                <button onClick={() => router.back()} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">返回</button>
             </div>
         );
     }
     
     return (
-        <PrivateChat
+        <PrivateChatWithNoSSR
             peerUid={peerId}
-            peerDisplayName={peerDisplayName}
+            peerDisplayName={peerDisplayName || '聊天'}
             currentUser={user}
-            onClose={() => router.back()} // 点击返回按钮时，返回到上一个页面（消息列表）
+            onClose={() => router.back()}
         />
     );
 };
