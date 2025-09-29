@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
-import PrivateChat from '@/themes/heo/components/PrivateChat';
+import PrivateChat from '@/components/PrivateChat';
 
 const ChatPage = () => {
     const router = useRouter();
