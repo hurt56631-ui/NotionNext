@@ -1,4 +1,4 @@
-// themes/heo/components/PostItem.js (已修复 TypeError: Cannot read properties of undefined (reading 'content') V2)
+// themes/heo/components/PostItem.js (最终修改版，用于集成 PrivateChat.js)
 
 import React, { forwardRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -25,16 +25,14 @@ const formatTimeAgo = (ts) => {
 };
 
 const parseVideoUrl = (postData) => {
-  if (!postData) return null; // 【关键修复】如果 postData 为空，直接返回
+  if (!postData) return null;
   
-  // 1. 优先使用专门的 videoUrl 字段
   if (postData.videoUrl && typeof postData.videoUrl === 'string' && postData.videoUrl.trim() !== '') {
     try { new URL(postData.videoUrl); return postData.videoUrl; } catch { /* not a valid URL */ }
   }
 
-  // 2. 如果 videoUrl 字段无效或不存在，回退到从 content 中解析
   const text = postData.content;
-  if (!text || typeof text !== 'string') return null; // 【关键修复】如果 content 为空或不是字符串，直接返回
+  if (!text || typeof text !== 'string') return null;
   
   const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
   const allUrls = text.match(urlRegex);
@@ -62,12 +60,15 @@ const removeUrlFromText = (text, urlToRemove) => {
     return text.replace(regex, '').trim();
 };
 
+// 【修改】StartChatButton 现在接收一个完整的 targetUser 对象
+const StartChatButton = ({ targetUser, onOpenChat }) => {
+  // 【修改】判断条件改为检查 targetUser 对象及其 uid 属性
+  if (!targetUser || !targetUser.uid) return null;
 
-const StartChatButton = ({ targetUserId, onOpenChat }) => {
-  if (!targetUserId) return null;
   const handleClick = (e) => {
     e.stopPropagation();
-    onOpenChat(targetUserId); 
+    // 【修改】将完整的 targetUser 对象传递给 onOpenChat 函数
+    onOpenChat(targetUser); 
   };
   return (
     <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" aria-label="私信">
@@ -76,27 +77,20 @@ const StartChatButton = ({ targetUserId, onOpenChat }) => {
   );
 };
 
-
 function PostItemInner({ post, onOpenChat }, ref) { 
   const { user } = useAuth();
   const router = useRouter(); 
 
-  // 【关键修复】在组件开始处进行防御性检查，如果 post 为空，直接返回 null
-  // 理论上父组件 CommunityPostsWithGesture 应该确保只传递有效的 post 对象，但这里增加一层防御。
   if (!post) {
-      // console.warn("PostItem: post prop is null or undefined, skipping render.");
       return null; 
   }
 
-  // 使用 useMemo 获取视频URL和清理后的内容
   const videoUrl = useMemo(() => {
-    // 【关键修复】在 useMemo 内部再次检查 post
     if (!post) return null; 
     return parseVideoUrl(post); 
   }, [post]);
 
   const cleanedContent = useMemo(() => {
-    // 【关键修复】在 useMemo 内部再次检查 post.content
     if (!post || !post.content) return ''; 
     const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
     const previewLength = 150; 
@@ -104,8 +98,7 @@ function PostItemInner({ post, onOpenChat }, ref) {
       return fullCleanedContent.substring(0, previewLength) + '...';
     }
     return fullCleanedContent;
-  }, [post, videoUrl]); // 依赖项依然是 post 和 videoUrl (videoUrl 依赖 post，所以没问题)
-
+  }, [post, videoUrl]);
 
   const hasLiked = useMemo(() => {
     return user && post.likers && post.likers.includes(user.uid);
@@ -134,12 +127,11 @@ function PostItemInner({ post, onOpenChat }, ref) {
     }
   }, [user, post, hasLiked]);
 
-
-  const handleCardClick = useCallback(() => { // 【优化】使用 useCallback 包裹
+  const handleCardClick = useCallback(() => {
     router.push(`/community/${post.id}`);
   }, [router, post.id]);
 
-  const handleActionClick = useCallback((e, callback) => { // 【优化】使用 useCallback 包裹
+  const handleActionClick = useCallback((e, callback) => {
     e.stopPropagation(); 
     if (callback) callback(e);
   }, []);
@@ -158,7 +150,13 @@ function PostItemInner({ post, onOpenChat }, ref) {
           </a>
         </Link>
         <div className="ml-auto">
-          {post.authorId && user && user.uid !== post.authorId && <StartChatButton targetUserId={post.authorId} onOpenChat={onOpenChat} />} 
+          {/* 【修改】这里将一个包含 uid 和 displayName 的对象传递给 StartChatButton */}
+          {post.authorId && user && user.uid !== post.authorId && 
+            <StartChatButton 
+              targetUser={{ uid: post.authorId, displayName: post.authorName || '匿名用户' }} 
+              onOpenChat={onOpenChat} 
+            />
+          } 
         </div>
       </div>
 
@@ -181,7 +179,7 @@ function PostItemInner({ post, onOpenChat }, ref) {
         )}
 
         <div className="text-sm text-gray-700 dark:text-gray-300">
-          <PostContent content={cleanedContent} /> {/* 传递 content prop */}
+          <PostContent content={cleanedContent} />
         </div>
       </div>
 
