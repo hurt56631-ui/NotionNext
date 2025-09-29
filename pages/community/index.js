@@ -8,8 +8,9 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+
 // 【新增】从 framer-motion 引入 AnimatePresence 以支持组件的入场和退场动画
-//import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 
 // 【新增】动态引入我们功能强大的 PrivateChat 组件
 const PrivateChat = dynamic(() => import('@/components/PrivateChat'), { ssr: false });
