@@ -1,18 +1,17 @@
-// themes/heo/components/PostItem.js (已重写，包含视频预览和完整点赞逻辑)
+// themes/heo/components/PostItem.js (已修复 TypeError: Cannot read properties of undefined (reading 'content'))
 
 import React, { forwardRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
-import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore'; // 【新增】Firestore操作
-import { db } from '@/lib/firebase'; // 【新增】导入 db
+import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-// 【新增】动态导入 VideoEmbed 和 PostContent
+// 【新增】导入 VideoEmbed 和 PostContent
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-// 【已修改】使用 date-fns 实现相对时间
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
@@ -27,13 +26,14 @@ const formatTimeAgo = (ts) => {
 };
 
 /**
- * 【从 PostDetail 复制过来，用于帖子预览】视频链接解析函数
+ * 【优化】视频链接解析函数
  *  - 优先从 post.videoUrl 字段获取。
  *  - 如果 post.videoUrl 为空，则从 post.content 文本内容中查找第一个视频链接。
+ *  - 增加了对 postData 和 postData.content 的防御性检查。
  */
 const parseVideoUrl = (postData) => {
-  if (!postData) return null;
-
+  if (!postData) return null; // 【关键修复】如果 postData 为空，直接返回
+  
   // 1. 优先使用专门的 videoUrl 字段
   if (postData.videoUrl && typeof postData.videoUrl === 'string' && postData.videoUrl.trim() !== '') {
     try { new URL(postData.videoUrl); return postData.videoUrl; } catch { /* not a valid URL */ }
@@ -41,7 +41,7 @@ const parseVideoUrl = (postData) => {
 
   // 2. 如果 videoUrl 字段无效或不存在，回退到从 content 中解析
   const text = postData.content;
-  if (!text || typeof text !== 'string') return null;
+  if (!text || typeof text !== 'string') return null; // 【关键修复】如果 content 为空或不是字符串，直接返回
   
   const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
   const allUrls = text.match(urlRegex);
@@ -50,8 +50,8 @@ const parseVideoUrl = (postData) => {
 
   const videoPatterns = [
     /youtube\.com|youtu\.be/, /vimeo\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/,
-    /bilibili\.com/, // B站
-    /\.(mp4|webm|ogg|mov)$/i // 直链视频文件
+    /bilibili\.com/, 
+    /\.(mp4|webm|ogg|mov)$/i 
   ];
 
   for (const url of allUrls) {
@@ -62,7 +62,7 @@ const parseVideoUrl = (postData) => {
   return null;
 };
 
-// 【从 PostDetail 复制过来】去除文本中特定 URL 的函数
+// 【优化】去除文本中特定 URL 的函数
 const removeUrlFromText = (text, urlToRemove) => {
     if (!text || !urlToRemove || typeof text !== 'string') return text;
     const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
@@ -71,13 +71,11 @@ const removeUrlFromText = (text, urlToRemove) => {
 };
 
 
-// 【修改】StartChatButton 接收 onOpenChat prop
 const StartChatButton = ({ targetUserId, onOpenChat }) => {
   if (!targetUserId) return null;
-  // 阻止事件冒泡，防止点击私信时触发外层的帖子链接跳转
   const handleClick = (e) => {
     e.stopPropagation();
-    onOpenChat(targetUserId); // 调用传入的 onOpenChat 回调
+    onOpenChat(targetUserId); 
   };
   return (
     <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" aria-label="私信">
@@ -87,58 +85,52 @@ const StartChatButton = ({ targetUserId, onOpenChat }) => {
 };
 
 
-// 【修改】PostItemInner 接收 onOpenChat prop，并包含完整点赞逻辑
-function PostItemInner({ post, onOpenChat }, ref) { // 【修改】接收 onOpenChat
+function PostItemInner({ post, onOpenChat }, ref) { 
   const { user } = useAuth();
   const router = useRouter(); 
 
-  if (!post) return null;
+  // 【关键修复】在组件开始处进行防御性检查
+  if (!post) {
+      console.warn("PostItem: post prop is null or undefined, skipping render.");
+      return null; 
+  }
 
   // 使用 useMemo 获取视频URL和清理后的内容
   const videoUrl = useMemo(() => {
-    return parseVideoUrl(post);
+    return parseVideoUrl(post); // post 此时已经通过上面的检查，确保不为 null
   }, [post]);
 
   const cleanedContent = useMemo(() => {
-    if (!post || !post.content) return '';
-    // 预览模式下，只显示部分内容，所以先清理，再截取
+    if (!post.content) return ''; // 【关键修复】如果 post.content 为空，返回空字符串
     const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
-    // 帖子预览通常只显示一部分内容，这里可以做截断
-    const previewLength = 150; // 预览文字长度限制
+    const previewLength = 150; 
     if (fullCleanedContent.length > previewLength) {
       return fullCleanedContent.substring(0, previewLength) + '...';
     }
     return fullCleanedContent;
-  }, [post, videoUrl]);
+  }, [post.content, videoUrl]); // 【修改】依赖项改为 post.content
 
 
-  // 【优化】点赞逻辑，直接在 PostItem 中更新 Firestore
   const hasLiked = useMemo(() => {
     return user && post.likers && post.likers.includes(user.uid);
   }, [user, post.likers]);
 
   const handleLike = useCallback(async (e) => {
-    e.stopPropagation(); // 阻止点击事件冒泡到帖子卡片
-    if (!user || !post || !db) return; // 如果未登录或帖子数据不存在，或 db 不可用，则返回
+    e.stopPropagation(); 
+    if (!user || !post || !db) return; 
 
     const postDocRef = doc(db, 'posts', post.id);
     try {
       if (hasLiked) {
-        // 取消点赞
         await updateDoc(postDocRef, {
           likesCount: increment(-1),
           likers: arrayRemove(user.uid)
         });
-        // 【注意】这里不直接更新 `post` 状态，因为 `PostItem` 接收的是 `post` prop，
-        // 最好让父组件通过 Firestore 实时监听来更新其 `posts` 列表，从而触发 PostItem 重新渲染。
-        // 如果父组件没有实时监听，你可以考虑在这里通过 `setPosts` 回调来更新父组件的 posts 列表，但这会复杂化 PostItem 的设计。
       } else {
-        // 点赞
         await updateDoc(postDocRef, {
           likesCount: increment(1),
           likers: arrayUnion(user.uid)
         });
-        // 同上，依赖父组件的 Firestore 监听来更新。
       }
     } catch (error) {
       console.error("点赞操作失败:", error);
@@ -147,12 +139,10 @@ function PostItemInner({ post, onOpenChat }, ref) { // 【修改】接收 onOpen
   }, [user, post, hasLiked]);
 
 
-  // 【处理整个卡片点击的函数】
   const handleCardClick = () => {
     router.push(`/community/${post.id}`);
   };
 
-  // 【阻止事件冒泡的通用处理函数】
   const handleActionClick = (e, callback) => {
     e.stopPropagation(); 
     if (callback) callback(e);
@@ -162,8 +152,7 @@ function PostItemInner({ post, onOpenChat }, ref) { // 【修改】接收 onOpen
   return (
     <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
       <div className="flex items-start mb-3">
-        {/* 头像和用户名的链接，点击头像区域可以打开聊天 */}
-        <Link href={`/me?profileId=${post.authorId || ''}`} passHref> {/* 【修改】指向个人主页 */}
+        <Link href={`/me?profileId=${post.authorId || ''}`} passHref> 
           <a onClick={(e) => handleActionClick(e)} className="relative z-10 flex items-center cursor-pointer group">
             <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-12 h-12 rounded-full object-cover" />
             <div className="ml-3 flex-grow">
@@ -172,39 +161,35 @@ function PostItemInner({ post, onOpenChat }, ref) { // 【修改】接收 onOpen
             </div>
           </a>
         </Link>
-        {/* 私信按钮 */}
         <div className="ml-auto">
-          {post.authorId && user && user.uid !== post.authorId && <StartChatButton targetUserId={post.authorId} onOpenChat={onOpenChat} />} {/* 传递 onOpenChat */}
+          {post.authorId && user && user.uid !== post.authorId && <StartChatButton targetUserId={post.authorId} onOpenChat={onOpenChat} />} 
         </div>
       </div>
 
       <div className="space-y-2 block my-3">
-        {/* 帖子标题 */}
         <h2 className="text-lg font-bold dark:text-gray-100 group-hover:text-blue-500">
           {post.title}
         </h2>
         
-        {/* 【新增】如果帖子有视频链接，则渲染视频播放器 (预览模式) */}
         {videoUrl && (
-          <div className="relative pt-[56.25%] overflow-hidden rounded-lg mb-4 shadow-md"> {/* 16:9 比例容器 */}
+          <div className="relative pt-[56.25%] overflow-hidden rounded-lg mb-4 shadow-md"> 
             <VideoEmbed 
               url={videoUrl} 
-              playing={false} // 预览时不自动播放
+              playing={false} 
               controls={true}
               width='100%'
               height='100%'
-              className="absolute top-0 left-0" // 填充容器
+              className="absolute top-0 left-0" 
             />
           </div>
         )}
 
-        {/* 【修改】渲染清理后的内容 */}
         <div className="text-sm text-gray-700 dark:text-gray-300">
+          {/* 【关键修复】确保 PostContent 接收 content prop 且能处理空字符串 */}
           <PostContent content={cleanedContent} />
         </div>
       </div>
 
-      {/* 底部操作栏 */}
       <div className="flex justify-center items-center space-x-8 mt-4 text-gray-600 dark:text-gray-400">
         <button onClick={handleLike} className={`relative z-10 flex items-center space-x-2 transition-colors ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}>
             <i className={`${hasLiked ? 'fas' : 'far'} fa-heart text-lg`} />
