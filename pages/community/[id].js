@@ -1,4 +1,4 @@
-// pages/community/[id].js (贴吧版 - 增强功能版)
+// pages/community/[id].js (贴吧版 - 加强最终版)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -14,6 +14,33 @@ const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
+
+/** === TTS 缓存与函数 === */
+const ttsCache = new Map();
+
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) {
+    console.error(`预加载 "${text}" 失败:`, error);
+  }
+};
+
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play();
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) ttsCache.get(text).play();
+    });
+  }
+};
 
 /** 解析视频 URL */
 const parseVideoUrl = (post) => {
@@ -37,9 +64,7 @@ const PostDetailPage = () => {
   const [error, setError] = useState('');
   const [commentContent, setCommentContent] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
-
-  const postRef = useRef(post);
-  useEffect(() => { postRef.current = post; }, [post]);
+  const [showAllComments, setShowAllComments] = useState(false);
 
   const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
   const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
@@ -63,7 +88,7 @@ const PostDetailPage = () => {
     }
   }, [id]);
 
-  /** 获取评论（含子评论） */
+  /** 获取评论 */
   const fetchComments = useCallback(() => {
     if (!id) return () => {};
     const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
@@ -84,21 +109,23 @@ const PostDetailPage = () => {
   }, [id, fetchPost, fetchComments]);
 
   /** 发表评论 */
-  const handleCommentSubmit = async (e, parentId = null) => {
+  const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
     e.preventDefault();
-    if (!commentContent.trim()) return;
+    const text = parentId ? inputRef?.current?.value : commentContent;
+    if (!text || !text.trim()) return;
     if (!user) return setShowLoginModal(true);
     try {
       await addDoc(collection(db, 'comments'), {
         postId: id,
         parentId,
-        content: commentContent.trim(),
+        content: text.trim(),
         authorId: user.uid,
         authorName: user.displayName || '匿名',
         authorAvatar: user.photoURL,
         createdAt: serverTimestamp()
       });
-      setCommentContent('');
+      if (parentId && inputRef?.current) inputRef.current.value = '';
+      else setCommentContent('');
     } catch (err) {
       console.error(err);
       alert('评论失败');
@@ -122,11 +149,30 @@ const PostDetailPage = () => {
           likers: [...(post.likers || []), user.uid]
         });
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
   const hasLiked = user && post?.likers?.includes(user.uid);
+
+  /** 踩 */
+  const toggleDislike = async () => {
+    if (!user || !post) return setShowLoginModal(true);
+    const ref = doc(db, 'posts', id);
+    const hasDisliked = post.dislikers?.includes(user.uid);
+    try {
+      if (hasDisliked) {
+        await updateDoc(ref, {
+          dislikesCount: increment(-1),
+          dislikers: post.dislikers.filter(u => u !== user.uid)
+        });
+      } else {
+        await updateDoc(ref, {
+          dislikesCount: increment(1),
+          dislikers: [...(post.dislikers || []), user.uid]
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+  const hasDisliked = user && post?.dislikers?.includes(user.uid);
 
   /** 收藏 */
   const toggleFavorite = async () => {
@@ -139,21 +185,19 @@ const PostDetailPage = () => {
       } else {
         await updateDoc(userRef, { favorites: [...(user.favorites || []), post.id] });
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  /** 管理员删除 */
+  /** 删除帖子 */
   const deletePost = async () => {
-    if (!user?.isAdmin) return;
+    if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
     if (confirm('确认删除此帖子吗？')) {
       await deleteDoc(doc(db, 'posts', id));
       router.push('/community');
     }
   };
 
-  // --- UI 渲染 ---
+  // --- UI ---
   if (authLoading || loading) return <LayoutBaseDynamic><p>加载中...</p></LayoutBaseDynamic>;
   if (error || !post) return <LayoutBaseDynamic><p>{error}</p></LayoutBaseDynamic>;
 
@@ -162,7 +206,16 @@ const PostDetailPage = () => {
       <div className="container mx-auto max-w-3xl py-6">
         {/* 帖子内容 */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 mb-8">
-          <h1 className="text-3xl font-bold mb-2">{post.title}</h1>
+          <div className="flex justify-between items-start">
+            <h1 className="text-3xl font-bold mb-2">{post.title}</h1>
+            <div className="space-x-2">
+              <button onClick={() => playCachedTTS(post.title)}>🔊</button>
+              <button onClick={() => navigator.share?.({ title: post.title, url: window.location.href })}>📤</button>
+              {(user?.isAdmin || user?.uid === post?.authorId) && (
+                <button onClick={deletePost} className="text-red-600">⚙ 删除</button>
+              )}
+            </div>
+          </div>
           <div className="flex items-center text-sm text-gray-500 space-x-2 mb-4">
             <img src={post.authorAvatar || '/img/avatar.svg'} className="w-8 h-8 rounded-full" />
             <span>{post.authorName}</span>
@@ -172,23 +225,30 @@ const PostDetailPage = () => {
           {videoUrl && <VideoEmbed url={videoUrl} controls />}
           <div className="prose dark:prose-invert max-w-none my-4">
             <PostContent content={cleanedContent} />
+            <button onClick={() => playCachedTTS(cleanedContent)}>🔊 朗读正文</button>
           </div>
           <div className="flex space-x-4">
-            <button onClick={toggleLike} className={hasLiked ? 'text-red-500' : ''}>
-              ❤️ {post.likesCount || 0}
-            </button>
+            <button onClick={toggleLike} className={hasLiked ? 'text-red-500' : ''}>👍 {post.likesCount || 0}</button>
+            <button onClick={toggleDislike} className={hasDisliked ? 'text-blue-500' : ''}>👎 {post.dislikesCount || 0}</button>
             <button onClick={toggleFavorite}>⭐ 收藏</button>
-            {user?.isAdmin && <button onClick={deletePost} className="text-red-600">删除帖子</button>}
           </div>
         </div>
 
         {/* 评论区 */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
           <h2 className="text-xl font-bold mb-4">评论 ({comments.length})</h2>
-          {comments.filter(c => !c.parentId).map(c => (
-            <CommentItem key={c.id} comment={c} comments={comments} onReply={handleCommentSubmit} user={user} />
-          ))}
-          <form onSubmit={e => handleCommentSubmit(e, null)} className="mt-4">
+          {(showAllComments ? comments.filter(c => !c.parentId) : comments.filter(c => !c.parentId).slice(0, 3))
+            .map(c => (
+              <CommentItem key={c.id} comment={c} comments={comments} onReply={handleCommentSubmit} user={user} />
+            ))}
+          {comments.filter(c => !c.parentId).length > 3 && (
+            <button onClick={() => setShowAllComments(!showAllComments)} className="text-blue-500 text-sm mt-2">
+              {showAllComments ? '收起评论' : '展开更多评论'}
+            </button>
+          )}
+
+          {/* 评论框放最底部 */}
+          <form onSubmit={e => handleCommentSubmit(e, null)} className="mt-6">
             <textarea
               value={commentContent}
               onChange={e => setCommentContent(e.target.value)}
@@ -206,9 +266,11 @@ const PostDetailPage = () => {
 
 export default PostDetailPage;
 
-/** 子评论组件 */
+/** 评论组件 */
 const CommentItem = ({ comment, comments, onReply, user }) => {
   const [showReply, setShowReply] = useState(false);
+  const [showAllReplies, setShowAllReplies] = useState(false);
+  const inputRef = useRef(null);
   const childComments = comments.filter(c => c.parentId === comment.id);
 
   return (
@@ -217,22 +279,24 @@ const CommentItem = ({ comment, comments, onReply, user }) => {
         <img src={comment.authorAvatar || '/img/avatar.svg'} className="w-6 h-6 rounded-full" />
         <span className="font-semibold">{comment.authorName}</span>
         <span className="text-xs text-gray-400">{comment.createdAt?.toDate?.().toLocaleString() || ''}</span>
+        <button onClick={() => playCachedTTS(comment.content)}>🔊</button>
       </div>
       <p className="ml-8">{comment.content}</p>
       <div className="ml-8 mt-1">
         <button onClick={() => setShowReply(!showReply)} className="text-xs text-blue-500">回复</button>
         {showReply && (
-          <form onSubmit={(e) => { onReply(e, comment.id); setShowReply(false); }} className="mt-2">
-            <textarea className="w-full border rounded p-2" rows="2" />
+          <form onSubmit={(e) => { onReply(e, comment.id, inputRef); setShowReply(false); }} className="mt-2">
+            <textarea ref={inputRef} className="w-full border rounded p-2" rows="2" />
             <button type="submit" className="mt-1 px-3 py-1 bg-blue-500 text-white rounded">提交</button>
           </form>
         )}
-        {childComments.length > 0 && (
-          <div className="ml-6 mt-2">
-            {childComments.map(child => (
-              <CommentItem key={child.id} comment={child} comments={comments} onReply={onReply} user={user} />
-            ))}
-          </div>
+        {(showAllReplies ? childComments : childComments.slice(0, 6)).map(child => (
+          <CommentItem key={child.id} comment={child} comments={comments} onReply={onReply} user={user} />
+        ))}
+        {childComments.length > 6 && (
+          <button onClick={() => setShowAllReplies(!showAllReplies)} className="text-xs text-blue-500">
+            {showAllReplies ? '收起回复' : '展开更多回复'}
+          </button>
         )}
       </div>
     </div>
