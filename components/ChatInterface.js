@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (V14 - 最终完整纯UI版)
+// /components/ChatInterface.js (V15 - 最终体验优化版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,13 +8,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
-// 全局样式
+// 【修复】滚动条样式：改为2px极细，并调整颜色使其更不显眼
 const GlobalScrollbarStyle = () => (
     <style jsx global>{`
-        .thin-scrollbar::-webkit-scrollbar { width: 4px; }
-        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
-        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
+        .thin-scrollbar::-webkit-scrollbar { 
+            width: 2px; 
+        }
+        .thin-scrollbar::-webkit-scrollbar-track { 
+            background: transparent; 
+        }
+        .thin-scrollbar::-webkit-scrollbar-thumb { 
+            background-color: #e5e7eb; /* gray-200, 更淡的颜色 */
+            border-radius: 20px; 
+        }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { 
+            background-color: #9ca3af; /* gray-400, 悬停时变清晰 */
+        }
     `}</style>
 );
 
@@ -135,7 +144,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId || !user) return;
 
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
@@ -152,7 +161,24 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     }, (err) => console.error("监听消息错误:", err));
     
     return () => unsub();
-  }, [chatId, user.uid, cfg.autoPlayTTS, cfg.autoTranslate]);
+  }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
+
+  // 【修复】发送消息后，强制滚动到底部
+  useEffect(() => {
+    if (messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        // 只有当最新消息是自己发送的，才强制滚动，避免打扰正在阅读历史消息的用户
+        if (lastMessage.uid === user.uid) {
+            setTimeout(() => {
+                virtuosoRef.current?.scrollToIndex({
+                    index: messages.length - 1,
+                    align: 'end',
+                    behavior: 'smooth'
+                });
+            }, 100); // 延迟以确保UI已渲染
+        }
+    }
+  }, [messages, user.uid]);
 
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
@@ -212,7 +238,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
-  const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**\n- **[缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**\n- **[缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**\n- **[缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**\n- **[缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**\n- **[缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
+  const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**，采用缅甸年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕迹:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**，遵循缅甸语的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**,将句子翻译成符合缅甸人日常表达习惯的、流畅自然的缅甸文。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**，充分考量缅甸的文化、礼仪及社会习俗，提供最得体、最显尊重的表达方式:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**: 思考：缅甸年轻人在类似“轻松随意聊天”情境下，想表达完全相同的情感、语气、意图和功能，会如何表达？提供此类对等表达及其缅文翻译，强调其自然和口语化程度。（提供3-5个）\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   
   const handleTranslateMessage = async (message) => {
@@ -322,7 +348,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </header>
       
-      <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar">
+      {/* 【修复】增加 overscroll-behavior-contain 来防止页面晃动 */}
+      <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar overscroll-behavior-contain">
          <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={filteredMessages} atBottomStateChange={setAtBottom} followOutput="auto" itemContent={(index, msg) => <MessageRow message={msg} key={msg.id} />} />
          <AnimatePresence>
             {!atBottom && (
