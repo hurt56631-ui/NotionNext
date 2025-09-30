@@ -1,175 +1,512 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'; import { Virtuoso } from 'react-virtuoso'; import { motion, AnimatePresence } from 'framer-motion'; import { Send, Settings, X, Volume2, Pencil, Check, BookText, Trash2 } from 'lucide-react'; import { doc, collection, query, orderBy, onSnapshot, addDoc, setDoc, getDoc, updateDoc, deleteDoc, serverTimestamp, getDocs } from 'firebase/firestore'; import { db } from '@/lib/firebase'; import { pinyin as pinyinLib } from 'pinyin-pro';
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { db } from "@/lib/firebase";
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { Virtuoso } from "react-virtuoso";
+import { motion, AnimatePresence } from "framer-motion";
+import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
+import { pinyin } from 'pinyin-pro';
 
-// PrivateChat V7 - 全功能版（覆盖全屏、禁止背景滚动、背景上传、磨砂玻璃、6 条翻译、拼音模式等） export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onClose }) { const user = currentUser; const chatId = React.useMemo(() => { if (!user?.uid || !peerUid) return null; return [user.uid, peerUid].sort().join('_'); }, [user, peerUid]);
+// 全局样式，用于美化滚动条 (沉浸式UI优化)
+const GlobalScrollbarStyle = () => (
+    <style jsx global>{`
+        .thin-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .thin-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .thin-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 20px;
+            border: transparent;
+        }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+    `}</style>
+);
 
-// state const [messages, setMessages] = useState([]); const [input, setInput] = useState(''); const [cfg, setCfg] = useState(() => { try { const saved = typeof window !== 'undefined' ? localStorage.getItem('pcfg') : null; return saved ? JSON.parse(saved) : { backgroundDataUrl: '', autoPlayTTS: false, autoTranslate: false, showTitles: false, ai: { endpoint: '', apiKey: '', model: 'gpt-4o-mini' }, glassOpacity: 0.6, bubbleStyle: 'rounded', themeColor: '#2563eb', fontSize: 15, fontWeight: 500 }; } catch { return { backgroundDataUrl: '', autoPlayTTS: false, autoTranslate: false, showTitles: false, ai: { endpoint: '', apiKey: '', model: 'gpt-4o-mini' }, glassOpacity: 0.6, bubbleStyle: 'rounded', themeColor: '#2563eb', fontSize: 15, fontWeight: 500 }; } }); const [settingsOpen, setSettingsOpen] = useState(false); const [translationOptions, setTranslationOptions] = useState(null); const [isTranslating, setIsTranslating] = useState(false); const [longPressedMessage, setLongPressedMessage] = useState(null); const [showPinyinOnlyFor, setShowPinyinOnlyFor] = useState(null); const [searchTerm, setSearchTerm] = useState(''); const [showSearch, setShowSearch] = useState(false); const virtuosoRef = useRef(null);
+// ------------------------------------------------------------------
+// 组件与图标
+// ------------------------------------------------------------------
 
-// tts cache const ttsCache = useRef(new Map()).current; const preloadTTS = useCallback(async (text) => { if (!text) return; if (ttsCache.has(text)) return; try { const url = https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20; const res = await fetch(url); if (!res.ok) throw new Error('TTS API Error'); const blob = await res.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (e) { console.error('preloadTTS error', e); } }, [ttsCache]); const playCachedTTS = useCallback((text) => { if (!text) return; if (ttsCache.has(text)) ttsCache.get(text).play(); else preloadTTS(text).then(() => { if (ttsCache.has(text)) ttsCache.get(text).play(); }); }, [preloadTTS, ttsCache]);
+// 【UI优化】缩小的 “译” 字圆圈图标
+const CircleTranslateIcon = () => (
+    <div className="w-5 h-5 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center text-xs text-gray-600 dark:text-gray-300 shadow-sm border border-gray-300 dark:border-gray-700">
+        译
+    </div>
+);
 
-// persist cfg useEffect(() => { try { localStorage.setItem('pcfg', JSON.stringify(cfg)); } catch {} }, [cfg]);
+// 【功能修改】长按显示拼音时，隐藏中文，只显示拼音
+const PinyinText = ({ text, showPinyin }) => {
+    if (!text || typeof text !== 'string') return text;
 
-// prevent body scroll while mounted useEffect(() => { const prev = typeof document !== 'undefined' ? document.body.style.overflow : undefined; if (typeof document !== 'undefined') document.body.style.overflow = 'hidden'; return () => { if (typeof document !== 'undefined') document.body.style.overflow = prev || ''; }; }, []);
+    if (showPinyin) {
+        try {
+            // 只返回拼音字符串，用空格连接
+            return pinyin(text, { type: 'array', toneType: 'none' }).join(' ');
+        } catch (error) {
+            console.error("Pinyin conversion failed:", error);
+            return text; // 发生错误时回退到原始文本
+        }
+    }
+    // 默认情况下，只显示原始中文文本
+    return text;
+};
 
-// ensure chat meta and subscribe to messages useEffect(() => { if (!chatId) return; let unsub = () => {}; (async () => { try { const metaRef = doc(db, 'privateChats', chatId); const metaSnap = await getDoc(metaRef); if (!metaSnap.exists()) await setDoc(metaRef, { members: [user.uid, peerUid].filter(Boolean), createdAt: serverTimestamp() }); } catch (e) { console.warn('ensure meta failed', e); } try { const messagesRef = collection(db, privateChats/${chatId}/messages); const q = query(messagesRef, orderBy('createdAt', 'asc')); unsub = onSnapshot(q, async (snap) => { const docs = []; for (const d of snap.docs) docs.push({ id: d.id, ...d.data() }); setMessages(docs); if (docs.length) { const last = docs[docs.length-1]; if (last.uid !== user.uid && cfg.autoPlayTTS) playCachedTTS(last.text); if (last.uid !== user.uid && cfg.autoTranslate) handleTranslateMessage(last); } // auto-scroll handled by Virtuoso via followOutput prop }, (err) => console.error('msg listen err', err)); } catch (err) { console.error('subscribe msgs err', err); } })(); return () => { try { unsub(); } catch {} }; }, [chatId, user?.uid, peerUid, cfg.autoPlayTTS, cfg.autoTranslate]);
+// ------------------------------------------------------------------
+// 功能模块
+// ------------------------------------------------------------------
+const ttsCache = new Map();
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
 
-// send message const sendMessage = useCallback(async (text) => { if (!chatId || !user?.uid) { alert('请先登录'); return; } const content = (text ?? input).trim(); if (!content) return; try { const messagesRef = collection(db, privateChats/${chatId}/messages); await addDoc(messagesRef, { text: content, uid: user.uid, displayName: user.displayName || '匿名', createdAt: serverTimestamp() }); setInput(''); setTranslationOptions(null); } catch (e) { console.error('send err', e); alert('发送失败'); } }, [chatId, user, input]);
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) { ttsCache.get(text).play(); }
+  else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); }
+};
 
-// delete single message const deleteMessage = useCallback(async (messageId) => { if (!chatId) return; try { await deleteDoc(doc(db, privateChats/${chatId}/messages, messageId)); } catch (e) { console.error('delete msg err', e); } }, [chatId]);
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => {
+    if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); }
+    const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`;
+    try {
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] })
+        });
+        if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
+        const data = await response.json();
+        return data.choices[0].message.content;
+    } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
+};
 
-// recall (edit) message - mark as recalled const recallMessage = useCallback(async (messageId) => { if (!chatId) return; try { await updateDoc(doc(db, privateChats/${chatId}/messages, messageId), { recalled: true, recalledAt: serverTimestamp() }); } catch (e) { console.error('recall err', e); } }, [chatId]);
+const parseMyTranslation = (text) => {
+    const sections = text.split(/(?=📖|💬|💡|🐼|🌸|👨)/).filter(Boolean);
+    const results = [];
+    for (const section of sections) {
+        const titleMatch = section.match(/^(?:📖|💬|💡|🐼|🌸|👨)\s*\*\*(.*?)\*\*/);
+        const title = titleMatch ? titleMatch[1].trim() : null;
+        if (!title) continue;
+        if (section.startsWith('👨')) {
+            const parts = section.split(/-\s*\[/g).slice(1); 
+            for (const part of parts) {
+                const chineseMatch = part.match(/(.*?)\]/);
+                const burmeseMatch = part.match(/\*\*(.*?)\*\*/s);
+                if (chineseMatch && burmeseMatch) {
+                    results.push({
+                        title: chineseMatch[1].trim(),
+                        burmeseText: burmeseMatch[1].trim(),
+                        chineseText: chineseMatch[1].trim()
+                    });
+                }
+            }
+        } else {
+            const burmeseMatch = section.match(/-\s*\*\*(.*?)\*\*/s);
+            const chineseMatch = section.match(/-\s*(?:中文意思|回译)\s*[:：]?\s*(.*)/is);
+            if (burmeseMatch && chineseMatch) {
+                results.push({
+                    title: title,
+                    burmeseText: burmeseMatch[1].trim(),
+                    chineseText: chineseMatch[1].trim()
+                });
+            }
+        }
+    }
+    return results.filter(item => item.burmeseText && item.chineseText);
+};
 
-// delete all messages const deleteAllMessages = useCallback(async () => { if (!chatId) return; if (!confirm('确认删除本会话所有消息？')) return; try { const msgsSnap = await getDocs(collection(db, privateChats/${chatId}/messages)); const batchDeletes = msgsSnap.docs.map(d => deleteDoc(doc(db, privateChats/${chatId}/messages, d.id))); await Promise.all(batchDeletes); setMessages([]); } catch (e) { console.error('deleteAll err', e); alert('删除失败'); } }, [chatId]);
 
-// AI helper const callAIHelper = useCallback(async (prompt, textToTranslate) => { const { endpoint, apiKey, model } = cfg.ai; if (!endpoint || !apiKey) throw new Error('请在设置中配置 AI 接口与密钥'); try { const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': Bearer ${apiKey} }, body: JSON.stringify({ model, messages: [{ role: 'user', content: ${prompt}\n\n${textToTranslate} }] }) }); if (!response.ok) { const t = await response.text(); throw new Error('AI Error: '+t); } const data = await response.json(); return data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? ''; } catch (e) { console.error('ai err', e); throw e; } }, [cfg.ai]);
+export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onClose }) {
+  const user = currentUser;
 
-// parse AI output for six sections const parseMyTranslation = useCallback((raw) => { if (!raw || typeof raw !== 'string') return []; const markers = ['📖','💬','💡','🐼','🌸','👨']; const results = []; // normalize newlines const norm = raw.replace(/\r\n/g,'\n'); // find indices of markers const idxs = markers.map(m => ({ m, i: norm.indexOf(m) })).filter(x => x.i >= 0).sort((a,b)=>a.i-b.i); if (idxs.length === 0) return []; for (let k=0;k<idxs.length;k++) { const start = idxs[k].i; const end = (k+1<idxs.length)?idxs[k+1].i : norm.length; const seg = norm.slice(start, end).trim(); // try extract bolded Burmese ... or first line after title const boldMatch = seg.match(/**(.+?)**/s); const burmese = boldMatch ? boldMatch[1].trim() : (seg.split('\n').slice(1).join('\n').split('\n')[0]||'').trim(); // Chinese meaning: look for lines containing 回译|中文意思|中文 const chiMatch = seg.match(/(?:回译|中文意思|中文)[^\n][:：]?\s([\s\S]+)/i); const chi = chiMatch ? chiMatch[1].split('\n').map(s=>s.trim()).filter(Boolean)[0] : ''; results.push({ marker: idxs[k].m, burmeseText: burmese, chineseText: chi }); } // ensure length 6 by filling blanks if necessary while (results.length < 6) results.push({ marker: null, burmeseText: '', chineseText: '' }); return results.slice(0,6); }, []);
+  // ----- State -----
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [longPressedMessage, setLongPressedMessage] = useState(null);
+  const [translationResult, setTranslationResult] = useState(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [myTranslations, setMyTranslations] = useState(null);
+  const [correctionMode, setCorrectionMode] = useState({ active: false, message: null, text: '' });
+  const [showPinyinFor, setShowPinyinFor] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
 
-// request AI 6 versions (MyInputPrompt should instruct model to output six labeled sections) const MyInputPrompt = 请按照下面六个标签依次输出翻译，每一部分用对应 emoji 开头（📖、💬、💡、🐼、🌸、👨），并在每部分中以 **加粗** 包裹目标语言（缅甸语）翻译，随后给出中文回译（标注为“中文意思”或“回译”）：\n\n;
+  const textareaRef = useRef(null);
+  const virtuosoRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-const handleTranslateMyInput = useCallback(async () => { if (!input?.trim()) return; setIsTranslating(true); setTranslationOptions(null); try { const raw = await callAIHelper(MyInputPrompt, input.trim()); const parsed = parseMyTranslation(raw); setTranslationOptions(parsed); } catch (e) { alert(e.message); } finally { setIsTranslating(false); } }, [input, callAIHelper, parseMyTranslation]);
+  const makeChatId = useCallback((a, b) => { if (!a || !b) return null; return [a, b].sort().join("_"); }, []);
+  const chatId = makeChatId(user?.uid, peerUid);
 
-// translate a single message (peer->local) const PeerMessagePrompt = 请将下面的缅甸语（或目标语）翻译成中文，要求自然、直译且保留原意，只返回中文翻译：\n\n; const [translationResult, setTranslationResult] = useState(null); const handleTranslateMessage = useCallback(async (message) => { if (!message?.text) return; setTranslationResult({ id: message.id, loading: true }); try { const raw = await callAIHelper(PeerMessagePrompt, message.text); setTranslationResult({ id: message.id, text: raw }); } catch (e) { alert(e.message); setTranslationResult(null); } }, [callAIHelper]);
+  // 【新增】默认设置，包含新增的样式和主题选项
+  const defaultSettings = { 
+      backgroundDataUrl: "/images/dancibeijingtu-7.jpg", 
+      backgroundOpacity: 0.2,
+      backgroundBlur: 4,
+      autoTranslate: false, 
+      autoPlayTTS: false, 
+      showTranslationTitles: false, 
+      fontSize: 16,
+      fontWeight: '700', // bold
+      theme: {
+          bubbleColor: '#3b82f6', // blue-500
+          textColor: '#ffffff'
+      },
+      ai: { 
+          endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", 
+          apiKey: "", 
+          model: "gemini-2.5-flash-lite", 
+          noStream: true 
+      } 
+  };
+  const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings"); const specificBg = localStorage.getItem(`chat_bg_${chatId}`); const bg = specificBg !== null ? specificBg : defaultSettings.backgroundDataUrl; const parsed = savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; parsed.ai = { ...defaultSettings.ai, ...parsed.ai }; parsed.theme = { ...defaultSettings.theme, ...parsed.theme }; return { ...parsed, backgroundDataUrl: bg }; } catch { return defaultSettings; } });
+  
+  // 【核心修复】当聊天窗口打开时，禁止页面背景滚动；关闭时恢复。
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
-// upload background: read file and store dataURL in localStorage per chat const handleBackgroundUpload = useCallback((file) => { if (!file) return; const reader = new FileReader(); reader.onload = (ev) => { const url = ev.target.result; setCfg(c => ({ ...c, backgroundDataUrl: url })); try { localStorage.setItem(chat_bg_${chatId}, url); } catch {} }; reader.readAsDataURL(file); }, [chatId]);
+  useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings", JSON.stringify({ ...cfg, backgroundDataUrl: undefined })); } }, [cfg]);
+  const handleBackgroundChange = (dataUrl) => { if (typeof window !== 'undefined') { const valueToSave = dataUrl === null ? "" : dataUrl; localStorage.setItem(`chat_bg_${chatId}`, valueToSave); setCfg(c => ({...c, backgroundDataUrl: valueToSave})); } };
 
-// load persisted bg useEffect(() => { try { const stored = typeof window !== 'undefined' ? localStorage.getItem(chat_bg_${chatId}) : null; if (stored) setCfg(c => ({ ...c, backgroundDataUrl: stored })); } catch {} }, [chatId]);
+  useEffect(() => {
+    if (!chatId || !user?.uid) return;
+    const ensureMeta = async () => { try { const metaRef = doc(db, "privateChats", chatId); const metaSnap = await getDoc(metaRef); if (!metaSnap.exists()) { await setDoc(metaRef, { members: [user.uid, peerUid].filter(Boolean), createdAt: serverTimestamp() }); } } catch (e) { console.warn("Failed to ensure chat meta:", e); } };
+    ensureMeta();
+    const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+    const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
+    const unsub = onSnapshot(q, async (snap) => {
+        const otherUserId = peerUid;
+        let otherUserPhoto = '/img/avatar.svg';
+        if (otherUserId) { try { const userProfileDoc = await getDoc(doc(db, 'users', otherUserId)); if (userProfileDoc.exists()) { otherUserPhoto = userProfileDoc.data().photoURL || '/img/avatar.svg'; } } catch (error) { console.error("Failed to fetch other user's profile:", error); } }
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data(), photoURL: d.data().uid === user.uid ? (user.photoURL || '/img/avatar.svg') : otherUserPhoto }));
+        setMessages(arr);
+        if (arr.length > 0) { const lastMessage = arr[arr.length - 1]; if (lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }
+    }, (err) => { console.error("Listen messages error:", err); });
+    return () => unsub();
+  }, [chatId, user?.uid, peerUid, cfg.autoPlayTTS, cfg.autoTranslate]);
+  
+  useEffect(() => {
+    if (searchActive && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [searchActive]);
+  
+  const adjustTextareaHeight = useCallback(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; } }, []);
+  useEffect(() => { adjustTextareaHeight(); }, [input, adjustTextareaHeight]);
+  
+  const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-// toggle pinyin-only view for a message (show pinyin, hide Chinese) const togglePinyinOnly = useCallback((msg) => { if (!msg?.text) return; if (showPinyinOnlyFor === msg.id) { setShowPinyinOnlyFor(null); return; } // generate pinyin try { const py = pinyinLib(msg.text || '', { toneType: 'none' }); setShowPinyinOnlyFor({ id: msg.id, pinyin: py }); } catch (e) { console.error('pinyin gen err', e); setShowPinyinOnlyFor(null); } }, [showPinyinOnlyFor]);
+  const sendMessage = async (textToSend) => {
+    const content = textToSend || input;
+    if (!content.trim() || !chatId || !user || !user.uid) { if (!user || !user.uid) { console.error("SendMessage Error: User is not authenticated."); alert("用户未登录，无法发送消息！"); } return; }
+    setSending(true);
+    try {
+      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+      await addDoc(messagesRef, { text: content.trim(), uid: user.uid, displayName: user.displayName || "匿名用户", photoURL: user.photoURL || '/img/avatar.svg', createdAt: serverTimestamp() });
+      setInput("");
+      setMyTranslations(null);
+    } catch (e) { console.error(e); alert("发送失败：" + e.message); }
+    finally { setSending(false); }
+  };
+  
+  // 【新增】撤回和删除消息的功能
+  const handleRecallMessage = async (message) => {
+    if (message.uid !== user.uid) return;
+    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
+    try {
+      await updateDoc(messageRef, {
+        text: "此消息已被撤回",
+        recalled: true, // 标记为已撤回
+      });
+    } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); }
+  };
 
-// long press menu actions const openLongPressMenu = useCallback((message) => { setLongPressedMessage(message); }, []); const closeLongPressMenu = useCallback(() => setLongPressedMessage(null), []);
+  const handleDeleteMessage = async (message) => {
+    if (message.uid !== user.uid) return;
+    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
+    try {
+      await deleteDoc(messageRef);
+    } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); }
+  };
 
-// render single message const MessageRow = ({ item }) => { const mine = item.uid === user.uid; const isPinyin = showPinyinOnlyFor?.id === item.id; return ( <div className={flex items-start gap-3 ${mine ? 'justify-end' : 'justify-start'} py-2 px-1}> {!mine && <img src={item.photoURL || '/img/avatar.svg'} className="w-8 h-8 rounded-full" />} <div className="relative max-w-[72%]"> <div onClick={() => togglePinyinOnly(item)} onContextMenu={(e)=>{ e.preventDefault(); openLongPressMenu(item); }} className={p-3 ${cfg.bubbleStyle==='rounded' ? 'rounded-2xl' : 'rounded-md'} shadow ${mine ? 'text-white' : 'text-gray-800'}'} style={{ backgroundColor: mine ? cfg.themeColor : rgba(255,255,255,0.9), fontSize: cfg.fontSize, fontWeight: cfg.fontWeight }} > {item.recalled ? <em className="opacity-60">消息已撤回</em> : ( isPinyin ? <div className="whitespace-pre-wrap">{showPinyinOnlyFor?.pinyin}</div> : <div className="whitespace-pre-wrap">{item.text}</div> )} </div> {/* small translate icon */} {!mine && ( <button onClick={() => handleTranslateMessage(item)} aria-label="翻译" className="absolute -right-6 bottom-0 w-7 h-7 rounded-full bg-white/80 text-gray-700 flex items-center justify-center text-xs shadow-sm">译</button> )} </div> {mine && <img src={item.photoURL || '/img/avatar.svg'} className="w-8 h-8 rounded-full" />} </div> ); };
+  const sendCorrection = async () => {
+    if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return;
+    const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id);
+    try {
+        await updateDoc(messageRef, {
+            correction: {
+                originalText: correctionMode.message.text,
+                correctedText: correctionMode.text.trim(),
+                correctorUid: user.uid,
+                correctedAt: serverTimestamp()
+            }
+        });
+        setCorrectionMode({ active: false, message: null, text: '' });
+    } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
+  };
+  
+  const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**，采用缅甸年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕迹:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**，遵循缅甸语的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**,将句子翻译成符合缅甸人日常表达习惯的、流畅自然的缅甸文。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**，充分考量缅甸的文化、礼仪及社会习俗，提供最得体、最显尊重的表达方式:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**: 思考：缅甸年轻人在类似“轻松随意聊天”情境下，想表达完全相同的情感、语气、意图和功能，会如何表达？提供此类对等表达及其缅文翻译，强调其自然和口语化程度。（提供3-5个）\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
+  const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
+  
+  const handleTranslateMessage = async (message) => {
+    setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null);
+    try {
+        const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
+        setTranslationResult({ messageId: message.id, text: result });
+    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
+  };
+  
+  const handleTranslateMyInput = async () => {
+    if (!input.trim()) return;
+    setIsTranslating(true); setMyTranslations(null);
+    try {
+        const resultText = await callAIHelper(MyInputPrompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
+        const versions = parseMyTranslation(resultText);
+        setMyTranslations(versions);
+    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
+  };
 
-// filtered messages by search const displayedMessages = showSearch && searchTerm ? messages.filter(m => (m.text||'').includes(searchTerm)) : messages;
+  const handleTextareaFocus = () => { setTimeout(() => { textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 300); };
+  
+  // 【新增】危险操作的占位函数
+  const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerDisplayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。需要后端支持批量删除。"); };
+  const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerDisplayName} 吗？`)) return; alert("拉黑功能待实现。需要在用户个人资料中添加屏蔽列表。"); };
 
-return ( <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: cfg.backgroundDataUrl ? url(${cfg.backgroundDataUrl}) center/cover : undefined }}> <div style={{ backdropFilter: 'blur(8px)', backgroundColor: rgba(255,255,255,${cfg.glassOpacity}) }} className="flex-shrink-0 flex items-center justify-between px-4 h-14 border-b border-gray-200"> <div className="flex items-center gap-3"> <button onClick={onClose} className="p-2 rounded-full"><X /></button> <div className="font-bold text-lg">{peerDisplayName || '聊天'}</div> </div> <div className="flex items-center gap-2"> <button onClick={() => playCachedTTS((messages[messages.length-1]||{}).text || '')} title="朗读最新" className="p-2 rounded-full"><Volume2 /></button> <button onClick={() => setSettingsOpen(true)} title="设置" className="p-2 rounded-full"><Settings /></button> </div> </div>
-
-<div className="flex-1 overflow-hidden relative">
-    <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={displayedMessages} itemContent={(index, msg) => <MessageRow item={msg} key={msg.id} />} followOutput="smooth" />
-  </div>
-
-  {/* translation options panel */}
-  <AnimatePresence>
-    {translationOptions && (
-      <motion.div initial={{ y: 200, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 200, opacity: 0 }} className="bg-white shadow-lg p-3 border-t border-gray-200">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-bold">选择翻译版本 (6)</div>
-          <button onClick={() => setTranslationOptions(null)} className="text-sm text-gray-500">关闭</button>
+  const LongPressMenu = ({ message, onClose }) => {
+    const mine = message.uid === user?.uid;
+    const isPinyinVisible = showPinyinFor === message.id;
+    return (
+        <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-2 flex flex-col gap-1 text-gray-800 dark:text-gray-200" onClick={e => e.stopPropagation()}>
+                <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button>
+                {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Volume2 size={18} /> 朗读</button>}
+                {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>}
+                {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Pencil size={18} /> 改错</button>}
+                {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>}
+                {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>}
+            </div>
         </div>
-        <div className="grid grid-cols-1 gap-2">
-          {translationOptions.map((t,i) => (
-            <div key={i} className="flex items-start gap-3 p-2 rounded-md bg-gray-50">
-              <div className="flex-1">
-                {cfg.showTitles && t.marker && <div className="text-xs text-gray-500">{t.marker}</div>}
-                <div className="font-bold text-blue-600">{t.burmeseText}</div>
-                {t.chineseText && <div className="text-xs text-gray-600 mt-1">回译: {t.chineseText}</div>}
+    );
+  };
+
+  const MessageRow = ({ message }) => {
+    const mine = message.uid === user?.uid;
+    const longPressTimer = useRef();
+    const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
+    const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
+    
+    const messageStyle = {
+      fontSize: `${cfg.fontSize}px`,
+      fontWeight: cfg.fontWeight
+    };
+
+    const bubbleStyle = mine ? {
+      backgroundColor: cfg.theme.bubbleColor,
+      color: cfg.theme.textColor,
+    } : {};
+
+    return (
+      <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}>
+        <img src={message.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
+        <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
+          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} style={bubbleStyle} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-md ${mine ? "rounded-br-none" : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none"}`}>
+            {message.recalled ? (
+              <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p>
+            ) : message.correction ? (
+              <div className="space-y-1">
+                <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
+                <p className="whitespace-pre-wrap break-words text-green-600 dark:text-green-400" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
               </div>
-              <button onClick={() => sendMessage(t.burmeseText)} className="px-3 py-2 bg-blue-600 text-white rounded">发送</button>
+            ) : (
+              <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
+            )}
+            {translationResult && translationResult.messageId === message.id && (
+              <div className="mt-2 pt-2 border-t border-gray-500/30">
+                <p className="text-sm opacity-90 whitespace-pre-wrap" style={{fontWeight: 'normal'}}>{translationResult.text}</p>
+              </div>
+            )}
+          </div>
+          {!mine && !message.recalled && (
+              <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
+                  <CircleTranslateIcon />
+              </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  if (!user) return <div className="fixed inset-0 z-50 bg-gray-100 dark:bg-black flex items-center justify-center"><p className="text-gray-800 dark:text-gray-200">正在加载用户信息...</p></div>;
+  
+  return (
+    <div className="fixed inset-0 z-50 bg-gray-100 dark:bg-black flex flex-col">
+      <GlobalScrollbarStyle />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full w-full" style={{ backgroundImage: cfg.backgroundDataUrl ? `url(${cfg.backgroundDataUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        
+        <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-black/30 backdrop-blur-md border-b border-white/10 z-20 relative">
+          <AnimatePresence>
+            {searchActive ? (
+                <motion.div key="search" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: '100%' }} exit={{ opacity: 0, width: 0 }} className="absolute inset-0 flex items-center px-4 bg-black/50 backdrop-blur-md">
+                    <input ref={searchInputRef} type="text" placeholder="搜索消息..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent text-white placeholder-gray-300 focus:outline-none" />
+                    <button onClick={() => { setSearchActive(false); setSearchQuery(''); }} className="p-2 -mr-2 text-white"><X/></button>
+                </motion.div>
+            ) : (
+                <motion.div key="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-between w-full">
+                    <div className="w-10"></div>
+                    <h1 className="font-bold text-lg text-white drop-shadow-md absolute left-1/2 -translate-x-1/2 truncate max-w-[50%]">{peerDisplayName || "聊天"}</h1>
+                    <div className="flex items-center gap-1">
+                        <button onClick={() => setSearchActive(true)} className="p-2 text-white drop-shadow-md"><Search /></button>
+                        <button onClick={() => setSettingsOpen(true)} className="p-2 -mr-2 text-white drop-shadow-md"><Settings /></button>
+                    </div>
+                </motion.div>
+            )}
+          </AnimatePresence>
+        </header>
+
+        <div className="flex-1 overflow-hidden relative p-4 thin-scrollbar">
+          <div className="absolute inset-0 z-0" style={{ backgroundColor: `rgba(0, 0, 0, ${cfg.backgroundOpacity})`, backdropFilter: `blur(${cfg.backgroundBlur}px)` }}></div>
+          <div className="relative h-full w-full">
+             <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={filteredMessages} atBottomStateChange={setAtBottom} followOutput="auto" itemContent={(index, msg) => <MessageRow message={msg} key={msg.id} />} overscan={300} />
+             <AnimatePresence>
+                {!atBottom && (
+                    <motion.button 
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+                      onClick={() => virtuosoRef.current.scrollToIndex({ index: messages.length - 1, align: 'end', behavior: 'smooth' })} 
+                      className="absolute bottom-4 right-4 z-10 bg-blue-500 text-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center">
+                        <ArrowDown size={20}/>
+                    </motion.button>
+                )}
+             </AnimatePresence>
+          </div>
+        </div>
+
+        <AnimatePresence>
+            {myTranslations && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', maxHeight: '75%', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', damping: 30, stiffness: 400 }} className="flex-shrink-0 border-t border-white/20 bg-black/30 backdrop-blur-lg flex flex-col z-10">
+                    <div className="p-3 flex justify-between items-center border-b border-white/20">
+                        <h4 className="text-sm font-bold text-center flex-1 text-white">选择一个翻译版本发送</h4>
+                        <button onClick={() => setMyTranslations(null)} className="text-white"><X size={18} /></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-3 thin-scrollbar">
+                        {myTranslations.map((trans, index) => (
+                            <div key={index} className="p-3 rounded-lg bg-black/20 flex items-start gap-3">
+                                <div className="flex-1 space-y-1">
+                                    {cfg.showTranslationTitles && trans.title && <p className={`font-bold text-sm ${trans.title === trans.chineseText ? 'text-white' : 'text-gray-300'}`}>{trans.title}</p>}
+                                    <p className="font-bold text-blue-400 text-base">{trans.burmeseText}</p>
+                                    {trans.title !== trans.chineseText && <p className="text-xs text-gray-300 font-bold">回译: <PinyinText text={trans.chineseText} showPinyin={true} /></p>}
+                                </div>
+                                <button onClick={() => sendMessage(trans.burmeseText)} className="w-10 h-10 flex-shrink-0 bg-blue-500 text-white rounded-full flex items-center justify-center"><Send size={16}/></button>
+                            </div>
+                        ))}
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+        
+        <footer className="flex-shrink-0 p-2 bg-black/30 backdrop-blur-md border-t border-white/10 z-10">
+          <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100/20 dark:bg-black/30 rounded-2xl border border-white/20">
+            <textarea ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleTextareaFocus} placeholder="输入消息..." className="flex-1 bg-transparent focus:outline-none text-white text-base resize-none overflow-hidden mx-2 py-2.5 leading-6 max-h-40 placeholder-gray-300" rows="1" style={{ minHeight: '2.75rem', fontWeight: 'bold' }} />
+            <div className="flex items-center flex-shrink-0 ml-1 self-end">
+                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-white hover:text-blue-300 disabled:opacity-30" title="AI 多版本翻译">
+                    {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-white"></div> : <CircleTranslateIcon />}
+                </button>
+                <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-500 disabled:shadow-none transition-all ml-1">
+                    <Send size={18} />
+                </button>
             </div>
-          ))}
-        </div>
-      </motion.div>
-    )}
-  </AnimatePresence>
+          </div>
+        </footer>
 
-  {/* input area */}
-  <div style={{ backdropFilter: 'blur(6px)', backgroundColor: `rgba(255,255,255,${Math.max(0.02,cfg.glassOpacity)})` }} className="flex-shrink-0 p-3 border-t border-gray-200">
-    <div className="flex items-end gap-2">
-      <textarea rows={1} value={input} onChange={(e)=>setInput(e.target.value)} placeholder="输入消息..." className="flex-1 p-2 rounded-md border resize-none" onKeyDown={(e)=>{ if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }}} />
-      <div className="flex items-center gap-2">
-        <button onClick={handleTranslateMyInput} disabled={isTranslating} title="AI 多版本翻译" className="p-2 rounded-md bg-gray-100">译</button>
-        <label className="p-2 rounded-md bg-gray-100 cursor-pointer">
-          <input type="file" accept="image/*" capture="environment" onChange={(e)=>{ const f = e.target.files?.[0]; if (f) handleBackgroundUpload(f); }} className="hidden" />
-          背景
-        </label>
-        <button onClick={()=>sendMessage()} className="p-2 rounded-md bg-blue-600 text-white"><Send /></button>
-      </div>
+        <AnimatePresence>
+          {settingsOpen && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/50 z-50" onClick={() => setSettingsOpen(false)}>
+              <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 30, stiffness: 300 }} onClick={(e) => e.stopPropagation()} className="absolute bottom-0 w-full bg-gray-800/80 backdrop-blur-xl text-white p-4 rounded-t-2xl space-y-4 max-h-[80vh] overflow-y-auto thin-scrollbar">
+                <h3 className="text-lg font-semibold text-center">聊天设置</h3>
+                
+                <div className="p-3 rounded-lg bg-black/30 space-y-3">
+                    <h4 className="font-bold text-sm">主题与样式</h4>
+                    <label className="flex items-center justify-between text-sm"><span className="font-bold">聊天气泡颜色</span><input type="color" value={cfg.theme.bubbleColor} onChange={e => setCfg(c => ({...c, theme: {...c.theme, bubbleColor: e.target.value}}))} className="w-10 h-8 p-1 bg-gray-700 border border-gray-600 rounded cursor-pointer"/></label>
+                    <label className="flex items-center justify-between text-sm"><span className="font-bold">字体大小 (px)</span><input type="number" value={cfg.fontSize} onChange={e => setCfg(c => ({...c, fontSize: parseInt(e.target.value)}))} className="w-20 p-1 text-center border rounded text-sm bg-gray-900/50 border-gray-600"/></label>
+                    <label className="flex items-center justify-between text-sm"><span className="font-bold">字体粗细</span><select value={cfg.fontWeight} onChange={e => setCfg(c => ({...c, fontWeight: e.target.value}))} className="p-1 border rounded text-sm bg-gray-900/50 border-gray-600"><option value="400">常规</option><option value="700">粗体</option></select></label>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-black/30 space-y-3">
+                    <h4 className="font-bold text-sm">背景效果</h4>
+                    <label className="flex items-center justify-between text-sm"><span>背景不透明度</span><input type="range" min="0" max="1" step="0.05" value={cfg.backgroundOpacity} onChange={e => setCfg(c => ({...c, backgroundOpacity: parseFloat(e.target.value)}))} className="w-1/2"/></label>
+                    <label className="flex items-center justify-between text-sm"><span>背景模糊度 (px)</span><input type="range" min="0" max="24" step="1" value={cfg.backgroundBlur} onChange={e => setCfg(c => ({...c, backgroundBlur: parseInt(e.target.value)}))} className="w-1/2"/></label>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm">聊天背景图</span>
+                      <div>
+                        {cfg.backgroundDataUrl && <button onClick={() => handleBackgroundChange(null)} className="px-3 py-1 text-sm bg-red-500 text-white rounded-md mr-2">移除</button>}
+                        <label className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md cursor-pointer">选择</label>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) { const reader = new FileReader(); reader.onload = (ev) => handleBackgroundChange(ev.target.result); reader.readAsDataURL(e.target.files[0]); } }} />
+                      </div>
+                    </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-black/30 space-y-2">
+                    <h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4>
+                    <input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-gray-900/50 border-gray-600 placeholder-gray-400"/>
+                    <input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c, ai: {...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-gray-900/50 border-gray-600 placeholder-gray-400"/>
+                    <input placeholder="模型 (e.g., gpt-4o-mini)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c, ai: {...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-gray-900/50 border-gray-600 placeholder-gray-400"/>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-black/30 space-y-2">
+                     <h4 className="font-bold text-sm">自动化</h4>
+                     <label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-400 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"/></label>
+                     <label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-400 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"/></label>
+                     <label className="flex items-center justify-between text-sm"><span className="font-bold">显示多版本翻译标题</span><input type="checkbox" checked={cfg.showTranslationTitles} onChange={e => setCfg(c => ({...c, showTranslationTitles: e.target.checked}))} className="h-5 w-5 text-blue-400 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"/></label>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-black/30 space-y-2">
+                    <h4 className="font-bold text-sm text-red-400">危险操作</h4>
+                    <button onClick={handleDeleteAllMessages} className="w-full text-left p-2 hover:bg-red-500/20 rounded-md text-red-400 font-bold text-sm">删除全部聊天记录</button>
+                    <button onClick={handleBlockUser} className="w-full text-left p-2 hover:bg-red-500/20 rounded-md text-red-400 font-bold text-sm">拉黑对方</button>
+                </div>
+
+                <button onClick={() => setSettingsOpen(false)} className="w-full mt-2 p-2 text-sm bg-gray-700 rounded-md">关闭</button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        {longPressedMessage && <LongPressMenu message={longPressedMessage} onClose={() => setLongPressedMessage(null)} />}
+        
+        <AnimatePresence>
+            {correctionMode.active && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 z-[70] flex items-center justify-center p-4">
+                    <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="w-full max-w-md bg-gray-800 text-white border border-gray-700 rounded-lg shadow-xl p-4 space-y-3">
+                        <h3 className="font-bold text-lg">修改消息</h3>
+                        <p className="text-sm p-3 bg-gray-700 rounded-md opacity-70">{correctionMode.message.text}</p>
+                        <textarea value={correctionMode.text} onChange={e => setCorrectionMode(c => ({...c, text: e.target.value}))} rows={4} className="w-full p-2 border rounded bg-gray-700 border-gray-600" />
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setCorrectionMode({ active: false, message: null, text: ''})} className="px-4 py-2 rounded-md bg-gray-600 text-sm">取消</button>
+                            <button onClick={sendCorrection} className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm">确认修改</button>
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+        
+        {(isTranslating && !myTranslations) && <div className="absolute inset-0 bg-black/30 z-[80] flex items-center justify-center text-white"><div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-white mr-2"></div>正在请求AI翻译...</div>}
+      </motion.div>
     </div>
-    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-      <div>
-        <button onClick={()=>setShowSearch(s=>!s)} className="mr-2">搜索</button>
-        {showSearch && <input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="搜索消息" className="p-1 border rounded" />}
-      </div>
-      <div className="flex items-center gap-2">
-        <button onClick={()=>deleteAllMessages()} className="text-red-500">删除所有</button>
-      </div>
-    </div>
-  </div>
-
-  {/* settings drawer */}
-  <AnimatePresence>
-    {settingsOpen && (
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 h-full w-80 bg-white shadow-lg z-50 p-4 overflow-auto">
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-bold">聊天设置</div>
-          <button onClick={()=>setSettingsOpen(false)}><X/></button>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium">背景透明度</label>
-            <input type="range" min="0.1" max="0.95" step="0.05" value={cfg.glassOpacity} onChange={(e)=>setCfg(c=>({...c, glassOpacity: Number(e.target.value)}))} className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">主题色</label>
-            <input type="color" value={cfg.themeColor} onChange={(e)=>setCfg(c=>({...c, themeColor: e.target.value}))} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">气泡样式</label>
-            <select value={cfg.bubbleStyle} onChange={(e)=>setCfg(c=>({...c, bubbleStyle: e.target.value}))} className="w-full p-2 border rounded">
-              <option value="rounded">圆角</option>
-              <option value="pill">胶囊</option>
-              <option value="flat">扁平</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium">字体大小</label>
-            <input type="range" min="12" max="22" step="1" value={cfg.fontSize} onChange={(e)=>setCfg(c=>({...c, fontSize: Number(e.target.value)}))} className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">字体粗细</label>
-            <input type="range" min="300" max="800" step="50" value={cfg.fontWeight} onChange={(e)=>setCfg(c=>({...c, fontWeight: Number(e.target.value)}))} className="w-full" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">AI 翻译设置（OpenAI 兼容）</label>
-            <input placeholder="接口地址" value={cfg.ai.endpoint} onChange={(e)=>setCfg(c=>({...c, ai:{...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded mb-2" />
-            <input placeholder="API Key" value={cfg.ai.apiKey} onChange={(e)=>setCfg(c=>({...c, ai:{...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded mb-2" />
-            <input placeholder="模型" value={cfg.ai.model} onChange={(e)=>setCfg(c=>({...c, ai:{...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded" />
-          </div>
-          <div className="flex gap-2">
-            <label className="flex-1 p-2 bg-gray-100 rounded">自动朗读 <input type="checkbox" checked={cfg.autoPlayTTS} onChange={(e)=>setCfg(c=>({...c, autoPlayTTS: e.target.checked}))} /></label>
-            <label className="flex-1 p-2 bg-gray-100 rounded">自动翻译 <input type="checkbox" checked={cfg.autoTranslate} onChange={(e)=>setCfg(c=>({...c, autoTranslate: e.target.checked}))} /></label>
-          </div>
-          <div className="pt-2">
-            <label className="block text-sm font-medium">聊天背景（上传）</label>
-            <input type="file" accept="image/*" capture="environment" onChange={(e)=>{ const f = e.target.files?.[0]; if (f) handleBackgroundUpload(f); }} />
-            <div className="mt-2 flex gap-2">
-              <button onClick={()=>{ setCfg(c=>({...c, backgroundDataUrl:''})); localStorage.removeItem(`chat_bg_${chatId}`); }} className="px-3 py-1 bg-red-500 text-white rounded">移除</button>
-            </div>
-          </div>
-          <div className="pt-3 border-t">
-            <button onClick={deleteAllMessages} className="w-full px-3 py-2 bg-red-600 text-white rounded">删除本会话全部消息</button>
-          </div>
-        </div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-
-  {/* long press menu */}
-  <AnimatePresence>
-    {longPressedMessage && (
-      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/30" onClick={()=>setLongPressedMessage(null)}>
-        <div className="bg-white p-2 rounded shadow">
-          <button onClick={()=>{ playCachedTTS(longPressedMessage.text); setLongPressedMessage(null); }} className="block px-3 py-2">朗读</button>
-          <button onClick={()=>{ handleTranslateMessage(longPressedMessage); setLongPressedMessage(null); }} className="block px-3 py-2">翻译</button>
-          {(longPressedMessage.uid === user.uid) && <button onClick={()=>{ recallMessage(longPressedMessage.id); setLongPressedMessage(null); }} className="block px-3 py-2">撤回</button>}
-          {(longPressedMessage.uid === user.uid || user.isAdmin) && <button onClick={()=>{ deleteMessage(longPressedMessage.id); setLongPressedMessage(null); }} className="block px-3 py-2 text-red-600">删除</button>}
-          <button onClick={()=>{ try { const py = pinyinLib(longPressedMessage.text, {toneType:'none'}); setShowPinyinOnlyFor({id: longPressedMessage.id, pinyin:py}); } catch(e){console.error(e);} setLongPressedMessage(null); }} className="block px-3 py-2">显示拼音</button>
-        </div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-
-</div>
-
-); }
-
+  );
+}
