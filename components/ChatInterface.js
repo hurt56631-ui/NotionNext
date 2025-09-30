@@ -12,7 +12,7 @@ import { pinyin } from 'pinyin-pro';
 const GlobalScrollbarStyle = () => (
     <style jsx global>{`
         .thin-scrollbar::-webkit-scrollbar { 
-            width: 2px; 
+            width: 2px !important; 
         }
         .thin-scrollbar::-webkit-scrollbar-track { 
             background: transparent; 
