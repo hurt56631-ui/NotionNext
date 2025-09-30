@@ -1,10 +1,10 @@
-// /components/MessagesPageContent.js (最终修复版)
+// /components/MessagesPageContent.js (最终加固版)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutlineUsers } from 'react-icons/hi2';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
@@ -33,7 +33,7 @@ const MessageHeader = ({ activeTab, setActiveTab }) => {
   );
 };
 
-// ConversationList 组件 (已修复查询和路由逻辑)
+// ConversationList 组件 (最终修复版)
 const ConversationList = () => {
     const { user } = useAuth();
     const router = useRouter();
@@ -43,7 +43,6 @@ const ConversationList = () => {
     useEffect(() => {
         if (!user) { setLoading(false); return; }
 
-        // 【核心查询修复】移除 orderBy 子句以避免Firebase错误。我们将在客户端进行排序。
         const chatsQuery = query(
             collection(db, 'privateChats'), 
             where('members', 'array-contains', user.uid)
@@ -55,34 +54,51 @@ const ConversationList = () => {
                 const chatData = chatDoc.data();
                 const otherUserId = chatData.members.find(id => id !== user.uid);
                 
-                // 如果找不到对方ID，或ID无效，则跳过此会话
-                if (!otherUserId || typeof otherUserId !== 'string' || otherUserId.trim() === '') return null;
+                // 【最终加固】如果 otherUserId 无效，直接返回 null，此会话将被过滤掉
+                if (!otherUserId || typeof otherUserId !== 'string' || otherUserId.trim() === '') {
+                    console.warn("发现一个无效的会话，对方用户ID为空，已跳过。", chatDoc.id);
+                    return null;
+                }
 
-                const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
-                const otherUser = userProfileDoc.exists() 
-                    ? { id: userProfileDoc.id, ...userProfileDoc.data() } 
-                    : { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
+                try {
+                    const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
+                    
+                    // 【最终加固】如果对方用户在 'users' 集合中不存在，也跳过此会话
+                    if (!userProfileDoc.exists()) {
+                        console.warn(`对方用户 (ID: ${otherUserId}) 在 'users' 集合中不存在，已跳过会话。`);
+                        return null;
+                    }
 
-                // 【修复未读逻辑】使用更安全的空值检查
-                const lastReadTimestamp = chatData.lastRead?.[user.uid]?.toDate();
-                const lastMessageTimestamp = chatData.lastMessageAt?.toDate(); // 使用 lastMessageAt 作为排序和判断依据
-                const isUnread = !!(lastMessageTimestamp && (!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp));
+                    const otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
+                    
+                    // 【最终加固】确保 otherUser.id 也是有效的
+                    if (!otherUser.id || typeof otherUser.id !== 'string' || otherUser.id.trim() === '') {
+                        console.warn("获取到的对方用户信息中ID无效，已跳过会话。");
+                        return null;
+                    }
 
-                return { 
-                    id: chatDoc.id, 
-                    ...chatData, 
-                    otherUser, 
-                    isUnread,
-                    sortTimestamp: lastMessageTimestamp || chatData.createdAt?.toDate() || new Date(0) // 提供一个用于排序的时间戳
-                };
+                    const lastReadTimestamp = chatData.lastRead?.[user.uid]?.toDate();
+                    const lastMessageTimestamp = chatData.lastMessageAt?.toDate();
+                    const isUnread = !!(lastMessageTimestamp && (!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp));
+
+                    return { 
+                        id: chatDoc.id, 
+                        ...chatData, 
+                        otherUser, 
+                        isUnread,
+                        sortTimestamp: lastMessageTimestamp || chatData.createdAt?.toDate() || new Date(0)
+                    };
+                } catch (error) {
+                    console.error(`处理会话 ${chatDoc.id} 时发生错误:`, error);
+                    return null; // 如果在获取单个用户信息时出错，也跳过此会话
+                }
             });
-            const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean);
 
-            // 【核心查询修复】在客户端进行排序
+            const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean); // filter(Boolean) 会移除所有 null
             resolvedChats.sort((a, b) => b.sortTimestamp - a.sortTimestamp);
-
             setConversations(resolvedChats);
             setLoading(false);
+
         }, (error) => {
             console.error("获取会话列表时出错: ", error);
             alert("无法加载会话列表，请检查您的网络连接和Firebase控制台的索引设置。");
@@ -92,23 +108,13 @@ const ConversationList = () => {
         return () => unsubscribe();
     }, [user]);
     
-    // 【核心路由修复】构建正确的 chatId 并跳转
+    // 跳转逻辑保持不变，因为现在传递给它的 convo 对象一定是安全的
     const handleConversationClick = (convo) => {
-        // 安全检查，确保所有需要的信息都存在
         if (!user?.uid || !convo.otherUser?.id) {
             alert("用户信息不完整，无法进入聊天。");
             return;
         }
-
         const uids = [user.uid, convo.otherUser.id];
-
-        // 再次验证UID的有效性
-        if (uids.some(uid => !uid || typeof uid !== 'string' || uid.trim() === '')) {
-            alert("用户ID无效，无法创建聊天。");
-            return;
-        }
-
-        // 创建正确的 chatId 并跳转
         const chatId = uids.sort().join('_');
         router.push(`/messages/${chatId}`);
     };
