@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 
 // 动态导入我们真正的聊天界面组件，并禁用SSR
 const ChatInterfaceWithNoSSR = dynamic(
-  () => import('@/components/ChatInterface'), // 我们将把 PrivateChat.js 的逻辑移到这里
+  () => import('@/components/ChatInterface'), // 我们把 PrivateChat.js 的逻辑移到这里
   { 
     ssr: false,
     loading: () => <div className="fixed inset-0 flex items-center justify-center bg-gray-100 dark:bg-black text-gray-500">正在进入聊天室...</div>
