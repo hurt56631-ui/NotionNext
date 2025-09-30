@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (V15 - 最终体验优化版)
+// /components/ChatInterface.js (V17 - 全面修复和功能优化版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,24 +8,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
-// 【修复】滚动条样式：改为2px极细，并调整颜色使其更不显眼
+// 全局样式：修复为标准<style>标签，确保2px极细滚动条生效，并增加Firefox兼容性
 const GlobalScrollbarStyle = () => (
-    <style jsx global>{`
-        .thin-scrollbar::-webkit-scrollbar { 
-            width: 2px !important; 
-        }
-        .thin-scrollbar::-webkit-scrollbar-track { 
-            background: transparent; 
-        }
-        .thin-scrollbar::-webkit-scrollbar-thumb { 
-            background-color: #e5e7eb; /* gray-200, 更淡的颜色 */
-            border-radius: 20px; 
-        }
-        .thin-scrollbar:hover::-webkit-scrollbar-thumb { 
-            background-color: #9ca3af; /* gray-400, 悬停时变清晰 */
-        }
+    <style>{`
+        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
+        /* Firefox support */
+        .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; }
     `}</style>
 );
+
 
 // 组件与图标
 const CircleTranslateIcon = () => (
@@ -58,8 +52,16 @@ const preloadTTS = async (text) => {
 };
 
 const playCachedTTS = (text) => {
-  if (ttsCache.has(text)) { ttsCache.get(text).play(); }
-  else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); }
+  // 修复：为 .play() 增加 .catch() 以处理浏览器自动播放限制导致的错误
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) {
+        ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+      }
+    });
+  }
 };
 
 const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => {
@@ -77,39 +79,20 @@ const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model)
     } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
 };
 
-const parseMyTranslation = (text) => {
-    const sections = text.split(/(?=📖|💬|💡|🐼|🌸|👨)/).filter(Boolean);
-    const results = [];
-    for (const section of sections) {
-        const titleMatch = section.match(/^(?:📖|💬|💡|🐼|🌸|👨)\s*\*\*(.*?)\*\*/);
-        const title = titleMatch ? titleMatch[1].trim() : null;
-        if (!title) continue;
-        if (section.startsWith('👨')) {
-            const parts = section.split(/-\s*\[/g).slice(1); 
-            for (const part of parts) {
-                const chineseMatch = part.match(/(.*?)\]/);
-                const burmeseMatch = part.match(/\*\*(.*?)\*\*/s);
-                if (chineseMatch && burmeseMatch) {
-                    results.push({
-                        title: chineseMatch[1].trim(),
-                        burmeseText: burmeseMatch[1].trim(),
-                        chineseText: chineseMatch[1].trim()
-                    });
-                }
-            }
-        } else {
-            const burmeseMatch = section.match(/-\s*\*\*(.*?)\*\*/s);
-            const chineseMatch = section.match(/-\s*(?:中文意思|回译)\s*[:：]?\s*(.*)/is);
-            if (burmeseMatch && chineseMatch) {
-                results.push({
-                    title: title,
-                    burmeseText: burmeseMatch[1].trim(),
-                    chineseText: chineseMatch[1].trim()
-                });
-            }
-        }
+// 新增：用于解析单一翻译结果+回译的函数
+const parseSingleTranslation = (text) => {
+    const translationMatch = text.match(/\*\*(.*?)\*\*/s);
+    const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is);
+
+    if (translationMatch && backTranslationMatch) {
+        return {
+            translation: translationMatch[1].trim(),
+            backTranslation: backTranslationMatch[1].trim(),
+        };
     }
-    return results.filter(item => item.burmeseText && item.chineseText);
+    console.warn("无法解析AI翻译响应:", text);
+    // 如果解析失败，返回原始文本，给用户一个反馈
+    return { translation: text.trim(), backTranslation: "解析失败" };
 };
 
 
@@ -123,7 +106,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [longPressedMessage, setLongPressedMessage] = useState(null);
   const [translationResult, setTranslationResult] = useState(null);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [myTranslations, setMyTranslations] = useState(null);
+  // 修改：状态从 myTranslations (数组) 改为 myTranslationResult (对象)
+  const [myTranslationResult, setMyTranslationResult] = useState(null);
   const [correctionMode, setCorrectionMode] = useState({ active: false, message: null, text: '' });
   const [showPinyinFor, setShowPinyinFor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -133,10 +117,15 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
   const footerRef = useRef(null);
+  // 新增：用于实现输入框自动增高的 ref
+  const textareaRef = useRef(null);
   
+  // 修改：在设置中增加源语言和目标语言，移除不再需要的 showTranslationTitles
   const defaultSettings = { 
-      autoTranslate: false, autoPlayTTS: false, showTranslationTitles: false, 
+      autoTranslate: false, autoPlayTTS: false,
       fontSize: 16, fontWeight: 'normal',
+      sourceLang: '中文',
+      targetLang: '缅甸语',
       ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
@@ -163,25 +152,21 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => unsub();
   }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
 
-  // 【修复】发送消息后，强制滚动到底部
-  useEffect(() => {
-    if (messages.length > 0) {
-        const lastMessage = messages[messages.length - 1];
-        // 只有当最新消息是自己发送的，才强制滚动，避免打扰正在阅读历史消息的用户
-        if (lastMessage.uid === user.uid) {
-            setTimeout(() => {
-                virtuosoRef.current?.scrollToIndex({
-                    index: messages.length - 1,
-                    align: 'end',
-                    behavior: 'smooth'
-                });
-            }, 100); // 延迟以确保UI已渲染
-        }
-    }
-  }, [messages, user.uid]);
+  // 修复：移除手动滚动逻辑，完全依赖 Virtuoso 的 followOutput 属性，避免遮挡和滚动冲突
+  // useEffect(() => { ... }); // 此块已被删除
 
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
+  // 新增：实现输入框根据内容自动增高
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+        textarea.style.height = 'auto'; // 重置高度以便正确计算 scrollHeight
+        const scrollHeight = textarea.scrollHeight;
+        textarea.style.height = `${scrollHeight}px`; // 设置为内容实际高度
+    }
+  }, [input]);
+
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
   const sendMessage = async (textToSend) => {
@@ -191,13 +176,23 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
     try {
         const chatDocRef = doc(db, "privateChats", chatId);
-        await setDoc(chatDocRef, { members: [user.uid, peerUser.id], lastMessageAt: serverTimestamp() }, { merge: true });
-
         const messagesRef = collection(chatDocRef, "messages");
-        await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
+        
+        await addDoc(messagesRef, { 
+            text: content.trim(), 
+            uid: user.uid, 
+            createdAt: serverTimestamp() 
+        });
+
+        await setDoc(chatDocRef, { 
+            members: [user.uid, peerUser.id], 
+            lastMessage: content.trim(),
+            lastMessageAt: serverTimestamp()
+        }, { merge: true });
 
         setInput("");
-        setMyTranslations(null);
+        // 修改：发送后清空新的翻译结果状态
+        setMyTranslationResult(null);
     } catch (e) {
         console.error("SendMessage Error:", e);
         alert(`发送失败: ${e.message}`);
@@ -238,7 +233,15 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
-  const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**，采用缅甸年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕迹:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**，遵循缅甸语的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**,将句子翻译成符合缅甸人日常表达习惯的、流畅自然的缅甸文。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**，充分考量缅甸的文化、礼仪及社会习俗，提供最得体、最显尊重的表达方式:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**: 思考：缅甸年轻人在类似“轻松随意聊天”情境下，想表达完全相同的情感、语气、意图和功能，会如何表达？提供此类对等表达及其缅文翻译，强调其自然和口语化程度。（提供3-5个）\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
+  // 修改：根据用户要求，更新为单一、自然的翻译提示词
+  const getMyInputPrompt = (sourceLang, targetLang) => 
+    `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。
+要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
+请严格遵循以下格式，只返回格式化的翻译结果，不要包含任何额外说明或标签：
+
+**[这里是${targetLang}翻译]**
+回译：[这里是回译成${sourceLang}的内容]`;
+
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   
   const handleTranslateMessage = async (message) => {
@@ -249,13 +252,15 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
+  // 修改：重构此函数以处理单一翻译结果
   const handleTranslateMyInput = async () => {
     if (!input.trim()) return;
-    setIsTranslating(true); setMyTranslations(null);
+    setIsTranslating(true); setMyTranslationResult(null);
     try {
-        const resultText = await callAIHelper(MyInputPrompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
-        const versions = parseMyTranslation(resultText);
-        setMyTranslations(versions);
+        const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang);
+        const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
+        const parsedResult = parseSingleTranslation(resultText);
+        setMyTranslationResult(parsedResult);
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
@@ -290,6 +295,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     const longPressTimer = useRef();
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
     const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
+    // 修复：增加 onTouchMove 事件，在滑动时清除长按计时器，防止误触
+    const handleTouchMove = () => { clearTimeout(longPressTimer.current); };
     
     const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
 
@@ -297,7 +304,13 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <div className={`flex items-end gap-2 my-2 px-4 ${mine ? "flex-row-reverse" : ""}`}>
         <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
         <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
-          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}>
+          <div 
+            onTouchStart={handleTouchStart} 
+            onTouchEnd={handleTouchEnd} 
+            onTouchMove={handleTouchMove} 
+            onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} 
+            className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}
+          >
             {message.recalled ? (
               <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p>
             ) : message.correction ? (
@@ -348,7 +361,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </header>
       
-      {/* 【修复】增加 overscroll-behavior-contain 来防止页面晃动 */}
       <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar overscroll-behavior-contain">
          <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={filteredMessages} atBottomStateChange={setAtBottom} followOutput="auto" itemContent={(index, msg) => <MessageRow message={msg} key={msg.id} />} />
          <AnimatePresence>
@@ -364,24 +376,22 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       </main>
 
       <footer ref={footerRef} className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-10">
+        {/* 修改：重构翻译结果展示区域，适配单一翻译结果 */}
         <AnimatePresence>
-            {myTranslations && (
+            {myTranslationResult && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
                     <div className="p-3 flex justify-between items-center">
-                        <h4 className="text-sm font-bold text-center flex-1 text-gray-700">选择一个翻译版本发送</h4>
-                        <button onClick={() => setMyTranslations(null)} className="text-gray-500"><X size={18} /></button>
+                        <h4 className="text-sm font-bold text-gray-700">AI 翻译建议</h4>
+                        <button onClick={() => setMyTranslationResult(null)} className="text-gray-500"><X size={18} /></button>
                     </div>
-                    <div className="max-h-60 overflow-y-auto p-3 pt-0 space-y-3 thin-scrollbar">
-                        {myTranslations.map((trans, index) => (
-                            <div key={index} className="p-3 rounded-lg bg-gray-100 flex items-start gap-3">
-                                <div className="flex-1 space-y-1">
-                                    {cfg.showTranslationTitles && trans.title && <p className={`font-bold text-sm ${trans.title === trans.chineseText ? 'text-black' : 'text-gray-500'}`}>{trans.title}</p>}
-                                    <p className="font-bold text-blue-600 text-base">{trans.burmeseText}</p>
-                                    {trans.title !== trans.chineseText && <p className="text-xs text-gray-500 font-bold">回译: {trans.chineseText}</p>}
-                                </div>
-                                <button onClick={() => sendMessage(trans.burmeseText)} className="w-10 h-10 flex-shrink-0 bg-blue-500 text-white rounded-full flex items-center justify-center"><Send size={16}/></button>
+                    <div className="max-h-60 overflow-y-auto p-3 pt-0 thin-scrollbar">
+                        <div className="p-3 rounded-lg bg-gray-100 flex items-start gap-3">
+                            <div className="flex-1 space-y-1">
+                                <p className="font-bold text-blue-600 text-base">{myTranslationResult.translation}</p>
+                                <p className="text-xs text-gray-500 font-bold">回译: {myTranslationResult.backTranslation}</p>
                             </div>
-                        ))}
+                            <button onClick={() => sendMessage(myTranslationResult.translation)} className="w-10 h-10 flex-shrink-0 bg-blue-500 text-white rounded-full flex items-center justify-center"><Send size={16}/></button>
+                        </div>
                     </div>
                 </motion.div>
             )}
@@ -389,17 +399,19 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         
         <div className="p-2">
           <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
+            {/* 修复：为 textarea 增加 ref 并修改 className 以实现自动增高 */}
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               onFocus={handleInputFocus}
               placeholder="输入消息..."
-              className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-40 mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
+              className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
               rows="1"
             />
             <div className="flex items-center flex-shrink-0 ml-1 self-end">
-                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 多版本翻译">
+                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">
                     {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}
                 </button>
                 <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1">
@@ -420,6 +432,18 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <label className="flex items-center justify-between text-sm"><span className="font-bold">字体大小 (px)</span><input type="number" value={cfg.fontSize} onChange={e => setCfg(c => ({...c, fontSize: parseInt(e.target.value)}))} className="w-20 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
                     <label className="flex items-center justify-between text-sm"><span className="font-bold">字体粗细</span><select value={cfg.fontWeight} onChange={e => setCfg(c => ({...c, fontWeight: e.target.value}))} className="p-1 border rounded text-sm bg-white border-gray-300"><option value="400">常规</option><option value="700">粗体</option></select></label>
               </div>
+               {/* 新增：翻译语言设置 */}
+              <div className="p-3 rounded-lg bg-white space-y-3">
+                  <h4 className="font-bold text-sm">翻译语言</h4>
+                  <label className="flex items-center justify-between text-sm">
+                      <span className="font-bold">源语言 (你的语言)</span>
+                      <input type="text" value={cfg.sourceLang} onChange={e => setCfg(c => ({...c, sourceLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/>
+                  </label>
+                  <label className="flex items-center justify-between text-sm">
+                      <span className="font-bold">目标语言 (对方语言)</span>
+                      <input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/>
+                  </label>
+              </div>
               <div className="p-3 rounded-lg bg-white space-y-2">
                   <h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4>
                   <input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
@@ -430,7 +454,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                    <h4 className="font-bold text-sm">自动化</h4>
                    <label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label>
                    <label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label>
-                   <label className="flex items-center justify-between text-sm"><span className="font-bold">显示多版本翻译标题</span><input type="checkbox" checked={cfg.showTranslationTitles} onChange={e => setCfg(c => ({...c, showTranslationTitles: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label>
+                   {/* 移除：不再需要“显示多版本翻译标题”的选项 */}
               </div>
               <div className="p-3 rounded-lg bg-white space-y-2">
                   <h4 className="font-bold text-sm text-red-500">危险操作</h4>
