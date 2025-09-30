@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (已复逻辑和路由问题)
+// /components/MessagesPageContent.js (最终修复版)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -17,7 +17,7 @@ const MessageHeader = ({ activeTab, setActiveTab }) => {
     { key: 'discover', name: '发现', icon: <HiOutlineGlobeAlt className="w-6 h-6" /> },
     { key: 'contacts', name: '联系人', icon: <HiOutlineUsers className="w-6 h-6" /> },
   ];
-  const baseClasses = "flex flex-col items-center justify-center pt-3 pb-2 font-semibold text-center w-1-4 transition-colors duration-300";
+  const baseClasses = "flex flex-col items-center justify-center pt-3 pb-2 font-semibold text-center w-1/4 transition-colors duration-300";
   const activeClasses = "text-white scale-110";
   const inactiveClasses = "text-white/70 hover:text-white";
   return (
@@ -33,7 +33,7 @@ const MessageHeader = ({ activeTab, setActiveTab }) => {
   );
 };
 
-// ConversationList 组件 (已修复)
+// ConversationList 组件 (已修复查询和路由逻辑)
 const ConversationList = () => {
     const { user } = useAuth();
     const router = useRouter();
@@ -43,11 +43,10 @@ const ConversationList = () => {
     useEffect(() => {
         if (!user) { setLoading(false); return; }
 
-        // 确保查询的字段存在，否则Firebase会报错
+        // 【核心查询修复】移除 orderBy 子句以避免Firebase错误。我们将在客户端进行排序。
         const chatsQuery = query(
             collection(db, 'privateChats'), 
-            where('members', 'array-contains', user.uid), 
-            orderBy('lastMessageTimestamp', 'desc')
+            where('members', 'array-contains', user.uid)
         );
 
         const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
@@ -56,45 +55,62 @@ const ConversationList = () => {
                 const chatData = chatDoc.data();
                 const otherUserId = chatData.members.find(id => id !== user.uid);
                 
-                if (!otherUserId) return null;
+                // 如果找不到对方ID，或ID无效，则跳过此会话
+                if (!otherUserId || typeof otherUserId !== 'string' || otherUserId.trim() === '') return null;
 
                 const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
                 const otherUser = userProfileDoc.exists() 
                     ? { id: userProfileDoc.id, ...userProfileDoc.data() } 
                     : { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
 
-                // 【修复 Bug】修正未读消息的判断逻辑
+                // 【修复未读逻辑】使用更安全的空值检查
                 const lastReadTimestamp = chatData.lastRead?.[user.uid]?.toDate();
-                const lastMessageTimestamp = chatData.lastMessageTimestamp?.toDate();
-                const isUnread = lastReadTimestamp && lastMessageTimestamp && lastMessageTimestamp > lastReadTimestamp;
+                const lastMessageTimestamp = chatData.lastMessageAt?.toDate(); // 使用 lastMessageAt 作为排序和判断依据
+                const isUnread = !!(lastMessageTimestamp && (!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp));
 
                 return { 
                     id: chatDoc.id, 
                     ...chatData, 
                     otherUser, 
-                    isUnread 
+                    isUnread,
+                    sortTimestamp: lastMessageTimestamp || chatData.createdAt?.toDate() || new Date(0) // 提供一个用于排序的时间戳
                 };
             });
             const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean);
+
+            // 【核心查询修复】在客户端进行排序
+            resolvedChats.sort((a, b) => b.sortTimestamp - a.sortTimestamp);
+
             setConversations(resolvedChats);
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching conversations: ", error);
+            console.error("获取会话列表时出错: ", error);
+            alert("无法加载会话列表，请检查您的网络连接和Firebase控制台的索引设置。");
             setLoading(false);
         });
 
         return () => unsubscribe();
     }, [user]);
     
-    // 【修复路由】导航到正确的聊天页面，并传递整个 conversation 对象
+    // 【核心路由修复】构建正确的 chatId 并跳转
     const handleConversationClick = (convo) => {
-        router.push({
-            pathname: `/messages/${convo.id}`, // 正确的路径
-            query: { 
-                peerUid: convo.otherUser.id,
-                peerDisplayName: convo.otherUser.displayName 
-            }
-        });
+        // 安全检查，确保所有需要的信息都存在
+        if (!user?.uid || !convo.otherUser?.id) {
+            alert("用户信息不完整，无法进入聊天。");
+            return;
+        }
+
+        const uids = [user.uid, convo.otherUser.id];
+
+        // 再次验证UID的有效性
+        if (uids.some(uid => !uid || typeof uid !== 'string' || uid.trim() === '')) {
+            alert("用户ID无效，无法创建聊天。");
+            return;
+        }
+
+        // 创建正确的 chatId 并跳转
+        const chatId = uids.sort().join('_');
+        router.push(`/messages/${chatId}`);
     };
 
     if (loading) { return <div className="p-8 text-center text-gray-500">正在加载私信...</div>; }
@@ -104,22 +120,21 @@ const ConversationList = () => {
     return (
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {conversations.map(convo => (
-                // 【修复路由】传递整个 convo 对象给点击事件
                 <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
                     <div className="relative">
                         <img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover" />
-                        {convo.isUnread && (<span className="absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 border-2 border-white dark:border-gray-800" />)}
+                        {convo.isUnread && (<span className="absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 border-2 border-white dark:border-gray-900" />)}
                     </div>
                     <div className="ml-4 flex-1 overflow-hidden">
                         <div className="flex justify-between items-center">
                             <p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>
-                            {convo.lastMessageTimestamp && (
+                            {convo.sortTimestamp && (
                                 <p className="text-xs text-gray-400">
-                                    {convo.lastMessageTimestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {new Date(convo.sortTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                             )}
                         </div>
-                        <p className="text-sm text-gray-500 truncate mt-1">{convo.lastMessage}</p>
+                        <p className="text-sm text-gray-500 truncate mt-1">{convo.lastMessage || '...'}</p>
                     </div>
                 </li>
             ))}
