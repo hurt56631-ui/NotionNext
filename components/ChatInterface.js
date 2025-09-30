@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (V14 - 终极数据同步修复版)
+// /components/ChatInterface.js (V14 - 最终完整纯UI版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -104,15 +104,10 @@ const parseMyTranslation = (text) => {
 };
 
 
-export default function ChatInterface({ chatId, currentUser }) {
+export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
 
-  // 【最终修复】增加内部加载和有效性状态
-  const [isLoading, setIsLoading] = useState(true);
-  const [isValidChat, setIsValidChat] = useState(false);
-  
   const [messages, setMessages] = useState([]);
-  const [peerUser, setPeerUser] = useState(null);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -140,70 +135,32 @@ export default function ChatInterface({ chatId, currentUser }) {
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   
   useEffect(() => {
-    // 重置状态以应对 chatId 变化
-    setIsLoading(true);
-    setPeerUser(null);
-    setMessages([]);
-
-    if (!chatId || !user?.uid) {
-        setIsLoading(false);
-        return;
-    }
-
-    const members = chatId.split('_');
-    if (members.length !== 2 || members.some(uid => !uid || uid.trim() === '')) {
-      console.error("无效的 chatId:", chatId);
-      setIsValidChat(false);
-      setIsLoading(false);
-      return;
-    }
-    
-    setIsValidChat(true);
-    const peerUid = members.find(uid => uid !== user.uid);
-
-    // 【最终修复】将获取 peerUser 的逻辑变成 async 函数，以便我们可以等待它完成
-    const setupChat = async () => {
-        if (peerUid) {
-            try {
-                const userDoc = await getDoc(doc(db, 'users', peerUid));
-                if (userDoc.exists()) {
-                    setPeerUser({ id: userDoc.id, ...userDoc.data() });
-                } else {
-                    // 如果对方用户不存在，也将聊天标记为无效
-                    setIsValidChat(false);
-                }
-            } catch (error) {
-                console.error("获取对方用户信息失败:", error);
-                setIsValidChat(false);
-            }
-        } else {
-            setIsValidChat(false);
-        }
-        setIsLoading(false); // 在获取完用户信息后再结束加载
-    };
-    
-    setupChat();
+    if (!chatId) return;
 
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
     const unsub = onSnapshot(q, (snap) => {
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setMessages(arr);
-        if (arr.length > 0) { const last = arr[arr.length - 1]; if (last.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(last.text); if (cfg.autoTranslate) handleTranslateMessage(last); } }
+        if (arr.length > 0) { 
+            const last = arr[arr.length - 1]; 
+            if (last.uid !== user.uid) { 
+                if (cfg.autoPlayTTS) playCachedTTS(last.text); 
+                if (cfg.autoTranslate) handleTranslateMessage(last); 
+            } 
+        }
     }, (err) => console.error("监听消息错误:", err));
     
     return () => unsub();
-  }, [chatId, user?.uid]); // 依赖项中移除 cfg，防止不必要的重载
+  }, [chatId, user.uid, cfg.autoPlayTTS, cfg.autoTranslate]);
 
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
   const sendMessage = async (textToSend) => {
-    // 【最终修复】发送消息时依赖 peerUser 状态，而不是重新计算
-    if (!isValidChat || !peerUser) { alert("对方用户信息尚未加载完成，请稍候。"); return; }
     const content = textToSend || input;
-    if (!content.trim() || !user?.uid) return;
+    if (!content.trim() || !user?.uid || !peerUser?.id) return;
     setSending(true);
 
     try {
@@ -341,23 +298,6 @@ export default function ChatInterface({ chatId, currentUser }) {
     );
   };
   
-  if (isLoading) {
-    return (
-        <div className="flex flex-col h-screen w-full bg-white text-black items-center justify-center">
-            <p className="text-gray-600">正在加载聊天信息...</p>
-        </div>
-    );
-  }
-
-  if (!isValidChat) {
-      return (
-          <div className="flex flex-col h-screen w-full bg-white text-black items-center justify-center p-4">
-              <h2 className="text-xl font-bold text-red-500">错误</h2>
-              <p className="text-gray-600 mt-2 text-center">无法加载此聊天。聊天ID无效或用户不存在。</p>
-          </div>
-      );
-  }
-  
   return (
     <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
@@ -427,16 +367,15 @@ export default function ChatInterface({ chatId, currentUser }) {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               onFocus={handleInputFocus}
-              placeholder={!peerUser ? "正在连接..." : "输入消息..."}
-              disabled={!peerUser}
+              placeholder="输入消息..."
               className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-40 mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
               rows="1"
             />
             <div className="flex items-center flex-shrink-0 ml-1 self-end">
-                <button onClick={handleTranslateMyInput} disabled={!peerUser} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 多版本翻译">
+                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 多版本翻译">
                     {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}
                 </button>
-                <button onClick={() => sendMessage()} disabled={!peerUser || sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1">
+                <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1">
                     <Send size={18} />
                 </button>
             </div>
