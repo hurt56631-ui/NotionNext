@@ -234,6 +234,13 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
 
+  // 【新增修复】点击输入框，自动滚动到可视区域，防止被输入法遮挡
+  const handleTextareaFocus = () => {
+    setTimeout(() => {
+        textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 300); // 延迟执行以等待键盘动画
+  };
+
   const LongPressMenu = ({ message, onClose }) => {
     const mine = message.uid === user?.uid;
     const isPinyinVisible = showPinyinFor === message.id;
@@ -258,27 +265,29 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     return (
       <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}>
         <img src={message.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
-        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70%] px-4 py-2 rounded-2xl shadow-md ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none"}`}>
-          {message.correction ? (
-            <div className="space-y-1">
-              <p className="whitespace-pre-wrap break-words font-bold opacity-60 line-through"><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
-              <p className="whitespace-pre-wrap break-words font-bold text-green-600 dark:text-green-400"><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
-            </div>
-          ) : (
-            <p className="whitespace-pre-wrap break-words font-bold"><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
-          )}
-          {translationResult && translationResult.messageId === message.id && (
-            <div className="mt-2 pt-2 border-t border-gray-500/30">
-              <p className="text-sm font-bold opacity-80 whitespace-pre-wrap"><PinyinText text={translationResult.text} showPinyin={showPinyinFor === message.id} /></p>
-            </div>
+        <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
+          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-md ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none"}`}>
+            {message.correction ? (
+              <div className="space-y-1">
+                <p className="whitespace-pre-wrap break-words font-bold opacity-60 line-through"><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
+                <p className="whitespace-pre-wrap break-words font-bold text-green-600 dark:text-green-400"><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
+              </div>
+            ) : (
+              <p className="whitespace-pre-wrap break-words font-bold"><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
+            )}
+            {translationResult && translationResult.messageId === message.id && (
+              <div className="mt-2 pt-2 border-t border-gray-500/30">
+                <p className="text-sm font-bold opacity-80 whitespace-pre-wrap"><PinyinText text={translationResult.text} showPinyin={showPinyinFor === message.id} /></p>
+              </div>
+            )}
+          </div>
+          {/* 【UI/UX 优化】将翻译按钮紧挨着聊天气泡右下角 */}
+          {!mine && (
+              <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
+                  <CircleTranslateIcon />
+              </button>
           )}
         </div>
-        {/* 【UI/UX 优化】新增的 “译” 字圆圈翻译按钮 */}
-        {!mine && (
-            <button onClick={() => handleTranslateMessage(message)} className="ml-2 self-center flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
-                <CircleTranslateIcon />
-            </button>
-        )}
       </div>
     );
   };
@@ -296,10 +305,10 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
       <GlobalScrollbarStyle />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full w-full" style={{ backgroundImage: cfg.backgroundDataUrl ? `url(${cfg.backgroundDataUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}>
         
-        <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 backdrop-blur-md z-20 relative">
-          {/* 【UI/UX 优化】彻底移除返回键，使用占位符保持标题居中 */}
+        {/* 【UI 优化】修改顶栏颜色与输入框一致，并加粗用户名使其更清晰 */}
+        <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-black/30 backdrop-blur-md border-b border-white/10 z-20 relative">
           <div className="w-10"></div>
-          <h1 className="font-semibold text-lg text-white drop-shadow-md absolute left-1/2 -translate-x-1/2 truncate max-w-[60%]">{peerDisplayName || "聊天"}</h1>
+          <h1 className="font-bold text-lg text-white drop-shadow-md absolute left-1/2 -translate-x-1/2 truncate max-w-[60%]">{peerDisplayName || "聊天"}</h1>
           <button onClick={() => setSettingsOpen(true)} className="p-2 -mr-2 text-white drop-shadow-md"><Settings /></button>
         </header>
 
@@ -340,14 +349,16 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+              onFocus={handleTextareaFocus} // 【新增修复】添加 onFocus 事件处理
               placeholder="输入消息..."
               className="flex-1 bg-transparent focus:outline-none text-white text-base resize-none overflow-hidden mx-2 py-2.5 leading-6 max-h-40 placeholder-gray-300 font-bold"
               rows="1"
               style={{ minHeight: '2.75rem' }} 
             />
             <div className="flex items-center flex-shrink-0 ml-1 self-end">
-                <button disabled className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-white disabled:opacity-30" title="AI 多版本翻译">
-                    {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-white"></div> : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5"><path d="M4 7V5H13V7L9.5 13H11V15H5V13L8.5 7H4Z" fill="currentColor"/><path d="M15 11V9H21V11H18.5L16.25 15H18.75L20 13.04L21.25 15H23.75L21.5 11.96V11H15Z" fill="currentColor"/></svg>}
+                {/* 【功能修复】启用我方翻译按钮，并替换为 "译" 图标 */}
+                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-white hover:text-blue-300 disabled:opacity-30" title="AI 多版本翻译">
+                    {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-white"></div> : <CircleTranslateIcon />}
                 </button>
                 <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-500 disabled:shadow-none transition-all ml-1">
                     <Send size={18} />
