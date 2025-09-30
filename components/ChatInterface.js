@@ -1,8 +1,8 @@
-// /components/ChatInterface.js (V11 - 最终修复版)
+// /components/ChatInterface.js (V12 - 终极发送与布局修复版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
@@ -58,7 +58,7 @@ const ttsCache = new Map();
 const preloadTTS = async (text) => {
   if (ttsCache.has(text)) return;
   try {
-    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`;
     const response = await fetch(url);
     if (!response.ok) throw new Error('API Error');
     const blob = await response.blob();
@@ -145,6 +145,7 @@ export default function ChatInterface({ chatId, currentUser }) {
   const textareaRef = useRef(null);
   const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
+  const footerRef = useRef(null); // Ref for the footer element
   
   const defaultSettings = { 
       autoTranslate: false, 
@@ -191,25 +192,42 @@ export default function ChatInterface({ chatId, currentUser }) {
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // 【修复】增强 sendMessage 的错误捕获和提示
+  // 【核心发送修复】确保父文档存在，这是消息发送失败的根本原因
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
-    if (!content.trim() || !chatId || !user || !user.uid) return;
+    if (!content.trim() || !chatId || !user?.uid) return;
     setSending(true);
+    
+    const members = chatId.split('_');
+    const peerUid = members.find(uid => uid !== user.uid);
+
     try {
-      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
-      await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
-      setInput("");
-      setMyTranslations(null);
+        // 1. 确保父文档（聊天会话）存在
+        const chatDocRef = doc(db, "privateChats", chatId);
+        await setDoc(chatDocRef, {
+            members: [user.uid, peerUid],
+            lastMessageAt: serverTimestamp() // 更新最后消息时间
+        }, { merge: true }); // merge:true 确保不会覆盖已有数据
+
+        // 2. 在子集合中添加新消息
+        const messagesRef = collection(chatDocRef, "messages");
+        await addDoc(messagesRef, { 
+            text: content.trim(), 
+            uid: user.uid, 
+            createdAt: serverTimestamp() 
+        });
+
+        setInput("");
+        setMyTranslations(null);
     } catch (e) {
-      console.error("SendMessage Error:", e); // 在控制台打印完整的错误对象
-      let errorMessage = e.message;
-      if (e.code === 'permission-denied') {
-          errorMessage = "权限不足。请检查您后台的Firestore安全规则，确保已登录用户有写入 `privateChats/{chatId}/messages` 集合的权限。";
-      }
-      alert(`发送失败: ${errorMessage}`);
+        console.error("SendMessage Error:", e);
+        let errorMessage = e.message;
+        if (e.code === 'permission-denied') {
+            errorMessage = "权限不足。请检查Firestore安全规则。";
+        }
+        alert(`发送失败: ${errorMessage}`);
     } finally {
-      setSending(false);
+        setSending(false);
     }
   };
   
@@ -266,6 +284,13 @@ export default function ChatInterface({ chatId, currentUser }) {
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
+  // 【核心布局修复】当输入框聚焦时，主动将其滚动到视图中
+  const handleInputFocus = () => {
+      setTimeout(() => {
+          footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 300); // 延迟以等待键盘动画
+  };
+
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
 
@@ -326,7 +351,6 @@ export default function ChatInterface({ chatId, currentUser }) {
   };
   
   return (
-    // 【布局修复】使用 dvh 替代 h-screen，完美适配移动端动态视口
     <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
@@ -364,7 +388,7 @@ export default function ChatInterface({ chatId, currentUser }) {
          </AnimatePresence>
       </main>
 
-      <footer className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-10">
+      <footer ref={footerRef} className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-10">
         <AnimatePresence>
             {myTranslations && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
@@ -395,6 +419,7 @@ export default function ChatInterface({ chatId, currentUser }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+              onFocus={handleInputFocus} // Attaching the focus handler
               placeholder="输入消息..."
               className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-40 mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
               rows="1"
