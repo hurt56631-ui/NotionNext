@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (V12 - 终极发送与布局修复版)
+// /components/ChatInterface.js (V13 - 最终完整修复版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,29 +8,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
-// 全局样式，用于美化滚动条 (适配白色主题)
+// 全局样式
 const GlobalScrollbarStyle = () => (
     <style jsx global>{`
-        .thin-scrollbar::-webkit-scrollbar {
-            width: 4px;
-        }
-        .thin-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .thin-scrollbar::-webkit-scrollbar-thumb {
-            background-color: #d1d5db; /* gray-300 */
-            border-radius: 20px;
-        }
-        .thin-scrollbar:hover::-webkit-scrollbar-thumb {
-            background-color: #9ca3af; /* gray-400 */
-        }
+        .thin-scrollbar::-webkit-scrollbar { width: 4px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
     `}</style>
 );
 
-// ------------------------------------------------------------------
-// 组件与图标 (适配白色主题)
-// ------------------------------------------------------------------
-
+// 组件与图标
 const CircleTranslateIcon = () => (
     <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">
         译
@@ -39,21 +27,14 @@ const CircleTranslateIcon = () => (
 
 const PinyinText = ({ text, showPinyin }) => {
     if (!text || typeof text !== 'string') return text;
-
     if (showPinyin) {
-        try {
-            return pinyin(text, { type: 'array', toneType: 'none' }).join(' ');
-        } catch (error) {
-            console.error("Pinyin conversion failed:", error);
-            return text;
-        }
+        try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); }
+        catch (error) { console.error("Pinyin conversion failed:", error); return text; }
     }
     return text;
 };
 
-// ------------------------------------------------------------------
 // 功能模块
-// ------------------------------------------------------------------
 const ttsCache = new Map();
 const preloadTTS = async (text) => {
   if (ttsCache.has(text)) return;
@@ -126,7 +107,6 @@ const parseMyTranslation = (text) => {
 export default function ChatInterface({ chatId, currentUser }) {
   const user = currentUser;
 
-  // ----- State -----
   const [messages, setMessages] = useState([]);
   const [peerUser, setPeerUser] = useState(null);
   const [input, setInput] = useState("");
@@ -141,23 +121,16 @@ export default function ChatInterface({ chatId, currentUser }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
+  const [isValidChat, setIsValidChat] = useState(false);
 
-  const textareaRef = useRef(null);
   const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
-  const footerRef = useRef(null); // Ref for the footer element
+  const footerRef = useRef(null);
   
   const defaultSettings = { 
-      autoTranslate: false, 
-      autoPlayTTS: false, 
-      showTranslationTitles: false, 
-      fontSize: 16,
-      fontWeight: 'normal',
-      ai: { 
-          endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", 
-          apiKey: "", 
-          model: "gemini-pro", 
-      } 
+      autoTranslate: false, autoPlayTTS: false, showTranslationTitles: false, 
+      fontSize: 16, fontWeight: 'normal',
+      ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
@@ -165,25 +138,29 @@ export default function ChatInterface({ chatId, currentUser }) {
   
   useEffect(() => {
     if (!chatId || !user?.uid) return;
-    
-    const members = chatId.split('_');
-    const peerUid = members.find(uid => uid !== user.uid);
 
+    const members = chatId.split('_');
+    if (members.length !== 2 || members.some(uid => !uid || uid.trim() === '')) {
+      console.error("无效的 chatId:", chatId);
+      setIsValidChat(false);
+      return;
+    }
+    setIsValidChat(true);
+
+    const peerUid = members.find(uid => uid !== user.uid);
     if (peerUid) {
         getDoc(doc(db, 'users', peerUid)).then(userDoc => {
-            if (userDoc.exists()) {
-                setPeerUser({ id: userDoc.id, ...userDoc.data() });
-            }
+            if (userDoc.exists()) setPeerUser({ id: userDoc.id, ...userDoc.data() });
         });
     }
 
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
-    const unsub = onSnapshot(q, async (snap) => {
+    const unsub = onSnapshot(q, (snap) => {
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setMessages(arr);
-        if (arr.length > 0) { const lastMessage = arr[arr.length - 1]; if (lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }
-    }, (err) => { console.error("Listen messages error:", err); });
+        if (arr.length > 0) { const last = arr[arr.length - 1]; if (last.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(last.text); if (cfg.autoTranslate) handleTranslateMessage(last); } }
+    }, (err) => console.error("监听消息错误:", err));
     
     return () => unsub();
   }, [chatId, user?.uid, cfg.autoPlayTTS, cfg.autoTranslate]);
@@ -192,40 +169,27 @@ export default function ChatInterface({ chatId, currentUser }) {
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // 【核心发送修复】确保父文档存在，这是消息发送失败的根本原因
   const sendMessage = async (textToSend) => {
+    if (!isValidChat) { alert("聊天ID无效，无法发送消息。"); return; }
     const content = textToSend || input;
-    if (!content.trim() || !chatId || !user?.uid) return;
+    if (!content.trim() || !user?.uid) return;
     setSending(true);
     
     const members = chatId.split('_');
     const peerUid = members.find(uid => uid !== user.uid);
 
     try {
-        // 1. 确保父文档（聊天会话）存在
         const chatDocRef = doc(db, "privateChats", chatId);
-        await setDoc(chatDocRef, {
-            members: [user.uid, peerUid],
-            lastMessageAt: serverTimestamp() // 更新最后消息时间
-        }, { merge: true }); // merge:true 确保不会覆盖已有数据
+        await setDoc(chatDocRef, { members: [user.uid, peerUid], lastMessageAt: serverTimestamp() }, { merge: true });
 
-        // 2. 在子集合中添加新消息
         const messagesRef = collection(chatDocRef, "messages");
-        await addDoc(messagesRef, { 
-            text: content.trim(), 
-            uid: user.uid, 
-            createdAt: serverTimestamp() 
-        });
+        await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
 
         setInput("");
         setMyTranslations(null);
     } catch (e) {
         console.error("SendMessage Error:", e);
-        let errorMessage = e.message;
-        if (e.code === 'permission-denied') {
-            errorMessage = "权限不足。请检查Firestore安全规则。";
-        }
-        alert(`发送失败: ${errorMessage}`);
+        alert(`发送失败: ${e.message}`);
     } finally {
         setSending(false);
     }
@@ -284,11 +248,10 @@ export default function ChatInterface({ chatId, currentUser }) {
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
-  // 【核心布局修复】当输入框聚焦时，主动将其滚动到视图中
   const handleInputFocus = () => {
       setTimeout(() => {
           footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 300); // 延迟以等待键盘动画
+      }, 300);
   };
 
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
@@ -350,12 +313,21 @@ export default function ChatInterface({ chatId, currentUser }) {
     );
   };
   
+  if (!isValidChat) {
+      return (
+          <div className="flex flex-col h-screen w-full bg-white text-black items-center justify-center p-4">
+              <h2 className="text-xl font-bold text-red-500">错误</h2>
+              <p className="text-gray-600 mt-2 text-center">无法加载此聊天。聊天ID无效或用户不存在。</p>
+          </div>
+      );
+  }
+  
   return (
     <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
       <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50 border-b border-gray-200 z-20 relative">
-          <AnimatePresence>
+        <AnimatePresence>
             {searchActive ? (
                 <motion.div key="search" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: '100%' }} exit={{ opacity: 0, width: 0 }} className="absolute inset-0 flex items-center px-4 bg-gray-100">
                     <input ref={searchInputRef} type="text" placeholder="搜索消息..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent text-black placeholder-gray-500 focus:outline-none" />
@@ -371,7 +343,7 @@ export default function ChatInterface({ chatId, currentUser }) {
                     </div>
                 </motion.div>
             )}
-          </AnimatePresence>
+        </AnimatePresence>
       </header>
       
       <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar">
@@ -415,11 +387,10 @@ export default function ChatInterface({ chatId, currentUser }) {
         <div className="p-2">
           <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
             <textarea
-              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              onFocus={handleInputFocus} // Attaching the focus handler
+              onFocus={handleInputFocus}
               placeholder="输入消息..."
               className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-40 mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
               rows="1"
