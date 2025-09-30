@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (这是一个新文件)
+// /components/MessagesPageContent.js (已修复逻辑和路由问题)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -33,7 +33,7 @@ const MessageHeader = ({ activeTab, setActiveTab }) => {
   );
 };
 
-// ConversationList 组件 (无变动)
+// ConversationList 组件 (已修复)
 const ConversationList = () => {
     const { user } = useAuth();
     const router = useRouter();
@@ -42,29 +42,59 @@ const ConversationList = () => {
 
     useEffect(() => {
         if (!user) { setLoading(false); return; }
-        const chatsQuery = query(collection(db, 'privateChats'), where('members', 'array-contains', user.uid), orderBy('lastMessageTimestamp', 'desc'));
+
+        // 确保查询的字段存在，否则Firebase会报错
+        const chatsQuery = query(
+            collection(db, 'privateChats'), 
+            where('members', 'array-contains', user.uid), 
+            orderBy('lastMessageTimestamp', 'desc')
+        );
+
         const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
             setLoading(true);
             const chatPromises = snapshot.docs.map(async (chatDoc) => {
                 const chatData = chatDoc.data();
                 const otherUserId = chatData.members.find(id => id !== user.uid);
+                
                 if (!otherUserId) return null;
+
                 const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
-                const otherUser = userProfileDoc.exists() ? { id: userProfileDoc.id, ...userProfileDoc.data() } : { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
+                const otherUser = userProfileDoc.exists() 
+                    ? { id: userProfileDoc.id, ...userProfileDoc.data() } 
+                    : { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
+
+                // 【修复 Bug】修正未读消息的判断逻辑
                 const lastReadTimestamp = chatData.lastRead?.[user.uid]?.toDate();
                 const lastMessageTimestamp = chatData.lastMessageTimestamp?.toDate();
-                const isUnread = lastReadTimestamp && lastMessageTimestamp && lastMessageTimestamp > lastMessageTimestamp;
-                return { id: chatDoc.id, ...chatData, otherUser, isUnread };
+                const isUnread = lastReadTimestamp && lastMessageTimestamp && lastMessageTimestamp > lastReadTimestamp;
+
+                return { 
+                    id: chatDoc.id, 
+                    ...chatData, 
+                    otherUser, 
+                    isUnread 
+                };
             });
             const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean);
             setConversations(resolvedChats);
             setLoading(false);
+        }, (error) => {
+            console.error("Error fetching conversations: ", error);
+            setLoading(false);
         });
+
         return () => unsubscribe();
     }, [user]);
     
-    const handleConversationClick = (peerUser) => {
-        router.push({ pathname: `/chat/${peerUser.id}`, query: { peerDisplayName: peerUser.displayName } });
+    // 【修复路由】导航到正确的聊天页面，并传递整个 conversation 对象
+    const handleConversationClick = (convo) => {
+        router.push({
+            pathname: `/messages/${convo.id}`, // 正确的路径
+            query: { 
+                peerUid: convo.otherUser.id,
+                peerDisplayName: convo.otherUser.displayName 
+            }
+        });
     };
 
     if (loading) { return <div className="p-8 text-center text-gray-500">正在加载私信...</div>; }
@@ -74,7 +104,8 @@ const ConversationList = () => {
     return (
         <ul className="divide-y divide-gray-200 dark:divide-gray-700">
             {conversations.map(convo => (
-                <li key={convo.id} onClick={() => handleConversationClick(convo.otherUser)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                // 【修复路由】传递整个 convo 对象给点击事件
+                <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
                     <div className="relative">
                         <img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover" />
                         {convo.isUnread && (<span className="absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 border-2 border-white dark:border-gray-800" />)}
@@ -82,7 +113,11 @@ const ConversationList = () => {
                     <div className="ml-4 flex-1 overflow-hidden">
                         <div className="flex justify-between items-center">
                             <p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>
-                            <p className="text-xs text-gray-400">{convo.lastMessageTimestamp?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            {convo.lastMessageTimestamp && (
+                                <p className="text-xs text-gray-400">
+                                    {convo.lastMessageTimestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            )}
                         </div>
                         <p className="text-sm text-gray-500 truncate mt-1">{convo.lastMessage}</p>
                     </div>
@@ -92,7 +127,7 @@ const ConversationList = () => {
     );
 };
 
-// 这是之前的主页面组件，现在被移到了这里
+// 主页面组件 (无变动)
 const MessagesPageContent = () => {
   const [activeTab, setActiveTab] = useState('messages');
 
