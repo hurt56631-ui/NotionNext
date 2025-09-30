@@ -1,4 +1,4 @@
-// pages/community/[id].js (已修复TTS构建错误，并采用API方案)
+// pages/community/[id].js (已修复 await 语法错误)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -57,31 +57,29 @@ const callAIHelper = async (textToTranslate, aiConfig) => {
     } catch (error) { console.error("AI Translation failed:", error); throw error; }
 };
 
-// 【修复】基于API的TTS朗读模块
+// 基于API的TTS朗读模块
 const ttsCache = new Map();
 let currentAudio = null;
 
 const playTTSWithAPI = async (text, ttsConfig) => {
+    if (typeof window === 'undefined') return; // 确保只在客户端执行
     if (!text || !ttsConfig.endpoint) {
         alert("请在设置中配置TTS接口地址。");
         return;
     }
 
-    // 如果有音频正在播放，则停止它
     if (currentAudio) {
         currentAudio.pause();
         currentAudio.currentTime = 0;
         currentAudio = null;
     }
 
-    // 检查缓存
     if (ttsCache.has(text)) {
         currentAudio = ttsCache.get(text);
         currentAudio.play();
         return;
     }
 
-    // 获取新音频
     try {
         const url = `${ttsConfig.endpoint}?t=${encodeURIComponent(text)}&v=${ttsConfig.speaker || 'zh-CN-XiaoxiaoMultilingualNeural'}`;
         const response = await fetch(url);
@@ -100,7 +98,6 @@ const playTTSWithAPI = async (text, ttsConfig) => {
 
 // --- 子组件 ---
 
-// 评论表单组件
 const CommentForm = ({ onSubmit, placeholder, initialContent = '', buttonText = '发表评论', isSubmitting = false, user }) => {
     const [content, setContent] = useState(initialContent);
     const textareaRef = useRef(null);
@@ -141,8 +138,6 @@ const CommentForm = ({ onSubmit, placeholder, initialContent = '', buttonText = 
     );
 };
 
-
-// 楼中楼评论项组件
 const CommentThread = ({ comment, replies, user, onReply, onDelete, onLike }) => {
     const [showReplies, setShowReplies] = useState(true);
     const [isReplying, setIsReplying] = useState(false);
@@ -219,19 +214,16 @@ const PostDetailPage = () => {
   const [translatedText, setTranslatedText] = useState({ title: null, content: null });
   const [isTranslating, setIsTranslating] = useState(false);
 
-  // 【新增】TTS 和 AI 配置
   const [appConfig, setAppConfig] = useState({
       ai: { endpoint: '', apiKey: '', model: 'gpt-4o-mini' },
       tts: { endpoint: 'https://t.leftsite.cn/tts', speaker: 'zh-CN-XiaoxiaoMultilingualNeural' }
   });
 
   useEffect(() => {
-    // 这个Effect只在客户端运行，所以可以安全使用localStorage
     try {
       const savedConfig = localStorage.getItem('app_config');
       if (savedConfig) {
         const parsed = JSON.parse(savedConfig);
-        // 合并默认值，防止旧配置缺少字段
         setAppConfig(prev => ({
             ai: { ...prev.ai, ...parsed.ai },
             tts: { ...prev.tts, ...parsed.tts }
@@ -320,7 +312,26 @@ const PostDetailPage = () => {
   const handleShare = async () => { try { if (navigator.share) await navigator.share({ title: post.title, url: window.location.href }); else { await navigator.clipboard.writeText(window.location.href); alert('链接已复制！'); } } catch (e) { console.error('Share failed:', e); } };
   const handleFollow = async () => { if (!user || !post.authorId) { setShowLoginModal(true); return; } try { const b = writeBatch(db); const fRef1 = doc(db, 'users', user.uid, 'following', post.authorId); const fRef2 = doc(db, 'users', post.authorId, 'followers', user.uid); if (isFollowing) { b.delete(fRef1); b.delete(fRef2); } else { b.set(fRef1, { at: serverTimestamp() }); b.set(fRef2, { at: serverTimestamp() }); } await b.commit(); setIsFollowing(!isFollowing); } catch (e) { console.error("Follow failed:", e); alert("操作失败。"); } };
   const handleFavorite = async () => { if (!user) { setShowLoginModal(true); return; } try { const favRef = doc(db, 'users', user.uid, 'favorites', id); if (isFavorited) await deleteDoc(favRef); else await setDoc(favRef, { postId: id, title: post.title, at: serverTimestamp() }); setIsFavorited(!isFavorited); } catch (e) { console.error("Favorite failed:", e); alert("操作失败。"); } };
-  const handleTranslate = async (type) => { if (isTranslating) return; setIsTranslating(true); try { const text = type === 'title' ? post.title : cleanedContent; if (text) setTranslatedText(p => ({ ...p, [type]: await callAIHelper(text, appConfig.ai) })); } catch (e) { alert(`翻译失败: ${e.message}`); } finally { setIsTranslating(false); } };
+  
+  // 【已修复】handleTranslate 函数
+  const handleTranslate = async (type) => {
+      if (isTranslating) return;
+      setIsTranslating(true);
+      try {
+          const text = type === 'title' ? post.title : cleanedContent;
+          if (text) {
+              // 1. 先调用异步函数并等待结果
+              const result = await callAIHelper(text, appConfig.ai);
+              // 2. 拿到结果后，再同步更新状态
+              setTranslatedText(prev => ({ ...prev, [type]: result }));
+          }
+      } catch (e) {
+          alert(`翻译失败: ${e.message}`);
+      } finally {
+          setIsTranslating(false);
+      }
+  };
+
   const handleDeletePost = async () => { if (isPostAuthor && window.confirm("确定删除帖子吗？")) { try { await deleteDoc(doc(db, 'posts', id)); router.push('/community'); } catch (e) { console.error("Delete failed:", e); alert("删除失败。"); } } };
   const handleCommentSubmit = async (content, parentId = null) => { if (!user) { setShowLoginModal(true); return; } setIsCommenting(true); try { await addDoc(collection(db, 'comments'), { postId: id, content, parentId, authorId: user.uid, authorName: user.displayName, authorAvatar: user.photoURL, createdAt: serverTimestamp(), likesCount: 0, likers: [] }); if (!parentId) await updateDoc(doc(db, 'posts', id), { commentsCount: increment(1) }); } catch (e) { console.error("Comment failed:", e); alert("评论失败。"); } finally { setIsCommenting(false); } };
   const handleDeleteComment = async (commentId) => { const c = comments.find(c => c.id === commentId); if (user?.uid !== c?.authorId) { alert("无权删除。"); return; } if (window.confirm("确定删除评论吗？")) { try { await deleteDoc(doc(db, 'comments', commentId)); if (!c.parentId) await updateDoc(doc(db, 'posts', id), { commentsCount: increment(-1) }); } catch (e) { console.error("Delete comment failed:", e); alert("删除失败。"); } } };
@@ -390,7 +401,6 @@ const PostDetailPage = () => {
                   <div className="flex justify-between items-center"><h3 className="text-lg font-bold">设置</h3><button onClick={() => setShowSettings(false)}><X size={20}/></button></div>
                   {isPostAuthor && <div className="space-y-2 border-b dark:border-gray-700 pb-4"><button onClick={() => router.push(`/community/edit/${id}`)} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><Edit size={16} />修改帖子</button><button onClick={handleDeletePost} className="w-full flex items-center gap-3 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md"><Trash2 size={16} />删除帖子</button></div>}
                   <div className="space-y-2 border-b dark:border-gray-700 pb-4"><button onClick={handleFavorite} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"><Bookmark size={16} className={isFavorited ? 'fill-current text-yellow-500' : ''} />{isFavorited ? '已收藏' : '收藏帖子'}</button></div>
-                  {/* 【新增】TTS 设置 */}
                   <div className="space-y-2 border-b dark:border-gray-700 pb-4">
                       <h4 className="font-semibold text-sm">朗读 (TTS) 设置</h4>
                       <input type="text" placeholder="TTS 接口地址" value={appConfig.tts.endpoint} onChange={e => setAppConfig(c => ({...c, tts: {...c.tts, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"/>
