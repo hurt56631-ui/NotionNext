@@ -106,21 +106,21 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [longPressedMessage, setLongPressedMessage] = useState(null);
   const [translationResult, setTranslationResult] = useState(null);
   const [isTranslating, setIsTranslating] = useState(false);
-  // 修改：状态从 myTranslations (数组) 改为 myTranslationResult (对象)
   const [myTranslationResult, setMyTranslationResult] = useState(null);
   const [correctionMode, setCorrectionMode] = useState({ active: false, message: null, text: '' });
   const [showPinyinFor, setShowPinyinFor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
+  
+  // 新增: 用于存储 footer 高度的 state
+  const [footerHeight, setFooterHeight] = useState(0);
 
   const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
   const footerRef = useRef(null);
-  // 新增：用于实现输入框自动增高的 ref
   const textareaRef = useRef(null);
   
-  // 修改：在设置中增加源语言和目标语言，移除不再需要的 showTranslationTitles
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false,
       fontSize: 16, fontWeight: 'normal',
@@ -152,20 +152,24 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => unsub();
   }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
 
-  // 修复：移除手动滚动逻辑，完全依赖 Virtuoso 的 followOutput 属性，避免遮挡和滚动冲突
-  // useEffect(() => { ... }); // 此块已被删除
-
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
-  // 新增：实现输入框根据内容自动增高
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-        textarea.style.height = 'auto'; // 重置高度以便正确计算 scrollHeight
+        textarea.style.height = 'auto';
         const scrollHeight = textarea.scrollHeight;
-        textarea.style.height = `${scrollHeight}px`; // 设置为内容实际高度
+        textarea.style.height = `${scrollHeight}px`;
     }
   }, [input]);
+
+  // 新增: 测量 footer 高度并更新 state
+  useEffect(() => {
+    if (footerRef.current) {
+        setFooterHeight(footerRef.current.offsetHeight);
+    }
+  }, [input, myTranslationResult]); // 当输入框内容或翻译建议变化时重新测量
+
 
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
@@ -191,7 +195,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         }, { merge: true });
 
         setInput("");
-        // 修改：发送后清空新的翻译结果状态
         setMyTranslationResult(null);
     } catch (e) {
         console.error("SendMessage Error:", e);
@@ -233,7 +236,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
-  // 修改：根据用户要求，更新为单一、自然的翻译提示词，并移除翻译结果的[]
   const getMyInputPrompt = (sourceLang, targetLang) => 
     `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。
 要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
@@ -252,7 +254,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
-  // 修改：重构此函数以处理单一翻译结果
   const handleTranslateMyInput = async () => {
     if (!input.trim()) return;
     setIsTranslating(true); setMyTranslationResult(null);
@@ -265,8 +266,9 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   
   const handleInputFocus = () => {
+      // 当输入框聚焦时，通常键盘会弹出，我们延迟一小段时间来确保布局更新，然后滚动到底部
       setTimeout(() => {
-          footerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, align: 'end', behavior: 'smooth' });
       }, 300);
   };
 
@@ -290,17 +292,14 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     );
   };
 
-  // 修改：增加 isLastMessage prop 以判断是否为最后一条消息
   const MessageRow = ({ message, isLastMessage }) => {
     const mine = message.uid === user?.uid;
     const longPressTimer = useRef();
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
     const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
-    // 修复：增加 onTouchMove 事件，在滑动时清除长按计时器，防止误触
     const handleTouchMove = () => { clearTimeout(longPressTimer.current); };
     
     const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
-    // 确定当前消息是否是对方的最新消息
     const isPeersLastMessage = !mine && isLastMessage;
 
     return (
@@ -330,7 +329,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               </div>
             )}
           </div>
-          {/* 修改：只在对方的最后一条消息显示翻译图标 */}
           {isPeersLastMessage && !message.recalled && (
               <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
                   <CircleTranslateIcon />
@@ -342,7 +340,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   
   return (
-    <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
+    // 修改: 调整整体布局结构，让 footer 成为 main 的兄弟节点，而不是 main 覆盖 footer
+    <div className="flex flex-col w-full h-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
       <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50 border-b border-gray-200 z-20 relative">
@@ -365,8 +364,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </header>
       
-      <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar overscroll-behavior-contain">
-         {/* 修改：为Virtuoso增加components prop，并传递isLastMessage给MessageRow */}
+      {/* 修改: 将 main 区域的布局改为绝对定位，并动态设置其 bottom 值 */}
+      <main 
+        className="absolute top-14 left-0 right-0 overflow-y-auto w-full thin-scrollbar overscroll-behavior-contain"
+        style={{ bottom: `${footerHeight}px` }}
+      >
          <Virtuoso 
             ref={virtuosoRef} 
             style={{ height: '100%' }} 
@@ -380,10 +382,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     isLastMessage={index === filteredMessages.length - 1}
                 />
             )}
-            // 修改：增加一个30px的底部组件，防止最后一条消息被输入框遮挡
-            components={{
-                Footer: () => <div style={{ height: '30px' }} />
-            }}
+            // 移除这里的内部 Footer，因为我们用 padding 代替
          />
          <AnimatePresence>
             {!atBottom && (
@@ -397,8 +396,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
          </AnimatePresence>
       </main>
 
-      <footer ref={footerRef} className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-10">
-        {/* 修改：重构翻译结果展示区域，适配单一翻译结果 */}
+      {/* 修改: 将 footer 改为绝对定位在底部 */}
+      <footer ref={footerRef} className="absolute bottom-0 left-0 right-0 w-full bg-gray-50 border-t border-gray-200 z-10">
         <AnimatePresence>
             {myTranslationResult && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
@@ -421,7 +420,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         
         <div className="p-2">
           <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
-            {/* 修复：为 textarea 增加 ref 并修改 className 以实现自动增高 */}
             <textarea
               ref={textareaRef}
               value={input}
@@ -454,7 +452,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <label className="flex items-center justify-between text-sm"><span className="font-bold">字体大小 (px)</span><input type="number" value={cfg.fontSize} onChange={e => setCfg(c => ({...c, fontSize: parseInt(e.target.value)}))} className="w-20 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
                     <label className="flex items-center justify-between text-sm"><span className="font-bold">字体粗细</span><select value={cfg.fontWeight} onChange={e => setCfg(c => ({...c, fontWeight: e.target.value}))} className="p-1 border rounded text-sm bg-white border-gray-300"><option value="400">常规</option><option value="700">粗体</option></select></label>
               </div>
-               {/* 新增：翻译语言设置 */}
               <div className="p-3 rounded-lg bg-white space-y-3">
                   <h4 className="font-bold text-sm">翻译语言</h4>
                   <label className="flex items-center justify-between text-sm">
@@ -476,7 +473,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                    <h4 className="font-bold text-sm">自动化</h4>
                    <label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label>
                    <label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label>
-                   {/* 移除：不再需要“显示多版本翻译标题”的选项 */}
               </div>
               <div className="p-3 rounded-lg bg-white space-y-2">
                   <h4 className="font-bold text-sm text-red-500">危险操作</h4>
