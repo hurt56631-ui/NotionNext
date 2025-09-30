@@ -295,7 +295,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     const mine = message.uid === user?.uid;
     const longPressTimer = useRef();
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
-    const handleTouchEnd = = () => { clearTimeout(longPressTimer.current); };
+    const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
     // 修复：增加 onTouchMove 事件，在滑动时清除长按计时器，防止误触
     const handleTouchMove = () => { clearTimeout(longPressTimer.current); };
     
