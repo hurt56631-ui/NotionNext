@@ -1,8 +1,8 @@
-// /components/ChatInterface.js (V10 - 终极功能完整版)
+// /components/ChatInterface.js (V11 - 最终修复版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
@@ -146,7 +146,6 @@ export default function ChatInterface({ chatId, currentUser }) {
   const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
   
-  // 【恢复】功能完整的默认设置
   const defaultSettings = { 
       autoTranslate: false, 
       autoPlayTTS: false, 
@@ -163,7 +162,6 @@ export default function ChatInterface({ chatId, currentUser }) {
 
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   
-  // 获取聊天对象信息 & 监听消息
   useEffect(() => {
     if (!chatId || !user?.uid) return;
     
@@ -193,6 +191,7 @@ export default function ChatInterface({ chatId, currentUser }) {
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
+  // 【修复】增强 sendMessage 的错误捕获和提示
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
     if (!content.trim() || !chatId || !user || !user.uid) return;
@@ -202,11 +201,18 @@ export default function ChatInterface({ chatId, currentUser }) {
       await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
       setInput("");
       setMyTranslations(null);
-    } catch (e) { console.error(e); alert("发送失败：" + e.message); }
-    finally { setSending(false); }
+    } catch (e) {
+      console.error("SendMessage Error:", e); // 在控制台打印完整的错误对象
+      let errorMessage = e.message;
+      if (e.code === 'permission-denied') {
+          errorMessage = "权限不足。请检查您后台的Firestore安全规则，确保已登录用户有写入 `privateChats/{chatId}/messages` 集合的权限。";
+      }
+      alert(`发送失败: ${errorMessage}`);
+    } finally {
+      setSending(false);
+    }
   };
   
-  // 【恢复】消息管理功能
   const handleRecallMessage = async (message) => {
     if (message.uid !== user.uid) return;
     const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
@@ -239,7 +245,6 @@ export default function ChatInterface({ chatId, currentUser }) {
     } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
-  // 【恢复】功能完整的翻译提示词
   const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**\n- **[缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**\n- **[缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**\n- **[缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**\n- **[缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**\n- **[缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   
@@ -321,8 +326,8 @@ export default function ChatInterface({ chatId, currentUser }) {
   };
   
   return (
-    // 【布局修复】使用 flex-col 和 h-screen 确保整体布局正确
-    <div className="flex flex-col h-screen w-full bg-white text-black">
+    // 【布局修复】使用 dvh 替代 h-screen，完美适配移动端动态视口
+    <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
       <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50 border-b border-gray-200 z-20 relative">
@@ -334,7 +339,6 @@ export default function ChatInterface({ chatId, currentUser }) {
                 </motion.div>
             ) : (
                 <motion.div key="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-between w-full">
-                    {/* 【修改】移除返回键，保留占位符以确保标题居中 */}
                     <div className="w-16"></div> 
                     <h1 className="font-bold text-lg text-black absolute left-1/2 -translate-x-1/2 truncate max-w-[50%]">{peerUser?.displayName || "聊天"}</h1>
                     <div className="flex items-center gap-1">
@@ -346,7 +350,6 @@ export default function ChatInterface({ chatId, currentUser }) {
           </AnimatePresence>
       </header>
       
-      {/* 【布局修复】flex-1 和 overflow-y-auto 是关键，让此区域可滚动并填满剩余空间 */}
       <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar">
          <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={filteredMessages} atBottomStateChange={setAtBottom} followOutput="auto" itemContent={(index, msg) => <MessageRow message={msg} key={msg.id} />} />
          <AnimatePresence>
