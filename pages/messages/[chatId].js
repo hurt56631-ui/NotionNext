@@ -1,34 +1,104 @@
-// /pages/messages/[chatId].js
+// /pages/messages/[chatId].js (V14 - 智能容器版)
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
+import { useAuth } from '@/lib/AuthContext';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-// 动态导入我们真正的聊天界面组件，并禁用SSR
-const ChatInterfaceWithNoSSR = dynamic(
-  () => import('@/components/ChatInterface'), // 我们把 PrivateChat.js 的逻辑移到这里
+// 动态导入UI组件
+const ChatInterface = dynamic(
+  () => import('@/components/ChatInterface'),
   { 
     ssr: false,
-    loading: () => <div className="fixed inset-0 flex items-center justify-center bg-gray-100 dark:bg-black text-gray-500">正在进入聊天室...</div>
+    // 整个加载过程由页面本身控制，所以组件自身的loading可以简化
+    loading: () => null 
   }
 );
 
 const ChatPage = () => {
-    const [isClient, setIsClient] = useState(false);
     const router = useRouter();
-    const { chatId } = router.query; // 从URL中获取chatId
+    const { user: currentUser } = useAuth();
+    const { chatId } = router.query;
+
+    const [peerUser, setPeerUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        setIsClient(true);
-    }, []);
+        // 当 currentUser 或 chatId 变化时，重置状态并开始获取数据
+        setIsLoading(true);
+        setPeerUser(null);
+        setError(null);
 
-    if (!isClient || !chatId) {
-        return <div className="fixed inset-0 bg-gray-100 dark:bg-black"></div>;
+        // 确保关键信息存在
+        if (!chatId || !currentUser) {
+            // 如果是在初始加载，等待 currentUser 可用
+            if (!currentUser) return; 
+            // 如果 chatId 无效
+            setError("无效的聊天ID。");
+            setIsLoading(false);
+            return;
+        }
+
+        const members = chatId.split('_');
+        if (members.length !== 2 || members.some(uid => !uid || uid.trim() === '')) {
+            setError("聊天ID格式不正确。");
+            setIsLoading(false);
+            return;
+        }
+
+        const peerUid = members.find(uid => uid !== currentUser.uid);
+        if (!peerUid) {
+            setError("无法从聊天ID中识别对方用户。");
+            setIsLoading(false);
+            return;
+        }
+
+        // 异步获取对方用户信息
+        const fetchPeerUser = async () => {
+            try {
+                const userDocRef = doc(db, 'users', peerUid);
+                const userDoc = await getDoc(userDocRef);
+                if (userDoc.exists()) {
+                    setPeerUser({ id: userDoc.id, ...userDoc.data() });
+                } else {
+                    setError("对方用户不存在。");
+                }
+            } catch (err) {
+                console.error("获取对方用户信息失败:", err);
+                setError("加载用户信息时发生网络错误。");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchPeerUser();
+
+    }, [chatId, currentUser]); // 依赖 currentUser 和 chatId
+
+    // 渲染加载状态
+    if (isLoading) {
+        return (
+            <div className="fixed inset-0 flex items-center justify-center bg-white text-gray-500">
+                正在进入聊天室...
+            </div>
+        );
     }
 
-    // 只有在客户端，并且获取到chatId后，才渲染聊天界面
-    // 将 chatId 作为 prop 传递给真正的聊天组件
-    return <ChatInterfaceWithNoSSR chatId={chatId} />;
+    // 渲染错误状态
+    if (error) {
+        return (
+            <div className="flex flex-col h-screen w-full bg-white text-black items-center justify-center p-4">
+                <h2 className="text-xl font-bold text-red-500">错误</h2>
+                <p className="text-gray-600 mt-2 text-center">{error}</p>
+            </div>
+        );
+    }
+
+    // 当所有数据准备好后，渲染聊天界面
+    return <ChatInterface chatId={chatId} currentUser={currentUser} peerUser={peerUser} />;
 };
 
 export default ChatPage;
