@@ -11,7 +11,7 @@ import { pinyin } from 'pinyin-pro';
 // 全局样式：修复为标准<style>标签，确保2px极细滚动条生效，并增加Firefox兼容性
 const GlobalScrollbarStyle = () => (
     <style>{`
-        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar { width: 1px; height: 1px; }
         .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
         .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
@@ -233,14 +233,14 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
-  // 修改：根据用户要求，更新为单一、自然的翻译提示词
+  // 修改：根据用户要求，更新为单一、自然的翻译提示词，并移除翻译结果的[]
   const getMyInputPrompt = (sourceLang, targetLang) => 
     `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。
 要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
 请严格遵循以下格式，只返回格式化的翻译结果，不要包含任何额外说明或标签：
 
-**[这里是${targetLang}翻译]**
-回译：[这里是回译成${sourceLang}的内容]`;
+**这里是${targetLang}翻译**
+回译：这里是回译成${sourceLang}的内容`;
 
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   
@@ -290,15 +290,18 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     );
   };
 
-  const MessageRow = ({ message }) => {
+  // 修改：增加 isLastMessage prop 以判断是否为最后一条消息
+  const MessageRow = ({ message, isLastMessage }) => {
     const mine = message.uid === user?.uid;
     const longPressTimer = useRef();
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
-    const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
+    const handleTouchEnd = = () => { clearTimeout(longPressTimer.current); };
     // 修复：增加 onTouchMove 事件，在滑动时清除长按计时器，防止误触
     const handleTouchMove = () => { clearTimeout(longPressTimer.current); };
     
     const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
+    // 确定当前消息是否是对方的最新消息
+    const isPeersLastMessage = !mine && isLastMessage;
 
     return (
       <div className={`flex items-end gap-2 my-2 px-4 ${mine ? "flex-row-reverse" : ""}`}>
@@ -327,7 +330,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               </div>
             )}
           </div>
-          {!mine && !message.recalled && (
+          {/* 修改：只在对方的最后一条消息显示翻译图标 */}
+          {isPeersLastMessage && !message.recalled && (
               <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
                   <CircleTranslateIcon />
               </button>
@@ -362,7 +366,25 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       </header>
       
       <main className="flex-1 overflow-y-auto relative w-full thin-scrollbar overscroll-behavior-contain">
-         <Virtuoso ref={virtuosoRef} style={{ height: '100%' }} data={filteredMessages} atBottomStateChange={setAtBottom} followOutput="auto" itemContent={(index, msg) => <MessageRow message={msg} key={msg.id} />} />
+         {/* 修改：为Virtuoso增加components prop，并传递isLastMessage给MessageRow */}
+         <Virtuoso 
+            ref={virtuosoRef} 
+            style={{ height: '100%' }} 
+            data={filteredMessages} 
+            atBottomStateChange={setAtBottom} 
+            followOutput="auto" 
+            itemContent={(index, msg) => (
+                <MessageRow 
+                    message={msg} 
+                    key={msg.id}
+                    isLastMessage={index === filteredMessages.length - 1}
+                />
+            )}
+            // 修改：增加一个30px的底部组件，防止最后一条消息被输入框遮挡
+            components={{
+                Footer: () => <div style={{ height: '30px' }} />
+            }}
+         />
          <AnimatePresence>
             {!atBottom && (
                 <motion.button 
