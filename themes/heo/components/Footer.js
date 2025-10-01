@@ -43,7 +43,7 @@ const Footer = () => {
       )}
 
       {showBottomNav && (
-        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-14 flex justify-around items-center px-2'>
+        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-16 flex justify-around items-center px-2'>
           <Link href='/' className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'><i className='fas fa-home text-lg'></i><span>主页</span></Link>
           <button onClick={handleOpenDrawer} className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'><i className='fas fa-robot text-lg'></i><span>AI助手</span></button>
           <Link href='/community' className='flex flex-col items-center text-gray-800 dark:text-gray-200 text-xs px-2 py-1'><i className='fas fa-users text-lg'></i><span>社区</span></Link>
