@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终修复版 - 补全 footerRef 定义)
+// /components/ChatInterface.js (最终修复版 - 已优化 handleInputFocus)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,21 +8,11 @@ import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, Ro
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式
-const GlobalScrollbarStyle = () => (
-    <style>{`
-        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
-        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
-        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
-        .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; }
-    `}</style>
-);
+const GlobalScrollbarStyle = () => ( <style>{` .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; } .thin-scrollbar::-webkit-scrollbar-track { background: transparent; } .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; } .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; } .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; } `}</style> );
 
-// 组件与图标
+// 组件与功能模块... (为简洁省略，与之前版本相同)
 const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
-
-// 功能模块
 const ttsCache = new Map();
 const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
 const playCachedTTS = (text) => { if (!text) return; if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }).catch(e => console.error("TTS preloading failed before play:", e)); } };
@@ -46,11 +36,9 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // --- 核心修复：重新添加 footerRef 的定义 ---
   const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -70,12 +58,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
   useEffect(() => {
-    if (footerRef.current) {
-      setFooterHeight(footerRef.current.offsetHeight);
-    }
-  }, [input, myTranslationResult]);
-
-  useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
     if (initialViewportHeightRef.current === null) {
       initialViewportHeightRef.current = window.innerHeight;
@@ -90,10 +72,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   useEffect(() => {
     if (isAtBottomRef.current) {
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 50);
-      return () => clearTimeout(timer);
+        const timer = setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        }, 50);
+        return () => clearTimeout(timer);
     }
   }, [messages]);
 
@@ -104,12 +86,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const lastSeen = data.lastSeen;
-        let isOnline = false;
         if (lastSeen && typeof lastSeen.toDate === 'function') {
           const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000;
-          isOnline = minutesAgo < 2;
+          setPeerStatus({ online: minutesAgo < 2 });
         }
-        setPeerStatus({ online: isOnline });
       }
     });
     return () => unsubscribe();
@@ -146,21 +126,16 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  const sendMessage = async (textToSend) => {
-    const content = textToSend || input;
-    if (!content.trim() || !user?.uid || !peerUser?.id) return;
-    setSending(true);
-    try {
-        const messagesRef = collection(db, `privateChats/${chatId}/messages`);
-        await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
-        await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true });
-        setInput("");
-        setMyTranslationResult(null);
-    } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } 
-    finally { setSending(false); }
-  };
+  const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const messagesRef = collection(db, `privateChats/${chatId}/messages`); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
   
-  const handleInputFocus = () => { setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 300); };
+  // --- 核心修复：应用方法二 ---
+  const handleInputFocus = () => { 
+    if (!isAtBottomRef.current) {
+      setTimeout(() => { 
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); 
+      }, 300);
+    }
+  };
   
   const handleScroll = () => {
     const el = mainScrollRef.current;
@@ -225,7 +200,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto w-full thin-scrollbar px-4 relative"
       >
-        <div style={{ paddingBottom: footerHeight + 10 }}>
+        <div style={{ paddingBottom: `calc(${footerHeight}px)`}}>
             {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
             <div ref={messagesEndRef} style={{ height: '1px' }} />
         </div>
