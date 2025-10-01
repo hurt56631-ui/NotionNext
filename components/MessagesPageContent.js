@@ -1,175 +1,117 @@
-// /components/MessagesPageContent.js (最终健壮版 - 已添加ID显示器和数据处理优化)
+// /components/MessagesPageContent.js (极限调试版)
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'firebase/firestore';
-import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutlineUsers } from 'react-icons/hi2';
-import { AnimatePresence, motion } from 'framer-motion';
-import { LayoutBase } from '@/themes/heo';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 
-const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
-  const tabs = [
-    { key: 'messages', name: '私信', icon: <HiOutlineChatBubbleLeftRight className="w-6 h-6" /> },
-    { key: 'notifications', name: '通知', icon: <HiOutlineBell className="w-6 h-6" /> },
-    { key: 'discover', name: '发现', icon: <HiOutlineGlobeAlt className="w-6 h-6" /> },
-    { key: 'contacts', name: '联系人', icon: <HiOutlineUsers className="w-6 h-6" /> }
-  ];
-  const baseClasses = 'relative flex flex-col items-center justify-center pt-3 pb-2 font-semibold text-center w-1/4 transition-colors duration-300';
-  const activeClasses = 'text-white scale-110';
-  const inactiveClasses = 'text-white/70 hover:text-white';
-  return (
-    <div className="flex justify-around sticky top-0 bg-gradient-to-r from-blue-500 to-purple-600 shadow-md z-10">
-      {tabs.map((tab) => (
-        <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`${baseClasses} ${activeTab === tab.key ? activeClasses : inactiveClasses}`}>
-          {tab.icon}
-          {tab.key === 'messages' && totalUnreadCount > 0 && (<span className="absolute top-2 right-1/2 translate-x-4 block h-2 w-2 rounded-full bg-green-400" />)}
-          <span className="text-xs mt-1">{tab.name}</span>
-          <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.key ? 'bg-white' : 'bg-transparent'}`}></div>
-        </button>
-      ))}
-    </div>
-  );
-};
-
-const ConversationList = ({ conversations, loading, user, authLoading }) => {
-  const router = useRouter();
-  const handleConversationClick = (convo) => {
-    if (!user?.uid || !convo.otherUser?.id) return;
-    router.push(`/messages/${convo.id}`);
-  };
-  if (authLoading || loading) { return <div className="p-8 text-center text-gray-500">正在加载...</div>; }
-  if (!user) { return <div className="p-8 text-center text-gray-500">请先登录以查看私信。</div>; }
-  if (conversations.length === 0) { return <div className="p-8 text-center text-gray-500">还没有任何私信哦。</div>; }
-  return (
-    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-      {conversations.map((convo) => (
-        <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
-          <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
-          <div className="ml-4 flex-1 overflow-hidden">
-            <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
-            <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>{convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-green-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}</div>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-};
-
-// --- 最终健壮性优化版本 ---
-const MessagesPageContent = () => {
-  const [activeTab, setActiveTab] = useState('messages');
+// 这是一个全新的、极简的组件，只用于调试
+const MinimalDebugger = () => {
   const { user, authLoading } = useAuth();
-  const [conversations, setConversations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [totalUnreadCount, setTotalUnreadCount] = useState(0);
+  const [debugData, setDebugData] = useState([]);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState("正在初始化...");
 
   useEffect(() => {
-    if (authLoading || !user) {
-      if (!authLoading) setLoading(false);
-      setConversations([]);
-      setTotalUnreadCount(0);
+    // 1. 检查 useAuth 的状态
+    if (authLoading) {
+      setStatus("正在等待用户认证...");
+      return;
+    }
+    if (!user) {
+      setStatus("用户未登录，无法获取数据。");
       return;
     }
 
+    // 2. 如果认证通过，设置查询
+    setStatus(`已作为用户 ${user.uid} 登录，正在查询数据库...`);
     const chatsQuery = query(
       collection(db, 'privateChats'),
       where('members', 'array-contains', user.uid),
       orderBy('lastMessageAt', 'desc')
     );
 
+    // 3. 启动实时监听
     const unsubscribe = onSnapshot(
       chatsQuery,
-      async (snapshot) => {
-        let currentTotalUnread = 0;
-        
-        // 核心优化：并行获取所有会话的对方用户信息，并处理未读数
-        const resolvedChats = await Promise.all(snapshot.docs.map(async (chatDoc) => {
-            const chatData = chatDoc.data();
-            const otherUserId = chatData.members.find((id) => id !== user.uid);
-            
-            // 立即计算未读数，即使对方用户信息获取失败，未读数也不会丢失
-            const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
-            currentTotalUnread += unreadCount;
-            
-            if (!otherUserId) return null;
+      (snapshot) => {
+        if (snapshot.empty) {
+          setStatus("数据库查询成功，但未找到与此用户相关的聊天记录。");
+          setDebugData([]);
+          return;
+        }
 
-            let otherUser = null;
-            try {
-                const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
-                if (userProfileDoc.exists()) {
-                    otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
-                }
-            } catch (error) {
-                // 即使获取对方用户信息失败，我们仍然返回会话和未读数
-                console.error(`处理会话 ${chatDoc.id} (用户 ${otherUserId}) 获取用户信息失败:`, error);
-            }
-            
-            // 如果无法获取对方用户信息，我们返回一个默认对象，以便列表项能够渲染（如显示“未知用户”）
-            if (!otherUser) {
-                otherUser = { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
-            }
-            
-            return { id: chatDoc.id, ...chatData, otherUser, unreadCount };
-        }));
-
-        const validChats = resolvedChats.filter(Boolean);
+        setStatus(`查询成功，找到 ${snapshot.size} 条聊天记录。正在处理...`);
         
-        setConversations(validChats);
-        setTotalUnreadCount(currentTotalUnread);
-        setLoading(false);
+        // 4. 直接处理数据，不进行任何额外的异步调用
+        const data = snapshot.docs.map(doc => {
+          const chatData = doc.data();
+          const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
+          return {
+            chatId: doc.id,
+            lastMessage: chatData.lastMessage,
+            unreadCount: unreadCount,
+            fullData: chatData // 包含完整数据以便调试
+          };
+        });
+        
+        setDebugData(data);
       },
-      (error) => { 
-        console.error('获取会话列表出错:', error); 
-        setLoading(false); 
-        // 遇到错误时，将未读数清零，以免显示错误状态
-        setTotalUnreadCount(0);
+      (err) => {
+        // 5. 如果查询出错，显示错误信息
+        console.error("Firestore onSnapshot 错误:", err);
+        setError(`数据库监听失败: ${err.message}`);
+        setStatus("数据库查询时发生错误！");
       }
     );
 
     return () => unsubscribe();
   }, [user, authLoading]);
 
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'messages': return <ConversationList conversations={conversations} loading={loading} user={user} authLoading={authLoading} />;
-      case 'notifications': return (<div className="p-8 text-center text-gray-500">通知功能正在开发中...</div>);
-      case 'discover': return (<div className="p-8 text-center text-gray-500">发现功能正在开发中...</div>);
-      case 'contacts': return (<div className="p-8 text-center text-gray-500">联系人功能正在开发中...</div>);
-      default: return null;
-    }
-  };
-
+  // 6. 将所有状态信息直接渲染到屏幕上
   return (
-    <LayoutBase>
-      {/* 保持 ID 显示器，以防万一 */}
-      <div style={{
-        position: 'fixed',
-        top: '80px',
-        left: '10px',
-        zIndex: 9999,
-        background: 'rgba(255, 0, 0, 0.8)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        fontSize: '12px',
-        maxWidth: '90vw',
-        wordBreak: 'break-all',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-      }}>
-        <h4 style={{ margin: 0, padding: 0, fontWeight: 'bold' }}>当前登录用户 (UID):</h4>
-        {authLoading ? '正在加载认证...' : user ? user.uid : '未登录 (null)'}
+    <div style={{ padding: '20px', fontFamily: 'monospace', color: 'black', background: 'white' }}>
+      <h1 style={{ color: 'red', borderBottom: '2px solid red' }}>极限调试模式</h1>
+      
+      <div style={{ marginTop: '20px' }}>
+        <h2 style={{ fontWeight: 'bold' }}>当前状态:</h2>
+        <p style={{ color: 'blue', fontWeight: 'bold' }}>{status}</p>
       </div>
 
-      <div className="flex flex-col min-h-screen bg-white dark:bg-black">
-        <MessageHeader activeTab={activeTab} setActiveTab={setActiveTab} totalUnreadCount={totalUnreadCount}/>
-        <main className="flex-1">
-          <AnimatePresence mode="wait"><motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>{renderContent()}</motion.div></AnimatePresence></main>
+      {error && (
+        <div style={{ marginTop: '20px', color: 'red' }}>
+          <h2 style={{ fontWeight: 'bold' }}>错误信息:</h2>
+          <pre>{error}</pre>
+        </div>
+      )}
+
+      <div style={{ marginTop: '20px' }}>
+        <h2 style={{ fontWeight: 'bold' }}>会话未读数:</h2>
+        {debugData.length > 0 ? (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {debugData.map(item => (
+              <li key={item.chatId} style={{ border: '1px solid #ccc', padding: '10px', margin: '10px 0', background: item.unreadCount > 0 ? '#e6ffed' : '#f7f7f7' }}>
+                <p><strong>Chat ID:</strong> {item.chatId}</p>
+                <p><strong>最后消息:</strong> {item.lastMessage}</p>
+                <p style={{ fontWeight: 'bold', fontSize: '1.2em', color: item.unreadCount > 0 ? 'green' : 'black' }}>
+                  <strong>计算出的未读数: {item.unreadCount}</strong>
+                </p>
+                <details>
+                    <summary>查看完整数据</summary>
+                    <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: '#eee', padding: '5px' }}>
+                        {JSON.stringify(item.fullData, null, 2)}
+                    </pre>
+                </details>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>没有找到任何会话数据。</p>
+        )}
       </div>
-    </LayoutBase>
+    </div>
   );
 };
 
-export default MessagesPageContent;
+// 导出这个极简组件
+export default MinimalDebugger;
