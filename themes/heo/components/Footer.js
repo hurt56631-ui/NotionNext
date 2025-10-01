@@ -1,4 +1,4 @@
-// /components/Footer.js (已简化)
+// /components/Footer.js (已简)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
