@@ -1,8 +1,10 @@
-// /components/ChatInterface.js (最终版 - 已集成美化、翻译按钮和背景透明度)
+// /components/ChatInterface.js (最终版 - 已集成美化、翻译按钮、背景透明度、并添加发送消息时更新未读数逻辑)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+// ✅ ---【核心修改】--- ✅
+// 导入 increment 函数，用于原子性地增加一个数字字段的值
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
@@ -79,11 +81,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => { if (vv) { vv.removeEventListener("resize", onViewport); vv.removeEventListener("scroll", onViewport); } };
   }, []);
 
-  // ✅ 核心修改：加载背景时，同时加载图片和透明度
   useEffect(() => {
     if (chatId) {
       try {
-        const key = `chat_bg_v2_${chatId}`; // 使用新 key 避免旧数据冲突
+        const key = `chat_bg_v2_${chatId}`;
         const savedBg = localStorage.getItem(key);
         if (savedBg) {
           setBackground(JSON.parse(savedBg));
@@ -92,7 +93,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     }
   }, [chatId]);
   
-  // ✅ 核心修改：保存背景时，同时保存图片和透明度
   const saveBackground = (newBg) => {
     setBackground(newBg);
     try {
@@ -116,7 +116,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   const clearBackground = () => {
     if (window.confirm("确定要清除自定义聊天背景吗？")) {
-      saveBackground({ dataUrl: null, opacity: 0.2 }); // 重置
+      saveBackground({ dataUrl: null, opacity: 0.2 });
     }
   };
   
@@ -124,7 +124,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     saveBackground({ ...background, opacity: parseFloat(e.target.value) });
   };
 
-  // 其他 Hooks & Functions (无变化)
+  // 其他 Hooks & Functions (基本无变化)
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
   useEffect(() => { if (!peerUser?.id) return; const peerUserRef = doc(db, 'users', peerUser.id); const unsubscribe = onSnapshot(peerUserRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); const lastSeen = data.lastSeen; if (lastSeen && typeof lastSeen.toDate === 'function') { const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000; setPeerStatus({ online: minutesAgo < 2 }); } } else { setPeerStatus({ online: false }); } }); return () => unsubscribe(); }, [peerUser?.id]);
   useEffect(() => { if (!chatId || !user) return; const messagesRef = collection(db, `privateChats/${chatId}/messages`); const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000)); const unsub = onSnapshot(q, (snap) => { const arr = snap.docs.map(d => ({ id: d.id, ...d.data() })); const oldMessagesCount = prevMessagesLengthRef.current; if (oldMessagesCount > 0 && arr.length > oldMessagesCount) { const newMessages = arr.slice(oldMessagesCount); const newPeerMessagesCount = newMessages.filter(m => m.uid !== user.uid).length; if (newPeerMessagesCount > 0 && !isAtBottomRef.current) { setUnreadCount(prev => prev + newPeerMessagesCount); } } setMessages(arr); prevMessagesLengthRef.current = arr.length; const lastMessage = arr[arr.length - 1]; if (lastMessage && lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }, (err) => console.error("监听消息错误:", err)); return () => unsub(); }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
@@ -132,7 +132,44 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
-  const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const messagesRef = collection(db, `privateChats/${chatId}/messages`); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
+
+  // ✅ ---【核心修改】--- ✅
+  // 修改 sendMessage 函数，使其在发送消息的同时，为对方增加未读计数
+  const sendMessage = async (textToSend) => {
+    const content = textToSend || input;
+    if (!content.trim() || !user?.uid || !peerUser?.id) return;
+    setSending(true);
+    try {
+      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+      // 1. 添加新消息到 messages 子集合
+      await addDoc(messagesRef, {
+        text: content.trim(),
+        // 注意：原代码此处为 uid，与 currentUser.uid 对应，是正确的
+        uid: user.uid,
+        createdAt: serverTimestamp()
+      });
+      
+      // 2. 更新主聊天文档
+      // 使用 setDoc 和 { merge: true } 来确保如果文档不存在，则会创建它
+      // 同时，我们在这里原子性地增加对方的未读数
+      await setDoc(doc(db, "privateChats", chatId), {
+        members: [user.uid, peerUser.id],
+        lastMessage: content.trim(),
+        lastMessageAt: serverTimestamp(),
+        // 核心逻辑: 使用点表示法和 increment(1) 来为对方的 unreadCount 加 1
+        [`unreadCounts.${peerUser.id}`]: increment(1)
+      }, { merge: true });
+      
+      setInput("");
+      setMyTranslationResult(null);
+    } catch (e) {
+      console.error("SendMessage Error:", e);
+      alert(`发送失败: ${e.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleScroll = () => { const el = mainScrollRef.current; if (el) { const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100; isAtBottomRef.current = atBottom; if (atBottom && unreadCount > 0) { setUnreadCount(0); } } };
   const handleRecallMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); } };
   const handleDeleteMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await deleteDoc(messageRef); } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); } };
@@ -145,7 +182,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
   const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
   
-  // ✅ 核心修复：恢复对方最新消息翻译功能
   const MessageRow = ({ message, isLastMessage }) => { 
     const mine = message.uid === user?.uid; 
     const longPressTimer = useRef(); 
@@ -153,7 +189,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; 
     const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; 
     const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
-    // 判断是否是对方的最后一条消息
     const isPeersLastMessage = !mine && isLastMessage;
 
     return ( 
@@ -164,7 +199,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} 
             {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} 
           </div> 
-          {/* 如果是对方的最后一条消息，且未被撤回，则显示翻译按钮 */}
           {isPeersLastMessage && !message.recalled && (
               <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
                   <div className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors">译</div>
@@ -175,6 +209,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     ); 
   };
 
+  // --- 以下所有 UI 渲染部分均无变化 ---
   return (
     <div className="h-screen w-full bg-gray-100 text-black overflow-hidden relative">
       <GlobalScrollbarStyle />
@@ -187,7 +222,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         />
       )}
       
-      {/* ✅ 核心修改：顶部面板美化 */}
       <header className="fixed top-0 left-0 w-full flex items-center justify-between h-14 px-4 bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg z-30">
         <AnimatePresence>
             {searchActive ? (
@@ -214,7 +248,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <main ref={mainScrollRef} onScroll={handleScroll} className="h-full overflow-y-auto w-full thin-scrollbar px-4 pt-14 pb-20 relative z-10">
         <div>
             {filteredMessages.map((msg, index) => (
-              // ✅ 核心修复：传递 isLastMessage prop
               <MessageRow message={msg} key={msg.id} isLastMessage={index === filteredMessages.length - 1} />
             ))}
             <div ref={messagesEndRef} style={{ height: '1px' }} />
@@ -236,7 +269,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </main>
 
-      {/* ✅ 核心修改：输入框底部面板美化 */}
       <footer id="chat-footer" className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-20 transition-all duration-150 shadow-t-lg">
         <div>
             <AnimatePresence>
@@ -281,7 +313,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <button onClick={clearBackground} className="px-3 py-2 rounded-md border bg-white text-sm flex items-center gap-2 text-red-500"><Trash size={16}/> 清除</button>
                     </div>
                 </div>
-                {/* ✅ 核心修改：新增背景透明度调节滑块 */}
                 {background.dataUrl && (
                   <div className="pt-2">
                     <label className="text-xs text-gray-600 dark:text-gray-300">背景透明度</label>
