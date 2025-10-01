@@ -1,10 +1,10 @@
-// /components/ChatInterface.js (最终修复版 - 采用 position: fixed + visualViewport)
+// /components/ChatInterface.js (最终版 - 已集成永久背景和新TTS)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
+import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式 (无变化)
@@ -18,17 +18,40 @@ const GlobalScrollbarStyle = () => (
     `}</style>
 );
 
-// 其他组件和功能模块 (无变化)
+// 组件与图标 (无变化)
 const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
+
+// ✅ TTS 功能模块：已替换为你指定的最新接口
 const ttsCache = new Map();
-const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
-const playCachedTTS = (text) => { if (!text) return; if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }).catch(e => console.error("TTS preloading failed before play:", e)); } };
+const preloadTTS = async (text) => {
+  if (!text || ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) {
+        ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+      }
+    });
+  }
+};
+
+// AI 功能模块 (无变化)
 const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
 const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
-  // State 和 Refs (基本无变化, 移除了 keyboardHeight state)
   const user = currentUser;
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -44,12 +67,20 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // ✅ 新增功能：背景图片 State
+  const [backgroundDataUrl, setBackgroundDataUrl] = useState(null);
+
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
   const searchInputRef = useRef(null);
   const textareaRef = useRef(null);
   const isAtBottomRef = useRef(true);
   const prevMessagesLengthRef = useRef(0);
+  
+  // ✅ 新增功能：文件选择框的 Ref
+  const fileInputRef = useRef(null);
+  
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal',
       sourceLang: '中文', targetLang: '缅甸语',
@@ -57,40 +88,35 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
-  // ✅ 核心修复 1：借鉴并替换为最稳健的 visualViewport 监听逻辑
+  // 键盘监听逻辑 (无变化)
   useEffect(() => {
     const vv = window.visualViewport;
-    // 直接通过 ID 获取元素，确保我们操作的是正确的 DOM 节点
     const footerEl = document.getElementById("chat-footer");
     const mainEl = mainScrollRef.current;
-
     function onViewport() {
       if (!footerEl || !mainEl || !vv) return;
-      
-      // 计算键盘的精确高度
       const bottomOffset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      
-      // 1. 直接设置 footer 的 bottom 样式，让它“浮”在键盘上
       footerEl.style.bottom = bottomOffset + "px";
-
-      // 2. 同时，动态设置 main 区域的 padding-bottom，确保消息列表不会被抬高的 footer 遮挡
-      //    这个值等于 footer 的原始高度（约 4.5rem/72px）加上键盘高度
       mainEl.style.paddingBottom = `calc(4.5rem + ${bottomOffset}px)`;
     }
+    if (vv) { vv.addEventListener("resize", onViewport); vv.addEventListener("scroll", onViewport); onViewport(); }
+    return () => { if (vv) { vv.removeEventListener("resize", onViewport); vv.removeEventListener("scroll", onViewport); } };
+  }, []);
 
-    if (vv) {
-      vv.addEventListener("resize", onViewport);
-      vv.addEventListener("scroll", onViewport);
-      onViewport(); // 初始执行一次
-    }
-
-    return () => {
-      if (vv) {
-        vv.removeEventListener("resize", onViewport);
-        vv.removeEventListener("scroll", onViewport);
+  // ✅ 新增功能：组件加载时，从 localStorage 读取永久背景
+  useEffect(() => {
+    if (chatId) {
+      try {
+        const key = `chat_bg_${chatId}`;
+        const savedBg = localStorage.getItem(key);
+        if (savedBg) {
+          setBackgroundDataUrl(savedBg);
+        }
+      } catch (e) {
+        console.error('加载聊天背景失败', e);
       }
-    };
-  }, []); // 空依赖数组，只在组件挂载和卸载时运行
+    }
+  }, [chatId]);
 
   // 其他 useEffect 和函数 (无变化)
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
@@ -99,6 +125,35 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
+  
+  // ✅ 新增功能：处理背景图片选择和清除的函数
+  const handleBackgroundPick = () => {
+    fileInputRef.current?.click();
+  };
+  const onFileChange = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+          const dataUrl = reader.result;
+          setBackgroundDataUrl(dataUrl);
+          try {
+              localStorage.setItem(`chat_bg_${chatId}`, dataUrl);
+          } catch (err) {
+              console.error('保存聊天背景失败', err);
+              alert('保存背景失败，可能是图片太大或存储空间已满。');
+          }
+      };
+      reader.readAsDataURL(file);
+      e.target.value = null; // 清空 input，以便可以再次选择同一张图片
+  };
+  const clearBackground = () => {
+      if (window.confirm("确定要清除自定义聊天背景吗？")) {
+        setBackgroundDataUrl(null);
+        try { localStorage.removeItem(`chat_bg_${chatId}`); } catch (e) { console.error("清除背景失败", e) }
+      }
+  };
+
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
   const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const messagesRef = collection(db, `privateChats/${chatId}/messages`); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
   const handleScroll = () => { const el = mainScrollRef.current; if (el) { const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100; isAtBottomRef.current = atBottom; if (atBottom && unreadCount > 0) { setUnreadCount(0); } } };
@@ -114,15 +169,21 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
   const MessageRow = ({ message }) => { const mine = message.uid === user?.uid; const longPressTimer = useRef(); const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight }; return ( <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}> <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}> {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} </div> </div> </div> ); };
 
-  // ✅ 核心修复 2：采用 position: fixed 布局，并为元素添加必要的 class 和 style
   return (
-    // 使用 h-screen 和 overflow-hidden 确保整个组件就是一个不可滚动的全屏容器
-    <div className="h-screen w-full bg-white text-black overflow-hidden">
+    <div className="h-screen w-full bg-white text-black overflow-hidden relative">
       <GlobalScrollbarStyle />
+      {/* ✅ 新增功能：隐藏的文件输入框 */}
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
       
-      {/* Header: 使用 fixed 固定在顶部，脱离文档流 */}
+      {/* ✅ 核心修改：为背景图片创建一个独立的、位于最底层的 div */}
+      {backgroundDataUrl && (
+        <div 
+          className="absolute inset-0 w-full h-full bg-cover bg-center z-0"
+          style={{ backgroundImage: `url(${backgroundDataUrl})` }}
+        />
+      )}
+      
       <header className="fixed top-0 left-0 w-full flex items-center justify-between h-14 px-4 bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-30">
-        {/* Header 内部逻辑保持不变 */}
         <AnimatePresence>
             {searchActive ? (
                 <motion.div key="search" className="absolute inset-0 flex items-center px-4 bg-gray-100">
@@ -145,22 +206,17 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </header>
       
-      {/* Main: 消息列表区域。它现在是唯一的可滚动区域 */}
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        // h-full: 占满父容器的全部高度
-        // overflow-y-auto: 内容超出时内部滚动
-        // pt-14: 留出顶部 fixed header 的空间 (h-14)
-        // pb-20: 默认留出底部 fixed footer 的空间 (约 h-20)
-        className="h-full overflow-y-auto w-full thin-scrollbar px-4 pt-14 pb-20"
+        className="h-full overflow-y-auto w-full thin-scrollbar px-4 pt-14 pb-20 relative z-10"
+        // ✅ 核心修改：移除这里的 style，把它交给了独立的背景 div
       >
         <div>
             {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
             <div ref={messagesEndRef} style={{ height: '1px' }} />
         </div>
         
-        {/* 未读消息按钮不再需要复杂的 bottom 计算，可以直接固定 */}
         <AnimatePresence>
           {unreadCount > 0 && (
             <motion.button 
@@ -177,12 +233,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </main>
 
-      {/* Footer: 使用 fixed 固定在底部，并赋予 ID 以便 JS 操作 */}
       <footer 
         id="chat-footer"
-        className="fixed bottom-0 left-0 w-full bg-gray-50 border-t border-gray-200 z-20 transition-all duration-150"
+        className="fixed bottom-0 left-0 w-full bg-gray-50/80 backdrop-blur-sm border-t border-gray-200 z-20 transition-all duration-150"
       >
-        {/* Footer 内部逻辑保持不变 */}
         <div>
             <AnimatePresence>
                 {myTranslationResult && (
@@ -208,13 +262,27 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </div>
       </footer>
       
-      {/* 弹窗类组件 (无变化) */}
       <AnimatePresence>
         {settingsOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/50 z-50" onClick={() => setSettingsOpen(false)}>
             <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 30, stiffness: 300 }} onClick={(e) => e.stopPropagation()} className="absolute bottom-0 w-full bg-gray-100 text-black p-4 rounded-t-2xl space-y-4 max-h-[80vh] overflow-y-auto thin-scrollbar border-t border-gray-200">
               <h3 className="text-lg font-semibold text-center">聊天设置</h3>
               <div className="p-3 rounded-lg bg-white space-y-3"><h4 className="font-bold text-sm">样式</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">字体大小 (px)</span><input type="number" value={cfg.fontSize} onChange={e => setCfg(c => ({...c, fontSize: parseInt(e.target.value)}))} className="w-20 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">字体粗细</span><select value={cfg.fontWeight} onChange={e => setCfg(c => ({...c, fontWeight: e.target.value}))} className="p-1 border rounded text-sm bg-white border-gray-300"><option value="400">常规</option><option value="700">粗体</option></select></label></div>
+              
+              {/* ✅ 新增功能：聊天背景设置 UI */}
+              <div className="p-3 rounded-lg bg-white space-y-2">
+                <h4 className="font-bold text-sm">聊天背景</h4>
+                <div className="flex items-center gap-3">
+                    <div className="w-20 h-12 rounded overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center">
+                    {backgroundDataUrl ? <img src={backgroundDataUrl} alt="bg preview" className="w-full h-full object-cover" /> : <div className="text-xs text-gray-400">无</div>}
+                    </div>
+                    <div className="flex-1 flex gap-2">
+                    <button onClick={handleBackgroundPick} className="px-3 py-2 rounded-md border bg-white text-sm flex items-center gap-2"><ImageIcon size={16}/> 上传</button>
+                    <button onClick={clearBackground} className="px-3 py-2 rounded-md border bg-white text-sm flex items-center gap-2 text-red-500"><Trash size={16}/> 清除</button>
+                    </div>
+                </div>
+              </div>
+
               <div className="p-3 rounded-lg bg-white space-y-3"><h4 className="font-bold text-sm">翻译语言</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">源语言 (你的语言)</span><input type="text" value={cfg.sourceLang} onChange={e => setCfg(c => ({...c, sourceLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">目标语言 (对方语言)</span><input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4><input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c, ai: {...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c, ai: {...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">自动化</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label></div>
