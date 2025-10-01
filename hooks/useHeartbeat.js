@@ -9,6 +9,7 @@ export function useHeartbeat(userId) {
 
     const updateUserHeartbeat = () => {
       const userDocRef = doc(db, 'users', userId);
+      // 使用 setDoc + merge 可以在文档不存在时自动创建
       setDoc(userDocRef, {
         lastSeen: serverTimestamp()
       }, { merge: true }).catch(error => {
@@ -17,7 +18,7 @@ export function useHeartbeat(userId) {
     };
 
     updateUserHeartbeat();
-    const intervalId = setInterval(updateUserHeartbeat, 60 * 1000);
+    const intervalId = setInterval(updateUserHeartbeat, 60 * 1000); // 每分钟更新一次
     return () => clearInterval(intervalId);
     
   }, [userId]);
