@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (已添加调试日志)
+// /components/MessagesPageContent.js (最终健壮版 - 已添加ID显示器和数据处理优化)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -9,7 +9,6 @@ import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutli
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
 
-// MessageHeader 组件 (无变化)
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
   const tabs = [
     { key: 'messages', name: '私信', icon: <HiOutlineChatBubbleLeftRight className="w-6 h-6" /> },
@@ -34,7 +33,6 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
   );
 };
 
-// ConversationList 组件 (无变化)
 const ConversationList = ({ conversations, loading, user, authLoading }) => {
   const router = useRouter();
   const handleConversationClick = (convo) => {
@@ -59,8 +57,7 @@ const ConversationList = ({ conversations, loading, user, authLoading }) => {
   );
 };
 
-// --- 已修改 ---
-// MessagesPageContent 现在负责所有数据获取和状态管理
+// --- 最终健壮性优化版本 ---
 const MessagesPageContent = () => {
   const [activeTab, setActiveTab] = useState('messages');
   const { user, authLoading } = useAuth();
@@ -85,55 +82,49 @@ const MessagesPageContent = () => {
     const unsubscribe = onSnapshot(
       chatsQuery,
       async (snapshot) => {
-        // --- 侦探日志 #1 ---
-        console.log("================ 消息列表刷新 ================");
-        console.log(`当前登录的用户ID (user.uid): ${user.uid}`);
-        
         let currentTotalUnread = 0;
-
-        const chatPromises = snapshot.docs.map(async (chatDoc) => {
-          const chatData = chatDoc.data();
-          const otherUserId = chatData.members.find((id) => id !== user.uid);
-          if (!otherUserId) return null;
-
-          try {
-            const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
-            if (!userProfileDoc.exists()) return null;
-            const otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
+        
+        // 核心优化：并行获取所有会话的对方用户信息，并处理未读数
+        const resolvedChats = await Promise.all(snapshot.docs.map(async (chatDoc) => {
+            const chatData = chatDoc.data();
+            const otherUserId = chatData.members.find((id) => id !== user.uid);
             
-            // ✅ ---【核心调试点】--- ✅
+            // 立即计算未读数，即使对方用户信息获取失败，未读数也不会丢失
             const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
-            
-            // --- 侦探日志 #2 ---
-            // 打印出为每个会话计算出的关键信息
-            console.log(`
-              [会话: ${otherUser.displayName || '未知用户'}]
-              - 会话数据 (chatData):`, chatData, `
-              - unreadCounts 字段内容:`, chatData.unreadCounts, `
-              - 尝试使用 key "${user.uid}" 读取未读数
-              - 计算出的未读数 (unreadCount): ${unreadCount}
-            `);
-            
             currentTotalUnread += unreadCount;
-            return { id: chatDoc.id, ...chatData, otherUser, unreadCount };
-          } catch (error) {
-            console.error(`处理会话 ${chatDoc.id} 出错:`, error);
-            return null;
-          }
-        });
+            
+            if (!otherUserId) return null;
 
-        const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean);
+            let otherUser = null;
+            try {
+                const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
+                if (userProfileDoc.exists()) {
+                    otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
+                }
+            } catch (error) {
+                // 即使获取对方用户信息失败，我们仍然返回会话和未读数
+                console.error(`处理会话 ${chatDoc.id} (用户 ${otherUserId}) 获取用户信息失败:`, error);
+            }
+            
+            // 如果无法获取对方用户信息，我们返回一个默认对象，以便列表项能够渲染（如显示“未知用户”）
+            if (!otherUser) {
+                otherUser = { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
+            }
+            
+            return { id: chatDoc.id, ...chatData, otherUser, unreadCount };
+        }));
+
+        const validChats = resolvedChats.filter(Boolean);
         
-        // --- 侦探日志 #3 ---
-        console.log("最终生成的、将要渲染的会话列表 (resolvedChats):", resolvedChats);
-        
-        setConversations(resolvedChats);
+        setConversations(validChats);
         setTotalUnreadCount(currentTotalUnread);
         setLoading(false);
       },
-      (error) => {
-        console.error('获取会话列表出错: ', error);
-        setLoading(false);
+      (error) => { 
+        console.error('获取会话列表出错:', error); 
+        setLoading(false); 
+        // 遇到错误时，将未读数清零，以免显示错误状态
+        setTotalUnreadCount(0);
       }
     );
 
@@ -143,8 +134,7 @@ const MessagesPageContent = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'messages':
-        return <ConversationList conversations={conversations} loading={loading} user={user} authLoading={authLoading} />;
+      case 'messages': return <ConversationList conversations={conversations} loading={loading} user={user} authLoading={authLoading} />;
       case 'notifications': return (<div className="p-8 text-center text-gray-500">通知功能正在开发中...</div>);
       case 'discover': return (<div className="p-8 text-center text-gray-500">发现功能正在开发中...</div>);
       case 'contacts': return (<div className="p-8 text-center text-gray-500">联系人功能正在开发中...</div>);
@@ -154,6 +144,25 @@ const MessagesPageContent = () => {
 
   return (
     <LayoutBase>
+      {/* 保持 ID 显示器，以防万一 */}
+      <div style={{
+        position: 'fixed',
+        top: '80px',
+        left: '10px',
+        zIndex: 9999,
+        background: 'rgba(255, 0, 0, 0.8)',
+        color: 'white',
+        padding: '10px',
+        borderRadius: '8px',
+        fontSize: '12px',
+        maxWidth: '90vw',
+        wordBreak: 'break-all',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+      }}>
+        <h4 style={{ margin: 0, padding: 0, fontWeight: 'bold' }}>当前登录用户 (UID):</h4>
+        {authLoading ? '正在加载认证...' : user ? user.uid : '未登录 (null)'}
+      </div>
+
       <div className="flex flex-col min-h-screen bg-white dark:bg-black">
         <MessageHeader activeTab={activeTab} setActiveTab={setActiveTab} totalUnreadCount={totalUnreadCount}/>
         <main className="flex-1">
