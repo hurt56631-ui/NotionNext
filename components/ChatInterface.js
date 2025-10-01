@@ -1,9 +1,7 @@
-// /components/ChatInterface.js (最终版 - 已集成美化、翻译按钮、背景透明度、并添加发送消息时更新未读数逻辑)
+// /components/ChatInterface.js (最终修复版 - 为所有账号启用正确的未读消息逻辑)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-// ✅ ---【核心修改】--- ✅
-// 导入 increment 函数，用于原子性地增加一个数字字段的值
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash } from "lucide-react";
@@ -75,7 +73,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       if (!footerEl || !mainEl || !vv) return;
       const bottomOffset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       footerEl.style.bottom = bottomOffset + "px";
-      mainEl.style.paddingBottom = `calc(5.5rem + ${bottomOffset}px)`; // 增加 padding 以便看清最后一条消息
+      mainEl.style.paddingBottom = `calc(5.5rem + ${bottomOffset}px)`;
     }
     if (vv) { vv.addEventListener("resize", onViewport); vv.addEventListener("scroll", onViewport); onViewport(); }
     return () => { if (vv) { vv.removeEventListener("resize", onViewport); vv.removeEventListener("scroll", onViewport); } };
@@ -124,7 +122,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     saveBackground({ ...background, opacity: parseFloat(e.target.value) });
   };
 
-  // 其他 Hooks & Functions (基本无变化)
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
   useEffect(() => { if (!peerUser?.id) return; const peerUserRef = doc(db, 'users', peerUser.id); const unsubscribe = onSnapshot(peerUserRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); const lastSeen = data.lastSeen; if (lastSeen && typeof lastSeen.toDate === 'function') { const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000; setPeerStatus({ online: minutesAgo < 2 }); } } else { setPeerStatus({ online: false }); } }); return () => unsubscribe(); }, [peerUser?.id]);
   useEffect(() => { if (!chatId || !user) return; const messagesRef = collection(db, `privateChats/${chatId}/messages`); const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000)); const unsub = onSnapshot(q, (snap) => { const arr = snap.docs.map(d => ({ id: d.id, ...d.data() })); const oldMessagesCount = prevMessagesLengthRef.current; if (oldMessagesCount > 0 && arr.length > oldMessagesCount) { const newMessages = arr.slice(oldMessagesCount); const newPeerMessagesCount = newMessages.filter(m => m.uid !== user.uid).length; if (newPeerMessagesCount > 0 && !isAtBottomRef.current) { setUnreadCount(prev => prev + newPeerMessagesCount); } } setMessages(arr); prevMessagesLengthRef.current = arr.length; const lastMessage = arr[arr.length - 1]; if (lastMessage && lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }, (err) => console.error("监听消息错误:", err)); return () => unsub(); }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
@@ -133,32 +130,39 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // ✅ ---【核心修改】--- ✅
-  // 修改 sendMessage 函数，使其在发送消息的同时，为对方增加未读计数
+  // ✅ ---【核心终极修复】--- ✅
+  // 修改 sendMessage 函数，使其在发送消息时：
+  // 1. 为对方增加未读计数
+  // 2. 将自己的未读计数清零
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
     if (!content.trim() || !user?.uid || !peerUser?.id) return;
     setSending(true);
     try {
-      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
       // 1. 添加新消息到 messages 子集合
+      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
       await addDoc(messagesRef, {
         text: content.trim(),
-        // 注意：原代码此处为 uid，与 currentUser.uid 对应，是正确的
         uid: user.uid,
         createdAt: serverTimestamp()
       });
       
       // 2. 更新主聊天文档
-      // 使用 setDoc 和 { merge: true } 来确保如果文档不存在，则会创建它
-      // 同时，我们在这里原子性地增加对方的未读数
-      await setDoc(doc(db, "privateChats", chatId), {
+      const chatDocRef = doc(db, "privateChats", chatId);
+      
+      const updateData = {
         members: [user.uid, peerUser.id],
         lastMessage: content.trim(),
         lastMessageAt: serverTimestamp(),
-        // 核心逻辑: 使用点表示法和 increment(1) 来为对方的 unreadCount 加 1
-        [`unreadCounts.${peerUser.id}`]: increment(1)
-      }, { merge: true });
+        // 为对方的未读数 +1
+        [`unreadCounts.${peerUser.id}`]: increment(1),
+        // 同时，将自己的未读数设置为 0，因为自己发的消息对自己总是已读
+        [`unreadCounts.${user.uid}`]: 0 
+      };
+
+      // 使用 setDoc 和 { merge: true } 一次性更新所有字段
+      // merge: true 确保如果 unreadCounts 字段不存在，它会被创建而不是覆盖整个文档
+      await setDoc(chatDocRef, updateData, { merge: true });
       
       setInput("");
       setMyTranslationResult(null);
@@ -209,7 +213,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     ); 
   };
 
-  // --- 以下所有 UI 渲染部分均无变化 ---
   return (
     <div className="h-screen w-full bg-gray-100 text-black overflow-hidden relative">
       <GlobalScrollbarStyle />
