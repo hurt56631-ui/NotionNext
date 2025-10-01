@@ -1,7 +1,7 @@
 // /hooks/useHeartbeat.js
 import { useEffect } from 'react';
-import { doc, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // 确保路径正确
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export function useHeartbeat(userId) {
   useEffect(() => {
@@ -12,7 +12,7 @@ export function useHeartbeat(userId) {
       setDoc(userDocRef, {
         lastSeen: serverTimestamp()
       }, { merge: true }).catch(error => {
-        console.error("心跳更新失败:", error);
+        console.error("Heartbeat update failed:", error);
       });
     };
 
