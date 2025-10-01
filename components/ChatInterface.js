@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终修复版 - 补全 footerRef 定义)
+// /components/ChatInterface.js (最终修复版 - 移除 handleInputFocus)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -46,12 +46,9 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // --- 核心修复：重新添加 footerRef 的定义 ---
-  const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
@@ -68,12 +65,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
-
-  useEffect(() => {
-    if (footerRef.current) {
-      setFooterHeight(footerRef.current.offsetHeight);
-    }
-  }, [input, myTranslationResult]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
@@ -104,12 +95,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const lastSeen = data.lastSeen;
-        let isOnline = false;
         if (lastSeen && typeof lastSeen.toDate === 'function') {
           const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000;
-          isOnline = minutesAgo < 2;
+          setPeerStatus({ online: minutesAgo < 2 });
         }
-        setPeerStatus({ online: isOnline });
       } else {
         setPeerStatus({ online: false });
       }
@@ -150,13 +139,14 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const messagesRef = collection(db, `privateChats/${chatId}/messages`); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
   
-  const handleInputFocus = () => { 
-    if (!isAtBottomRef.current) {
-      setTimeout(() => { 
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); 
-      }, 300);
-    }
-  };
+  // --- 核心修复：注释掉 handleInputFocus 函数 ---
+  // const handleInputFocus = () => { 
+  //   if (!isAtBottomRef.current) {
+  //     setTimeout(() => { 
+  //       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); 
+  //     }, 300);
+  //   }
+  // };
   
   const handleScroll = () => {
     const el = mainScrollRef.current;
@@ -234,7 +224,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               exit={{ opacity: 0, y: 20 }}
               onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
               className="fixed right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
-              style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px + 1rem)`}}
+              style={{ bottom: `calc(70px + ${keyboardHeight}px + 1rem)`}} // Use a fallback height for footer
             >
               <div className="flex items-center gap-1.5 px-2">
                 <span className="font-bold text-sm">{unreadCount}</span>
@@ -249,7 +239,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-20"
         style={{ paddingBottom: `${keyboardHeight}px` }}
       >
-        <div ref={footerRef}>
+        <div>
             <AnimatePresence>
                 {myTranslationResult && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
@@ -262,7 +252,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             <div className="p-2">
               <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
                 <textarea
-                  ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleInputFocus} placeholder="输入消息..."
+                  ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  // --- 核心修复：移除 onFocus 属性 ---
+                  // onFocus={handleInputFocus} 
+                  placeholder="输入消息..."
                   className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
                 />
                 <div className="flex items-center flex-shrink-0 ml-1 self-end">
