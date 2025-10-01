@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终四合一完整版)
+// /components/ChatInterface.js (最终、完整、四合一修复版)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,18 +8,86 @@ import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, Ro
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式
-const GlobalScrollbarStyle = () => ( <style>{` .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; } .thin-scrollbar::-webkit-scrollbar-track { background: transparent; } .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; } .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; } .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; } `}</style> );
+const GlobalScrollbarStyle = () => (
+    <style>{`
+        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
+        .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; }
+    `}</style>
+);
 
 // 组件与图标
-const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
-const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
+const CircleTranslateIcon = () => (
+    <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">
+        译
+    </div>
+);
+
+const PinyinText = ({ text, showPinyin }) => {
+    if (!text || typeof text !== 'string') return text;
+    if (showPinyin) {
+        try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); }
+        catch (error) { console.error("Pinyin conversion failed:", error); return text; }
+    }
+    return text;
+};
 
 // 功能模块
 const ttsCache = new Map();
-const preloadTTS = async (text) => { if (ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
-const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }); } };
-const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); return data.choices[0].message.content; } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
-const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim(), }; } console.warn("无法解析AI翻译响应:", text); return { translation: text.trim(), backTranslation: "解析失败" }; };
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
+
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) {
+        ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+      }
+    });
+  }
+};
+
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => {
+    if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); }
+    const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`;
+    try {
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] })
+        });
+        if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
+        const data = await response.json();
+        return data.choices[0].message.content;
+    } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
+};
+
+const parseSingleTranslation = (text) => {
+    const translationMatch = text.match(/\*\*(.*?)\*\*/s);
+    const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is);
+
+    if (translationMatch && backTranslationMatch) {
+        return {
+            translation: translationMatch[1].trim(),
+            backTranslation: backTranslationMatch[1].trim(),
+        };
+    }
+    console.warn("无法解析AI翻译响应:", text);
+    return { translation: text.trim(), backTranslation: "解析失败" };
+};
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -41,7 +109,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
@@ -49,49 +116,57 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const mainScrollRef = useRef(null);
   const searchInputRef = useRef(null);
   const textareaRef = useRef(null);
+  const isAtBottomRef = useRef(true);
   
-  const defaultSettings = { autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal', sourceLang: '中文', targetLang: '缅甸语', ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } };
+  const defaultSettings = { 
+      autoTranslate: false, autoPlayTTS: false,
+      fontSize: 16, fontWeight: 'normal',
+      sourceLang: '中文',
+      targetLang: '缅甸语',
+      ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
+  };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
+  // 实时测量 footer 高度
   useEffect(() => {
     if (footerRef.current) {
       setFooterHeight(footerRef.current.offsetHeight);
     }
   }, [input, myTranslationResult]);
 
+  // 键盘避让逻辑
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
     if (initialViewportHeightRef.current === null) {
       initialViewportHeightRef.current = window.innerHeight;
     }
     const handleViewportChange = () => {
-      const currentHeight = window.visualViewport.height;
-      const initialHeight = initialViewportHeightRef.current;
-      let calculatedKeyboardHeight = initialHeight - currentHeight;
-      setKeyboardHeight(calculatedKeyboardHeight > 80 ? calculatedKeyboardHeight : 0);
+      const keyboardH = initialViewportHeightRef.current - window.visualViewport.height;
+      setKeyboardHeight(keyboardH > 80 ? keyboardH : 0);
     };
     window.visualViewport.addEventListener('resize', handleViewportChange);
     return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
   }, []);
 
+  // 自动滚动到底部
   useEffect(() => {
-    if (isAtBottom) {
+    if (isAtBottomRef.current) {
       const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 150);
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
       return () => clearTimeout(timer);
     }
-  }, [messages, isAtBottom]);
+  }, [messages]);
 
+  // 监听对方在线状态
   useEffect(() => {
     if (!peerUser?.id) return;
     const peerUserRef = doc(db, 'users', peerUser.id);
     const unsubscribe = onSnapshot(peerUserRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const lastSeenTimestamp = data.lastSeen;
-        if (lastSeenTimestamp instanceof Timestamp) {
-          const minutesAgo = (new Date().getTime() - lastSeenTimestamp.toDate().getTime()) / 60000;
+        if (data.lastSeen instanceof Timestamp) {
+          const minutesAgo = (new Date().getTime() - data.lastSeen.toDate().getTime()) / 60000;
           setPeerStatus({ online: minutesAgo < 2 });
         } else {
           setPeerStatus({ online: false });
@@ -101,8 +176,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => unsubscribe();
   }, [peerUser?.id]);
 
+  // 保存设置
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   
+  // 监听消息并计算未读数
   useEffect(() => {
     if (!chatId || !user) return;
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
@@ -110,31 +187,34 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     const unsub = onSnapshot(q, (snap) => {
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const oldMessagesCount = messages.length;
+
         if (oldMessagesCount > 0 && arr.length > oldMessagesCount) {
           const newMessages = arr.slice(oldMessagesCount);
           const newPeerMessagesCount = newMessages.filter(m => m.uid !== user.uid).length;
-          if (newPeerMessagesCount > 0 && !isAtBottom) {
+          if (newPeerMessagesCount > 0 && !isAtBottomRef.current) {
             setUnreadCount(prev => prev + newPeerMessagesCount);
           }
         }
+        
         setMessages(arr);
-        if (arr.length > 0 && arr[arr.length-1].uid !== user.uid) { 
+        
+        if (arr.length > 0 && arr[arr.length - 1].uid !== user.uid) { 
             const last = arr[arr.length - 1];
             if (cfg.autoPlayTTS) playCachedTTS(last.text); 
             if (cfg.autoTranslate) handleTranslateMessage(last); 
         } 
     }, (err) => console.error("监听消息错误:", err));
     return () => unsub();
-  }, [chatId, user, isAtBottom, messages.length]);
+  }, [chatId, user]);
 
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
+  // 输入框自动增高
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
         textarea.style.height = 'auto';
-        const scrollHeight = textarea.scrollHeight;
-        textarea.style.height = `${scrollHeight}px`;
+        textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [input]);
 
@@ -145,10 +225,9 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     if (!content.trim() || !user?.uid || !peerUser?.id) return;
     setSending(true);
     try {
-        const chatDocRef = doc(db, "privateChats", chatId);
-        const messagesRef = collection(chatDocRef, "messages");
+        const messagesRef = collection(db, `privateChats/${chatId}/messages`);
         await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
-        await setDoc(chatDocRef, { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true });
+        await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true });
         setInput("");
         setMyTranslationResult(null);
     } catch (e) {
@@ -163,6 +242,17 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 300);
+  };
+
+  const handleScroll = () => {
+    const el = mainScrollRef.current;
+    if (el) {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      isAtBottomRef.current = atBottom;
+      if (atBottom) {
+        setUnreadCount(0);
+      }
+    }
   };
 
   const handleRecallMessage = async (message) => {
@@ -287,19 +377,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       </div>
     );
   };
-  
-  const handleScroll = () => {
-    const el = mainScrollRef.current;
-    if (el) {
-      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-      if (atBottom !== isAtBottom) {
-        setIsAtBottom(atBottom);
-        if (atBottom) {
-          setUnreadCount(0);
-        }
-      }
-    }
-  };
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-white text-black" style={{ height: '100dvh' }}>
@@ -308,18 +385,18 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <header className="absolute top-0 left-0 right-0 h-14 px-4 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-30">
         <AnimatePresence>
             {searchActive ? (
-                <motion.div key="search" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: '100%' }} exit={{ opacity: 0, width: 0 }} className="absolute inset-0 flex items-center px-4 bg-gray-100">
+                <motion.div key="search" className="absolute inset-0 flex items-center px-4 bg-gray-100">
                     <input ref={searchInputRef} type="text" placeholder="搜索消息..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-transparent text-black placeholder-gray-500 focus:outline-none" />
                     <button onClick={() => { setSearchActive(false); setSearchQuery(''); }} className="p-2 -mr-2 text-gray-600"><X/></button>
                 </motion.div>
             ) : (
-                <motion.div key="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-between w-full">
+                <motion.div key="title" className="flex items-center justify-between w-full">
                     <div className="w-16"></div> 
                     <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <h1 className="font-bold text-lg text-black truncate max-w-[50vw]">{peerUser?.displayName || "聊天"}</h1>
                         {peerStatus.online ? (
                             <span className="text-xs text-green-500 font-semibold flex items-center gap-1">
-                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                                 在线
                             </span>
                         ) : (
@@ -338,11 +415,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="absolute top-14 left-0 right-0 overflow-y-auto w-full thin-scrollbar px-2"
+        className="absolute top-14 left-0 right-0 overflow-y-auto w-full thin-scrollbar px-4"
         style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px)` }}
       >
         {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} style={{ height: '1px' }} />
 
         <AnimatePresence>
           {unreadCount > 0 && (
