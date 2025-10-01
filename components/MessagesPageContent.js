@@ -8,9 +8,9 @@ import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'fire
 import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutlineUsers } from 'react-icons/hi2';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
-import events from '@/lib/events'; // 导入事件总线
+import events from '@/lib/events';
 
-// MessageHeader 组件 (无变动)
+// MessageHeader 组件 (集成总未读数红点)
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
   const tabs = [
     { key: 'messages', name: '私信', icon: <HiOutlineChatBubbleLeftRight className="w-6 h-6" /> },
@@ -26,7 +26,6 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
       {tabs.map(tab => (
         <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`${baseClasses} ${activeTab === tab.key ? activeClasses : inactiveClasses}`}>
           {tab.icon}
-          {/* 在“私信”按钮上显示总未读数红点 */}
           {tab.key === 'messages' && totalUnreadCount > 0 && (
             <span className="absolute top-2 right-1/2 translate-x-4 block h-2 w-2 rounded-full bg-red-500" />
           )}
@@ -38,15 +37,14 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
   );
 };
 
-// ConversationList 组件 (最终修复版 + 集成新功能)
+// ConversationList 组件 (集成在线绿点和紫色未读数)
 const ConversationList = ({ onTotalUnreadChange }) => {
     const { user } = useAuth();
     const router = useRouter();
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [onlineStatus, setOnlineStatus] = useState({}); // 用于存储所有用户的在线状态
+    const [onlineStatus, setOnlineStatus] = useState({});
 
-    // 监听全局用户在线状态变化
     useEffect(() => {
         const handleStatusChange = (detail) => {
             setOnlineStatus(prev => ({...prev, [detail.userId]: detail.isOnline}));
@@ -61,7 +59,7 @@ const ConversationList = ({ onTotalUnreadChange }) => {
         const chatsQuery = query(
             collection(db, 'privateChats'), 
             where('members', 'array-contains', user.uid),
-            orderBy('lastMessageAt', 'desc') // 按最后消息时间排序
+            orderBy('lastMessageAt', 'desc')
         );
 
         const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
@@ -80,12 +78,13 @@ const ConversationList = ({ onTotalUnreadChange }) => {
 
                     const otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
                     
-                    // 获取当前用户的未读消息数
                     const memberDocRef = doc(db, `privateChats/${chatDoc.id}/members`, user.uid);
                     const memberDocSnap = await getDoc(memberDocRef);
                     const unreadCount = memberDocSnap.data()?.unreadCount || 0;
                     
-                    totalUnread += unreadCount;
+                    if(unreadCount > 0) {
+                      totalUnread++; // 这里我们只计算有未读消息的会话数，而不是消息总数
+                    }
 
                     return { 
                         id: chatDoc.id, 
@@ -101,7 +100,7 @@ const ConversationList = ({ onTotalUnreadChange }) => {
 
             const resolvedChats = (await Promise.all(chatPromises)).filter(Boolean);
             setConversations(resolvedChats);
-            onTotalUnreadChange(totalUnread); // 更新父组件的总未读数
+            onTotalUnreadChange(totalUnread);
             setLoading(false);
 
         }, (error) => {
@@ -127,8 +126,13 @@ const ConversationList = ({ onTotalUnreadChange }) => {
                 <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
                     <div className="relative">
                         <img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover" />
-                        {onlineStatus[convo.otherUser.id] && (
+                        {/* 核心修改: 在线状态显示为绿点 */}
+                        {onlineStatus[convo.otherUser.id] ? (
                           <span className="absolute bottom-0 right-0 block h-4 w-4 rounded-full bg-green-500 border-2 border-white dark:border-gray-900" />
+                        ) : (
+                          // 如果需要离线也显示红点，可以取消这里的注释
+                          // <span className="absolute bottom-0 right-0 block h-4 w-4 rounded-full bg-gray-400 border-2 border-white dark:border-gray-900" />
+                          null
                         )}
                     </div>
                     <div className="ml-4 flex-1 overflow-hidden">
@@ -142,9 +146,10 @@ const ConversationList = ({ onTotalUnreadChange }) => {
                         </div>
                         <div className="flex justify-between items-start mt-1">
                             <p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>
+                            {/* 核心修改: 显示紫色数字角标 */}
                             {convo.unreadCount > 0 && (
                                 <span className="ml-2 flex-shrink-0 text-xs text-white bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">
-                                    {convo.unreadCount}
+                                    {convo.unreadCount > 9 ? '9+' : convo.unreadCount}
                                 </span>
                             )}
                         </div>
@@ -155,28 +160,18 @@ const ConversationList = ({ onTotalUnreadChange }) => {
     );
 };
 
-// 主页面组件
+// 主页面组件 (集成总未读数状态)
 const MessagesPageContent = () => {
   const [activeTab, setActiveTab] = useState('messages');
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
-
-  // 监听全局新消息事件，用于实时更新总未读数
+  
+  // 监听来自 Footer 的全局事件，确保状态同步
   useEffect(() => {
-      const handleNewMessage = (detail) => {
-          // 这里的逻辑可以更精细，但简单地累加也可以
-          setTotalUnreadCount(prev => prev + 1);
-      };
-      const handleChatRead = (detail) => {
-          // 当一个聊天被打开并标记为已读时，我们需要重新计算总未读数
-          // 最简单的方式是让 ConversationList 组件通过回调函数更新
-      };
-      events.on('new-message', handleNewMessage);
-      events.on('chatRead', handleChatRead);
-
-      return () => {
-          events.remove('new-message', handleNewMessage);
-          events.remove('chatRead', handleChatRead);
-      }
+    const updateTotalCount = (detail) => {
+        setTotalUnreadCount(detail.count);
+    };
+    events.on('totalUnreadCountChanged', updateTotalCount);
+    return () => events.remove('totalUnreadCountChanged', updateTotalCount);
   }, []);
 
   const renderContent = () => {
