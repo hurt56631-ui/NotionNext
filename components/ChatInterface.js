@@ -497,7 +497,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             </AnimatePresence>
         </main>
 
-        <footer ref={footerRef} className="absolute bottom-0 left-0 right-0 w-full bg-gray-50 border-t border-gray-200 z-10">
+        <footer 
+    ref={footerRef} 
+    className="absolute left-0 right-0 w-full bg-gray-50 border-t border-gray-200 z-10 transition-all duration-200"
+    style={{ bottom: `${keyboardOffset}px` }}
+>
             <AnimatePresence>
                 {myTranslationResult && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
