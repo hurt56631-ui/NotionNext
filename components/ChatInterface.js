@@ -10,7 +10,7 @@ import { pinyin } from 'pinyin-pro';
 // 全局样式
 const GlobalScrollbarStyle = () => (
     <style>{`
-        .thin-scrollbar::-webkit-scrollbar { width: 1px; height: 1px; }
+        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
         .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
         .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
