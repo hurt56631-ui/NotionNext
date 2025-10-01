@@ -73,7 +73,7 @@ const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model)
         if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
         const data = await response.json();
         if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content;
-        return JSON.stringify(data); // Fallback
+        return JSON.stringify(data);
     } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
 };
 
@@ -86,7 +86,6 @@ const parseSingleTranslation = (text) => {
     const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text;
     return { translation: firstLine.trim(), backTranslation: "解析失败" };
 };
-
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -104,20 +103,16 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const footerRef = useRef(null);
-  const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
   const searchInputRef = useRef(null);
   const textareaRef = useRef(null);
   const isAtBottomRef = useRef(true);
   const prevMessagesLengthRef = useRef(0);
-
+  
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false,
       fontSize: 16, fontWeight: 'normal',
@@ -127,31 +122,19 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
-  // 1. 键盘避让逻辑
+  // 1. 自动滚动到底部
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-    if (initialViewportHeightRef.current === null) {
-      initialViewportHeightRef.current = window.innerHeight;
-    }
-    const handleViewportChange = () => {
-      const keyboardH = initialViewportHeightRef.current - window.visualViewport.height;
-      setKeyboardHeight(keyboardH > 80 ? keyboardH : 0);
+    const scrollToBottom = (behavior = 'auto') => {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
     };
-    window.visualViewport.addEventListener('resize', handleViewportChange);
-    return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
-  }, []);
-
-  // 2. 消息滚动到底部逻辑
-  useEffect(() => {
     if (isAtBottomRef.current) {
-        const timer = setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 50);
+        // 使用 setTimeout 确保在 DOM 更新后再滚动
+        const timer = setTimeout(() => scrollToBottom('smooth'), 100);
         return () => clearTimeout(timer);
     }
   }, [messages]);
 
-  // 3. 监听对方在线状态
+  // 2. 监听对方在线状态
   useEffect(() => {
     if (!peerUser?.id) return;
     const peerUserRef = doc(db, 'users', peerUser.id);
@@ -160,7 +143,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         const data = docSnap.data();
         const lastSeen = data.lastSeen;
         let isOnline = false;
-        if (lastSeen && typeof lastSeen.toDate === 'function') { // Robust check for Firestore Timestamp
+        if (lastSeen && typeof lastSeen.toDate === 'function') { // Robust check
           const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000;
           isOnline = minutesAgo < 2;
         }
@@ -170,7 +153,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => unsubscribe();
   }, [peerUser?.id]);
 
-  // 4. 消息获取与未读数计算
+  // 3. 监听消息并计算未读数
   useEffect(() => {
     if (!chatId || !user) return;
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
@@ -197,13 +180,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         } 
     }, (err) => console.error("监听消息错误:", err));
     return () => unsub();
-  }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]); // Removed stale dependencies
+  }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
 
-  // 5. 其他 Effects
+  // 4. 其他 Effects
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
-  useEffect(() => { if(footerRef.current) setFooterHeight(footerRef.current.offsetHeight) }, [input, myTranslationResult]);
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
@@ -221,14 +203,18 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     finally { setSending(false); }
   };
   
-  const handleInputFocus = () => { setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 300); };
+  const handleInputFocus = () => {
+      setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+  };
 
   const handleScroll = () => {
     const el = mainScrollRef.current;
     if (el) {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
       isAtBottomRef.current = atBottom;
-      if (atBottom) {
+      if (atBottom && unreadCount > 0) {
         setUnreadCount(0);
       }
     }
@@ -284,11 +270,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto w-full thin-scrollbar px-4"
-        style={{ paddingBottom: `calc(${footerHeight}px + ${keyboardHeight}px)` }}
+        className="flex-1 overflow-y-auto w-full thin-scrollbar px-4 relative"
       >
-        {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
-        <div ref={messagesEndRef} style={{ height: '1px' }} />
+        <div style={{ paddingBottom: `calc(${footerHeight}px)`}}>
+            {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
+            <div ref={messagesEndRef} style={{ height: '1px' }} />
+        </div>
 
         <AnimatePresence>
           {unreadCount > 0 && (
@@ -297,8 +284,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               animate={{ opacity: 1, y: 0 }} 
               exit={{ opacity: 0, y: 20 }}
               onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
-              className="fixed bottom-[100px] right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
-              style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px + 1rem)`}}
+              className="fixed right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
+              style={{ bottom: `calc(${footerHeight}px + 1rem)`}}
             >
               <div className="flex items-center gap-1.5 px-2">
                 <span className="font-bold text-sm">{unreadCount}</span>
@@ -311,8 +298,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
       <footer 
         ref={footerRef} 
-        className="fixed left-0 right-0 bg-gray-50 border-t border-gray-200 z-20 transition-all duration-200 ease-out"
-        style={{ bottom: `${keyboardHeight}px` }}
+        className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-20"
+        style={{ paddingBottom: `${keyboardHeight}px` }}
       >
         <AnimatePresence>
             {myTranslationResult && (
