@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (最终修复版 - 结合了健壮的数据逻辑和完整UI)
+// /components/MessagesPageContent.js (最终修复版 - 解决了 'photoURL' of undefined 崩溃问题)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -36,6 +36,7 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
 const ConversationList = ({ conversations, loading, user, authLoading }) => {
   const router = useRouter();
   const handleConversationClick = (convo) => {
+    // ✅ 增加一个安全检查，即使 otherUser 存在但 id 为空也不跳转
     if (!user?.uid || !convo.otherUser?.id) return;
     router.push(`/messages/${convo.id}`);
   };
@@ -44,15 +45,22 @@ const ConversationList = ({ conversations, loading, user, authLoading }) => {
   if (conversations.length === 0) { return <div className="p-8 text-center text-gray-500">还没有任何私信哦。</div>; }
   return (
     <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-      {conversations.map((convo) => (
-        <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
-          <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
-          <div className="ml-4 flex-1 overflow-hidden">
-            <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
-            <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>{convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-green-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}</div>
-          </div>
-        </li>
-      ))}
+      {conversations.map((convo) => {
+        // ✅ 增加一个安全检查，确保 convo 和 convo.otherUser 存在
+        if (!convo || !convo.otherUser) {
+            // 如果数据不完整，可以渲染一个占位符或直接跳过
+            return null; 
+        }
+        return (
+            <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
+                <div className="ml-4 flex-1 overflow-hidden">
+                    <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
+                    <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>{convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-green-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}</div>
+                </div>
+            </li>
+        );
+      })}
     </ul>
   );
 };
@@ -80,55 +88,57 @@ const MessagesPageContent = () => {
 
     const unsubscribe = onSnapshot(
       chatsQuery,
-      (snapshot) => {
-        // ✅ 采用最健壮的方式：先同步处理所有快照数据，再异步获取用户信息
-        // 这样可以确保即使 getDoc 延迟，核心的 unreadCount 也已经计算完毕
-        
+      async (snapshot) => {
         let currentTotalUnread = 0;
-        const chatsWithUnread = snapshot.docs.map(doc => {
+        
+        // ✅ 核心修复：在第一次处理数据时，就为 otherUser 提供一个临时的占位对象
+        const chatsWithPlaceholders = snapshot.docs.map(doc => {
           const chatData = doc.data();
           const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
           currentTotalUnread += unreadCount;
+          const otherUserId = chatData.members.find((id) => id !== user.uid);
+          
           return {
             id: doc.id,
             ...chatData,
             unreadCount: unreadCount,
+            // 关键修复：无论如何都创建一个 otherUser 对象，避免 undefined
+            otherUser: { 
+                id: otherUserId || null, 
+                displayName: '加载中...', 
+                photoURL: '/img/avatar.svg' 
+            }
           };
         });
 
-        // 立即更新一次状态，让未读数尽快反映出来
-        // 此时 otherUser 可能还是空的，但 unreadCount 是最新的
-        setConversations(prev => {
-            // 合并新旧数据，防止用户信息丢失
-            return chatsWithUnread.map(newChat => {
-                const oldChat = prev.find(c => c.id === newChat.id);
-                return { ...oldChat, ...newChat };
-            });
-        });
+        // 立即用带占位符的数据更新UI，这样页面不会崩溃
+        setConversations(chatsWithPlaceholders);
         setTotalUnreadCount(currentTotalUnread);
-        setLoading(false); // 此时可以结束加载状态，因为核心数据已在
+        setLoading(false);
 
-        // 然后，异步地、不阻塞UI地去获取所有对方用户的信息
-        Promise.all(chatsWithUnread.map(async (chat) => {
-          const otherUserId = chat.members.find((id) => id !== user.uid);
-          if (!otherUserId) return chat; // 如果找不到对方，返回原数据
+        // 然后，在后台异步地获取真实的用户信息
+        const resolvedChats = await Promise.all(chatsWithPlaceholders.map(async (chat) => {
+            // 如果没有 otherUserId，直接返回
+            if (!chat.otherUser.id) return chat;
 
-          try {
-            const userProfileDoc = await getDoc(doc(db, 'users', otherUserId));
-            if (userProfileDoc.exists()) {
-              chat.otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
-            } else {
-              chat.otherUser = { id: otherUserId, displayName: '未知用户', photoURL: '/img/avatar.svg' };
+            try {
+                const userProfileDoc = await getDoc(doc(db, 'users', chat.otherUser.id));
+                if (userProfileDoc.exists()) {
+                    // 如果获取成功，用真实数据覆盖占位符
+                    chat.otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() };
+                } else {
+                    // 如果用户不存在，提供一个明确的“未知用户”状态
+                    chat.otherUser.displayName = '未知用户';
+                }
+            } catch (error) {
+                console.error(`获取用户 ${chat.otherUser.id} 信息失败:`, error);
+                chat.otherUser.displayName = '加载失败';
             }
-          } catch (error) {
-            console.error(`获取用户 ${otherUserId} 信息失败:`, error);
-            chat.otherUser = { id: otherUserId, displayName: '加载失败', photoURL: '/img/avatar.svg' };
-          }
-          return chat;
-        })).then(resolvedChats => {
-            // 当所有用户信息都获取完毕后，再次更新状态，补全用户信息
-            setConversations(resolvedChats.filter(Boolean));
-        });
+            return chat;
+        }));
+        
+        // 当所有真实用户信息获取完毕后，再次更新UI，显示正确的头像和昵称
+        setConversations(resolvedChats.filter(Boolean));
       },
       (error) => { 
         console.error('获取会话列表出错:', error); 
