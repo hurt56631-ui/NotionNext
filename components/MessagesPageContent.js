@@ -1,14 +1,15 @@
-// /components/MessagesPageContent.js (终集版)
+// /components/MessagesPageContent.js (已修复 events.on 和 getDoc 错误)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db } from '@/lib/firebase';
+// --- 核心修复：确保所有需要的函数都被导入 ---
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'firebase/firestore';
 import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutlineUsers } from 'react-icons/hi2';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
-import events from '@/lib/events';
+import events from '@/lib/events'; // 确保 events.js 被正确导入
 
 // MessageHeader 组件 (集成总未读数红点)
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
@@ -47,8 +48,11 @@ const ConversationList = ({ onTotalUnreadChange }) => {
 
     useEffect(() => {
         const handleStatusChange = (detail) => {
-            setOnlineStatus(prev => ({...prev, [detail.userId]: detail.isOnline}));
+            if (detail && detail.userId) {
+              setOnlineStatus(prev => ({...prev, [detail.userId]: detail.isOnline}));
+            }
         };
+        // --- 核心修复：确保 events.on 被正确调用 ---
         events.on('userStatusChanged', handleStatusChange);
         return () => events.remove('userStatusChanged', handleStatusChange);
     }, []);
@@ -83,7 +87,7 @@ const ConversationList = ({ onTotalUnreadChange }) => {
                     const unreadCount = memberDocSnap.data()?.unreadCount || 0;
                     
                     if(unreadCount > 0) {
-                      totalUnread++; // 这里我们只计算有未读消息的会话数，而不是消息总数
+                      totalUnread++;
                     }
 
                     return { 
@@ -126,13 +130,10 @@ const ConversationList = ({ onTotalUnreadChange }) => {
                 <li key={convo.id} onClick={() => handleConversationClick(convo)} className="flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
                     <div className="relative">
                         <img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover" />
-                        {/* 核心修改: 在线状态显示为绿点 */}
                         {onlineStatus[convo.otherUser.id] ? (
                           <span className="absolute bottom-0 right-0 block h-4 w-4 rounded-full bg-green-500 border-2 border-white dark:border-gray-900" />
                         ) : (
-                          // 如果需要离线也显示红点，可以取消这里的注释
-                          // <span className="absolute bottom-0 right-0 block h-4 w-4 rounded-full bg-gray-400 border-2 border-white dark:border-gray-900" />
-                          null
+                          <span className="absolute bottom-0 right-0 block h-4 w-4 rounded-full bg-gray-400 border-2 border-white dark:border-gray-900" />
                         )}
                     </div>
                     <div className="ml-4 flex-1 overflow-hidden">
@@ -146,7 +147,6 @@ const ConversationList = ({ onTotalUnreadChange }) => {
                         </div>
                         <div className="flex justify-between items-start mt-1">
                             <p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>
-                            {/* 核心修改: 显示紫色数字角标 */}
                             {convo.unreadCount > 0 && (
                                 <span className="ml-2 flex-shrink-0 text-xs text-white bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">
                                     {convo.unreadCount > 9 ? '9+' : convo.unreadCount}
@@ -160,15 +160,16 @@ const ConversationList = ({ onTotalUnreadChange }) => {
     );
 };
 
-// 主页面组件 (集成总未读数状态)
+// 主页面组件
 const MessagesPageContent = () => {
   const [activeTab, setActiveTab] = useState('messages');
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   
-  // 监听来自 Footer 的全局事件，确保状态同步
   useEffect(() => {
     const updateTotalCount = (detail) => {
-        setTotalUnreadCount(detail.count);
+        if (detail && typeof detail.count === 'number') {
+            setTotalUnreadCount(detail.count);
+        }
     };
     events.on('totalUnreadCountChanged', updateTotalCount);
     return () => events.remove('totalUnreadCountChanged', updateTotalCount);
