@@ -10,7 +10,7 @@ import { pinyin } from 'pinyin-pro';
 // 全局样式
 const GlobalScrollbarStyle = () => (
     <style>{`
-        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar { width: 1px; height: 1px; }
         .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
         .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
@@ -253,8 +253,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
                 <textarea
                   ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  // --- 核心修复：移除 onFocus 属性 ---
-                  // onFocus={handleInputFocus} 
+                  // onFocus={handleInputFocus}  <- 核心修复：移除 onFocus
                   placeholder="输入消息..."
                   className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
                 />
