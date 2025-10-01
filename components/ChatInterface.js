@@ -1,9 +1,8 @@
-// /components/ChatInterface.js (最终解决方案 - 采用双层包裹结构)
+// /components/ChatInterface.js (最终解决方案 - 采用“全屏滚动 + 悬浮输入框”模式)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { Virtuoso } from "react-virtuoso";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
@@ -20,10 +19,10 @@ const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).p
 const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); return data.choices[0].message.content; } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
 const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim(), }; } console.warn("无法解析AI翻译响应:", text); return { translation: text.trim(), backTranslation: "解析失败" }; };
 
+
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
 
-  // 所有 State 和 Refs 保持不变
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -36,43 +35,88 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [showPinyinFor, setShowPinyinFor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
-  const [atBottom, setAtBottom] = useState(true);
+  
+  // --- 新增: 键盘避让逻辑相关 State 和 Refs ---
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const footerRef = useRef(null);
+  const initialViewportHeightRef = useRef(0);
+  const messagesEndRef = useRef(null);
 
-  const virtuosoRef = useRef(null);
   const searchInputRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // 所有 useEffect 和函数逻辑保持不变
+  // 所有函数逻辑保持不变 (为简洁此处省略)
   const defaultSettings = { autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal', sourceLang: '中文', targetLang: '缅甸语', ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
+  
+  // --- 新增: 键盘避让 useEffect ---
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // 记录初始视窗高度
+    if (initialViewportHeightRef.current === 0) {
+      initialViewportHeightRef.current = window.innerHeight;
+    }
+
+    const handleViewportChange = () => {
+      let calculatedKeyboardHeight = 0;
+      if (window.visualViewport) {
+        // 使用 visualViewport API (更准确)
+        calculatedKeyboardHeight = initialViewportHeightRef.current - window.visualViewport.height;
+      } else {
+        // 兼容旧版浏览器的回退方案
+        if (window.innerHeight < initialViewportHeightRef.current) {
+          calculatedKeyboardHeight = initialViewportHeightRef.current - window.innerHeight;
+        }
+      }
+      // 过滤掉小的resize事件（比如滚动条出现），只响应键盘弹起
+      setKeyboardHeight(calculatedKeyboardHeight > 80 ? calculatedKeyboardHeight : 0);
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
+    } else {
+      window.addEventListener('resize', handleViewportChange);
+      return () => window.removeEventListener('resize', handleViewportChange);
+    }
+  }, []);
+
+  // --- 修改: 滚动到底部的 useEffect ---
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 150); // 稍微增加延迟以确保DOM渲染完毕
+    return () => clearTimeout(timer);
+  }, [messages, keyboardHeight]); // 当消息或键盘高度变化时都触发滚动
+
+  // 其他所有 useEffects 和函数逻辑保持不变
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (!chatId || !user) return; const messagesRef = collection(db, `privateChats/${chatId}/messages`); const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000)); const unsub = onSnapshot(q, (snap) => { const arr = snap.docs.map(d => ({ id: d.id, ...d.data() })); setMessages(arr); if (arr.length > 0) { const last = arr[arr.length - 1]; if (last.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(last.text); if (cfg.autoTranslate) handleTranslateMessage(last); } } }, (err) => console.error("监听消息错误:", err)); return () => unsub(); }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; const scrollHeight = textarea.scrollHeight; textarea.style.height = `${scrollHeight}px`; } }, [input]);
-
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
-
   const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const chatDocRef = doc(db, "privateChats", chatId); const messagesRef = collection(chatDocRef, "messages"); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(chatDocRef, { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
-  const handleInputFocus = () => { setTimeout(() => { virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, align: 'end', behavior: 'smooth' }); }, 300); };
+  const handleInputFocus = () => { setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 300); };
   const handleRecallMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); } };
   const handleDeleteMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await deleteDoc(messageRef); } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); } };
   const sendCorrection = async () => { if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id); try { await updateDoc(messageRef, { correction: { originalText: correctionMode.message.text, correctedText: correctionMode.text.trim(), correctorUid: user.uid, correctedAt: serverTimestamp() } }); setCorrectionMode({ active: false, message: null, text: '' }); } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); } };
   const getMyInputPrompt = (sourceLang, targetLang) => `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。\n要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n请严格遵循以下格式，只返回格式化的翻译结果，不要包含任何额外说明或标签：\n\n**这里是${targetLang}翻译**\n回译：这里是回译成${sourceLang}的内容`;
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   const handleTranslateMessage = async (message) => { setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null); try { const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); setTranslationResult({ messageId: message.id, text: result }); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
-  const handleTranslateMyInput = async () => { if (!input.trim()) return; setIsTranslating(true); setMyTranslations(null); try { const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang); const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const parsedResult = parseSingleTranslation(resultText); setMyTranslationResult(parsedResult); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
+  const handleTranslateMyInput = async () => { if (!input.trim()) return; setIsTranslating(true); setMyTranslationResult(null); try { const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang); const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const parsedResult = parseSingleTranslation(resultText); setMyTranslationResult(parsedResult); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
   const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
-  const MessageRow = ({ message, isLastMessage }) => { const mine = message.uid === user?.uid; const longPressTimer = useRef(); const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight }; const isPeersLastMessage = !mine && isLastMessage; return ( <div className={`flex items-end gap-2 my-2 px-4 ${mine ? "flex-row-reverse" : ""}`}> <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}> {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} </div> {isPeersLastMessage && !message.recalled && ( <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译"> <CircleTranslateIcon /> </button> )} </div> </div> ); };
+  const MessageRow = ({ message }) => { const mine = message.uid === user?.uid; const longPressTimer = useRef(); const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight }; return ( <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}> <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}> {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} </div> </div> </div> ); };
 
   return (
-    // 容器: 采用 Flexbox 垂直布局，并占满整个视窗高度
-    <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
+    // 修改: 整体容器不再使用 Flexbox，而是作为布局上下文
+    <div className="relative w-full h-full overflow-hidden bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
-      {/* 头部: 高度固定 */}
-      <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50 border-b border-gray-200 z-20 relative">
+      {/* 头部: 固定在顶部 */}
+      <header className="absolute top-0 left-0 right-0 h-14 px-4 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-20">
         <AnimatePresence>
             {searchActive ? (
                 <motion.div key="search" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: '100%' }} exit={{ opacity: 0, width: 0 }} className="absolute inset-0 flex items-center px-4 bg-gray-100">
@@ -92,42 +136,24 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         </AnimatePresence>
       </header>
       
-      {/* --- 修改: 采用双层包裹结构 --- */}
-      {/* 外层包裹: 占据所有剩余空间，并且 overflow-hidden 以创建新的布局上下文 */}
-      <div className="flex-1 overflow-hidden relative">
-        {/* 内层包裹: 高度和宽度撑满外层，为 Virtuoso 提供一个稳定的高度参考 */}
-        <div className="relative h-full w-full">
-           <Virtuoso 
-              ref={virtuosoRef} 
-              style={{ height: '100%' }} // 撑满内层包裹
-              className="thin-scrollbar" // 使用自定义滚动条样式
-              data={filteredMessages} 
-              atBottomStateChange={setAtBottom} 
-              followOutput="auto" 
-              itemContent={(index, msg) => (
-                  <MessageRow 
-                      message={msg} 
-                      key={msg.id}
-                      isLastMessage={index === filteredMessages.length - 1}
-                  />
-              )} 
-           />
-           <AnimatePresence>
-              {!atBottom && (
-                  <motion.button 
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-                    onClick={() => virtuosoRef.current.scrollToIndex({ index: messages.length - 1, align: 'end', behavior: 'smooth' })} 
-                    className="absolute bottom-4 right-4 z-10 bg-blue-500 text-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center">
-                      <ArrowDown size={20}/>
-                  </motion.button>
-              )}
-           </AnimatePresence>
-        </div>
-      </div>
-      {/* --- 修改结束 --- */}
+      {/* 内容区: 全屏可滚动，并动态计算 padding-bottom */}
+      <main 
+        className="absolute top-14 left-0 right-0 bottom-0 overflow-y-auto w-full thin-scrollbar px-2"
+        style={{ paddingBottom: `calc(1rem + ${footerRef.current?.offsetHeight || 70}px)` }}
+      >
+        {filteredMessages.map((msg, index) => (
+            <MessageRow message={msg} key={msg.id} isLastMessage={index === filteredMessages.length - 1} />
+        ))}
+        {/* 滚动到底部的锚点 */}
+        <div ref={messagesEndRef} />
+      </main>
 
-      {/* 尾部(输入框): 高度固定 */}
-      <footer className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-10">
+      {/* 尾部(输入框): 固定在底部，并根据键盘高度上移 */}
+      <footer 
+        ref={footerRef} 
+        className="fixed bottom-0 left-0 right-0 z-20 bg-gray-50/80 backdrop-blur-sm border-t border-gray-200 transition-transform duration-200 ease-out"
+        style={{ transform: `translateY(${-keyboardHeight}px)` }}
+      >
         <AnimatePresence>
             {myTranslationResult && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
