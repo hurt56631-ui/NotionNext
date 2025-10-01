@@ -1,39 +1,3 @@
-// /hooks/useHeartbeat.js
-import { useEffect } from 'react';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-
-export function useHeartbeat(userId) {
-  useEffect(() => {
-    if (!userId) return;
-
-    const updateUserHeartbeat = () => {
-      const userDocRef = doc(db, 'users', userId);
-      setDoc(userDocRef, {
-        lastSeen: serverTimestamp()
-      }, { merge: true }).catch(error => {
-        console.error("Heartbeat update failed:", error);
-      });
-    };
-
-    updateUserHeartbeat();
-    const intervalId = setInterval(updateUserHeartbeat, 60 * 1000);
-    return () => clearInterval(intervalId);
-    
-  }, [userId]);
-}```
-
-### 第 2 步：`_app.js` 文件 (确保已集成)
-
-确保您的 `_app.js` 已经正确地调用了 `useHeartbeat`。
-
----
-
-### 第 3 步：最终的、真正完整的 `ChatInterface.js` 代码
-
-请**完整替换**您现有的文件。
-
-```javascript
 // /components/ChatInterface.js (最终、完整、四合一修复版 - 已修复所有已知问题)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
