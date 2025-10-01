@@ -1,4 +1,5 @@
-// pages/community/[id].js (贴吧版 - 加强最终版 - 根据用户需求修改 - 完整重构版)
+// --- START OF FILE: pages/community/[id].js ---
+// (贴吧版 - 加强最终版 - 根据用户需求修改 - 完整重构版)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -14,9 +15,7 @@ import dynamic from 'next/dynamic';
 const ReadAloudIcon = ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.879 15.121A5.002 5.002 0 014 12a5 5 0 011.879-3.879m12.242 0A9 9 0 0021 12a9 9 0 00-2.879 6.121M12 12a3 3 0 100-6 3 3 0 000 6z" /></svg>;
 const LikeIcon = ({ filled, className = "w-5 h-5" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9A2 2 0 0020 4h-4" /></svg>;
 const DislikeIcon = ({ filled, className = "w-5 h-5" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 15v4a3 3 0 003 3l4-9V3H5.72a2 2 0 00-2 1.7l-1.38 9A2 2 0 004 16h4" /></svg>;
-const FavoriteIcon = ({ filled, className = "w-5 h-5" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>;
 const ShareIcon = ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.882 13.255 9 13.11 9 12.897v-1.794c0-.214-.118-.359-.316-.442L4.542 8.75c-.29-.122-.51-.122-.8 0L.316 10.66c-.198.083-.316.228-.316.442v1.794c0 .214.118.359.316.442l3.826 1.643c.29.122.51.122.8 0l3.826-1.643zM21 12a3 3 0 11-6 0 3 3 0 016 0zM12 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
-const TranslateIcon = ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m4 13l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V15z" /></svg>;
 const MoreOptionsIcon = ({ className = "w-6 h-6" }) => <svg className={className} fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>;
 const SettingsIcon = ({ className = "w-5 h-5 mr-2" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.82 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.82 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.82-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.82-3.31 2.37-2.37.568.308 1.157.385 1.79.458z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
 
@@ -67,8 +66,9 @@ const PostDetailPage = () => {
     const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
     const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
 
-    // Data Fetching
+    // Data Fetching & SSR safety check
     useEffect(() => {
+        setIsClient(true); // Set to true once component mounts on the client
         if (id) {
             setLoading(true);
             const fetchPost = async () => {
@@ -77,7 +77,7 @@ const PostDetailPage = () => {
                     const snap = await getDoc(ref);
                     if (snap.exists()) {
                         setPost({ id: snap.id, ...snap.data() });
-                        updateDoc(ref, { viewsCount: increment(1) });
+                        updateDoc(ref, { viewsCount: increment(1) }).catch();
                     } else { setError('帖子不存在或已被删除'); }
                 } catch (e) { setError('加载帖子失败'); }
             };
@@ -86,12 +86,13 @@ const PostDetailPage = () => {
             const unsubscribe = onSnapshot(q, (snap) => {
                 setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 setLoading(false);
-            }, () => setError('加载评论失败'));
+            }, () => {
+                setError('加载评论失败');
+                setLoading(false);
+            });
             return () => unsubscribe();
         }
     }, [id]);
-
-    useEffect(() => { setIsClient(true); }, []);
 
     // Handlers
     const handleCommentSubmit = async (e, parentId = null, replyToUsername = null, inputRef = null) => {
@@ -131,7 +132,6 @@ const PostDetailPage = () => {
     const toggleLike = createToggleHandler('likers', 'likesCount');
     const toggleDislike = createToggleHandler('dislikers', 'dislikesCount');
 
-    // Comments tree structure
     const commentsTree = useMemo(() => {
         const map = {};
         const roots = [];
@@ -321,3 +321,4 @@ const TranslateSettingsModal = ({ onClose }) => {
         </div>
     );
 };
+// --- END OF FILE: pages/community/[id].js ---
