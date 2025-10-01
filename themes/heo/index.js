@@ -133,7 +133,7 @@ const LayoutBase = props => {
       </main>
 
       {/* 页脚 (修改：仅在首页 '/' 显示页脚) */}
-      {router.route === '/' && <Footer />}
+      <Footer />
 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
