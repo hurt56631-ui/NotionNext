@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终、完整、四合一修复版 - 已修复所有已知问题)
+// /components/ChatInterface.js (最终修复版 - 补全 footerRef 定义)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -19,73 +19,15 @@ const GlobalScrollbarStyle = () => (
 );
 
 // 组件与图标
-const CircleTranslateIcon = () => (
-    <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">
-        译
-    </div>
-);
-
-const PinyinText = ({ text, showPinyin }) => {
-    if (!text || typeof text !== 'string') return text;
-    if (showPinyin) {
-        try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); }
-        catch (error) { console.error("Pinyin conversion failed:", error); return text; }
-    }
-    return text;
-};
+const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
+const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
 
 // 功能模块
 const ttsCache = new Map();
-const preloadTTS = async (text) => {
-  if (!text || ttsCache.has(text)) return;
-  try {
-    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('API Error');
-    const blob = await response.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    ttsCache.set(text, audio);
-  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
-};
-
-const playCachedTTS = (text) => {
-  if (!text) return;
-  if (ttsCache.has(text)) {
-    ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
-  } else {
-    preloadTTS(text).then(() => {
-      if (ttsCache.has(text)) {
-        ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
-      }
-    }).catch(e => console.error("TTS preloading failed before play:", e));
-  }
-};
-
-const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => {
-    if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); }
-    const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`;
-    try {
-        const response = await fetch(apiEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] })
-        });
-        if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
-        const data = await response.json();
-        if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content;
-        return JSON.stringify(data);
-    } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
-};
-
-const parseSingleTranslation = (text) => {
-    const translationMatch = text.match(/\*\*(.*?)\*\*/s);
-    const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is);
-    if (translationMatch && backTranslationMatch) {
-        return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() };
-    }
-    const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text;
-    return { translation: firstLine.trim(), backTranslation: "解析失败" };
-};
+const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
+const playCachedTTS = (text) => { if (!text) return; if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }).catch(e => console.error("TTS preloading failed before play:", e)); } };
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
+const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -104,9 +46,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // --- 核心修复：重新添加 footerRef 的定义 ---
+  const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
@@ -123,6 +68,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
+
+  useEffect(() => {
+    if (footerRef.current) {
+      setFooterHeight(footerRef.current.offsetHeight);
+    }
+  }, [input, myTranslationResult]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
@@ -309,16 +260,16 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             </AnimatePresence>
             
             <div className="p-2">
-            <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
+              <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
                 <textarea
-                ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleInputFocus} placeholder="输入消息..."
-                className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
+                  ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleInputFocus} placeholder="输入消息..."
+                  className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
                 />
                 <div className="flex items-center flex-shrink-0 ml-1 self-end">
                     <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">{isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}</button>
                     <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1"><Send size={18} /></button>
                 </div>
-            </div>
+              </div>
             </div>
         </div>
       </footer>
