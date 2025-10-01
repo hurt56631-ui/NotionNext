@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终修复版 - 严格遵循最佳实践)
+// /components/ChatInterface.js (最终修复版 - 补全 footerRef 定义)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,13 +8,21 @@ import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, Ro
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式
-const GlobalScrollbarStyle = () => ( <style>{` .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; } .thin-scrollbar::-webkit-scrollbar-track { background: transparent; } .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; } .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; } .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; } `}</style> );
+const GlobalScrollbarStyle = () => (
+    <style>{`
+        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
+        .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; }
+    `}</style>
+);
 
 // 组件与图标
 const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
 
-// 功能模块 (TTS, AI Helper, etc.)
+// 功能模块
 const ttsCache = new Map();
 const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
 const playCachedTTS = (text) => { if (!text) return; if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }).catch(e => console.error("TTS preloading failed before play:", e)); } };
@@ -38,9 +46,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(70);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
-  
+
+  // --- 核心修复：重新添加 footerRef 的定义 ---
+  const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
@@ -58,34 +69,34 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
-  // 1. 键盘避让逻辑
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (footerRef.current) {
+      setFooterHeight(footerRef.current.offsetHeight);
+    }
+  }, [input, myTranslationResult]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
     if (initialViewportHeightRef.current === null) {
       initialViewportHeightRef.current = window.innerHeight;
     }
     const handleViewportChange = () => {
-      let calculatedKeyboardHeight = 0;
-      if (window.visualViewport) {
-        calculatedKeyboardHeight = initialViewportHeightRef.current - window.visualViewport.height;
-      }
-      setKeyboardHeight(calculatedKeyboardHeight > 80 ? calculatedKeyboardHeight : 0);
+      const keyboardH = initialViewportHeightRef.current - window.visualViewport.height;
+      setKeyboardHeight(keyboardH > 80 ? keyboardH : 0);
     };
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleViewportChange);
-      return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
-    }
+    window.visualViewport.addEventListener('resize', handleViewportChange);
+    return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
   }, []);
 
-  // 2. 消息滚动到底部逻辑
   useEffect(() => {
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [messages, keyboardHeight]);
+    if (isAtBottomRef.current) {
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
 
-  // 3. 监听对方在线状态
   useEffect(() => {
     if (!peerUser?.id) return;
     const peerUserRef = doc(db, 'users', peerUser.id);
@@ -104,7 +115,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => unsubscribe();
   }, [peerUser?.id]);
 
-  // 4. 消息获取与未读数计算
   useEffect(() => {
     if (!chatId || !user) return;
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
@@ -172,14 +182,15 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const handleTranslateMyInput = async () => { if (!input.trim()) return; setIsTranslating(true); setMyTranslationResult(null); try { const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang); const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const parsedResult = parseSingleTranslation(resultText); setMyTranslationResult(parsedResult); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
+
   const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
   const MessageRow = ({ message }) => { const mine = message.uid === user?.uid; const longPressTimer = useRef(); const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight }; return ( <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}> <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}> {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} </div> </div> </div> ); };
 
   return (
-    <div className="relative flex flex-col h-full w-full overflow-hidden bg-white text-black" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
-      <header className="relative z-20 flex-shrink-0 p-3 h-14 flex justify-between items-center bg-gray-50/80 text-gray-900 border-b border-gray-200/80 backdrop-blur-lg">
+      <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-30">
         <AnimatePresence>
             {searchActive ? (
                 <motion.div key="search" className="absolute inset-0 flex items-center px-4 bg-gray-100">
@@ -212,10 +223,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="relative z-10 flex-1 w-full overflow-y-auto overflow-x-hidden p-4 thin-scrollbar"
+        className="flex-1 overflow-y-auto w-full thin-scrollbar px-4 relative"
       >
-        {messages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
-        <div ref={messagesEndRef} style={{ height: '1px' }}/>
+        <div style={{ paddingBottom: footerHeight + 10 }}>
+            {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
+            <div ref={messagesEndRef} style={{ height: '1px' }} />
+        </div>
 
         <AnimatePresence>
           {unreadCount > 0 && (
@@ -225,7 +238,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               exit={{ opacity: 0, y: 20 }}
               onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
               className="fixed right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
-              style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px + 1rem)` }}
+              style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px + 1rem)`}}
             >
               <div className="flex items-center gap-1.5 px-2">
                 <span className="font-bold text-sm">{unreadCount}</span>
@@ -238,7 +251,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
       <footer 
         ref={footerRef} 
-        className="relative z-20 flex-shrink-0 bg-gray-50 border-t border-gray-200 transition-all duration-200 ease-out"
+        className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-20"
         style={{ paddingBottom: `${keyboardHeight}px` }}
       >
         <AnimatePresence>
