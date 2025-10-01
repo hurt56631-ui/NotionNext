@@ -1,3 +1,5 @@
+// /components/Footer.js (已按要求修改)
+
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
 import PoweredBy from '@/components/PoweredBy'
@@ -9,7 +11,7 @@ import React, { useState, useEffect } from 'react'
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 import { useAuth } from '@/lib/AuthContext'
-import { useMessages } from '@/lib/MessageContext' 
+import { useMessages } from '@/lib/MessageContext' // <-- 导入 useMessages
 import dynamic from 'next/dynamic'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
@@ -17,8 +19,8 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 const Footer = () => {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const { totalUnreadCount } = useMessages(); 
-  
+  const { totalUnreadCount } = useMessages(); // <-- 直接从 Context 获取总未read数
+
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [isDrawerOpen, setDrawerOpen] = useState(false)
 
@@ -32,81 +34,62 @@ const Footer = () => {
   const handleAuthRedirect = (e) => { if (!loading && !user) { e.preventDefault(); setShowLoginModal(true); } };
   const showDesktopFooter = router.pathname === '/';
 
-  // 定义导航项数据
-  const navItems = [
-    { path: '/', icon: 'fas fa-home', text: '主页' },
-    { path: '/ai-assistant', icon: 'fas fa-robot', text: 'AI助手' },
-    { path: '/community', icon: 'fas fa-users', text: '社区' },
-    { path: '/messages', icon: 'fas fa-comment-alt', text: '消息' },
-    { path: '/me', icon: 'fas fa-user', text: '我' },
-  ];
+  // --- 颜色和样式定义 ---
+  const defaultColor = 'text-gray-500 dark:text-gray-400';
+  const activeColor = 'text-purple-500 dark:text-purple-400';
 
   return (
     <>
       {showDesktopFooter && (
-        <footer className='relative flex-shrink-0 bg-white dark:bg-[#1a191d] ...'>
-          {/* ... 桌面端页脚内容不变 ... */}
+        <footer className='relative flex-shrink-0 bg-white dark:bg-[#1a191d] text-gray-600 dark:text-gray-400 justify-center text-center m-auto p-6 text-sm leading-6'>
+            {/* ... 桌面端页脚内容不变 ... (为了完整性，这里可以填充原有内容) */}
+            <div className="w-full">
+                 <span>
+                    <SocialButton />
+                    <br />
+                    <CopyRightDate />
+                    <br />
+                    <BeiAnGongAn />
+                    <PoweredBy />
+                 </span>
+            </div>
         </footer>
       )}
 
       {showBottomNav && (
-        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-14 flex justify-around items-center px-2'>
-          {navItems.map((item) => {
-            // 判断是否为当前选中页面
-            const isActive = router.pathname === item.path;
-            // 处理 AI 助手的特殊点击事件
-            if (item.path === '/ai-assistant') {
-              return (
-                <button
-                  key={item.path}
-                  onClick={handleOpenDrawer}
-                  className='flex flex-col items-center text-xs px-2 py-1'
-                >
-                  <<i
-                    className={`${item.icon} text-lg ${
-                      isActive ? 'text-blue-500' : 'text-gray-800 dark:text-gray-200'
-                    }`}
-                  ></</i>
-                  <span
-                    className={`${
-                      isActive ? 'text-blue-500' : 'text-gray-800 dark:text-gray-200'
-                    }`}
-                  >
-                    {item.text}
-                  </span>
-                </button>
-              );
-            }
-            // 处理需要权限重定向的导航项（消息、我）
-            const hasAuthRedirect = item.path === '/messages' || item.path === '/me';
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                onClick={hasAuthRedirect ? handleAuthRedirect : undefined}
-                className='flex flex-col items-center text-xs px-2 py-1 relative'
-              >
-                {item.path === '/messages' && totalUnreadCount > 0 && (
-                  <span className='absolute top-0 right-1.5 flex h-2 w-2'>
+        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-20 flex justify-around items-center px-2'>
+          
+          <Link href='/' className={`flex flex-col items-center ${router.pathname === '/' ? activeColor : defaultColor} px-2 py-1`}>
+            <i className='fas fa-home text-xl'></i>
+            <span className='text-sm mt-1'>主页</span>
+          </Link>
+          
+          <button onClick={handleOpenDrawer} className={`flex flex-col items-center ${defaultColor} px-2 py-1`}>
+            <i className='fas fa-robot text-xl'></i>
+            <span className='text-sm mt-1'>AI助手</span>
+          </button>
+          
+          <Link href='/community' className={`flex flex-col items-center ${router.pathname === '/community' ? activeColor : defaultColor} px-2 py-1`}>
+            <i className='fas fa-users text-xl'></i>
+            <span className='text-sm mt-1'>社区</span>
+          </Link>
+          
+          <Link href='/messages' onClick={handleAuthRedirect} className={`flex flex-col items-center ${router.pathname === '/messages' ? activeColor : defaultColor} px-2 py-1 relative`}>
+              {totalUnreadCount > 0 && (
+                  <span className='absolute top-0 right-1.5 flex h-2.5 w-2.5'>
                     <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75'></span>
-                    <span className='relative inline-flex rounded-full h-2 w-2 bg-green-500'></span>
+                    <span className='relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500'></span>
                   </span>
-                )}
-                <<i
-                  className={`${item.icon} text-lg ${
-                    isActive ? 'text-blue-500' : 'text-gray-800 dark:text-gray-200'
-                  }`}
-                ></</i>
-                <span
-                  className={`${
-                    isActive ? 'text-blue-500' : 'text-gray-800 dark:text-gray-200'
-                  }`}
-                >
-                  {item.text}
-                </span>
-              </Link>
-            );
-          })}
+              )}
+              <i className='fas fa-comment-alt text-xl'></i>
+              <span className='text-sm mt-1'>消息</span>
+          </Link>
+          
+          <Link href='/me' onClick={handleAuthRedirect} className={`flex flex-col items-center ${router.pathname === '/me' ? activeColor : defaultColor} px-2 py-1`}>
+            <i className='fas fa-user text-xl'></i>
+            <span className='text-sm mt-1'>我</span>
+          </Link>
+
         </div>
       )}
 
