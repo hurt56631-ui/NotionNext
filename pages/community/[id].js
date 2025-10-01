@@ -1,6 +1,6 @@
-// pages/community/[id].js (贴吧版 - 加强最终版 - 根据用户需求修改)
+// pages/community/[id].js (新拟物化 + 抖音评论区风格 - 最终版)
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import {
   doc, getDoc, collection, query, where, orderBy, onSnapshot,
@@ -10,531 +10,603 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 
-// --- Icon Components ---
-const ReadAloudIcon = ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.879 15.121A5.002 5.002 0 014 12a5 5 0 011.879-3.879m12.242 0A9 9 0 0021 12a9 9 0 00-2.879 6.121M12 12a3 3 0 100-6 3 3 0 000 6z" /></svg>;
-const LikeIcon = ({ filled, className = "w-6 h-6" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9A2 2 0 0020 4h-4" /></svg>;
-const DislikeIcon = ({ filled, className = "w-6 h-6" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 15v4a3 3 0 003 3l4-9V3H5.72a2 2 0 00-2 1.7l-1.38 9A2 2 0 004 16h4" /></svg>;
-const FavoriteIcon = ({ filled, className = "w-6 h-6" }) => <svg className={className} fill={filled ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>;
-const ShareIcon = ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v12" /></svg>;
-const TranslateIcon = ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m4 13l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V15z" /></svg>;
-const MoreOptionsIcon = ({ className = "w-6 h-6" }) => <svg className={className} fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>;
-
+// --- Dynamic Imports for Client-Side Components ---
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-/** === TTS 缓存与函数 === */
-const ttsCache = new Map();
-const preloadTTS = async (text) => {
-  if (ttsCache.has(text)) return;
-  try {
-    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('API Error');
-    const blob = await response.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    ttsCache.set(text, audio);
-  } catch (error) {
-    console.error(`预加载 "${text}" 失败:`, error);
-  }
-};
-const playCachedTTS = (text) => {
-  if (ttsCache.has(text)) {
-    ttsCache.get(text).play();
-  } else {
-    preloadTTS(text).then(() => {
-      if (ttsCache.has(text)) ttsCache.get(text).play();
-    });
-  }
+// --- TTS (Text-to-Speech) Functions ---
+const playTTS = (text) => {
+  if (!text) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  speechSynthesis.speak(utterance);
 };
 
-/** 解析视频 URL */
-const parseVideoUrl = (post) => {
-  if (!post) return null;
-  if (post.videoUrl) {
-    try { new URL(post.videoUrl); return post.videoUrl; } catch {}
-  }
-  const urls = post.content?.match(/https?:\/\/[^\s<>"']+/g) || [];
-  const patterns = [/youtu/, /vimeo/, /tiktok/, /facebook/, /twitch/, /dailymotion/, /bilibili/, /\.(mp4|webm|ogg|mov)$/i];
-  return urls.find(u => patterns.some(p => p.test(u))) || null;
-};
-const removeUrlFromText = (text, url) => text?.replace(url, '').trim() || '';
 
+// --- Custom Hook for Long Press ---
+const useLongPress = (callback = () => {}, ms = 300) => {
+  const [startLongPress, setStartLongPress] = useState(false);
+  const timerRef = useRef();
+  const isLongPress = useRef(false);
+
+  useEffect(() => {
+    if (startLongPress) {
+      isLongPress.current = false;
+      timerRef.current = setTimeout(() => {
+        isLongPress.current = true;
+        callback();
+      }, ms);
+    } else {
+      clearTimeout(timerRef.current);
+    }
+
+    return () => {
+      clearTimeout(timerRef.current);
+    };
+  }, [startLongPress, ms, callback]);
+  
+  const start = useCallback((e) => {
+    // prevent context menu on desktop
+    e.preventDefault(); 
+    setStartLongPress(true);
+  }, []);
+  const stop = useCallback((e, wasClicked = false) => {
+    setStartLongPress(false);
+    if (wasClicked && !isLongPress.current) {
+        // This can be used to handle normal clicks if needed
+    }
+  }, []);
+
+  return {
+    onMouseDown: start,
+    onMouseUp: stop,
+    onMouseLeave: stop,
+    onTouchStart: start,
+    onTouchEnd: stop,
+  };
+};
+
+
+// --- Main Page Component ---
 const PostDetailPage = () => {
   const router = useRouter();
   const { id } = router.query;
   const { user, loading: authLoading } = useAuth();
+
+  // State Management
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [commentContent, setCommentContent] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showAllComments, setShowAllComments] = useState(false);
-  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [showShareMenu, setShowShareMenu] = useState(false);
-  const [showTranslateSettings, setShowTranslateSettings] = useState(false);
-  const [translatedContent, setTranslatedContent] = useState({ post: null, comments: {} });
+  const [commentSort, setCommentSort] = useState('默认');
+  const [showLongPressMenu, setShowLongPressMenu] = useState(false);
+  const [longPressedComment, setLongPressedComment] = useState(null);
 
-  const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
-  const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
-
-  const fetchPost = useCallback(async () => {
+  // --- Data Fetching ---
+  useEffect(() => {
     if (!id) return;
-    try {
-      const ref = doc(db, 'posts', id);
-      const snap = await getDoc(ref);
+
+    setLoading(true);
+
+    // Fetch Post
+    const postRef = doc(db, 'posts', id);
+    const unsubPost = onSnapshot(postRef, (snap) => {
       if (snap.exists()) {
-        const postData = { id: snap.id, ...snap.data() };
-        setPost(postData);
-        if (!postData.viewsCount) {
-             updateDoc(ref, { viewsCount: 1 });
-        } else {
-             updateDoc(ref, { viewsCount: increment(1) });
-        }
+        setPost({ id: snap.id, ...snap.data() });
       } else {
         setError('帖子不存在或已被删除');
       }
-    } catch (e) {
+    }, (e) => {
       console.error(e);
       setError('加载帖子失败');
-    }
-  }, [id]);
+    });
 
-  const fetchComments = useCallback(() => {
-    if (!id) return () => {};
-    const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
-    return onSnapshot(q, (snap) => {
+    // Fetch Comments
+    const commentsQuery = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'desc'));
+    const unsubComments = onSnapshot(commentsQuery, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setComments(data);
       setLoading(false);
+    }, (e) => {
+      console.error(e);
+      setLoading(false);
     });
+    
+    // Increment view count
+    getDoc(postRef).then(snap => {
+        if(snap.exists()) updateDoc(postRef, { viewsCount: increment(1) });
+    });
+
+
+    return () => {
+      unsubPost();
+      unsubComments();
+    };
   }, [id]);
 
-  useEffect(() => {
-    if (id) {
-      setLoading(true);
-      fetchPost();
-      const unsub = fetchComments();
-      return () => unsub();
-    }
-  }, [id, fetchPost, fetchComments]);
-
-  const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
-    e.preventDefault();
-    const text = parentId ? inputRef?.current?.value : commentContent;
-    if (!text || !text.trim()) return;
+  // --- Interaction Handlers ---
+  const handleInteraction = async (action, targetId, type) => {
     if (!user) return setShowLoginModal(true);
-    try {
-      await addDoc(collection(db, 'comments'), {
-        postId: id,
-        parentId,
-        content: text.trim(),
-        authorId: user.uid,
-        authorName: user.displayName || '匿名',
-        authorAvatar: user.photoURL,
-        createdAt: serverTimestamp()
-      });
-      if (parentId && inputRef?.current) inputRef.current.value = '';
-      else setCommentContent('');
-    } catch (err) {
-      console.error(err);
-      alert('评论失败');
-    }
-  };
 
-  const toggleLike = async (targetId, type = 'post') => {
-    if (!user || !targetId) return setShowLoginModal(true);
+    const ref = doc(db, type === 'post' ? 'posts' : 'comments', targetId);
+    const target = type === 'post' ? post : comments.find(c => c.id === targetId);
+    if (!target) return;
+
+    const field = action === 'like' ? 'likers' : 'dislikers';
+    const countField = action === 'like' ? 'likesCount' : 'dislikesCount';
     
-    const ref = doc(db, type === 'post' ? 'posts' : 'comments', targetId);
-    const target = type === 'post' ? post : comments.find(c => c.id === targetId);
-    if (!target) return;
-
-    const hasLiked = target.likers?.includes(user.uid);
-    const likers = target.likers || [];
-    const likesCount = target.likesCount || 0;
-
+    const hasInteracted = target[field]?.includes(user.uid);
+    const currentArray = target[field] || [];
+    
     try {
-      if (hasLiked) {
+      if (hasInteracted) {
         await updateDoc(ref, {
-          likesCount: increment(-1),
-          likers: likers.filter(uid => uid !== user.uid)
+          [countField]: increment(-1),
+          [field]: currentArray.filter(uid => uid !== user.uid)
         });
       } else {
         await updateDoc(ref, {
-          likesCount: increment(1),
-          likers: [...likers, user.uid]
+          [countField]: increment(1),
+          [field]: [...currentArray, user.uid]
         });
       }
-    } catch (e) { console.error('点赞失败:', e); }
+    } catch (e) { console.error(`${action} failed:`, e); }
   };
-
-  const toggleDislike = async (targetId, type = 'post') => {
-    if (!user || !targetId) return setShowLoginModal(true);
-
-    const ref = doc(db, type === 'post' ? 'posts' : 'comments', targetId);
-    const target = type === 'post' ? post : comments.find(c => c.id === targetId);
-    if (!target) return;
-
-    const hasDisliked = target.dislikers?.includes(user.uid);
-    const dislikers = target.dislikers || [];
-    const dislikesCount = target.dislikesCount || 0;
-
-    try {
-      if (hasDisliked) {
-        await updateDoc(ref, {
-          dislikesCount: increment(-1),
-          dislikers: dislikers.filter(uid => uid !== user.uid)
-        });
-      } else {
-        await updateDoc(ref, {
-          dislikesCount: increment(1),
-          dislikers: [...dislikers, user.uid]
-        });
-      }
-    } catch (e) { console.error('踩失败:', e); }
-  };
-  
-  const hasLiked = user && post?.likers?.includes(user.uid);
-  const hasDisliked = user && post?.dislikers?.includes(user.uid);
-  const [hasFavorited, setHasFavorited] = useState(false);
-
-    useEffect(() => {
-        if (user && post) {
-            const checkFavorite = async () => {
-                const userDocRef = doc(db, 'users', user.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    const favorites = userDoc.data().favorites || [];
-                    setHasFavorited(favorites.includes(post.id));
-                }
-            };
-            checkFavorite();
-        }
-    }, [user, post]);
 
   const toggleFavorite = async () => {
     if (!user || !post) return setShowLoginModal(true);
+    // This logic assumes user data is available via `useAuth` context, 
+    // including a `favorites` array.
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
     const favorites = userDoc.exists() ? userDoc.data().favorites || [] : [];
-    
+    const hasFavorited = favorites.includes(post.id);
+
     try {
       if (hasFavorited) {
         await updateDoc(userRef, { favorites: favorites.filter(pid => pid !== post.id) });
-        setHasFavorited(false);
       } else {
         await updateDoc(userRef, { favorites: [...favorites, post.id] });
-        setHasFavorited(true);
       }
     } catch (e) { console.error(e); }
   };
-
-  const deletePost = async () => {
-    if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
-    if (confirm('确认删除此帖子吗？')) {
-      await deleteDoc(doc(db, 'posts', id));
-      router.push('/community');
-    }
+  
+  const handleCommentSubmit = async (content, parentId = null) => {
+      if (!content.trim()) return;
+      if (!user) return setShowLoginModal(true);
+      try {
+        await addDoc(collection(db, 'comments'), {
+          postId: id,
+          parentId,
+          content: content.trim(),
+          authorId: user.uid,
+          authorName: user.displayName || '匿名用户',
+          authorAvatar: user.photoURL || '/img/avatar.svg',
+          createdAt: serverTimestamp(),
+          likesCount: 0,
+          dislikesCount: 0,
+          likers: [],
+          dislikers: []
+        });
+        return true; // Indicate success
+      } catch (err) {
+        console.error(err);
+        alert('评论失败');
+        return false; // Indicate failure
+      }
   };
   
-  const handleTranslate = async () => {
-        const settings = JSON.parse(localStorage.getItem('translateSettings') || '{}');
-        if (!settings.apiKey || !settings.apiUrl) {
-            alert('请先在翻译设置中配置API密钥和接口地址');
-            setShowTranslateSettings(true);
-            return;
-        }
+  const handleCommentDelete = async (commentId) => {
+    if (!commentId) return;
+    const commentToDelete = comments.find(c => c.id === commentId);
+    if (!user || (user.uid !== commentToDelete?.authorId && !user.isAdmin)) {
+      alert("无权删除");
+      return;
+    }
+    if (confirm("确定要删除这条评论吗？")) {
+        await deleteDoc(doc(db, 'comments', commentId));
+        setShowLongPressMenu(false);
+        setLongPressedComment(null);
+    }
+  }
 
-        try {
-            // 翻译帖子正文
-            const postRes = await callTranslateAPI(cleanedContent, settings);
-            
-            // 翻译评论
-            const translatedComments = {};
-            for (const comment of comments) {
-                const commentRes = await callTranslateAPI(comment.content, settings);
-                translatedComments[comment.id] = commentRes;
-            }
+  // --- Long Press Logic ---
+  const openLongPressMenu = (comment) => {
+    setLongPressedComment(comment);
+    setShowLongPressMenu(true);
+  };
+  
+  // --- Memoized Sorting and Filtering ---
+  const sortedComments = (useCallback(() => {
+    let sorted = [...comments];
+    switch (commentSort) {
+      case '最新':
+        sorted.sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+        break;
+      case '热门':
+        sorted.sort((a, b) => (b.likesCount || 0) - (a.likesCount || 0));
+        break;
+      case '默认':
+      default:
+        // Default is descending by time, which is the initial query
+        break;
+    }
+    return sorted;
+  }, [comments, commentSort]));
 
-            setTranslatedContent({ post: postRes, comments: translatedComments });
-        } catch (error) {
-            console.error('翻译失败:', error);
-            alert(`翻译失败: ${error.message}`);
-        }
-    };
+  const mainComments = sortedComments().filter(c => !c.parentId);
+  const replies = sortedComments().filter(c => c.parentId);
 
-    const callTranslateAPI = async (text, settings) => {
-        const { apiUrl, model, apiKey, sourceLang, targetLang } = settings;
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'system', content: `Translate the following text from ${sourceLang} to ${targetLang}.` },
-                    { role: 'user', content: text }
-                ]
-            })
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || '请求翻译API失败');
-        }
-        const data = await response.json();
-        return data.choices[0].message.content;
-    };
+  // --- Render Logic ---
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <p>加载中...</p>
+      </div>
+    );
+  }
+  
+  if (error) {
+     return (
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <p>{error}</p>
+      </div>
+    );
+  }
 
-
-  if (authLoading || loading) return <LayoutBaseDynamic><div className="flex justify-center items-center h-screen"><p>加载中...</p></div></LayoutBaseDynamic>;
-  if (error || !post) return <LayoutBaseDynamic><div className="flex justify-center items-center h-screen"><p>{error}</p></div></LayoutBaseDynamic>;
 
   return (
     <LayoutBaseDynamic>
-      <div className="container mx-auto max-w-3xl py-6 px-4 sm:px-0">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 mb-8 relative">
-          <div className="flex justify-between items-start">
-            <h1 className="text-2xl md:text-3xl font-bold mb-2 pr-10">{post.title}</h1>
-            <div className="relative">
-              <button onClick={() => setShowOptionsMenu(!showOptionsMenu)} className="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-2 rounded-full">
-                <MoreOptionsIcon />
-              </button>
-              {showOptionsMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border dark:border-gray-700">
-                  <ul className="py-1">
-                    {(user?.isAdmin || user?.uid === post?.authorId) && <>
-                      <li><a href="#" onClick={(e) => { e.preventDefault(); deletePost(); setShowOptionsMenu(false); }} className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">删除</a></li>
-                      <li><a href="#" onClick={(e) => { e.preventDefault(); alert("修改功能待开发"); setShowOptionsMenu(false);}} className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">修改</a></li>
-                    </>}
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); toggleFavorite(); setShowOptionsMenu(false); }} className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">{hasFavorited ? '取消收藏' : '收藏'}</a></li>
-                    <li><a href="#" onClick={(e) => { e.preventDefault(); setShowTranslateSettings(true); setShowOptionsMenu(false); }} className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">翻译设置</a></li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 space-x-2 mb-4">
-            <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName} className="w-8 h-8 rounded-full" />
-            <span>{post.authorName}</span>
-            <span>· {post.createdAt?.toDate?.().toLocaleString() || '未知时间'}</span>
-            <span>· 浏览 {post.viewsCount || 0}</span>
-          </div>
-          {videoUrl && <div className="my-4"><VideoEmbed url={videoUrl} controls /></div>}
-          <div className="prose dark:prose-invert max-w-none my-4">
-            <PostContent content={translatedContent.post || cleanedContent} />
-          </div>
+      <div className="relative w-full min-h-screen bg-gray-50 text-gray-800">
+        {/* Optional decorative background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-50/50 via-gray-100/40 to-gray-200/30"></div>
 
-          <div className="flex items-center justify-between text-gray-600 dark:text-gray-400 mt-6 border-t dark:border-gray-700 pt-4">
-            <div className="flex space-x-4">
-              <button onClick={() => playCachedTTS(cleanedContent)} className="flex items-center space-x-1 hover:text-blue-500"><ReadAloudIcon /><span>朗读</span></button>
-              <button onClick={handleTranslate} className="flex items-center space-x-1 hover:text-green-500"><TranslateIcon /><span>翻译</span></button>
-            </div>
-            <div className="flex space-x-4">
-              <button onClick={() => toggleLike(post.id, 'post')} className={`flex items-center space-x-1 ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}><LikeIcon filled={hasLiked} /><span>{post.likesCount || 0}</span></button>
-              <button onClick={() => toggleDislike(post.id, 'post')} className={`flex items-center space-x-1 ${hasDisliked ? 'text-blue-500' : 'hover:text-blue-500'}`}><DislikeIcon filled={hasDisliked} /><span>{post.dislikesCount || 0}</span></button>
-              <div className="relative">
-                 <button onClick={() => setShowShareMenu(!showShareMenu)} className="flex items-center space-x-1 hover:text-indigo-500"><ShareIcon /><span>分享</span></button>
-                 {showShareMenu && <SharePanel url={window.location.href} title={post.title} onClose={() => setShowShareMenu(false)} />}
-              </div>
-              <button onClick={toggleFavorite} className={`flex items-center space-x-1 ${hasFavorited ? 'text-yellow-500' : 'hover:text-yellow-500'}`}><FavoriteIcon filled={hasFavorited} /><span>收藏</span></button>
-            </div>
-          </div>
-        </div>
+        <TopNavBar />
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
-          <h2 className="text-xl font-bold mb-4">评论 ({comments.length})</h2>
-          
-          <div className="space-y-4">
-            {(showAllComments ? comments.filter(c => !c.parentId) : comments.filter(c => !c.parentId).slice(0, 3))
-              .map(c => (
-                <CommentItem key={c.id} comment={c} comments={comments} onReply={handleCommentSubmit} user={user} 
-                onLike={toggleLike} onDislike={toggleDislike} translatedContent={translatedContent.comments[c.id]}/>
-              ))}
-          </div>
-
-          {comments.filter(c => !c.parentId).length > 3 && (
-            <button onClick={() => setShowAllComments(!showAllComments)} className="text-blue-500 text-sm mt-4 w-full text-center">
-              {showAllComments ? '收起部分评论' : '查看全部评论'}
-            </button>
-          )}
-
-          <form onSubmit={e => handleCommentSubmit(e, null)} className="mt-6 flex items-start space-x-3">
-            <img src={user?.photoURL || '/img/avatar.svg'} className="w-10 h-10 rounded-full"/>
-            <div className="flex-grow">
-               <textarea
-                value={commentContent}
-                onChange={e => setCommentContent(e.target.value)}
-                placeholder={user ? "发表你的看法..." : "请登录后评论"}
-                className="w-full border rounded-md p-2 bg-gray-100 dark:bg-gray-700 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows="3"
-                disabled={!user}
-              />
-              <div className="text-right mt-2">
-                 <button type="submit" disabled={!user || !commentContent.trim()} className="px-4 py-2 bg-blue-500 text-white rounded-md disabled:bg-gray-400 disabled:cursor-not-allowed">发表评论</button>
-              </div>
-            </div>
-          </form>
-        </div>
+        <main className="max-w-4xl mx-auto px-4 pt-20 pb-28 relative z-10">
+            {post && (
+                <PostContentCard
+                    post={post}
+                    user={user}
+                    onLike={() => handleInteraction('like', post.id, 'post')}
+                    onDislike={() => handleInteraction('dislike', post.id, 'post')}
+                    onFavorite={toggleFavorite}
+                />
+            )}
+            
+            {comments && (
+                <CommentArea
+                    comments={mainComments}
+                    replies={replies}
+                    sortOrder={commentSort}
+                    setSortOrder={setCommentSort}
+                    onInteraction={handleInteraction}
+                    onReplySubmit={handleCommentSubmit}
+                    onLongPress={openLongPressMenu}
+                    user={user}
+                />
+            )}
+        </main>
+        
+        <CommentInputFooter user={user} onSubmit={handleCommentSubmit} />
+        
+        {showLongPressMenu && longPressedComment && (
+            <LongPressMenu
+                comment={longPressedComment}
+                user={user}
+                onClose={() => setShowLongPressMenu(false)}
+                onDelete={() => handleCommentDelete(longPressedComment.id)}
+                onLike={() => handleInteraction('like', longPressedComment.id, 'comment')}
+                onDislike={() => handleInteraction('dislike', longPressedComment.id, 'comment')}
+            />
+        )}
+        
+        <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
       </div>
-      <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-      {showTranslateSettings && <TranslateSettingsModal onClose={() => setShowTranslateSettings(false)} />}
     </LayoutBaseDynamic>
   );
 };
 
 export default PostDetailPage;
 
-const CommentItem = ({ comment, comments, onReply, user, onLike, onDislike, translatedContent }) => {
-  const [showReply, setShowReply] = useState(false);
-  const [showAllReplies, setShowAllReplies] = useState(false);
-  const inputRef = useRef(null);
-  const childComments = comments.filter(c => c.parentId === comment.id);
 
-  const hasLiked = user && comment.likers?.includes(user.uid);
-  const hasDisliked = user && comment.dislikers?.includes(user.uid);
+// --- UI Sub-components ---
 
-  return (
-    <div className="flex space-x-3">
-      <img src={comment.authorAvatar || '/img/avatar.svg'} alt={comment.authorName} className="w-10 h-10 rounded-full" />
-      <div className="flex-1">
-        <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2">
-          <span className="font-semibold text-sm">{comment.authorName}</span>
-          <p className="text-gray-800 dark:text-gray-200 my-1">{translatedContent || comment.content}</p>
-        </div>
-        <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400 mt-1 pl-2">
-          <span>{comment.createdAt?.toDate?.().toLocaleString() || ''}</span>
-          <button onClick={() => onLike(comment.id, 'comment')} className={`flex items-center space-x-1 ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}><LikeIcon filled={hasLiked} className="w-4 h-4" /><span>{comment.likesCount || 0}</span></button>
-          <button onClick={() => onDislike(comment.id, 'comment')} className={`flex items-center space-x-1 ${hasDisliked ? 'text-blue-500' : 'hover:text-blue-500'}`}><DislikeIcon filled={hasDisliked} className="w-4 h-4" /><span>{comment.dislikesCount || 0}</span></button>
-          <button onClick={() => setShowReply(!showReply)} className="hover:underline">回复</button>
-          <button onClick={() => playCachedTTS(comment.content)} className="hover:text-blue-500"><ReadAloudIcon className="w-4 h-4" /></button>
-        </div>
-
-        {showReply && (
-          <form onSubmit={(e) => { onReply(e, comment.id, inputRef); setShowReply(false); }} className="mt-2 flex space-x-2">
-            <textarea ref={inputRef} placeholder={`回复 @${comment.authorName}`} className="flex-grow border rounded-md p-2 text-sm bg-gray-100 dark:bg-gray-700 dark:border-gray-600" rows="2" />
-            <button type="submit" className="px-3 py-1 bg-blue-500 text-white rounded-md self-start">提交</button>
-          </form>
-        )}
-        
-        {childComments.length > 0 && (
-           <div className="mt-3 space-y-3 border-l-2 border-gray-200 dark:border-gray-600 pl-4">
-             {(showAllReplies ? childComments : childComments.slice(0, 3)).map(child => (
-               <CommentReplyItem key={child.id} comment={child} onLike={onLike} onDislike={onDislike} user={user} />
-             ))}
-             {childComments.length > 3 && (
-               <button onClick={() => setShowAllReplies(!showAllReplies)} className="text-xs text-blue-500 hover:underline">
-                 {showAllReplies ? '收起回复' : `展开剩余 ${childComments.length - 3} 条回复`}
-               </button>
-             )}
-           </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const CommentReplyItem = ({ comment, onLike, onDislike, user }) => {
-    const hasLiked = user && comment.likers?.includes(user.uid);
-    const hasDisliked = user && comment.dislikers?.includes(user.uid);
-
+const TopNavBar = () => {
+    const router = useRouter();
     return (
-        <div className="flex space-x-2">
-            <img src={comment.authorAvatar || '/img/avatar.svg'} alt={comment.authorName} className="w-6 h-6 rounded-full" />
-            <div className="flex-1">
-                <p className="text-sm">
-                    <span className="font-semibold">{comment.authorName}: </span>
-                    <span className="text-gray-800 dark:text-gray-200">{comment.content}</span>
-                </p>
-                <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    <span>{comment.createdAt?.toDate?.().toLocaleTimeString() || ''}</span>
-                    <button onClick={() => onLike(comment.id, 'comment')} className={`flex items-center space-x-1 ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}><LikeIcon filled={hasLiked} className="w-3 h-3" /><span>{comment.likesCount || 0}</span></button>
-                    <button onClick={() => onDislike(comment.id, 'comment')} className={`flex items-center space-x-1 ${hasDisliked ? 'text-blue-500' : 'hover:text-blue-500'}`}><DislikeIcon filled={hasDisliked} className="w-3 h-3" /><span>{comment.dislikesCount || 0}</span></button>
-                </div>
+        <header className="fixed top-0 left-0 right-0 z-50 bg-white/60 backdrop-blur-lg shadow-sm border-b border-gray-200/50">
+            <div className="max-w-4xl mx-auto py-3 px-4 flex items-center justify-between">
+                <button className="p-2 rounded-full text-gray-600 hover:bg-gray-200/60 transition-colors" onClick={() => router.back()}>
+                    <i className="fas fa-arrow-left text-lg"></i>
+                </button>
+                <h1 className="text-xl font-bold text-gray-800 truncate flex-grow text-center ml-4 mr-4">帖子详情</h1>
+                <button className="p-2 rounded-full text-gray-600 hover:bg-gray-200/60 transition-colors">
+                    <i className="fas fa-ellipsis-h text-lg"></i>
+                </button>
             </div>
-        </div>
+        </header>
     );
 };
 
-const SharePanel = ({ url, title, onClose }) => {
-    const sharePlatforms = [
-        { name: 'WeChat', icon: 'https://img.icons8.com/color/48/000000/weixing.png', link: `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}` },
-        { name: 'Weibo', icon: 'https://img.icons8.com/color/48/000000/sina-weibo.png', link: `http://service.weibo.com/share/share.php?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}` },
-        { name: 'QQ', icon: 'https://img.icons8.com/color/48/000000/qq.png', link: `http://connect.qq.com/widget/shareqq/index.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}` },
-        { name: 'Twitter', icon: 'https://img.icons8.com/color/48/000000/twitter.png', link: `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}` },
-        { name: 'Facebook', icon: 'https://img.icons8.com/color/48/000000/facebook-new.png', link: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}` },
-    ];
-
-    return (
-        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg z-20 border dark:border-gray-700 p-2">
-            <p className="text-sm font-semibold text-center mb-2">分享到</p>
-            <div className="grid grid-cols-3 gap-2">
-                {sharePlatforms.map(p => (
-                    <a key={p.name} href={p.link} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center text-xs hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-md">
-                        <img src={p.icon} alt={p.name} className="w-8 h-8"/>
-                        <span>{p.name}</span>
-                    </a>
-                ))}
-            </div>
-             <button onClick={onClose} className="absolute top-0 right-0 text-gray-500 hover:text-gray-800 p-1">&times;</button>
-        </div>
-    );
-};
-
-const TranslateSettingsModal = ({ onClose }) => {
-    const [settings, setSettings] = useState({ apiUrl: '', model: '', apiKey: '', sourceLang: 'auto', targetLang: 'Chinese' });
+const PostContentCard = ({ post, user, onLike, onDislike, onFavorite }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const contentRef = useRef(null);
+    const [needsExpansion, setNeedsExpansion] = useState(false);
     
     useEffect(() => {
-        const saved = localStorage.getItem('translateSettings');
-        if (saved) {
-            setSettings(JSON.parse(saved));
+        if (contentRef.current && contentRef.current.scrollHeight > contentRef.current.clientHeight) {
+            setNeedsExpansion(true);
         }
-    }, []);
+    }, [post.content]);
+    
+    const hasLiked = user && post.likers?.includes(user.uid);
+    const hasDisliked = user && post.dislikers?.includes(user.uid);
+    // Note: Favorite status would ideally come from a user context or prop
+    
+    return (
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-6 mb-6 border border-gray-200/50">
+            {/* User Info */}
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                    <img src={post.authorAvatar || '/img/avatar.svg'} alt="用户头像" className="w-12 h-12 rounded-full mr-3 shadow-sm border-2 border-white" />
+                    <div>
+                        <h3 className="font-bold text-lg text-gray-800 flex items-center">{post.authorName} <span className="ml-2 text-blue-500 text-xs px-2 py-0.5 bg-blue-100 rounded-full font-semibold">楼主</span></h3>
+                        <p className="text-xs text-gray-500">{new Date(post.createdAt?.toDate()).toLocaleString()} (城市)</p>
+                    </div>
+                </div>
+                <button className="px-4 py-1.5 bg-blue-500 text-white rounded-full text-sm shadow-sm hover:bg-blue-600 transition-colors active:scale-95 font-semibold">
+                    <i className="fas fa-plus mr-1"></i>关注
+                </button>
+            </div>
 
-    const handleSave = () => {
-        localStorage.setItem('translateSettings', JSON.stringify(settings));
-        onClose();
-    };
+            {/* Title */}
+            <div className="flex items-center mb-3">
+                <h2 className="text-2xl font-bold text-gray-800 flex-grow">{post.title}</h2>
+                <button onClick={() => playTTS(post.title)} className="p-2 rounded-full text-gray-500 hover:bg-gray-200/60 transition-colors"><i className="fas fa-volume-up text-lg"></i></button>
+            </div>
+            
+            {/* Video if exists */}
+            {post.videoUrl && <div className="my-4"><VideoEmbed url={post.videoUrl} controls /></div>}
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setSettings(prev => ({...prev, [name]: value}));
+            {/* Content */}
+            <div className="relative">
+                <p ref={contentRef} className={`text-gray-700 leading-relaxed mb-4 ${!isExpanded && 'line-clamp-5'}`}>
+                    {post.content}
+                </p>
+                {needsExpansion && !isExpanded && (
+                     <button onClick={() => setIsExpanded(true)} className="text-blue-500 text-sm hover:underline font-semibold ml-1">展开全文</button>
+                )}
+            </div>
+             <button onClick={() => playTTS(post.content)} className="p-2 rounded-full text-gray-500 hover:bg-gray-200/60 transition-colors"><i className="fas fa-volume-up text-lg"></i></button>
+
+            {/* Actions */}
+            <div className="flex items-center justify-around mt-6 text-gray-500 border-t border-gray-100 pt-4">
+                <button onClick={onLike} className={`flex flex-col items-center gap-1 hover:text-red-500 transition-colors active:scale-95 ${hasLiked && 'text-red-500'}`}>
+                    <i className="fas fa-thumbs-up text-lg"></i> <span className="text-xs font-semibold">{post.likesCount || 0}</span>
+                </button>
+                <button onClick={onDislike} className={`flex flex-col items-center gap-1 hover:text-blue-500 transition-colors active:scale-95 ${hasDisliked && 'text-blue-500'}`}>
+                    <i className="fas fa-thumbs-down text-lg"></i> <span className="text-xs font-semibold">{post.dislikesCount || 0}</span>
+                </button>
+                <button className="flex flex-col items-center gap-1 hover:text-green-500 transition-colors active:scale-95">
+                    <i className="fas fa-comment text-lg"></i> <span className="text-xs font-semibold">{post.commentsCount || 0}</span>
+                </button>
+                <button className="flex flex-col items-center gap-1 hover:text-indigo-500 transition-colors active:scale-95">
+                    <i className="fas fa-share-alt text-lg"></i> <span className="text-xs font-semibold">分享</span>
+                </button>
+                <button onClick={onFavorite} className="flex flex-col items-center gap-1 hover:text-yellow-500 transition-colors active:scale-95">
+                    <i className="fas fa-star text-lg"></i> <span className="text-xs font-semibold">收藏</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const CommentArea = ({ comments, replies, sortOrder, setSortOrder, onInteraction, onReplySubmit, onLongPress, user }) => {
+    return (
+        <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-md p-6 mt-6 border border-gray-200/50">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-800">评论 ({comments.length})</h3>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                    {['默认', '最新', '热门'].map(order => (
+                        <button key={order} onClick={() => setSortOrder(order)} className={`px-3 py-1 rounded-full transition-colors ${sortOrder === order ? 'bg-blue-500 text-white font-semibold' : 'hover:bg-gray-100'}`}>
+                            {order}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            
+            {/* Comments List */}
+            <div className="space-y-4">
+                {comments.map(comment => (
+                    <CommentItem
+                        key={comment.id}
+                        comment={comment}
+                        replies={replies.filter(r => r.parentId === comment.id)}
+                        onInteraction={onInteraction}
+                        onReplySubmit={onReplySubmit}
+                        onLongPress={onLongPress}
+                        user={user}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const CommentItem = ({ comment, replies, onInteraction, onReplySubmit, onLongPress, user }) => {
+    const [showReplyInput, setShowReplyInput] = useState(false);
+
+    const hasLiked = user && comment.likers?.includes(user.uid);
+    const hasDisliked = user && comment.dislikers?.includes(user.uid);
+    
+    const longPressEvents = useLongPress(() => onLongPress(comment));
+
+    return (
+        <div className="pb-4 border-b border-gray-100 last:border-b-0" {...longPressEvents}>
+            <div className="flex items-start gap-3">
+                <img src={comment.authorAvatar} alt="用户头像" className="w-10 h-10 rounded-full shrink-0 shadow-sm" />
+                <div className="flex-grow">
+                    <h4 className="font-semibold text-gray-800">{comment.authorName} <span className="text-xs text-gray-500 ml-2 font-normal">{new Date(comment.createdAt?.toDate()).toLocaleString()}</span></h4>
+                    <p className="text-gray-700 my-1">{comment.content}</p>
+                    <div className="flex items-center gap-4 text-gray-500 text-sm">
+                        <button onClick={() => onInteraction('like', comment.id, 'comment')} className={`flex items-center gap-1 hover:text-red-500 ${hasLiked && 'text-red-500'}`}><i className="fas fa-thumbs-up"></i> <span>{comment.likesCount || 0}</span></button>
+                        <button onClick={() => onInteraction('dislike', comment.id, 'comment')} className={`flex items-center gap-1 hover:text-blue-500 ${hasDisliked && 'text-blue-500'}`}><i className="fas fa-thumbs-down"></i></button>
+                        <button onClick={() => setShowReplyInput(!showReplyInput)} className="hover:text-blue-500 font-semibold">回复</button>
+                    </div>
+
+                    {showReplyInput && <ReplyInput onSubmit={(content) => { onReplySubmit(content, comment.id); setShowReplyInput(false); }} />}
+
+                    {replies.length > 0 && <ReplyList replies={replies} onInteraction={onInteraction} onLongPress={onLongPress} user={user} onReplySubmit={onReplySubmit} mainCommentAuthor={comment.authorName} />}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ReplyList = ({ replies, onInteraction, onLongPress, user, onReplySubmit, mainCommentAuthor }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const displayedReplies = isExpanded ? replies : replies.slice(0, 2);
+
+    return (
+        <div className="mt-4 bg-gray-50/70 rounded-lg p-3 space-y-3">
+            {displayedReplies.map(reply => (
+                <ReplyItem 
+                    key={reply.id} 
+                    reply={reply} 
+                    onInteraction={onInteraction} 
+                    onLongPress={onLongPress} 
+                    user={user}
+                    onReplySubmit={(content) => onReplySubmit(content, reply.parentId)} // All replies go to main comment
+                    mainCommentAuthor={mainCommentAuthor}
+                 />
+            ))}
+            {replies.length > 2 && !isExpanded && (
+                <button onClick={() => setIsExpanded(true)} className="text-blue-500 text-sm font-semibold hover:underline">
+                    展开 {replies.length - 2} 条回复 <i className="fas fa-chevron-down text-xs"></i>
+                </button>
+            )}
+        </div>
+    );
+};
+
+const ReplyItem = ({ reply, onInteraction, onLongPress, user, onReplySubmit, mainCommentAuthor }) => {
+    const [showReplyInput, setShowReplyInput] = useState(false);
+
+    const hasLiked = user && reply.likers?.includes(user.uid);
+    const hasDisliked = user && reply.dislikers?.includes(user.uid);
+
+    const longPressEvents = useLongPress(() => onLongPress(reply));
+    
+    // Simple logic to find @mention
+    const replyTo = reply.content.startsWith('@') ? reply.content.split(' ')[0] : `@${mainCommentAuthor}`;
+
+
+    return (
+        <div className="flex items-start gap-2" {...longPressEvents}>
+            <img src={reply.authorAvatar} alt="回复用户头像" className="w-6 h-6 rounded-full shrink-0 shadow-sm" />
+            <div className="flex-grow">
+                <p className="text-gray-700 text-sm">
+                    <span className="font-semibold text-gray-800">{reply.authorName}</span>
+                    {/* <span className="text-blue-500 mx-1">{replyTo}</span> */}
+                    : {reply.content}
+                </p>
+                <div className="flex items-center gap-3 text-gray-500 text-xs mt-1">
+                    <span>{new Date(reply.createdAt?.toDate()).toLocaleTimeString()}</span>
+                    <button onClick={() => onInteraction('like', reply.id, 'comment')} className={`flex items-center gap-1 hover:text-red-500 ${hasLiked && 'text-red-500'}`}><i className="fas fa-thumbs-up"></i> <span>{reply.likesCount || 0}</span></button>
+                    <button onClick={() => onInteraction('dislike', reply.id, 'comment')} className={`flex items-center gap-1 hover:text-blue-500 ${hasDisliked && 'text-blue-500'}`}><i className="fas fa-thumbs-down"></i></button>
+                    <button onClick={() => setShowReplyInput(!showReplyInput)} className="hover:text-blue-500 font-semibold">回复</button>
+                </div>
+                {showReplyInput && <ReplyInput placeholder={`@${reply.authorName} `} onSubmit={(content) => { onReplySubmit(content, reply.parentId); setShowReplyInput(false); }} />}
+            </div>
+        </div>
+    );
+};
+
+const CommentInputFooter = ({ user, onSubmit }) => {
+    const [content, setContent] = useState('');
+    
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const success = await onSubmit(content, null);
+        if (success) {
+            setContent('');
+        }
+    }
+    
+    return (
+        <form onSubmit={handleSubmit} className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.05)] p-3 flex items-start gap-3 z-40">
+            <div className="max-w-4xl mx-auto flex items-start gap-3 w-full">
+                <img src={user?.photoURL || '/img/avatar.svg'} alt="用户头像" className="w-10 h-10 rounded-full shrink-0 shadow-sm" />
+                <div className="flex-grow relative">
+                    <textarea 
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder={user ? "发表你的看法..." : "请先登录..."}
+                        className="w-full pl-12 pr-24 py-2 bg-gray-100 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none max-h-24 h-10 transition-all duration-200 ease-in-out focus:h-20"
+                        disabled={!user}
+                    ></textarea>
+                    <div className="absolute top-1/2 -translate-y-1/2 left-3 flex gap-3 text-gray-500 text-lg">
+                        <button type="button" className="hover:text-blue-500"><i className="fas fa-smile"></i></button>
+                        <button type="button" className="hover:text-blue-500"><i className="fas fa-at"></i></button>
+                        {/* <button type="button" className="hover:text-blue-500"><i className="fas fa-image"></i></button> */}
+                    </div>
+                    <button type="submit" disabled={!content.trim() || !user} className="absolute top-1/2 -translate-y-1/2 right-2 px-5 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold">发表</button>
+                </div>
+            </div>
+        </form>
+    );
+};
+
+const ReplyInput = ({ onSubmit, placeholder = '' }) => {
+    const [content, setContent] = useState(placeholder);
+    
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSubmit(content);
+        setContent(placeholder);
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold mb-4">翻译设置 (OpenAI 兼容接口)</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium">接口地址 (API URL)</label>
-                        <input type="text" name="apiUrl" value={settings.apiUrl} onChange={handleChange} className="mt-1 block w-full border rounded-md p-2 dark:bg-gray-700 dark:border-gray-600" placeholder="https://api.example.com/v1/chat/completions" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">模型 (Model)</label>
-                        <input type="text" name="model" value={settings.model} onChange={handleChange} className="mt-1 block w-full border rounded-md p-2 dark:bg-gray-700 dark:border-gray-600" placeholder="gpt-3.5-turbo" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium">密钥 (API Key)</label>
-                        <input type="password" name="apiKey" value={settings.apiKey} onChange={handleChange} className="mt-1 block w-full border rounded-md p-2 dark:bg-gray-700 dark:border-gray-600" placeholder="sk-..." />
-                    </div>
-                    <div className="flex space-x-4">
-                        <div className="flex-1">
-                           <label className="block text-sm font-medium">源语言</label>
-                           <input type="text" name="sourceLang" value={settings.sourceLang} onChange={handleChange} className="mt-1 block w-full border rounded-md p-2 dark:bg-gray-700 dark:border-gray-600" placeholder="e.g., auto" />
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium">目标语言</label>
-                            <input type="text" name="targetLang" value={settings.targetLang} onChange={handleChange} className="mt-1 block w-full border rounded-md p-2 dark:bg-gray-700 dark:border-gray-600" placeholder="e.g., Chinese" />
-                        </div>
-                    </div>
+        <form onSubmit={handleSubmit} className="mt-2 flex items-center gap-2">
+            <input 
+                type="text"
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                placeholder="添加回复..."
+                className="flex-grow bg-gray-200/50 rounded-full px-3 py-1 text-sm border-transparent focus:border-blue-500 focus:bg-white focus:ring-0"
+            />
+            <button type="submit" className="text-sm text-blue-500 font-semibold disabled:text-gray-400" disabled={!content.replace(placeholder, '').trim()}>发送</button>
+        </form>
+    );
+};
+
+const LongPressMenu = ({ comment, user, onClose, onDelete, onLike, onDislike }) => {
+    const canDelete = user && (user.uid === comment.authorId || user.isAdmin);
+
+    return (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+            <div className="bg-white/80 backdrop-blur-lg rounded-xl shadow-xl p-2 w-64 text-gray-800" onClick={e => e.stopPropagation()}>
+                <div className="p-2 border-b border-gray-200/80">
+                    <p className="text-sm truncate">“{comment.content}”</p>
                 </div>
-                <div className="mt-6 flex justify-end space-x-3">
-                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-md">取消</button>
-                    <button onClick={handleSave} className="px-4 py-2 bg-blue-500 text-white rounded-md">保存</button>
+                <div className="py-1">
+                    <button onClick={() => { playTTS(comment.content); onClose(); }} className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-gray-500/10 rounded-md"><i className="fas fa-volume-up w-4 text-center"></i>朗读</button>
+                    <button className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-gray-500/10 rounded-md"><i className="fas fa-language w-4 text-center"></i>翻译</button>
+                </div>
+                <hr className="my-1 border-gray-200/80" />
+                <div className="py-1">
+                    <button onClick={() => { onLike(); onClose(); }} className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-gray-500/10 rounded-md"><i className="fas fa-thumbs-up w-4 text-center"></i>点赞</button>
+                    <button onClick={() => { onDislike(); onClose(); }} className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-gray-500/10 rounded-md"><i className="fas fa-thumbs-down w-4 text-center"></i>点踩</button>
+                </div>
+                <hr className="my-1 border-gray-200/80" />
+                <div className="py-1">
+                     <button className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-gray-500/10 rounded-md"><i className="fas fa-share-alt w-4 text-center"></i>分享</button>
+                    {canDelete && (
+                        <button onClick={onDelete} className="w-full flex items-center gap-3 py-2 px-3 text-left hover:bg-red-500/10 text-red-500 rounded-md"><i className="fas fa-trash w-4 text-center"></i>删除</button>
+                    )}
                 </div>
             </div>
         </div>
