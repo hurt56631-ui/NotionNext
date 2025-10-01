@@ -13,7 +13,7 @@ import { getApp, initializeApp } from "firebase/app";
 
 // ----------- Replace with your Firebase config or import your firebase app/init -----------
 // If you already initialize Firebase elsewhere, comment out the initializeApp block and import your app.
-const firebaseConfig = {
+// const firebaseConfig = {
   // apiKey: "YOUR_API_KEY",
   // authDomain: "YOUR_AUTH_DOMAIN",
   // projectId: "YOUR_PROJECT_ID",
