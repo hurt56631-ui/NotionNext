@@ -1,4 +1,40 @@
-// /components/ChatInterface.js (最终修复版 - 已优化 handleInputFocus)
+// /hooks/useHeartbeat.js
+import { useEffect } from 'react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+export function useHeartbeat(userId) {
+  useEffect(() => {
+    if (!userId) return;
+
+    const updateUserHeartbeat = () => {
+      const userDocRef = doc(db, 'users', userId);
+      setDoc(userDocRef, {
+        lastSeen: serverTimestamp()
+      }, { merge: true }).catch(error => {
+        console.error("Heartbeat update failed:", error);
+      });
+    };
+
+    updateUserHeartbeat();
+    const intervalId = setInterval(updateUserHeartbeat, 60 * 1000);
+    return () => clearInterval(intervalId);
+    
+  }, [userId]);
+}```
+
+### 第 2 步：`_app.js` 文件 (确保已集成)
+
+确保您的 `_app.js` 已经正确地调用了 `useHeartbeat`。
+
+---
+
+### 第 3 步：最终的、真正完整的 `ChatInterface.js` 代码
+
+请**完整替换**您现有的文件。
+
+```javascript
+// /components/ChatInterface.js (最终、完整、四合一修复版 - 已修复所有已知问题)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -8,16 +44,84 @@ import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, Ro
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式
-const GlobalScrollbarStyle = () => ( <style>{` .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; } .thin-scrollbar::-webkit-scrollbar-track { background: transparent; } .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; } .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; } .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; } `}</style> );
+const GlobalScrollbarStyle = () => (
+    <style>{`
+        .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; }
+        .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; }
+        .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; }
+    `}</style>
+);
 
-// 组件与功能模块... (为简洁省略，与之前版本相同)
-const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">译</div> );
-const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
+// 组件与图标
+const CircleTranslateIcon = () => (
+    <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-200">
+        译
+    </div>
+);
+
+const PinyinText = ({ text, showPinyin }) => {
+    if (!text || typeof text !== 'string') return text;
+    if (showPinyin) {
+        try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); }
+        catch (error) { console.error("Pinyin conversion failed:", error); return text; }
+    }
+    return text;
+};
+
+// 功能模块
 const ttsCache = new Map();
-const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
-const playCachedTTS = (text) => { if (!text) return; if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }).catch(e => console.error("TTS preloading failed before play:", e)); } };
-const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
-const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
+const preloadTTS = async (text) => {
+  if (!text || ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
+
+const playCachedTTS = (text) => {
+  if (!text) return;
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) {
+        ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
+      }
+    }).catch(e => console.error("TTS preloading failed before play:", e));
+  }
+};
+
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => {
+    if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); }
+    const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`;
+    try {
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] })
+        });
+        if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
+        const data = await response.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content;
+        return JSON.stringify(data);
+    } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
+};
+
+const parseSingleTranslation = (text) => {
+    const translationMatch = text.match(/\*\*(.*?)\*\*/s);
+    const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is);
+    if (translationMatch && backTranslationMatch) {
+        return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() };
+    }
+    const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text;
+    return { translation: firstLine.trim(), backTranslation: "解析失败" };
+};
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -39,7 +143,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const footerRef = useRef(null);
   const initialViewportHeightRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
@@ -72,10 +175,10 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   useEffect(() => {
     if (isAtBottomRef.current) {
-        const timer = setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 50);
-        return () => clearTimeout(timer);
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [messages]);
 
@@ -86,10 +189,14 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const lastSeen = data.lastSeen;
+        let isOnline = false;
         if (lastSeen && typeof lastSeen.toDate === 'function') {
           const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000;
-          setPeerStatus({ online: minutesAgo < 2 });
+          isOnline = minutesAgo < 2;
         }
+        setPeerStatus({ online: isOnline });
+      } else {
+        setPeerStatus({ online: false });
       }
     });
     return () => unsubscribe();
@@ -128,7 +235,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   const sendMessage = async (textToSend) => { const content = textToSend || input; if (!content.trim() || !user?.uid || !peerUser?.id) return; setSending(true); try { const messagesRef = collection(db, `privateChats/${chatId}/messages`); await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() }); await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true }); setInput(""); setMyTranslationResult(null); } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } finally { setSending(false); } };
   
-  // --- 核心修复：应用方法二 ---
   const handleInputFocus = () => { 
     if (!isAtBottomRef.current) {
       setTimeout(() => { 
@@ -200,7 +306,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto w-full thin-scrollbar px-4 relative"
       >
-        <div style={{ paddingBottom: `calc(${footerHeight}px)`}}>
+        <div style={{ paddingBottom: '1rem' }}>
             {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
             <div ref={messagesEndRef} style={{ height: '1px' }} />
         </div>
@@ -225,30 +331,31 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       </main>
 
       <footer 
-        ref={footerRef} 
         className="flex-shrink-0 w-full bg-gray-50 border-t border-gray-200 z-20"
         style={{ paddingBottom: `${keyboardHeight}px` }}
       >
-        <AnimatePresence>
-            {myTranslationResult && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
-                    <div className="p-3 flex justify-between items-center"><h4 className="text-sm font-bold text-gray-700">AI 翻译建议</h4><button onClick={() => setMyTranslationResult(null)} className="text-gray-500"><X size={18} /></button></div>
-                    <div className="max-h-60 overflow-y-auto p-3 pt-0 thin-scrollbar"><div className="p-3 rounded-lg bg-gray-100 flex items-start gap-3"><div className="flex-1 space-y-1"><p className="font-bold text-blue-600 text-base">{myTranslationResult.translation}</p><p className="text-xs text-gray-500 font-bold">回译: {myTranslationResult.backTranslation}</p></div><button onClick={() => sendMessage(myTranslationResult.translation)} className="w-10 h-10 flex-shrink-0 bg-blue-500 text-white rounded-full flex items-center justify-center"><Send size={16}/></button></div></div>
-                </motion.div>
-            )}
-        </AnimatePresence>
-        
-        <div className="p-2">
-          <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
-            <textarea
-              ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleInputFocus} placeholder="输入消息..."
-              className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
-            />
-            <div className="flex items-center flex-shrink-0 ml-1 self-end">
-                <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">{isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}</button>
-                <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1"><Send size={18} /></button>
+        <div ref={footerRef}>
+            <AnimatePresence>
+                {myTranslationResult && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-gray-200 bg-white">
+                        <div className="p-3 flex justify-between items-center"><h4 className="text-sm font-bold text-gray-700">AI 翻译建议</h4><button onClick={() => setMyTranslationResult(null)} className="text-gray-500"><X size={18} /></button></div>
+                        <div className="max-h-60 overflow-y-auto p-3 pt-0 thin-scrollbar"><div className="p-3 rounded-lg bg-gray-100 flex items-start gap-3"><div className="flex-1 space-y-1"><p className="font-bold text-blue-600 text-base">{myTranslationResult.translation}</p><p className="text-xs text-gray-500 font-bold">回译: {myTranslationResult.backTranslation}</p></div><button onClick={() => sendMessage(myTranslationResult.translation)} className="w-10 h-10 flex-shrink-0 bg-blue-500 text-white rounded-full flex items-center justify-center"><Send size={16}/></button></div></div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            
+            <div className="p-2">
+            <div className="flex items-end w-full max-w-4xl mx-auto p-1.5 bg-gray-100 rounded-2xl border border-gray-200">
+                <textarea
+                ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} onFocus={handleInputFocus} placeholder="输入消息..."
+                className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
+                />
+                <div className="flex items-center flex-shrink-0 ml-1 self-end">
+                    <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">{isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}</button>
+                    <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1"><Send size={18} /></button>
+                </div>
             </div>
-          </div>
+            </div>
         </div>
       </footer>
 
