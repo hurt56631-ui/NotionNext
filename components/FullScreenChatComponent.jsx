@@ -5,18 +5,22 @@
 // - Input area automatically raises when mobile keyboard appears (uses visualViewport)
 // - Supports real-time messages with Firestore
 // - Uses Tailwind CSS for styling (make sure Tailwind is set up in your project)
-// - Replace the firebase config and init with your app's configuration
 
 import React, { useEffect, useState, useRef } from "react";
-import { getFirestore, collection, query, orderBy, addDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
-import { getApp, initializeApp } from "firebase/app";
+// 引入你项目里已有的 db 实例，不再需要在这里初始化 Firebase
+import { db } from '@/lib/firebase'; 
+import { collection, query, orderBy, addDoc, serverTimestamp, onSnapshot } from "firebase/firestore";
+// 不再需要这些 Firebase app 的导入，因为我们直接用 @/lib/firebase 提供的 db
+// import { getApp, initializeApp } from "firebase/app"; 
 
-// ----------- Replace with your Firebase config or import your firebase app/init -----------
-// If you already initialize Firebase elsewhere, comment out the initializeApp block and import your app.
-// const firebaseConfig = {
-  // apiKey: "YOUR_API_KEY",
-  // authDomain: "YOUR_AUTH_DOMAIN",
-  // projectId: "YOUR_PROJECT_ID",
+
+// ----------- 原来的 Firebase config 块，现在完整注释掉 -----------
+// 如果你已经在 '@/lib/firebase' 中初始化了 Firebase，这里就不需要再定义 config
+/*
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
 };
 
 let app;
@@ -26,7 +30,8 @@ try {
   // initialize only if not already initialized
   app = initializeApp(firebaseConfig);
 }
-const db = getFirestore(app);
+// const db = getFirestore(app); // 这一行也不再需要，因为我们从 '@/lib/firebase' 导入了 db
+*/
 // -----------------------------------------------------------------------------------------
 
 export default function FullScreenChat({ chatId = "global-chat", user = { uid: "anon", name: "游客" } }) {
