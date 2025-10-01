@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终、完整、四合一修复版)
+// /components/ChatInterface.js (最终、完整、四合一修复版 - 已修复所有已知问题)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -37,7 +37,7 @@ const PinyinText = ({ text, showPinyin }) => {
 // 功能模块
 const ttsCache = new Map();
 const preloadTTS = async (text) => {
-  if (ttsCache.has(text)) return;
+  if (!text || ttsCache.has(text)) return;
   try {
     const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaxiaoMultilingualNeural&r=-20`;
     const response = await fetch(url);
@@ -49,6 +49,7 @@ const preloadTTS = async (text) => {
 };
 
 const playCachedTTS = (text) => {
+  if (!text) return;
   if (ttsCache.has(text)) {
     ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
   } else {
@@ -56,7 +57,7 @@ const playCachedTTS = (text) => {
       if (ttsCache.has(text)) {
         ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error));
       }
-    });
+    }).catch(e => console.error("TTS preloading failed before play:", e));
   }
 };
 
@@ -71,23 +72,21 @@ const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model)
         });
         if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); }
         const data = await response.json();
-        return data.choices[0].message.content;
+        if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content;
+        return JSON.stringify(data); // Fallback
     } catch (error) { console.error("调用AI翻译失败:", error); throw error; }
 };
 
 const parseSingleTranslation = (text) => {
     const translationMatch = text.match(/\*\*(.*?)\*\*/s);
     const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is);
-
     if (translationMatch && backTranslationMatch) {
-        return {
-            translation: translationMatch[1].trim(),
-            backTranslation: backTranslationMatch[1].trim(),
-        };
+        return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() };
     }
-    console.warn("无法解析AI翻译响应:", text);
-    return { translation: text.trim(), backTranslation: "解析失败" };
+    const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text;
+    return { translation: firstLine.trim(), backTranslation: "解析失败" };
 };
+
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -117,7 +116,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const searchInputRef = useRef(null);
   const textareaRef = useRef(null);
   const isAtBottomRef = useRef(true);
-  
+  const prevMessagesLengthRef = useRef(0);
+
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false,
       fontSize: 16, fontWeight: 'normal',
@@ -127,14 +127,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
-  // 实时测量 footer 高度
-  useEffect(() => {
-    if (footerRef.current) {
-      setFooterHeight(footerRef.current.offsetHeight);
-    }
-  }, [input, myTranslationResult]);
-
-  // 键盘避让逻辑
+  // 1. 键盘避让逻辑
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
     if (initialViewportHeightRef.current === null) {
@@ -148,46 +141,44 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     return () => window.visualViewport.removeEventListener('resize', handleViewportChange);
   }, []);
 
-  // 自动滚动到底部
+  // 2. 消息滚动到底部逻辑
   useEffect(() => {
     if (isAtBottomRef.current) {
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-      }, 50);
-      return () => clearTimeout(timer);
+        const timer = setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        }, 50);
+        return () => clearTimeout(timer);
     }
   }, [messages]);
 
-  // 监听对方在线状态
+  // 3. 监听对方在线状态
   useEffect(() => {
     if (!peerUser?.id) return;
     const peerUserRef = doc(db, 'users', peerUser.id);
     const unsubscribe = onSnapshot(peerUserRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.lastSeen instanceof Timestamp) {
-          const minutesAgo = (new Date().getTime() - data.lastSeen.toDate().getTime()) / 60000;
-          setPeerStatus({ online: minutesAgo < 2 });
-        } else {
-          setPeerStatus({ online: false });
+        const lastSeen = data.lastSeen;
+        let isOnline = false;
+        if (lastSeen && typeof lastSeen.toDate === 'function') { // Robust check for Firestore Timestamp
+          const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000;
+          isOnline = minutesAgo < 2;
         }
+        setPeerStatus({ online: isOnline });
       }
     });
     return () => unsubscribe();
   }, [peerUser?.id]);
 
-  // 保存设置
-  useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
-  
-  // 监听消息并计算未读数
+  // 4. 消息获取与未读数计算
   useEffect(() => {
     if (!chatId || !user) return;
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
     const unsub = onSnapshot(q, (snap) => {
         const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const oldMessagesCount = messages.length;
-
+        
+        const oldMessagesCount = prevMessagesLengthRef.current;
         if (oldMessagesCount > 0 && arr.length > oldMessagesCount) {
           const newMessages = arr.slice(oldMessagesCount);
           const newPeerMessagesCount = newMessages.filter(m => m.uid !== user.uid).length;
@@ -197,27 +188,23 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         }
         
         setMessages(arr);
+        prevMessagesLengthRef.current = arr.length;
         
-        if (arr.length > 0 && arr[arr.length - 1].uid !== user.uid) { 
-            const last = arr[arr.length - 1];
-            if (cfg.autoPlayTTS) playCachedTTS(last.text); 
-            if (cfg.autoTranslate) handleTranslateMessage(last); 
+        const lastMessage = arr[arr.length - 1];
+        if (lastMessage && lastMessage.uid !== user.uid) { 
+            if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); 
+            if (cfg.autoTranslate) handleTranslateMessage(lastMessage); 
         } 
     }, (err) => console.error("监听消息错误:", err));
     return () => unsub();
-  }, [chatId, user]);
+  }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]); // Removed stale dependencies
 
+  // 5. 其他 Effects
+  useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
+  useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
+  useEffect(() => { if(footerRef.current) setFooterHeight(footerRef.current.offsetHeight) }, [input, myTranslationResult]);
   
-  // 输入框自动增高
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${textarea.scrollHeight}px`;
-    }
-  }, [input]);
-
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
   const sendMessage = async (textToSend) => {
@@ -230,19 +217,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         await setDoc(doc(db, "privateChats", chatId), { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp() }, { merge: true });
         setInput("");
         setMyTranslationResult(null);
-    } catch (e) {
-        console.error("SendMessage Error:", e);
-        alert(`发送失败: ${e.message}`);
-    } finally {
-        setSending(false);
-    }
+    } catch (e) { console.error("SendMessage Error:", e); alert(`发送失败: ${e.message}`); } 
+    finally { setSending(false); }
   };
   
-  const handleInputFocus = () => {
-      setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 300);
-  };
+  const handleInputFocus = () => { setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 300); };
 
   const handleScroll = () => {
     const el = mainScrollRef.current;
@@ -255,134 +234,24 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     }
   };
 
-  const handleRecallMessage = async (message) => {
-    if (message.uid !== user.uid) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
-    try {
-      await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true });
-    } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); }
-  };
-
-  const handleDeleteMessage = async (message) => {
-    if (message.uid !== user.uid) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
-    try {
-      await deleteDoc(messageRef);
-    } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); }
-  };
-
-  const sendCorrection = async () => {
-    if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id);
-    try {
-        await updateDoc(messageRef, {
-            correction: {
-                originalText: correctionMode.message.text,
-                correctedText: correctionMode.text.trim(),
-                correctorUid: user.uid,
-                correctedAt: serverTimestamp()
-            }
-        });
-        setCorrectionMode({ active: false, message: null, text: '' });
-    } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
-  };
-  
-  const getMyInputPrompt = (sourceLang, targetLang) => 
-    `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。
-要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
-请严格遵循以下格式，只返回格式化的翻译结果，不要包含任何额外说明或标签：
-
-**这里是${targetLang}翻译**
-回译：这里是回译成${sourceLang}的内容`;
-
+  const handleRecallMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); } };
+  const handleDeleteMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await deleteDoc(messageRef); } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); } };
+  const sendCorrection = async () => { if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id); try { await updateDoc(messageRef, { correction: { originalText: correctionMode.message.text, correctedText: correctionMode.text.trim(), correctorUid: user.uid, correctedAt: serverTimestamp() } }); setCorrectionMode({ active: false, message: null, text: '' }); } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); } };
+  const getMyInputPrompt = (sourceLang, targetLang) => `你是一位精通${sourceLang}和${targetLang}的双语翻译专家。请将以下${sourceLang}文本翻译成${targetLang}。\n要求：在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n请严格遵循以下格式，只返回格式化的翻译结果，不要包含任何额外说明或标签：\n\n**这里是${targetLang}翻译**\n回译：这里是回译成${sourceLang}的内容`;
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
-  
-  const handleTranslateMessage = async (message) => {
-    setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null);
-    try {
-        const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
-        setTranslationResult({ messageId: message.id, text: result });
-    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
-  };
-  
-  const handleTranslateMyInput = async () => {
-    if (!input.trim()) return;
-    setIsTranslating(true);
-    setMyTranslationResult(null);
-    try {
-        const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang);
-        const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
-        const parsedResult = parseSingleTranslation(resultText);
-        setMyTranslationResult(parsedResult);
-    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
-  };
-
+  const handleTranslateMessage = async (message) => { setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null); try { const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); setTranslationResult({ messageId: message.id, text: result }); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
+  const handleTranslateMyInput = async () => { if (!input.trim()) return; setIsTranslating(true); setMyTranslationResult(null); try { const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang); const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const parsedResult = parseSingleTranslation(resultText); setMyTranslationResult(parsedResult); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
 
-  const LongPressMenu = ({ message, onClose }) => {
-    const mine = message.uid === user?.uid;
-    const isPinyinVisible = showPinyinFor === message.id;
-    return (
-        <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}>
-                <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button>
-                {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>}
-                {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>}
-                {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>}
-                {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>}
-                {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>}
-            </div>
-        </div>
-    );
-  };
-
-  const MessageRow = ({ message }) => {
-    const mine = message.uid === user?.uid;
-    const longPressTimer = useRef();
-    const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
-    const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
-    const handleTouchMove = () => { clearTimeout(longPressTimer.current); };
-    
-    const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
-
-    return (
-      <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}>
-        <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
-        <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
-          <div 
-            onTouchStart={handleTouchStart} 
-            onTouchEnd={handleTouchEnd} 
-            onTouchMove={handleTouchMove} 
-            onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} 
-            className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}
-          >
-            {message.recalled ? (
-              <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p>
-            ) : message.correction ? (
-              <div className="space-y-1">
-                <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
-                <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
-              </div>
-            ) : (
-              <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
-            )}
-            {translationResult && translationResult.messageId === message.id && (
-              <div className="mt-2 pt-2 border-t border-black/20">
-                <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
+  const MessageRow = ({ message }) => { const mine = message.uid === user?.uid; const longPressTimer = useRef(); const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; const handleTouchMove = () => { clearTimeout(longPressTimer.current); }; const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight }; return ( <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}> <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-gray-200 text-black rounded-bl-none"}`}> {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} </div> </div> </div> ); };
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-white text-black" style={{ height: '100dvh' }}>
+    <div className="flex flex-col w-full bg-white text-black" style={{ height: '100dvh' }}>
       <GlobalScrollbarStyle />
       
-      <header className="absolute top-0 left-0 right-0 h-14 px-4 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-30">
+      <header className="flex-shrink-0 flex items-center justify-between h-14 px-4 bg-gray-50/80 backdrop-blur-sm border-b border-gray-200 z-30">
         <AnimatePresence>
             {searchActive ? (
                 <motion.div key="search" className="absolute inset-0 flex items-center px-4 bg-gray-100">
@@ -415,8 +284,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       <main 
         ref={mainScrollRef}
         onScroll={handleScroll}
-        className="absolute top-14 left-0 right-0 overflow-y-auto w-full thin-scrollbar px-4"
-        style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px)` }}
+        className="flex-1 overflow-y-auto w-full thin-scrollbar px-4"
+        style={{ paddingBottom: `calc(${footerHeight}px + ${keyboardHeight}px)` }}
       >
         {filteredMessages.map((msg) => (<MessageRow message={msg} key={msg.id} />))}
         <div ref={messagesEndRef} style={{ height: '1px' }} />
@@ -428,7 +297,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               animate={{ opacity: 1, y: 0 }} 
               exit={{ opacity: 0, y: 20 }}
               onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
-              className="absolute bottom-4 right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
+              className="fixed bottom-[100px] right-4 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
+              style={{ bottom: `calc(${footerHeight}px + ${keyboardHeight}px + 1rem)`}}
             >
               <div className="flex items-center gap-1.5 px-2">
                 <span className="font-bold text-sm">{unreadCount}</span>
@@ -441,7 +311,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
       <footer 
         ref={footerRef} 
-        className="absolute left-0 right-0 bg-gray-50 border-t border-gray-200 z-20 transition-all duration-200 ease-out"
+        className="fixed left-0 right-0 bg-gray-50 border-t border-gray-200 z-20 transition-all duration-200 ease-out"
         style={{ bottom: `${keyboardHeight}px` }}
       >
         <AnimatePresence>
