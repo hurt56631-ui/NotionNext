@@ -1,201 +1,281 @@
-// themes/heo/components/PostItem.js (最终美化版 - 替换图标、优化排版)
+// themes/heo/Layout/LayoutSlug.js (最终美化版 - 已集成“楼中楼”评论区)
 
-import React, { forwardRef, useMemo, useCallback } from 'react';
-import Link from 'next/link';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
-import dynamic from 'next/dynamic';
-import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-// ✅ 导入所有需要的 Lucide 图标
-import { Volume2, MessageSquare, ThumbsUp, ThumbsDown, Send, Heart } from 'lucide-react';
-
-const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
-const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
-
+import { doc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, updateDoc, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
 
-// --- TTS 朗读功能模块 (无变化) ---
-const playCachedTTS = (text) => {
-  try {
-    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
-    new Audio(url).play();
-  } catch (error) { console.error("TTS playback failed:", error); }
-};
-// --- TTS 模块结束 ---
+// ✅ 导入所有需要的 Lucide 图标
+import { Heart, MessageSquare, Send } from 'lucide-react';
 
+import { AdSlot } from '@/components/GoogleAdsense';
+import NotionPage from '@/components/NotionPage';
+import WWAds from '@/components/WWAds';
+import { useGlobal } from '@/lib/global';
+import FloatTocButton from '../components/FloatTocButton';
+import { PostLock } from '../components/PostLock';
+import AISummary from '@/components/AISummary';
+import ArticleExpirationNotice from '@/components/ArticleExpirationNotice';
 
+// --- 辅助函数：时间格式化 ---
 const formatTimeAgo = (ts) => {
   if (!ts) return '不久前';
   try {
     const date = ts?.toDate ? ts.toDate() : new Date(ts);
     return formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
-  } catch (e) {
-    return '日期错误';
-  }
+  } catch (e) { return '日期错误'; }
 };
 
-const parseVideoUrl = (postData) => {
-  if (!postData) return null;
-  if (postData.videoUrl && typeof postData.videoUrl === 'string' && postData.videoUrl.trim() !== '') {
-    try { new URL(postData.videoUrl); return postData.videoUrl; } catch { /* not a valid URL */ }
-  }
-  const text = postData.content;
-  if (!text || typeof text !== 'string') return null;
-  const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
-  const allUrls = text.match(urlRegex);
-  if (!allUrls) return null;
-  const videoPatterns = [
-    /youtube\.com|youtu\.be/, /vimeo\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/,
-    /bilibili\.com/, 
-    /\.(mp4|webm|ogg|mov)$/i 
-  ];
-  for (const url of allUrls) {
-    if (videoPatterns.some(p => p.test(url))) {
-      return url;
-    }
-  }
-  return null;
-};
+// ===================================================================
+// =============  ✅ 新增：楼中楼评论区相关组件  =============
+// ===================================================================
 
-const removeUrlFromText = (text, urlToRemove) => {
-    if (!text || !urlToRemove || typeof text !== 'string') return text;
-    const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-    const regex = new RegExp(escapedUrl, 'g');
-    return text.replace(regex, '').trim();
-};
+// --- 回复输入框组件 (用于主评论和楼中楼回复) ---
+const CommentInput = ({ postId, parentCommentId = null, onCommentAdded, placeholder = "发表你的看法..." }) => {
+    const { user } = useAuth();
+    const [content, setContent] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-// --- 私信按钮组件 ---
-const StartChatButton = ({ targetUser }) => {
-  const { user: currentUser } = useAuth();
-  const router = useRouter();
+    const handleSubmit = async () => {
+        if (!content.trim() || !user || isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            const commentsRef = collection(db, 'posts', postId, 'comments');
+            await addDoc(commentsRef, {
+                content: content.trim(),
+                authorId: user.uid,
+                authorName: user.displayName,
+                authorAvatar: user.photoURL,
+                parentCommentId, // 标记父评论ID
+                createdAt: serverTimestamp(),
+            });
+            setContent('');
+            if (onCommentAdded) onCommentAdded();
 
-  if (!targetUser || !targetUser.uid || !currentUser || currentUser.uid === targetUser.uid) return null;
+            // 如果是主评论，更新帖子总评论数
+            if (!parentCommentId) {
+                const postRef = doc(db, 'posts', postId);
+                await updateDoc(postRef, { commentCount: increment(1) });
+            }
+        } catch (error) {
+            console.error("发表评论失败:", error);
+            alert("发表评论失败，请重试。");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+    
+    if (!user) return null;
 
-  const handleClick = (e) => {
-    e.stopPropagation();
-    const chatId = [currentUser.uid, targetUser.uid].sort().join('_');
-    router.push(`/messages/${chatId}`);
-  };
-
-  // ✅ 美化：按钮样式更新，更精致
-  return (
-    <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1.5 rounded-full bg-blue-500 text-white text-xs font-semibold hover:bg-blue-600 transition-colors active:scale-95 shadow-sm" aria-label="私信">
-      <Send size={14} className="mr-1.5" /> 私信
-    </button>
-  );
-};
-
-// --- 帖子列表项 ---
-function PostItemInner({ post }, ref) {
-  const { user } = useAuth();
-  const router = useRouter(); 
-
-  if (!post) {
-      return null; 
-  }
-
-  const videoUrl = useMemo(() => parseVideoUrl(post), [post]);
-
-  const cleanedContent = useMemo(() => {
-    if (!post || !post.content) return ''; 
-    const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
-    const previewLength = 120; // 缩短预览长度，更适合移动端
-    if (fullCleanedContent.length > previewLength) {
-      return fullCleanedContent.substring(0, previewLength) + '...';
-    }
-    return fullCleanedContent;
-  }, [post, videoUrl]);
-
-  const hasLiked = useMemo(() => user && post.likers?.includes(user.uid), [user, post.likers]);
-
-  const handleLike = useCallback(async (e) => {
-    e.stopPropagation(); 
-    if (!user || !post || !db) {
-        alert("请先登录再点赞");
-        return; 
-    }
-
-    const postDocRef = doc(db, 'posts', post.id);
-    try {
-      if (hasLiked) {
-        await updateDoc(postDocRef, { likesCount: increment(-1), likers: arrayRemove(user.uid) });
-      } else {
-        await updateDoc(postDocRef, { likesCount: increment(1), likers: arrayUnion(user.uid) });
-      }
-    } catch (error) {
-      console.error("点赞操作失败:", error);
-      alert("点赞/取消点赞失败，请重试。");
-    }
-  }, [user, post, hasLiked]);
-
-  const handleCardClick = useCallback(() => router.push(`/community/${post.id}`), [router, post.id]);
-  const handleActionClick = useCallback((e, callback) => {
-    e.stopPropagation(); 
-    if (callback) callback(e);
-  }, []);
-  const handleTtsClick = useCallback((e, text) => {
-    e.stopPropagation();
-    playCachedTTS(text);
-  }, []);
-
-  return (
-    <div ref={ref} onClick={handleCardClick} className="bg-white dark:bg-gray-800/50 p-4 sm:p-5 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
-      {/* 头部：头像、昵称、时间和私信按钮 */}
-      <div className="flex items-center justify-between mb-4">
-        <Link href={`/profile/${post.authorId}`} passHref> 
-          <a onClick={handleActionClick} className="relative z-10 flex items-center group">
-            <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-11 h-11 rounded-full object-cover shadow-sm" />
-            <div className="ml-3">
-              <p className="font-bold text-gray-800 dark:text-gray-200 group-hover:text-blue-500 transition-colors">{post.authorName || '匿名用户'}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">{formatTimeAgo(post.createdAt)}</p>
+    return (
+        <div className="flex items-center space-x-3">
+            <img src={user.photoURL || '/img/avatar.svg'} alt="你的头像" className="w-9 h-9 rounded-full" />
+            <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-700 rounded-full">
+                <input 
+                    type="text" 
+                    value={content} 
+                    onChange={(e) => setContent(e.target.value)} 
+                    placeholder={placeholder}
+                    className="w-full bg-transparent px-4 py-2 focus:outline-none text-gray-800 dark:text-gray-200"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                />
+                <button onClick={handleSubmit} disabled={isSubmitting || !content.trim()} className="p-2 mr-1 rounded-full text-white bg-blue-500 disabled:bg-gray-400 transition-colors active:scale-95">
+                    <Send size={18} />
+                </button>
             </div>
-          </a>
-        </Link>
-        <div className="flex-shrink-0">
-          <StartChatButton targetUser={{ uid: post.authorId }} />
         </div>
-      </div>
+    );
+};
 
-      {/* 内容区：标题、视频、正文 */}
-      <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 break-words">
-              {post.title}
-            </h2>
-            <button onClick={(e) => handleTtsClick(e, post.title)} className="relative z-10 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0 text-gray-500 dark:text-gray-400" aria-label="朗读标题">
-                <Volume2 size={18} />
-            </button>
+// --- 单个评论/回复渲染组件 ---
+const CommentItem = ({ comment, postId, isReply = false }) => {
+    const [showReplyInput, setShowReplyInput] = useState(false);
+    return (
+        <div className="flex space-x-3">
+            <Link href={`/profile/${comment.authorId}`}>
+                <a className="flex-shrink-0"><img src={comment.authorAvatar || '/img/avatar.svg'} alt={comment.authorName} className="w-9 h-9 rounded-full" /></a>
+            </Link>
+            <div className="flex-1">
+                <div className="bg-gray-100 dark:bg-gray-700 rounded-xl p-3">
+                    <div className="flex items-center justify-between">
+                        <Link href={`/profile/${comment.authorId}`}><a className="font-semibold text-sm text-gray-800 dark:text-gray-200 hover:underline">{comment.authorName}</a></Link>
+                        <p className="text-xs text-gray-400">{formatTimeAgo(comment.createdAt)}</p>
+                    </div>
+                    <p className="text-gray-700 dark:text-gray-300 mt-1">{comment.content}</p>
+                </div>
+                <div className="pl-3 mt-1">
+                    <button onClick={() => setShowReplyInput(!showReplyInput)} className="text-xs font-semibold text-gray-500 hover:text-blue-500">
+                        回复
+                    </button>
+                </div>
+                {showReplyInput && (
+                    <div className="mt-2">
+                         {/* ✅ 楼中楼回复时，placeholder变化 */}
+                        <CommentInput 
+                            postId={postId} 
+                            parentCommentId={comment.id} 
+                            placeholder={`回复 @${comment.authorName}`}
+                            onCommentAdded={() => setShowReplyInput(false)} 
+                        />
+                    </div>
+                )}
+            </div>
         </div>
+    );
+};
+
+// --- 评论楼层组件 (包含楼中楼逻辑) ---
+const CommentFloor = ({ comment, postId }) => {
+  const [replies, setReplies] = useState([]);
+
+  // 加载对这条评论的回复 (楼中楼)
+  useEffect(() => {
+      if (!comment.id) return;
+      const q = query(
+          collection(db, 'posts', postId, 'comments'),
+          where('parentCommentId', '==', comment.id),
+          orderBy('createdAt', 'asc')
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+          const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setReplies(fetchedReplies);
+      });
+      return () => unsubscribe();
+  }, [postId, comment.id]);
+
+  return (
+    <div className="py-4 border-t border-gray-100 dark:border-gray-700">
+        {/* 一级评论 */}
+        <CommentItem comment={comment} postId={postId} />
         
-        {videoUrl && (
-          <div className="w-full rounded-lg overflow-hidden shadow-lg">
-            <VideoEmbed url={videoUrl} />
-          </div>
+        {/* 二级及以上评论 (楼中楼)，固定一级缩进 */}
+        {replies.length > 0 && (
+            <div className="mt-4 pl-8 md:pl-12 space-y-4">
+                {replies.map(reply => (
+                    <CommentItem key={reply.id} comment={reply} postId={postId} isReply={true} />
+                ))}
+            </div>
         )}
-
-        <div className="text-gray-700 dark:text-gray-300 text-base leading-relaxed break-words">
-          <PostContent content={cleanedContent} />
-        </div>
-      </div>
-
-      {/* 底部操作栏：点赞、评论 */}
-      <div className="flex justify-end items-center space-x-6 mt-5 text-gray-500 dark:text-gray-400">
-        <button onClick={handleLike} className={`relative z-10 flex items-center space-x-1.5 transition-all duration-150 active:scale-95 group ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}>
-            <Heart size={20} fill={hasLiked ? 'currentColor' : 'none'} className={`group-hover:fill-current transition-colors ${hasLiked ? '' : 'stroke-current'}`} />
-            <span className="text-sm font-semibold">{post.likesCount || 0}</span>
-        </button>
-        
-        <Link href={`/community/${post.id}#comments`} passHref>
-            <a onClick={handleActionClick} className="relative z-10 flex items-center space-x-1.5 hover:text-blue-500 active:scale-95 transition-colors">
-                <MessageSquare size={20} />
-                <span className="text-sm font-semibold">{post.commentCount || 0}</span>
-            </a>
-        </Link>
-      </div>
     </div>
   );
-}
+};
 
-export default forwardRef(PostItemInner);
+// --- 新的评论区主组件 ---
+const NewCommentSection = ({ post }) => {
+    const { user } = useAuth();
+    const [comments, setComments] = useState([]);
+    const postId = post?.id;
+
+    // 实时获取主评论
+    useEffect(() => {
+        if (!postId) return;
+        const q = query(
+            collection(db, 'posts', postId, 'comments'),
+            where('parentCommentId', '==', null),
+            orderBy('createdAt', 'desc') // 最新评论在最上面
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setComments(fetchedComments);
+        }, (error) => console.error("加载评论失败:", error));
+        return () => unsubscribe();
+    }, [postId]);
+
+    return (
+        <div id="comments" className='duration-200 overflow-x-auto px-5'>
+            <div className='text-2xl font-bold dark:text-white mb-6'>
+                <div className="flex items-center gap-2">
+                    <MessageSquare/>
+                    <span>评论 ({post?.commentCount || 0})</span>
+                </div>
+            </div>
+            {/* 评论输入框 */}
+            {user ? (
+                <div className="mb-6">
+                    <CommentInput postId={postId} />
+                </div>
+            ) : (
+                <div className="text-center p-4 border dark:border-gray-700 rounded-lg mb-6">
+                    <p className='dark:text-gray-300'>请<button onClick={() => alert('请实现登录弹窗')} className="text-blue-500 font-bold mx-1 hover:underline">登录</button>后发表评论</p>
+                </div>
+            )}
+
+            {/* 评论列表 */}
+            <div>
+                {comments.map(comment => (
+                    <CommentFloor key={comment.id} comment={comment} postId={postId} />
+                ))}
+                {comments.length === 0 && <p className="text-center text-gray-500 py-8">还没有评论，快来抢沙发吧！</p>}
+            </div>
+        </div>
+    );
+};
+
+
+/**
+ * 文章详情页布局
+ * @param {*} props
+ * @returns
+ */
+const LayoutSlug = props => {
+  const { post, lock, validPassword } = props;
+  const { locale, fullWidth } = useGlobal();
+  const router = useRouter();
+
+  // 404 跳转逻辑
+  useEffect(() => {
+    if (!post) {
+      setTimeout(() => {
+          if (isBrowser) {
+            const article = document.querySelector('#article-wrapper');
+            if (!article) {
+              router.push('/404').then(() => console.warn('找不到页面', router.asPath));
+            }
+          }
+        }, 5000
+      );
+    }
+  }, [post, router]);
+
+  return (
+    <>
+      <div className={`article w-full ${fullWidth ? '' : 'xl:max-w-5xl mx-auto'} bg-white dark:bg-[#18171d] dark:border-gray-600 lg:shadow-md lg:border rounded-2xl lg:p-4`}>
+        {lock && <PostLock validPassword={validPassword} />}
+
+        {!lock && post && (
+          <div id='article-wrapper'>
+            {/* Notion文章主体 */}
+            <article itemScope itemType='https://schema.org/Article'>
+              <section className='px-5 justify-center mx-auto'>
+                <ArticleExpirationNotice post={post} />
+                <AISummary aiSummary={post.aiSummary} />
+                <WWAds orientation='horizontal' className='w-full' />
+                {post && <NotionPage post={post} />}
+                <WWAds orientation='horizontal' className='w-full' />
+              </section>
+            </article>
+
+            {/* ✅ ---【核心修改：替换为新的楼中楼评论区】--- ✅ */}
+            <div className="mt-8">
+                <hr className='my-4 border-dashed' />
+                <div className='py-2'>
+                  <AdSlot />
+                </div>
+                {/* 使用新的评论区组件 */}
+                <NewCommentSection post={post} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <FloatTocButton {...props} />
+    </>
+  );
+};
+
+export default LayoutSlug;
