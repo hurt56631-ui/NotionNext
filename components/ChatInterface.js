@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完整版 - 集成 RTDB 实时在线状态、智能输入和 UI 优化)
+// /components/ChatInterface.js (终极完整版 - 修复编译错误，集成 RTDB 实时在线状态)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
@@ -149,7 +149,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   
   // ✅ ---【核心修复：RTDB 在线状态读取】--- ✅
   useEffect(() => {
-    if (!peerUser?.id || typeof window === 'undefined' || !rtDb) {
+    // 确保 rtDb 已初始化 (rtDb.toJSON() 是检查 RTDB 实例是否存在的可靠方法)
+    if (!peerUser?.id || typeof window === 'undefined' || !rtDb || !rtDb.toJSON()) {
       setPeerStatus({ online: false, lastSeenTimestamp: null });
       return;
     }
@@ -402,7 +403,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <div className="w-16"></div> 
                     <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <h1 className="font-bold text-lg text-white truncate max-w-[50vw]">{peerUser?.displayName || "聊天"}</h1>
-                        {/* ✅ 核心修改：显示在线状态或最后在线时间 */}
+                        {/* 核心修改：显示在线状态或最后在线时间 */}
                         {peerStatus.online ? ( 
                             <span className="text-xs text-white/80 font-semibold flex items-center gap-1">
                                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>在线
@@ -546,7 +547,13 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                 <label className="flex items-center justify-between text-sm"><span className="font-bold">目标语言 (对方语言)</span><input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
               </div>
               
-              <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4><input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/></div>
+              <div className="p-3 rounded-lg bg-white space-y-2">
+                <h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4>
+                <input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
+                <input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c, ai: {...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
+                <input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c, ai: {...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
+              </div>
+              
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">自动化</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm text-red-500">危险操作</h4><button onClick={handleDeleteAllMessages} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">删除全部聊天记录</button><button onClick={handleBlockUser} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">拉黑对方</button></div>
               <button onClick={() => setSettingsOpen(false)} className="w-full mt-2 p-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-md">关闭</button>
