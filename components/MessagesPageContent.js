@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (最终版本 - 集成全局未读状态)
+// /components/MessagesPageContent.js (最终版本 - 精简监听，使用全局状态)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -8,7 +8,6 @@ import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'fire
 import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineGlobeAlt, HiOutlineUsers } from 'react-icons/hi2';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
-// ✅ 导入 useUnreadCount Hook
 import { useUnreadCount } from '@/lib/UnreadCountContext'; 
 
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
@@ -26,8 +25,8 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
       {tabs.map((tab) => (
         <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`${baseClasses} ${activeTab === tab.key ? activeClasses : inactiveClasses}`}>
           {tab.icon}
-          {/* 顶部导航栏未读小圆点 (现在使用全局状态计算的 totalUnreadCount) */}
-          {tab.key === 'messages' && totalUnreadCount > 0 && (<span className="absolute top-2 right-1/2 translate-x-4 block h-2 w-2 rounded-full bg-green-400" />)}
+          {/* ✅ 颜色和逻辑不变，使用全局状态 */}
+          {tab.key === 'messages' && totalUnreadCount > 0 && (<span className="absolute top-2 right-1/2 translate-x-4 block h-2 w-2 rounded-full bg-red-500" />)}
           <span className="text-xs mt-1">{tab.name}</span>
           <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.key ? 'bg-white' : 'bg-transparent'}`}></div>
         </button>
@@ -50,16 +49,15 @@ const ConversationList = ({ conversations, loading, user, authLoading }) => {
   return (
     <ul className="divide-y divide-gray-200 dark:divide-gray-700">
       {conversations.map((convo) => {
-        if (!convo || !convo.otherUser) {
-            return null; 
-        }
+        if (!convo || !convo.otherUser) { return null; }
         return (
             <li key={convo.id} onClick={() => handleConversationClick(convo)} className="relative flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
                 <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
                 <div className="ml-4 flex-1 overflow-hidden">
                     <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
                     <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>
-                        {convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-green-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}
+                        {/* ✅ 颜色和逻辑不变 */}
+                        {convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}
                     </div>
                 </div>
             </li>
@@ -78,11 +76,13 @@ const MessagesPageContent = () => {
   // ✅ 核心修改：使用全局状态 Hook
   const { totalUnreadCount, setTotalUnreadCount } = useUnreadCount();
 
+  // --- 核心逻辑：从 AuthContext 提取数据的简化版本 ---
   useEffect(() => {
+    // 监听逻辑已移到 AuthContext，这里只负责根据 AuthContext 的 user 状态来获取会话列表
     if (authLoading || !user) {
       if (!authLoading) setLoading(false);
       setConversations([]);
-      setTotalUnreadCount(0); // 清除全局状态
+      // setTotalUnreadCount(0); // 这一步现在交给 AuthContext 完成
       return;
     }
 
@@ -95,12 +95,11 @@ const MessagesPageContent = () => {
     const unsubscribe = onSnapshot(
       chatsQuery,
       async (snapshot) => {
-        let currentTotalUnread = 0;
+        // ❌ 核心改变：不再在这里重复计算 totalUnreadCount，只计算单个会话的 unreadCount
         
         const chatsWithPlaceholders = snapshot.docs.map(doc => {
           const chatData = doc.data();
-          const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
-          currentTotalUnread += unreadCount;
+          const unreadCount = chatData.unreadCounts?.[user.uid] || 0; // 仍需计算单个未读数
           const otherUserId = chatData.members.find((id) => id !== user.uid);
           
           return {
@@ -112,8 +111,7 @@ const MessagesPageContent = () => {
         });
 
         setConversations(chatsWithPlaceholders);
-        setTotalUnreadCount(currentTotalUnread); // ✅ 更新全局状态
-        setLoading(false);
+        // setLoading(false); // 这一行应该移到下面
 
         const resolvedChats = await Promise.all(chatsWithPlaceholders.map(async (chat) => {
             if (!chat.otherUser.id) return chat;
@@ -132,6 +130,7 @@ const MessagesPageContent = () => {
         }));
         
         setConversations(resolvedChats.filter(Boolean));
+        setLoading(false); // 在所有异步操作完成后，才关闭加载状态
       },
       (error) => { 
         console.error('获取会话列表出错:', error); 
@@ -140,7 +139,7 @@ const MessagesPageContent = () => {
     );
 
     return () => unsubscribe();
-  }, [user, authLoading, setTotalUnreadCount]); // 依赖中加入 setTotalUnreadCount
+  }, [user, authLoading]); // 依赖中不再需要 setTotalUnreadCount
 
 
   const renderContent = () => {
