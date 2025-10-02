@@ -1,5 +1,3 @@
-// themes/heo/Layout/LayoutSlug.js (终极美化版 - 已集成“楼中楼”评论区、折叠、无限回复)
-
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
