@@ -1,7 +1,8 @@
-// pages/community/index.js (贴吧版 + 私信功能完全集成最终版)
+// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 已优化手势和UI)
 
 import { useTransition, animated } from '@react-spring/web';
-import { useDrag } from '@use-gesture/react';
+// ✅ 移除 useDrag, 引入 useSwipeable
+import { useSwipeable } from 'react-swipeable';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -82,14 +83,9 @@ const CommunityPage = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
   const [currentSort, setCurrentSort] = useState('最新');
-  const [swipeDirection, setSwipeDirection] = useState(0);
-  const categoryIndexRef = useRef(0);
-
+  const [swipeDirection, setSwipeDirection] = useState(0); // -1 for right, 1 for left
+  
   const [chatTarget, setChatTarget] = useState(null);
-
-  useEffect(() => {
-    categoryIndexRef.current = CATEGORIES.indexOf(currentCategory);
-  }, [currentCategory]);
 
   const updateLastVisible = useCallback((newDoc) => {
     lastVisibleRef.current = newDoc;
@@ -154,26 +150,27 @@ const CommunityPage = () => {
     }
   }, [currentCategory, currentSort, db]);
 
-  const bind = useDrag(
-    ({ active, movement: [mx, my], direction: [dx], cancel, canceled }) => {
-      if (Math.abs(my) > Math.abs(mx)) {
-        cancel();
-        return;
-      }
-      if (!active && !canceled) {
-        if (Math.abs(mx) > window.innerWidth * 0.25) {
-          const direction = dx > 0 ? -1 : 1;
-          const currentIndex = categoryIndexRef.current;
-          const nextIndex = currentIndex + direction;
-          if (nextIndex >= 0 && nextIndex < CATEGORIES.length) {
-            setSwipeDirection(direction);
-            setCurrentCategory(CATEGORIES[nextIndex]);
-          }
-        }
+  // ✅ 全新的手势处理逻辑
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      const currentIndex = CATEGORIES.indexOf(currentCategory);
+      if (currentIndex < CATEGORIES.length - 1) {
+        setSwipeDirection(1); // 向左滑，新内容从右边来
+        setCurrentCategory(CATEGORIES[currentIndex + 1]);
       }
     },
-    { axis: 'x', filterTaps: true, threshold: 20 }
-  );
+    onSwipedRight: () => {
+      const currentIndex = CATEGORIES.indexOf(currentCategory);
+      if (currentIndex > 0) {
+        setSwipeDirection(-1); // 向右滑，新内容从左边来
+        setCurrentCategory(CATEGORIES[currentIndex - 1]);
+      }
+    },
+    // ✅ 核心配置：高灵敏度、大范围、防浏览器手势
+    delta: 30, // 触发滑动所需的最小像素移动，数值越小越灵敏
+    preventDefaultTouchmoveEvent: true, // 阻止触摸移动事件的默认行为，关键在于避免触发浏览器侧滑返回
+    trackMouse: true, // 允许在桌面上用鼠标拖动来触发滑动
+  });
 
   const transitions = useTransition(currentCategory, {
     from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
@@ -253,11 +250,13 @@ const CommunityPage = () => {
         </div>
 
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
-          <div className="sticky top-0 z-30 bg-transparent py-3">
+          {/* ✅ 修复：移除了 py-3，解决与状态栏的间隙问题 */}
+          <div className="sticky top-0 z-30">
             <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
           </div>
 
-          <div {...bind()} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
+          {/* ✅ 应用新的手势绑定 */}
+          <div {...swipeHandlers} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
             {transitions((style, item) => (
               <animated.div key={item} style={{ ...style, width: '100%' }}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
