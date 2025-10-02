@@ -135,7 +135,7 @@ alert('保存背景失败，可能是图片太大或存储空间已满。');
 };
 
 const onFileChange = (e) => {
-const file = e.target.files?.;
+const file = e.target.files?.[0];
 if (!file) return;
 const reader = new FileReader();
 reader.onload = () => {
