@@ -1,4 +1,4 @@
-// /components/Footer.js (已按要求修改)
+// /components/Footer.js (已集成全局未读消息提示)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -11,7 +11,9 @@ import React, { useState, useEffect } from 'react'
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 import { useAuth } from '@/lib/AuthContext'
-import { useMessages } from '@/lib/MessageContext' // <-- 导入 useMessages
+// ✅ ---【核心修改】--- ✅
+// 导入我们新的 useUnreadCount Hook
+import { useUnreadCount } from '@/lib/UnreadCountContext' 
 import dynamic from 'next/dynamic'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
@@ -19,7 +21,9 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 const Footer = () => {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const { totalUnreadCount } = useMessages(); // <-- 直接从 Context 获取总未read数
+  
+  // ✅ 核心修改：从新的全局 Context 获取总未读数
+  const { totalUnreadCount } = useUnreadCount(); 
 
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [isDrawerOpen, setDrawerOpen] = useState(false)
@@ -42,7 +46,7 @@ const Footer = () => {
     <>
       {showDesktopFooter && (
         <footer className='relative flex-shrink-0 bg-white dark:bg-[#1a191d] text-gray-600 dark:text-gray-400 justify-center text-center m-auto p-6 text-sm leading-6'>
-            {/* ... 桌面端页脚内容不变 ... (为了完整性，这里可以填充原有内容) */}
+            {/* ... 桌面端页脚内容不变 ... */}
             <div className="w-full">
                  <span>
                     <SocialButton />
@@ -74,6 +78,7 @@ const Footer = () => {
             <span className='text-sm mt-1'>社区</span>
           </Link>
           
+          {/* ✅ 核心修改：消息按钮，使用 totalUnreadCount 来显示小绿点 */}
           <Link href='/messages' onClick={handleAuthRedirect} className={`flex flex-col items-center ${router.pathname === '/messages' ? activeColor : defaultColor} px-2 py-1 relative`}>
               {totalUnreadCount > 0 && (
                   <span className='absolute top-0 right-1.5 flex h-2.5 w-2.5'>
