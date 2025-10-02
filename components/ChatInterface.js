@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { ref, onValue } from "firebase/database";
 import { database } from "@/lib/firebase";
-import { formatDistanceToNow } from "date-fns";
 
 export default function ChatInterface({ chatPartnerId }) {
   const [status, setStatus] = useState("offline");
@@ -10,8 +9,7 @@ export default function ChatInterface({ chatPartnerId }) {
   useEffect(() => {
     if (!chatPartnerId || !database) return;
 
-    const statusRef = ref(database, `onlineStatus/${chatPartnerId}`);
-
+    const statusRef = ref(database, `status/${chatPartnerId}`);
     const unsubscribe = onValue(statusRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -26,17 +24,13 @@ export default function ChatInterface({ chatPartnerId }) {
     return () => unsubscribe();
   }, [chatPartnerId]);
 
-  const renderStatus = () => {
-    if (status === "online") return "🟢 在线";
-    if (lastSeen) {
-      return `${formatDistanceToNow(new Date(lastSeen), { addSuffix: true })} 在线过`;
-    }
-    return "⚪ 离线";
-  };
-
   return (
     <div className="text-sm text-gray-500 px-2 py-1">
-      {renderStatus()}
+      {status === "online"
+        ? "🟢 在线"
+        : lastSeen
+        ? `${Math.floor((Date.now() - lastSeen) / 60000)} 分钟前在线`
+        : "⚪ 离线"}
     </div>
   );
 }
