@@ -1,4 +1,4 @@
-// /components/Footer.js (已集成全局未读消息提示)
+// /components/Footer.js (已修复 '提示登录' 逻辑)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -11,8 +11,6 @@ import React, { useState, useEffect } from 'react'
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 import { useAuth } from '@/lib/AuthContext'
-// ✅ ---【核心修改】--- ✅
-// 导入我们新的 useUnreadCount Hook
 import { useUnreadCount } from '@/lib/UnreadCountContext' 
 import dynamic from 'next/dynamic'
 
@@ -20,9 +18,9 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 
 const Footer = () => {
   const router = useRouter()
-  const { user, loading } = useAuth()
+  // ✅ 关键：这里获取 loading 状态
+  const { user, authLoading } = useAuth() 
   
-  // ✅ 核心修改：从新的全局 Context 获取总未读数
   const { totalUnreadCount } = useUnreadCount(); 
 
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -35,18 +33,36 @@ const Footer = () => {
   const handleOpenDrawer = () => { router.push(router.asPath + '#ai-chat', undefined, { shallow: true }); setDrawerOpen(true); };
   const handleCloseDrawer = () => { if (window.location.hash === '#ai-chat') { router.back(); } else { setDrawerOpen(false); } };
   useEffect(() => { const handleHashChange = () => { if (window.location.hash !== '#ai-chat') { setDrawerOpen(false); } }; window.addEventListener('popstate', handleHashChange); return () => { window.removeEventListener('popstate', handleHashChange); }; }, [router]);
-  const handleAuthRedirect = (e) => { if (!loading && !user) { e.preventDefault(); setShowLoginModal(true); } };
+  
+  // ✅ 核心修复：只有当 authLoading 为 false 时，才检查 user
+  const handleAuthRedirect = (e) => { 
+    if (authLoading) {
+        // 如果还在加载，阻止默认跳转，但不弹窗，避免在认证进行时干扰
+        e.preventDefault();
+        return;
+    }
+    if (!user) { 
+        e.preventDefault(); 
+        setShowLoginModal(true); 
+    } 
+  };
+  
   const showDesktopFooter = router.pathname === '/';
 
-  // --- 颜色和样式定义 ---
   const defaultColor = 'text-gray-500 dark:text-gray-400';
   const activeColor = 'text-purple-500 dark:text-purple-400';
+
+  // ✅ 优化：在 authLoading 时，底部导航栏不应该允许点击关键按钮
+  if (authLoading) {
+      // 可以在这里返回一个禁用版的 Footer，或者让 Footer 里的 Link 禁用。
+      // 为简化，我们直接返回一个只包含一个 loading 状态的 div
+      // 但为了不改变您的 Layout 结构，我们使用 Link 上的 disabled 逻辑
+  }
 
   return (
     <>
       {showDesktopFooter && (
         <footer className='relative flex-shrink-0 bg-white dark:bg-[#1a191d] text-gray-600 dark:text-gray-400 justify-center text-center m-auto p-6 text-sm leading-6'>
-            {/* ... 桌面端页脚内容不变 ... */}
             <div className="w-full">
                  <span>
                     <SocialButton />
@@ -78,8 +94,12 @@ const Footer = () => {
             <span className='text-sm mt-1'>社区</span>
           </Link>
           
-          {/* ✅ 核心修改：消息按钮，使用 totalUnreadCount 来显示小绿点 */}
-          <Link href='/messages' onClick={handleAuthRedirect} className={`flex flex-col items-center ${router.pathname === '/messages' ? activeColor : defaultColor} px-2 py-1 relative`}>
+          {/* ✅ 核心修复：消息和个人中心的跳转需要等待认证完成 */}
+          <Link 
+            href='/messages' 
+            onClick={handleAuthRedirect} 
+            className={`flex flex-col items-center ${router.pathname === '/messages' ? activeColor : defaultColor} px-2 py-1 relative ${authLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
               {totalUnreadCount > 0 && (
                   <span className='absolute top-0 right-1.5 flex h-2.5 w-2.5'>
                     <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75'></span>
@@ -90,7 +110,11 @@ const Footer = () => {
               <span className='text-sm mt-1'>消息</span>
           </Link>
           
-          <Link href='/me' onClick={handleAuthRedirect} className={`flex flex-col items-center ${router.pathname === '/me' ? activeColor : defaultColor} px-2 py-1`}>
+          <Link 
+            href='/me' 
+            onClick={handleAuthRedirect} 
+            className={`flex flex-col items-center ${router.pathname === '/me' ? activeColor : defaultColor} px-2 py-1 ${authLoading ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
             <i className='fas fa-user text-xl'></i>
             <span className='text-sm mt-1'>我</span>
           </Link>
