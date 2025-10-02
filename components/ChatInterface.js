@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完整版 - 修复编译错误，集成 RTDB 实时在线状态)
+// /components/ChatInterface.js (终极完整版 - 修复编译误，集成 RTDB 实时在线状态)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
