@@ -1,11 +1,11 @@
-// /components/ChatInterface.js (最终完美集成版 - 包含 writeBatch、智能输入和 UI 优化)
+// /components/ChatInterface.js (终极完整版 - 集成 RTDB 实时在线状态、智能输入和 UI 优化)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { db } from "@/lib/firebase";
-// ✅ 确保导入 writeBatch
+// ✅ 引入 RTDB 实例和函数
+import { db, rtDb } from "@/lib/firebase"; 
+import { ref as rtRef, onValue } from 'firebase/database';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment, writeBatch } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
-// ✅ 导入 Mic 图标
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash, Mic } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
@@ -26,14 +26,29 @@ const CircleTranslateIcon = ({ size = 6 }) => (
 );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
 
-// TTS 功能模块 (无变化)
+// TTS/AI 模块 (无变化)
 const ttsCache = new Map();
 const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
 const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }); } };
-
-// AI 功能模块 (无变化)
 const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
 const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
+
+// --- 辅助函数：格式化时间戳为“最后在线时间” ---
+const formatLastSeen = (timestamp) => {
+    if (!timestamp) return '离线';
+    const now = Date.now();
+    const diff = now - timestamp; 
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return '在线'; 
+    if (minutes < 60) return `${minutes} 分钟前`;
+    if (hours < 24) return `${hours} 小时前`;
+    if (days < 7) return `${days} 天前`;
+    
+    return new Date(timestamp).toLocaleDateString();
+};
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
@@ -49,11 +64,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [showPinyinFor, setShowPinyinFor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
-  const [peerStatus, setPeerStatus] = useState({ online: false });
+  
+  // ✅ 实时在线状态
+  const [peerStatus, setPeerStatus] = useState({ online: false, lastSeenTimestamp: null });
   const [unreadCount, setUnreadCount] = useState(0);
   const [background, setBackground] = useState({ dataUrl: null, opacity: 0.2 });
-
-  // ✅ 语音识别相关状态
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef(null);
   
@@ -65,7 +80,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef(null);
   
-  // ✅ 默认设置中包含语音识别语言
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal',
       sourceLang: '中文', targetLang: '缅甸语',
@@ -132,14 +146,64 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
 
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
-  useEffect(() => { if (!peerUser?.id) return; const peerUserRef = doc(db, 'users', peerUser.id); const unsubscribe = onSnapshot(peerUserRef, (docSnap) => { if (docSnap.exists()) { const data = docSnap.data(); const lastSeen = data.lastSeen; if (lastSeen && typeof lastSeen.toDate === 'function') { const minutesAgo = (new Date().getTime() - lastSeen.toDate().getTime()) / 60000; setPeerStatus({ online: minutesAgo < 2 }); } } else { setPeerStatus({ online: false }); } }); return () => unsubscribe(); }, [peerUser?.id]);
+  
+  // --- 替换旧的 lastSeen 监听，使用 RTDB 实时状态 ---
+  useEffect(() => {
+    if (!peerUser?.id || typeof window === 'undefined' || !rtDb) {
+      setPeerStatus({ online: false, lastSeenTimestamp: null });
+      return;
+    }
+
+    const peerStatusRef = rtRef(rtDb, `/status/${peerUser.id}`);
+    
+    const unsubscribeRTDB = onValue(peerStatusRef, (snapshot) => {
+      const statusData = snapshot.val();
+      if (statusData && statusData.state === 'online') {
+        setPeerStatus({ online: true, lastSeenTimestamp: statusData.last_changed });
+      } else if (statusData) {
+        setPeerStatus({ online: false, lastSeenTimestamp: statusData.last_changed });
+      } else {
+        // Fallback: 如果 RTDB 节点丢失，尝试从 Firestore 读取 lastSeen
+        const peerFirestoreRef = doc(db, 'users', peerUser.id);
+        getDoc(peerFirestoreRef).then(docSnap => {
+            if (docSnap.exists()) {
+                const lastSeen = docSnap.data().lastSeen;
+                const firestoreTime = lastSeen?.toDate()?.getTime() || null;
+                setPeerStatus({ online: false, lastSeenTimestamp: firestoreTime });
+            }
+        });
+      }
+    });
+
+    const peerFirestoreRef = doc(db, 'users', peerUser.id);
+    const unsubscribeFirestore = onSnapshot(peerFirestoreRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const lastSeen = docSnap.data().lastSeen;
+            if (lastSeen && typeof lastSeen.toDate === 'function') {
+                const firestoreTime = lastSeen.toDate().getTime();
+                setPeerStatus(prev => {
+                    if (prev.online) return prev;
+                    return { online: false, lastSeenTimestamp: firestoreTime };
+                });
+            }
+        }
+    });
+
+
+    return () => {
+        unsubscribeRTDB();
+        unsubscribeFirestore();
+    };
+  }, [peerUser?.id]);
+
+
   useEffect(() => { if (!chatId || !user) return; const messagesRef = collection(db, `privateChats/${chatId}/messages`); const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000)); const unsub = onSnapshot(q, (snap) => { const arr = snap.docs.map(d => ({ id: d.id, ...d.data() })); const oldMessagesCount = prevMessagesLengthRef.current; if (oldMessagesCount > 0 && arr.length > oldMessagesCount) { const newMessages = arr.slice(oldMessagesCount); const newPeerMessagesCount = newMessages.filter(m => m.uid !== user.uid).length; if (newPeerMessagesCount > 0 && !isAtBottomRef.current) { setUnreadCount(prev => prev + newPeerMessagesCount); } } setMessages(arr); prevMessagesLengthRef.current = arr.length; const lastMessage = arr[arr.length - 1]; if (lastMessage && lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }, (err) => console.error("监听消息错误:", err)); return () => unsub(); }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // ✅ ---【核心修复：使用 writeBatch 确保准确性】--- ✅
+  // --- sendMessage 函数 ---
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
     if (!content.trim() || !user?.uid || !peerUser?.id || !chatId) {
@@ -152,32 +216,26 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       const chatDocRef = doc(db, "privateChats", chatId);
       const newMessageRef = doc(collection(chatDocRef, "messages"));
 
-      // 操作 A：添加新消息
       batch.set(newMessageRef, {
         text: content.trim(),
         uid: user.uid,
         createdAt: serverTimestamp()
       });
 
-      // 操作 B：更新主聊天文档
       batch.update(chatDocRef, {
         members: [user.uid, peerUser.id], 
         lastMessage: content.trim(),
         lastMessageAt: serverTimestamp(),
-        // 为对方(peerUser)的未读数 +1
         [`unreadCounts.${peerUser.id}`]: increment(1),
-        // 同时，将自己(user)的未读数设置为 0
         [`unreadCounts.${user.uid}`]: 0
       });
 
-      // 提交所有操作
       await batch.commit();
       
       setInput("");
       setMyTranslationResult(null);
     } catch (e) {
       if (e.code === 'not-found') {
-        // Fallback：如果主文档不存在，尝试使用 setDoc 创建它
         try {
             const chatDocRef = doc(db, "privateChats", chatId);
             await setDoc(chatDocRef, {
@@ -204,7 +262,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     }
   };
 
-  // ✅ 新增语音识别处理函数
+  // --- 语音识别处理函数 ---
   const handleSpeechRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -237,7 +295,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     recognition.onerror = (event) => {
       console.error("语音识别错误:", event.error);
       setIsListening(false);
-      // 如果识别失败，清空输入框
       setInput('');
     };
 
@@ -249,7 +306,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       
       setInput(transcript);
 
-      // 当一句话识别结束时，直接发送
       if (event.results[0].isFinal && transcript.trim()) {
         sendMessage(transcript);
       }
@@ -279,7 +335,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
           <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> 
           {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} 
           
-          {/* ✅ 更新长按菜单的翻译图标 */}
+          {/* 更新长按菜单的翻译图标 */}
           {!message.recalled && 
             <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full">
               <div className="w-5 h-5 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-xs font-bold text-gray-600">译</div>
@@ -346,7 +402,16 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <div className="w-16"></div> 
                     <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <h1 className="font-bold text-lg text-white truncate max-w-[50vw]">{peerUser?.displayName || "聊天"}</h1>
-                        {peerStatus.online ? ( <span className="text-xs text-white/80 font-semibold flex items-center gap-1"><div className="w-2 h-2 bg-green-400 rounded-full"></div>在线</span> ) : ( <span className="text-xs text-white/60">离线</span> )}
+                        {/* ✅ 核心修改：显示在线状态或最后在线时间 */}
+                        {peerStatus.online ? ( 
+                            <span className="text-xs text-white/80 font-semibold flex items-center gap-1">
+                                <div className="w-2 h-2 bg-green-400 rounded-full"></div>在线
+                            </span> 
+                        ) : ( 
+                            <span className="text-xs text-white/60">
+                                {formatLastSeen(peerStatus.lastSeenTimestamp)}
+                            </span> 
+                        )}
                     </div>
                     <div className="flex items-center gap-1">
                         <button onClick={() => setSearchActive(true)} className="p-2 text-white/80 hover:text-white"><Search /></button>
@@ -408,7 +473,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                       {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}
                   </button>
                   
-                  {/* ✅ 智能按钮：根据输入状态切换语音/发送 */}
+                  {/* 智能按钮：根据输入状态切换语音/发送 */}
                   {input.trim() === '' ? (
                     <button onClick={handleSpeechRecognition} className={`w-10 h-10 flex items-center justify-center rounded-full text-white transition-all ml-1 ${isListening ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`} title="语音输入">
                       <Mic size={18} />
@@ -458,7 +523,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                 )}
               </div>
 
-              {/* ✅ 语音和翻译设置，包含语音识别语言 */}
+              {/* 语音和翻译设置，包含语音识别语言 */}
               <div className="p-3 rounded-lg bg-white space-y-3">
                 <h4 className="font-bold text-sm">语音和翻译</h4>
                 <label className="flex items-center justify-between text-sm">
