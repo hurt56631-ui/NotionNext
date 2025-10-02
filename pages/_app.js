@@ -1,5 +1,4 @@
-
-// pages/_app.js (已修改)
+// pages/_app.js (最终版 - 已集成 UnreadCountProvider)
 
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
@@ -17,12 +16,15 @@ import BLOG from '@/blog.config'
 import ExternalPlugins from '@/components/ExternalPlugins'
 import SEO from '@/components/SEO'
 
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import { MessageProvider } from '@/lib/MessageContext'; // <-- 导入 MessageProvider
+import { AuthProvider } from '@/lib/AuthContext';
+// ✅ ---【核心修改】--- ✅
+// 导入我们新创建的 UnreadCountProvider
+import { UnreadCountProvider } from '@/lib/UnreadCountContext'; 
+// 移除旧的 MessageProvider 导入 (如果有)
+// import { MessageProvider } from '@/lib/MessageContext'; 
 
 const AppInner = ({ Component, pageProps }) => {
   useAdjustStyle()
-  // useHeartbeat 仍然可以保留，因为它不影响UI
   
   const route = useRouter()
   const theme = useMemo(() => {
@@ -55,10 +57,10 @@ const AppInner = ({ Component, pageProps }) => {
 const MyApp = ({ Component, pageProps }) => {
   return (
     <AuthProvider>
-      {/* 将 MessageProvider 包裹在 AuthProvider 内部 */}
-      <MessageProvider>
+      {/* ✅ 关键：用 UnreadCountProvider 包裹 AppInner */}
+      <UnreadCountProvider>
         <AppInner Component={Component} pageProps={pageProps} />
-      </MessageProvider>
+      </UnreadCountProvider>
     </AuthProvider>
   )
 }
