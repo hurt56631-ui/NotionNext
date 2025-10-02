@@ -1,320 +1,213 @@
+// themes/heo/components/PostItem.js (V9 - 已链接到独立聊天页面)
 
-
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { forwardRef, useMemo, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
-import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection, query, where, orderBy, addDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
-import { Volume2, Send } from 'lucide-react';
-import Link from 'next/link';
+import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Volume2 } from 'lucide-react';
 
-import Comment from '@/components/Comment' // 旧的 Comment 组件，我们将用新的逻辑替代
-import { AdSlot } from '@/components/GoogleAdsense'
-import LazyImage from '@/components/LazyImage'
-import NotionPage from '@/components/NotionPage'
-import WWAds from '@/components/WWAds'
-import { useGlobal } from '@/lib/global'
-import { isBrowser } from '@/lib/utils'
-import FloatTocButton from '../components/FloatTocButton'
-import { PostLock } from '../components/PostLock'
-import AISummary from '@/components/AISummary'
-import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-
+const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-// --- 辅助函数：时间格式化 ---
+import { formatDistanceToNow } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+
+// --- TTS 朗读功能模块 ---
+const ttsCache = new Map();
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
+  try {
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+};
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) { ttsCache.get(text).play(); }
+  else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); }
+};
+// --- TTS 模块结束 ---
+
+
 const formatTimeAgo = (ts) => {
   if (!ts) return '不久前';
   try {
     const date = ts?.toDate ? ts.toDate() : new Date(ts);
     return formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
-  } catch (e) { return '日期错误'; }
+  } catch (e) {
+    return '日期错误';
+  }
 };
 
-// --- 辅助函数：TTS 朗读 ---
-const playTTS = (text) => {
-  try {
-    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
-    new Audio(url).play();
-  } catch (error) { console.error("TTS playback failed:", error); }
+const parseVideoUrl = (postData) => {
+  if (!postData) return null;
+  if (postData.videoUrl && typeof postData.videoUrl === 'string' && postData.videoUrl.trim() !== '') {
+    try { new URL(postData.videoUrl); return postData.videoUrl; } catch { /* not a valid URL */ }
+  }
+  const text = postData.content;
+  if (!text || typeof text !== 'string') return null;
+  const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
+  const allUrls = text.match(urlRegex);
+  if (!allUrls) return null;
+  const videoPatterns = [
+    /youtube\.com|youtu\.be/, /vimeo\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/,
+    /bilibili\.com/, 
+    /\.(mp4|webm|ogg|mov)$/i 
+  ];
+  for (const url of allUrls) {
+    if (videoPatterns.some(p => p.test(url))) {
+      return url;
+    }
+  }
+  return null;
 };
 
-// ===================================================================
-// =============  ✅ 新增：楼中楼评论区相关组件  =============
-// ===================================================================
+const removeUrlFromText = (text, urlToRemove) => {
+    if (!text || !urlToRemove || typeof text !== 'string') return text;
+    const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+    const regex = new RegExp(escapedUrl, 'g');
+    return text.replace(regex, '').trim();
+};
 
-// --- 楼中楼回复框组件 ---
-const ReplyInput = ({ postId, parentCommentId, onCommentAdded }) => {
-    const { user } = useAuth();
-    const [reply, setReply] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
+// --- 【核心修改】StartChatButton 组件 ---
+const StartChatButton = ({ targetUser }) => {
+  const { user: currentUser } = useAuth();
+  const router = useRouter();
 
-    const handleSubmit = async () => {
-        if (!reply.trim() || !user || isSubmitting) return;
-        setIsSubmitting(true);
-        try {
-            const commentsRef = collection(db, 'posts', postId, 'comments');
-            await addDoc(commentsRef, {
-                content: reply,
-                authorId: user.uid,
-                authorName: user.displayName,
-                authorAvatar: user.photoURL,
-                parentCommentId: parentCommentId, // 标记这是对哪条评论的回复
-                createdAt: serverTimestamp(),
-            });
-            setReply('');
-            if (onCommentAdded) onCommentAdded(); // 通知父组件有新评论
-        } catch (error) {
-            console.error("回复失败:", error);
-            alert("回复失败，请重试。");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  if (!targetUser || !targetUser.uid || !currentUser) return null;
+
+  const handleClick = (e) => {
+    e.stopPropagation(); // 阻止事件冒泡到父元素（卡片点击）
     
-    if (!user) return null;
-
-    return (
-        <div className="flex items-center space-x-2 mt-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-lg">
-            <input 
-                type="text" 
-                value={reply} 
-                onChange={(e) => setReply(e.target.value)} 
-                placeholder="添加回复..." 
-                className="flex-1 bg-transparent focus:outline-none text-sm px-2 text-gray-800 dark:text-gray-200"
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
-            />
-            <button onClick={handleSubmit} disabled={isSubmitting || !reply.trim()} className="p-2 rounded-full bg-blue-500 text-white disabled:bg-gray-400">
-                <Send size={16} />
-            </button>
-        </div>
-    );
-};
-
-// --- 单个评论楼层组件 (包含楼中楼) ---
-const CommentFloor = ({ comment, postId }) => {
-  const [showReplyInput, setShowReplyInput] = useState(false);
-  const [replies, setReplies] = useState([]);
-
-  // 加载对这条评论的回复 (楼中楼)
-  useEffect(() => {
-      if (!comment.id) return;
-      const q = query(
-          collection(db, 'posts', postId, 'comments'),
-          where('parentCommentId', '==', comment.id),
-          orderBy('createdAt', 'asc')
-      );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-          const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setReplies(fetchedReplies);
-      });
-      return () => unsubscribe();
-  }, [postId, comment.id]);
+    // 生成唯一的 chatId，确保顺序不影响结果
+    const chatId = [currentUser.uid, targetUser.uid].sort().join('_');
+    
+    // 使用 router.push 进行页面跳转
+    router.push(`/messages/${chatId}`);
+  };
 
   return (
-    <div className="flex space-x-3 py-4 border-b border-gray-100 dark:border-gray-700">
-      <img src={comment.authorAvatar || '/img/avatar.svg'} alt={comment.authorName} className="w-10 h-10 rounded-full mt-1" />
-      <div className="flex-1">
-        <div className="flex items-center justify-between">
-          <p className="font-semibold text-gray-800 dark:text-gray-200">{comment.authorName}</p>
-          <p className="text-xs text-gray-400">{formatTimeAgo(comment.createdAt)}</p>
-        </div>
-        <p className="text-gray-700 dark:text-gray-300 mt-1">{comment.content}</p>
-        <button onClick={() => setShowReplyInput(!showReplyInput)} className="text-xs text-gray-500 hover:text-blue-500 mt-2">
-            回复
-        </button>
-
-        {replies.length > 0 && (
-            <div className="mt-3 space-y-3 pl-4 border-l-2 border-gray-200 dark:border-gray-600">
-                {replies.map(reply => (
-                    <div key={reply.id} className="text-sm">
-                        <p>
-                            <Link href={`/profile/${reply.authorId}`}><a className="font-semibold text-blue-500 hover:underline">{reply.authorName}</a></Link>
-                            : <span className="text-gray-600 dark:text-gray-400">{reply.content}</span>
-                        </p>
-                    </div>
-                ))}
-            </div>
-        )}
-        
-        {showReplyInput && <ReplyInput postId={postId} parentCommentId={comment.id} onCommentAdded={() => setShowReplyInput(false)} />}
-      </div>
-    </div>
+    <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" aria-label="私信">
+      <i className="far fa-comment-dots mr-2" /> 私信
+    </button>
   );
 };
 
-// --- 新的评论区主组件 ---
-const NewCommentSection = ({ post }) => {
-    const { user } = useAuth();
-    const [comments, setComments] = useState([]);
-    const [newComment, setNewComment] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const postId = post?.id;
+// --- PostItemInner 组件 ---
+function PostItemInner({ post }, ref) { // 移除了 onOpenChat prop
+  const { user } = useAuth();
+  const router = useRouter(); 
 
-    // 实时获取主评论
-    useEffect(() => {
-        if (!postId) return;
-        const q = query(
-            collection(db, 'posts', postId, 'comments'),
-            where('parentCommentId', '==', null),
-            orderBy('createdAt', 'asc')
-        );
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setComments(fetchedComments);
-        }, (error) => console.error("加载评论失败:", error));
-        return () => unsubscribe();
-    }, [postId]);
+  if (!post) {
+      return null; 
+  }
 
-    const handlePostComment = async () => {
-        if (!newComment.trim() || !user || isSubmitting) return;
-        setIsSubmitting(true);
-        try {
-            const commentsRef = collection(db, 'posts', postId, 'comments');
-            await addDoc(commentsRef, {
-                content: newComment,
-                authorId: user.uid,
-                authorName: user.displayName,
-                authorAvatar: user.photoURL,
-                parentCommentId: null,
-                createdAt: serverTimestamp(),
-            });
-            setNewComment("");
-            const postRef = doc(db, 'posts', postId);
-            await updateDoc(postRef, { commentCount: increment(1) });
-        } catch (error) {
-            console.error("评论失败:", error);
-            alert("评论失败，请重试。");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  const videoUrl = useMemo(() => parseVideoUrl(post), [post]);
 
-    return (
-        <div className='duration-200 overflow-x-auto px-5'>
-            <div className='text-2xl dark:text-white'>
-                <i className='fas fa-comment mr-1' />
-                评论 ({post?.commentCount || 0})
-            </div>
-            {/* 评论输入框 */}
-            {user ? (
-                <div className="flex items-center space-x-3 my-6">
-                    <img src={user.photoURL || '/img/avatar.svg'} alt="你的头像" className="w-10 h-10 rounded-full" />
-                    <div className="flex-1 flex items-center bg-gray-100 dark:bg-gray-700 rounded-full">
-                        <input 
-                            type="text" 
-                            value={newComment} 
-                            onChange={(e) => setNewComment(e.target.value)} 
-                            placeholder="发表你的看法..." 
-                            className="w-full bg-transparent px-4 py-2 focus:outline-none text-gray-800 dark:text-gray-200"
-                            onKeyDown={(e) => { if (e.key === 'Enter') handlePostComment(); }}
-                        />
-                        <button onClick={handlePostComment} disabled={isSubmitting || !newComment.trim()} className="p-2 mr-1 rounded-full text-white bg-blue-500 disabled:bg-gray-400">
-                            <Send size={18} />
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div className="text-center p-4 border rounded-lg my-6">
-                    <p>请<button onClick={() => alert('请实现登录弹窗')} className="text-blue-500 font-bold mx-1">登录</button>后发表评论</p>
-                </div>
-            )}
-
-            {/* 评论列表 */}
-            <div className="space-y-4">
-                {comments.map(comment => (
-                    <CommentFloor key={comment.id} comment={comment} postId={postId} />
-                ))}
-                {comments.length === 0 && <p className="text-center text-gray-500 pt-4">还没有评论，快来抢沙发吧！</p>}
-            </div>
-        </div>
-    );
-};
-
-
-/**
- * 文章详情
- * @param {*} props
- * @returns
- */
-const LayoutSlug = props => {
-  const { post, lock, validPassword } = props
-  const { locale, fullWidth } = useGlobal()
-
-  const [hasCode, setHasCode] = useState(false)
-
-  useEffect(() => {
-    // 延迟执行以确保 DOM 完全加载
-    setTimeout(() => {
-        const codeBlocks = document.querySelectorAll('[class^="language-"]');
-        setHasCode(codeBlocks.length > 0);
-    }, 500);
-  }, [post]);
-
-  const router = useRouter()
-  useEffect(() => {
-    // 404
-    if (!post) {
-      setTimeout(
-        () => {
-          if (isBrowser) {
-            const article = document.querySelector('#article-wrapper #notion-article')
-            if (!article) {
-              router.push('/404').then(() => {
-                console.warn('找不到页面', router.asPath)
-              })
-            }
-          }
-        },
-        siteConfig('POST_WAITING_TIME_FOR_404', 5000)
-      )
+  const cleanedContent = useMemo(() => {
+    if (!post || !post.content) return ''; 
+    const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
+    const previewLength = 150; 
+    if (fullCleanedContent.length > previewLength) {
+      return fullCleanedContent.substring(0, previewLength) + '...';
     }
-  }, [post])
+    return fullCleanedContent;
+  }, [post, videoUrl]);
+
+  const hasLiked = useMemo(() => user && post.likers && post.likers.includes(user.uid), [user, post.likers]);
+
+  const handleLike = useCallback(async (e) => {
+    e.stopPropagation(); 
+    if (!user || !post || !db) return; 
+
+    const postDocRef = doc(db, 'posts', post.id);
+    try {
+      if (hasLiked) {
+        await updateDoc(postDocRef, { likesCount: increment(-1), likers: arrayRemove(user.uid) });
+      } else {
+        await updateDoc(postDocRef, { likesCount: increment(1), likers: arrayUnion(user.uid) });
+      }
+    } catch (error) {
+      console.error("点赞操作失败:", error);
+      alert("点赞/取消点赞失败，请重试。");
+    }
+  }, [user, post, hasLiked]);
+
+  const handleCardClick = useCallback(() => router.push(`/community/${post.id}`), [router, post.id]);
+  const handleActionClick = useCallback((e, callback) => {
+    e.stopPropagation(); 
+    if (callback) callback(e);
+  }, []);
+  const handleTtsClick = useCallback((e, text) => {
+    e.stopPropagation();
+    playCachedTTS(text);
+  }, []);
+
   return (
-    <>
-      <div
-        className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} ${hasCode ? 'xl:w-[73.15vw]' : ''}  bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4 `}>
-        {/* 文章锁 */}
-        {lock && <PostLock validPassword={validPassword} />}
-
-        {!lock && post && (
-          <div className='mx-auto md:w-full md:px-5'>
-            {/* 文章主体 */}
-            <article
-              id='article-wrapper'
-              itemScope
-              itemType='https://schema.org/Movie'>
-              {/* Notion文章主体 */}
-              <section
-                className='wow fadeInUp p-5 justify-center mx-auto'
-                data-wow-delay='.2s'>
-                <ArticleExpirationNotice post={post} />
-                <AISummary aiSummary={post.aiSummary} />
-                <WWAds orientation='horizontal' className='w-full' />
-                {post && <NotionPage post={post} />}
-                <WWAds orientation='horizontal' className='w-full' />
-              </section>
-            </article>
-
-            {/* ✅ ---【核心修改：替换为新的楼中楼评论区】--- ✅ */}
-            <div className={`${post ? '' : 'hidden'}`}>
-                <hr className='my-4 border-dashed' />
-                <div className='py-2'>
-                  <AdSlot />
-                </div>
-                {/* 使用新的评论区组件 */}
-                <NewCommentSection post={post} />
+    <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
+      <div className="flex items-start mb-3">
+        <Link href={`/profile/${post.authorId}`} passHref> 
+          <a onClick={handleActionClick} className="relative z-10 flex items-center cursor-pointer group">
+            <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-12 h-12 rounded-full object-cover" />
+            <div className="ml-3 flex-grow">
+              <p className="font-semibold text-gray-800 dark:text-gray-200 group-hover:text-blue-500">{post.authorName || '匿名用户'}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{formatTimeAgo(post.createdAt)}</p>
             </div>
-          </div>
-        )}
+          </a>
+        </Link>
+        <div className="ml-auto">
+          {post.authorId && user && user.uid !== post.authorId && 
+            <StartChatButton 
+              targetUser={{ uid: post.authorId }} 
+            />
+          } 
+        </div>
       </div>
 
-      <FloatTocButton {...props} />
-    </>
-  )
+      <div className="space-y-3 block">
+        <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-bold dark:text-gray-100 group-hover:text-blue-500">
+              {post.title}
+            </h2>
+            <button onClick={(e) => handleTtsClick(e, post.title)} className="relative z-10 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 flex-shrink-0" aria-label="朗读标题">
+                <Volume2 size={18} />
+            </button>
+        </div>
+        
+        {videoUrl && (
+          <div className="relative pt-[56.25%] overflow-hidden rounded-lg shadow-md"> 
+            <VideoEmbed url={videoUrl} playing={false} controls={true} width='100%' height='100%' className="absolute top-0 left-0" />
+          </div>
+        )}
+
+        <div className="text-base font-semibold text-gray-700 dark:text-gray-300">
+          <PostContent content={cleanedContent} />
+        </div>
+      </div>
+
+      <div className="flex justify-center items-center space-x-8 mt-4 text-gray-600 dark:text-gray-400">
+        <button onClick={handleLike} className={`relative z-10 flex items-center space-x-2 transition-colors ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}>
+            <i className={`${hasLiked ? 'fas' : 'far'} fa-heart text-lg`} />
+            <span>{post.likesCount || 0}</span>
+        </button>
+        <button onClick={handleActionClick} className="relative z-10 flex items-center space-x-1 hover:text-gray-500">
+            <i className="far fa-thumbs-down text-lg" />
+        </button>
+        <Link href={`/community/${post.id}#comments`} passHref>
+            <a onClick={handleActionClick} className="relative z-10 flex items-center space-x-2 hover:text-green-500">
+                <i className="far fa-comment-dots text-lg" />
+                <span>{post.commentCount || 0}</span>
+            </a>
+        </Link>
+      </div>
+    </div>
+  );
 }
 
-export default LayoutSlug
+export default forwardRef(PostItemInner);
