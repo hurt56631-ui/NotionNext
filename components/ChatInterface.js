@@ -1,6 +1,7 @@
-// /components/ChatInterface.js (终极完整版 - 修复编译错误，集成了所有功能)
+// /components/ChatInterface.js (终极完整版 - 集成 RTDB 实时在线状态、智能输入和 UI 优化)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
+// ✅ 引入 RTDB 实例和 Firestore 实例
 import { db, rtDb } from "@/lib/firebase"; 
 import { ref as rtRef, onValue } from 'firebase/database';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment, writeBatch } from "firebase/firestore";
@@ -19,7 +20,7 @@ const GlobalScrollbarStyle = () => (
     `}</style>
 );
 
-// 组件与图标 (已更新)
+// 组件与图标 (无变化)
 const CircleTranslateIcon = ({ size = 6 }) => (
     <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div>
 );
@@ -64,6 +65,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchActive, setSearchActive] = useState(false);
   
+  // ✅ 实时在线状态
   const [peerStatus, setPeerStatus] = useState({ online: false, lastSeenTimestamp: null });
   const [unreadCount, setUnreadCount] = useState(0);
   const [background, setBackground] = useState({ dataUrl: null, opacity: 0.2 });
@@ -81,7 +83,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal',
       sourceLang: '中文', targetLang: '缅甸语',
-      speechLang: 'zh-CN',
+      speechLang: 'zh-CN', // 默认语音识别语言为中文
       ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
@@ -145,7 +147,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
 
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
   
-  // --- RTDB 在线状态读取 ---
+  // ✅ ---【核心修复：RTDB 在线状态读取】--- ✅
   useEffect(() => {
     if (!peerUser?.id || typeof window === 'undefined' || !rtDb) {
       setPeerStatus({ online: false, lastSeenTimestamp: null });
@@ -400,7 +402,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <div className="w-16"></div> 
                     <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <h1 className="font-bold text-lg text-white truncate max-w-[50vw]">{peerUser?.displayName || "聊天"}</h1>
-                        {/* 核心修改：显示在线状态或最后在线时间 */}
+                        {/* ✅ 核心修改：显示在线状态或最后在线时间 */}
                         {peerStatus.online ? ( 
                             <span className="text-xs text-white/80 font-semibold flex items-center gap-1">
                                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>在线
@@ -432,8 +434,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
           {unreadCount > 0 && (
             <motion.button 
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
-              onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
               className="fixed right-4 bottom-24 z-10 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center p-2 min-w-[40px] h-10"
+              onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }} 
             >
               <div className="flex items-center gap-1.5 px-2">
                 <span className="font-bold text-sm">{unreadCount}</span>
@@ -544,7 +546,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                 <label className="flex items-center justify-between text-sm"><span className="font-bold">目标语言 (对方语言)</span><input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
               </div>
               
-              <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4><input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c.ai, endpoint: e.target.value}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c.ai, apiKey: e.target.value}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c.ai, model: e.target.value}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/></div>
+              <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4><input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">自动化</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm text-red-500">危险操作</h4><button onClick={handleDeleteAllMessages} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">删除全部聊天记录</button><button onClick={handleBlockUser} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">拉黑对方</button></div>
               <button onClick={() => setSettingsOpen(false)} className="w-full mt-2 p-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-md">关闭</button>
