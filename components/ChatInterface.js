@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完美版 - 修复所有编译/运行错误，功能稳定)
+// /components/ChatInterface.js (终极完美版 - 修复所有编译/运错误，功能稳定)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
