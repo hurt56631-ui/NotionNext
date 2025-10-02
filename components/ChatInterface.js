@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (极简调试版 - 仅用于测试在线状态)
+// /components/ChatInterface.js (极简调试版 - 仅用测试在线状态)
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
