@@ -1,4 +1,4 @@
-// pages/_app.js (最终版 - 已集成 UnreadCountProvider)
+// /pages/_app.js (最终架构修复版)
 
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
@@ -16,13 +16,11 @@ import BLOG from '@/blog.config'
 import ExternalPlugins from '@/components/ExternalPlugins'
 import SEO from '@/components/SEO'
 
+// ✅ 核心修改：导入所有需要的 Provider
 import { AuthProvider } from '@/lib/AuthContext';
-// ✅ ---【核心修改】--- ✅
-// 导入我们新创建的 UnreadCountProvider
 import { UnreadCountProvider } from '@/lib/UnreadCountContext'; 
-// 移除旧的 MessageProvider 导入 (如果有)
-// import { MessageProvider } from '@/lib/MessageContext'; 
 
+// AppInner 组件保持不变
 const AppInner = ({ Component, pageProps }) => {
   useAdjustStyle()
   
@@ -54,10 +52,12 @@ const AppInner = ({ Component, pageProps }) => {
   )
 }
 
+// ✅ 核心修复：重构 MyApp 以正确嵌套 Provider
 const MyApp = ({ Component, pageProps }) => {
   return (
+    // 1. 最外层是 AuthProvider，它不依赖其他 Context
     <AuthProvider>
-      {/* ✅ 关键：用 UnreadCountProvider 包裹 AppInner */}
+      {/* 2. 内层是 UnreadCountProvider，它可能会间接依赖 AuthProvider (通过 useAuth) */}
       <UnreadCountProvider>
         <AppInner Component={Component} pageProps={pageProps} />
       </UnreadCountProvider>
