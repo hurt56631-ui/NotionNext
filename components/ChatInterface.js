@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完整版 - 修复编译错误，集成 RTDB 实时在线状态)
+// /components/ChatInterface.js (终极完美版 - 修复所有编译/运行错误，功能稳定)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
@@ -20,7 +20,18 @@ const GlobalScrollbarStyle = () => (
     `}</style>
 );
 
-// ... (所有辅助函数保持不变)
+// ✅ 修复：将 className 的内容用反引号包裹，以使用模板字符串
+const CircleTranslateIcon = ({ size = 6 }) => (
+    <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div>
+);
+const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
+
+// TTS/AI 模块 (无变化)
+const ttsCache = new Map();
+const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
+const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }); } };
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
+const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
 
 // --- 辅助函数：格式化时间戳为“最后在线时间” ---
 const formatLastSeen = (timestamp) => {
@@ -138,7 +149,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   
   // ✅ ---【核心修复：RTDB 在线状态读取】--- ✅
   useEffect(() => {
-    // 修复：使用更安全的检查方式，检查 rtDb 是否已初始化
+    // 确保 rtDb 已初始化 (不再使用错误的 .toJSON() 检查)
     if (!peerUser?.id || typeof window === 'undefined' || !rtDb) {
       setPeerStatus({ online: false, lastSeenTimestamp: null });
       return;
@@ -483,7 +494,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         {settingsOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/50 z-50" onClick={() => setSettingsOpen(false)}>
             <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 30, stiffness: 300 }} onClick={(e) => e.stopPropagation()} className="absolute bottom-0 w-full bg-gray-100 text-black p-4 rounded-t-2xl space-y-4 max-h-[80vh] overflow-y-auto thin-scrollbar border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-center">聊天设置</h3>
+              <h3 className="font-semibold text-lg text-center">聊天设置</h3>
               <div className="p-3 rounded-lg bg-white space-y-3"><h4 className="font-bold text-sm">样式</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">字体大小 (px)</span><input type="number" value={cfg.fontSize} onChange={e => setCfg(c => ({...c, fontSize: parseInt(e.target.value)}))} className="w-20 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">字体粗细</span><select value={cfg.fontWeight} onChange={e => setCfg(c => ({...c, fontWeight: e.target.value}))} className="p-1 border rounded text-sm bg-white border-gray-300"><option value="400">常规</option><option value="700">粗体</option></select></label></div>
               
               <div className="p-3 rounded-lg bg-white space-y-2">
@@ -538,7 +549,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
               
               <div className="p-3 rounded-lg bg-white space-y-2">
                 <h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4>
-                {/* 修复编译错误：确保状态更新函数调用正确 */}
+                {/* 编译错误已修复 */}
                 <input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
                 <input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c, ai: {...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
                 <input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c, ai: {...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/>
