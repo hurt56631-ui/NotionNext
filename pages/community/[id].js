@@ -1,26 +1,32 @@
-// themes/heo/Layout/LayoutSlug.js (最终美化版 - 已集成“楼中楼”评论区)
+// themes/heo/Layout/LayoutSlug.js (最终修复版 - 修复所有路径引用错误)
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection, query, orderBy, addDoc, serverTimestamp, updateDoc, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, orderBy, addDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-// ✅ 导入所有需要的 Lucide 图标
+// ✅ 导入 Lucide 图标
 import { Heart, MessageSquare, Send } from 'lucide-react';
 
+// ✅ ---【核心修复：使用别名路径 @/ 替代相对路径 ../】--- ✅
+import Comment from '@/components/Comment'; // 旧的 Comment 组件，我们将用新的逻辑替代
 import { AdSlot } from '@/components/GoogleAdsense';
 import NotionPage from '@/components/NotionPage';
 import WWAds from '@/components/WWAds';
 import { useGlobal } from '@/lib/global';
-import FloatTocButton from '../components/FloatTocButton';
-import { PostLock } from '../components/PostLock';
+import { isBrowser } from '@/lib/utils';
+import FloatTocButton from '@/themes/heo/components/FloatTocButton'; // 修复路径
+import { PostLock } from '@/themes/heo/components/PostLock';       // 修复路径
 import AISummary from '@/components/AISummary';
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice';
+
+// 动态导入 PostContent
+const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
 // --- 辅助函数：时间格式化 ---
 const formatTimeAgo = (ts) => {
@@ -115,7 +121,6 @@ const CommentItem = ({ comment, postId, isReply = false }) => {
                 </div>
                 {showReplyInput && (
                     <div className="mt-2">
-                         {/* ✅ 楼中楼回复时，placeholder变化 */}
                         <CommentInput 
                             postId={postId} 
                             parentCommentId={comment.id} 
@@ -227,10 +232,21 @@ const LayoutSlug = props => {
   const { locale, fullWidth } = useGlobal();
   const router = useRouter();
 
+  const [hasCode, setHasCode] = useState(false);
+
+  useEffect(() => {
+    // 延迟执行以确保 DOM 完全加载
+    setTimeout(() => {
+        const codeBlocks = document.querySelectorAll('[class^="language-"]');
+        setHasCode(codeBlocks.length > 0);
+    }, 500);
+  }, [post]);
+
   // 404 跳转逻辑
   useEffect(() => {
     if (!post) {
-      setTimeout(() => {
+      setTimeout(
+        () => {
           if (isBrowser) {
             const article = document.querySelector('#article-wrapper');
             if (!article) {
@@ -241,10 +257,9 @@ const LayoutSlug = props => {
       );
     }
   }, [post, router]);
-
   return (
     <>
-      <div className={`article w-full ${fullWidth ? '' : 'xl:max-w-5xl mx-auto'} bg-white dark:bg-[#18171d] dark:border-gray-600 lg:shadow-md lg:border rounded-2xl lg:p-4`}>
+      <div className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl mx-auto'} ${hasCode ? 'xl:w-[73.15vw]' : ''}  bg-white dark:bg-[#18171d] dark:border-gray-600 lg:shadow-md lg:border rounded-2xl lg:p-4`}>
         {lock && <PostLock validPassword={validPassword} />}
 
         {!lock && post && (
