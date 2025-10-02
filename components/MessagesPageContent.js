@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (最终集成版 - 已绑定“语伴”功能)
+// /components/MessagesPageContent.js (最终美化版 - 集成高端语伴功能)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -7,47 +7,84 @@ import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, getDocs } from 'firebase/firestore';
 // ✅ 导入新图标
 import { HiOutlineChatBubbleLeftRight, HiOutlineBell, HiOutlineSparkles, HiOutlineUsers } from 'react-icons/hi2';
-import { Send, Globe, MessageCircle } from 'lucide-react';
+import { Send, Globe, MessageCircle, User, MapPin, Heart as HeartIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
 import { useUnreadCount } from '@/lib/UnreadCountContext'; 
 
 // ===================================================================
-// =============  ✅ 新增：语伴列表相关组件  =============
+// =============  ✅ 新增：语伴列表相关组件 (高端美化版)  =============
 // ===================================================================
 
 const PartnerCardSkeleton = () => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md animate-pulse">
-        <div className="flex items-center space-x-4"><div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full"></div><div className="flex-1 space-y-2"><div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div></div></div>
-        <div className="mt-4 space-y-2"><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div><div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div></div>
+    <div className="relative w-full aspect-[3/4] bg-gray-200 dark:bg-gray-700 rounded-2xl overflow-hidden shadow-lg animate-pulse">
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent">
+            <div className="h-6 bg-gray-400 rounded w-1/2 mb-2"></div>
+            <div className="h-4 bg-gray-400 rounded w-1/3"></div>
+        </div>
     </div>
 );
 
-const LanguagePartnerCard = ({ partner, onStartChat }) => {
+const LanguagePartnerCard = ({ partner, onSayHi }) => {
     const router = useRouter();
+    const interests = partner.interests || [];
+
     return (
-        <div onClick={() => router.push(`/profile/${partner.uid}`)} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg hover:shadow-xl transition-shadow cursor-pointer border border-transparent hover:border-blue-500">
-            <div className="flex items-start space-x-4">
-                <div className="relative flex-shrink-0">
-                    <img src={partner.photoURL || '/img/avatar.svg'} alt={partner.displayName} className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm"/>
-                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-white dark:border-gray-800 ring-1 ring-green-300"><span className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75"></span></div>
-                </div>
-                <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">{partner.displayName || '新用户'}</h3>
-                    <div className="mt-1 flex items-center space-x-3 text-sm text-gray-500 dark:text-gray-400">
-                        <div className="flex items-center"><Globe size={14} className="mr-1.5 text-gray-400"/><span>母语: <span className="font-semibold text-gray-700 dark:text-gray-300">{partner.nativeLanguage || '未知'}</span></span></div>
-                    </div>
-                     <div className="mt-1 flex items-center space-x-3 text-sm text-gray-500 dark:text-gray-400">
-                        <div className="flex items-center"><MessageCircle size={14} className="mr-1.5 text-gray-400"/><span>在学: <span className="font-semibold text-gray-700 dark:text-gray-300">{partner.learningLanguage || '未知'}</span></span></div>
-                    </div>
-                </div>
-            </div>
-            <div className="mt-4">
-                <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed h-10 overflow-hidden">{partner.bio || '这位语伴很神秘，什么也没留下...'}</p>
-                <div className="mt-4 flex justify-end">
-                    <button onClick={(e) => { e.stopPropagation(); onStartChat(partner); }} className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500 text-white font-semibold text-sm hover:bg-blue-600 transition-colors active:scale-95 shadow-md">
-                        <Send size={16} className="mr-2" />私信
+        <div 
+            onClick={() => router.push(`/profile/${partner.uid}`)}
+            className="relative w-full aspect-[3/4] bg-gray-200 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-lg group cursor-pointer"
+        >
+            {/* 背景图 */}
+            <img 
+                src={partner.profileBackground || partner.photoURL || '/img/bg_fallback.jpg'} 
+                alt={`${partner.displayName} 的背景`}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+            />
+            
+            {/* 渐变遮罩 + 内容 */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex flex-col justify-end p-4 text-white">
+                {/* 打招呼按钮 */}
+                <div className="absolute top-4 right-4">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onSayHi(partner); }}
+                        className="w-12 h-12 rounded-full bg-blue-500/80 backdrop-blur-sm text-white flex items-center justify-center hover:bg-blue-500 shadow-lg transition-all active:scale-90"
+                        aria-label="打招呼"
+                    >
+                        <Send size={20} />
                     </button>
+                </div>
+
+                {/* 基本信息 */}
+                <div className="transform transition-transform duration-300 group-hover:-translate-y-2">
+                    <h3 className="text-2xl font-bold tracking-tight">{partner.displayName || '新用户'}</h3>
+                    <div className="flex items-center text-sm mt-1 opacity-90">
+                        {partner.gender === 'male' && <i className="fas fa-mars text-blue-300 mr-1.5"></i>}
+                        {partner.gender === 'female' && <i className="fas fa-venus text-pink-300 mr-1.5"></i>}
+                        {partner.age && <span>{partner.age}岁</span>}
+                        {partner.country && <MapPin size={14} className="ml-2 mr-1" />}
+                        {partner.country && <span>{partner.country}</span>}
+                    </div>
+                </div>
+
+                {/* 语言和兴趣 (默认隐藏，悬停时上浮显示) */}
+                <div className="pt-2 max-h-0 opacity-0 group-hover:max-h-48 group-hover:opacity-100 transition-all duration-300 overflow-hidden">
+                    <div className="mt-2 text-xs space-y-2">
+                        <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-full px-2 py-1 w-fit">
+                            <Globe size={12} className="mr-1.5"/>
+                            <span>母语: <span className="font-semibold">{partner.nativeLanguage || '未知'}</span></span>
+                        </div>
+                        <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-full px-2 py-1 w-fit">
+                            <MessageCircle size={12} className="mr-1.5"/>
+                            <span>在学: <span className="font-semibold">{partner.learningLanguage || '未知'}</span></span>
+                        </div>
+                    </div>
+                    {interests.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                            {interests.slice(0, 3).map(interest => (
+                                <span key={interest} className="text-xs bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5">{interest}</span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -65,55 +102,86 @@ const LanguagePartnerList = () => {
             if (!db) return;
             setLoading(true);
             try {
+                // 1. 获取过去30天内看过的用户ID
+                const viewedKey = `viewed_partners_${currentUser.uid}`;
+                const viewedData = JSON.parse(localStorage.getItem(viewedKey) || '{}');
+                const recentViewedIds = [];
+                const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+                
+                Object.keys(viewedData).forEach(id => {
+                    if (viewedData[id] > oneMonthAgo) {
+                        recentViewedIds.push(id);
+                    }
+                });
+
+                // 2. 查询24小时内活跃的用户
                 const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                const q = query(collection(db, 'users'), where('lastSeen', '>=', oneDayAgo), orderBy('lastSeen', 'desc'), limit(50));
+                const q = query(
+                    collection(db, 'users'),
+                    where('lastSeen', '>=', oneDayAgo),
+                    orderBy('lastSeen', 'desc'),
+                    limit(100) // 多获取一些用于过滤
+                );
+
                 const querySnapshot = await getDocs(q);
                 const fetchedPartners = [];
+                const newViewedData = { ...viewedData };
+
                 querySnapshot.forEach((doc) => {
-                    if (currentUser && doc.id === currentUser.uid) return;
-                    fetchedPartners.push({ uid: doc.id, ...doc.data() });
+                    const partnerData = { uid: doc.id, ...doc.data() };
+                    // 3. 过滤掉自己和30天内看过的用户
+                    if (currentUser && partnerData.uid === currentUser.uid) return;
+                    if (recentViewedIds.includes(partnerData.uid)) return;
+
+                    fetchedPartners.push(partnerData);
+                    newViewedData[partnerData.uid] = Date.now(); // 更新浏览时间
                 });
-                setPartners(fetchedPartners);
+
+                setPartners(fetchedPartners.slice(0, 20)); // 最多显示20个
+                
+                // 4. 将更新后的浏览记录存回 localStorage
+                localStorage.setItem(viewedKey, JSON.stringify(newViewedData));
+
             } catch (error) { console.error("获取语伴列表失败:", error); } 
             finally { setLoading(false); }
         };
-        fetchPartners();
+
+        if (currentUser) {
+            fetchPartners();
+        } else {
+            setLoading(false); // 未登录则不加载
+        }
     }, [currentUser]);
 
-    const handleStartChat = (targetUser) => {
-        if (!currentUser) { alert("请先登录再开始聊天"); return; }
+    const handleSayHi = (targetUser) => {
+        if (!currentUser) { alert("请先登录再打招呼"); return; }
         const chatId = [currentUser.uid, targetUser.uid].sort().join('_');
         router.push(`/messages/${chatId}`);
     };
 
     return (
-        <div className="max-w-3xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white text-center mb-2">发现语伴</h1>
-            <p className="text-center text-gray-500 dark:text-gray-400 mb-8">以下是24小时内活跃的用户</p>
-            
-            {/* ✅ 未来功能扩展区 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 text-center">
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow">
-                    <i className="fas fa-map-marker-alt text-2xl text-blue-500"></i><p className="mt-2 text-sm font-semibold">附近的人</p>
-                </div>
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow">
-                    <i className="fas fa-wine-bottle text-2xl text-green-500"></i><p className="mt-2 text-sm font-semibold">漂流瓶</p>
-                </div>
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow">
-                    <i className="fas fa-mobile-alt text-2xl text-purple-500"></i><p className="mt-2 text-sm font-semibold">摇一摇</p>
-                </div>
-                 <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow cursor-pointer hover:shadow-lg transition-shadow">
-                    <i className="fas fa-globe-asia text-2xl text-yellow-500"></i><p className="mt-2 text-sm font-semibold">语伴匹配</p>
-                </div>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="text-center mb-10">
+                <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight">寻找语伴</h1>
+                <p className="mt-2 text-lg text-gray-500 dark:text-gray-400">与世界各地的学习者建立联系</p>
             </div>
-
-            <div className="space-y-6">
+            
+            {/* 网格布局 */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
                 {loading ? (
-                    <><PartnerCardSkeleton /><PartnerCardSkeleton /><PartnerCardSkeleton /></>
+                    Array.from({ length: 8 }).map((_, i) => <PartnerCardSkeleton key={i} />)
                 ) : partners.length > 0 ? (
-                    partners.map(partner => (<LanguagePartnerCard key={partner.uid} partner={partner} onStartChat={handleStartChat}/>))
+                    partners.map(partner => (
+                        <LanguagePartnerCard 
+                            key={partner.uid} 
+                            partner={partner}
+                            onSayHi={handleSayHi}
+                        />
+                    ))
                 ) : (
-                    <div className="text-center py-16"><p className="text-gray-500">暂时没有找到活跃的语伴哦。</p></div>
+                    <div className="col-span-full text-center py-20">
+                        <p className="text-gray-500 text-lg">今天没有新的语伴了，明天再来看看吧！</p>
+                    </div>
                 )}
             </div>
         </div>
@@ -121,17 +189,17 @@ const LanguagePartnerList = () => {
 };
 
 // ===================================================================
-// =============  ✅ 现有组件修改  =============
+// =============  ✅ 现有组件修改 (保持不变)  =============
 // ===================================================================
 
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
-  // ✅ 核心修改：更新 Tab 定义
   const tabs = [
     { key: 'messages', name: '私信', icon: <HiOutlineChatBubbleLeftRight className="w-6 h-6" /> },
     { key: 'notifications', name: '通知', icon: <HiOutlineBell className="w-6 h-6" /> },
-    { key: 'partners', name: '语伴', icon: <HiOutlineSparkles className="w-6 h-6" /> }, // “发现”改为“语伴”
+    { key: 'partners', name: '语伴', icon: <HiOutlineSparkles className="w-6 h-6" /> },
     { key: 'contacts', name: '联系人', icon: <HiOutlineUsers className="w-6 h-6" /> }
   ];
+  // ... (其余代码保持不变)
   const baseClasses = 'relative flex flex-col items-center justify-center pt-3 pb-2 font-semibold text-center w-1/4 transition-colors duration-300';
   const activeClasses = 'text-white scale-110';
   const inactiveClasses = 'text-white/70 hover:text-white';
@@ -150,32 +218,33 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
 };
 
 const ConversationList = ({ conversations, loading, user, authLoading }) => {
-  const router = useRouter();
-  const handleConversationClick = (convo) => {
-    if (!user?.uid || !convo.otherUser?.id) return;
-    router.push(`/messages/${convo.id}`);
-  };
-  if (authLoading || loading) { return <div className="p-8 text-center text-gray-500">正在加载...</div>; }
-  if (!user) { return <div className="p-8 text-center text-gray-500">请先登录以查看私信。</div>; }
-  if (conversations.length === 0) { return <div className="p-8 text-center text-gray-500">还没有任何私信哦。</div>; }
-  return (
-    <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-      {conversations.map((convo) => {
-        if (!convo || !convo.otherUser) { return null; }
-        return (
-            <li key={convo.id} onClick={() => handleConversationClick(convo)} className="relative flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
-                <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
-                <div className="ml-4 flex-1 overflow-hidden">
-                    <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
-                    <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>
-                        {convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}
+    // ... (代码保持不变)
+    const router = useRouter();
+    const handleConversationClick = (convo) => {
+        if (!user?.uid || !convo.otherUser?.id) return;
+        router.push(`/messages/${convo.id}`);
+    };
+    if (authLoading || loading) { return <div className="p-8 text-center text-gray-500">正在加载...</div>; }
+    if (!user) { return <div className="p-8 text-center text-gray-500">请先登录以查看私信。</div>; }
+    if (conversations.length === 0) { return <div className="p-8 text-center text-gray-500">还没有任何私信哦。</div>; }
+    return (
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+        {conversations.map((convo) => {
+            if (!convo || !convo.otherUser) { return null; }
+            return (
+                <li key={convo.id} onClick={() => handleConversationClick(convo)} className="relative flex items-center p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                    <div className="relative"><img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/></div>
+                    <div className="ml-4 flex-1 overflow-hidden">
+                        <div className="flex justify-between items-center"><p className="font-semibold truncate dark:text-gray-200">{convo.otherUser.displayName || '未知用户'}</p>{convo.lastMessageAt && (<p className="text-xs text-gray-400">{new Date(convo.lastMessageAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>)}</div>
+                        <div className="flex justify-between items-start mt-1"><p className="text-sm text-gray-500 truncate">{convo.lastMessage || '...'}</p>
+                            {convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}
+                        </div>
                     </div>
-                </div>
-            </li>
-        );
-      })}
-    </ul>
-  );
+                </li>
+            );
+        })}
+        </ul>
+    );
 };
 
 const MessagesPageContent = () => {
@@ -183,12 +252,12 @@ const MessagesPageContent = () => {
   const { user, authLoading } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { totalUnreadCount, setTotalUnreadCount } = useUnreadCount();
+  const { totalUnreadCount } = useUnreadCount();
 
   useEffect(() => {
     if (activeTab !== 'messages' || authLoading || !user) {
       if (!authLoading) setLoading(false);
-      setConversations([]);
+      if(activeTab === 'messages') setConversations([]);
       return;
     }
     setLoading(true);
@@ -223,13 +292,11 @@ const MessagesPageContent = () => {
     return () => unsubscribe();
   }, [user, authLoading, activeTab]);
 
-
-  // ✅ 核心修改：更新内容渲染逻辑
   const renderContent = () => {
     switch (activeTab) {
       case 'messages': return <ConversationList conversations={conversations} loading={loading} user={user} authLoading={authLoading} />;
       case 'notifications': return (<div className="p-8 text-center text-gray-500">通知功能正在开发中...</div>);
-      case 'partners': return <LanguagePartnerList />; // “发现”改为“语伴”
+      case 'partners': return <LanguagePartnerList />;
       case 'contacts': return (<div className="p-8 text-center text-gray-500">联系人功能正在开发中...</div>);
       default: return null;
     }
