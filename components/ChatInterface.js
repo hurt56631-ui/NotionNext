@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (极简调试版 - 仅用测试在线状态)
+// /components/ChatInterface.js (极简调试版 - 仅用于测试在线状态)
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -9,12 +9,12 @@ import { doc, getDoc } from 'firebase/firestore';
 
 // ✅ ---【采纳AI建议：健壮的时间格式化函数】--- ✅
 const formatLastSeen = (timestamp) => {
-  if (!timestamp) return "离线";
+  if (!timestamp) return "离线 (no timestamp)";
   const now = Date.now();
   const diffMs = now - timestamp;
   const diffMinutes = Math.floor(diffMs / 60000);
 
-  if (diffMinutes < 1) return "在线";
+  if (diffMinutes < 1) return `在线 (m < 1)`;
   if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
   const diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) return `${diffHours} 小时前`;
@@ -29,81 +29,69 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const peerId = peerUser?.id || null;
 
   // 核心状态：只保留对方的在线状态
-  const [peerStatus, setPeerStatus] = useState({ online: false, lastSeenTimestamp: null });
+  const [peerStatus, setPeerStatus] = useState({ 
+    online: false, 
+    lastSeenTimestamp: null, 
+    debug: "Initializing..." 
+  });
 
-  // ✅ ---【采纳AI建议：最健壮的在线状态 useEffect】--- ✅
+  // ✅ ---【最健壮的在线状态 useEffect，并增加调试信息】--- ✅
   useEffect(() => {
-    let unsub = null;
+    let unsubRTDB = null;
     let cancelled = false;
 
-    // 严格检查
-    if (!peerId || typeof window === "undefined") {
-      setPeerStatus({ online: false, lastSeenTimestamp: null });
+    if (!peerId) {
+      setPeerStatus(prev => ({ ...prev, debug: "Error: peerId is null" }));
+      return;
+    }
+    if (typeof window === "undefined") {
+      setPeerStatus(prev => ({ ...prev, debug: "Error: Not in browser" }));
       return;
     }
 
-    // 检查 RTDB 是否初始化
     if (!rtDb) {
-      console.warn("rtDb not initialized - falling back to Firestore lastSeen.");
-      (async () => {
-        try {
-          const userDocRef = doc(db, "users", peerId);
-          const snap = await getDoc(userDocRef);
-          if (snap.exists()) {
-            const ls = snap.data().lastSeen;
-            const lastSeenMs = ls?.toDate ? ls.toDate().getTime() : null;
-            if (!cancelled) setPeerStatus({ online: false, lastSeenTimestamp: lastSeenMs });
-          }
-        } catch (e) { console.warn("Firestore fallback failed:", e); }
-      })();
+      setPeerStatus(prev => ({ ...prev, debug: "Error: rtDb is null, falling back to Firestore..." }));
+      // Fallback to Firestore
+      const userDocRef = doc(db, "users", peerId);
+      getDoc(userDocRef).then(snap => {
+        if (!cancelled && snap.exists()) {
+          const ls = snap.data().lastSeen;
+          const lastSeenMs = ls?.toDate ? ls.toDate().getTime() : null;
+          setPeerStatus({ online: false, lastSeenTimestamp: lastSeenMs, debug: "Fallback successful: Read from Firestore." });
+        }
+      }).catch(e => {
+        if (!cancelled) setPeerStatus(prev => ({ ...prev, debug: `Fallback Error: ${e.message}` }));
+      });
       return;
     }
 
     try {
+      setPeerStatus(prev => ({ ...prev, debug: "Attempting RTDB connection..." }));
       const peerStatusRef = rtRef(rtDb, `/status/${peerId}`);
-      unsub = onValue(peerStatusRef, async (snapshot) => {
+      
+      unsubRTDB = onValue(peerStatusRef, 
+        (snapshot) => {
           if (cancelled) return;
           const statusData = snapshot.val();
-
           if (statusData && statusData.state === "online") {
-            const lastChanged = statusData.last_changed;
-            const lastSeenMs = typeof lastChanged === "number" ? lastChanged : null;
-            setPeerStatus({ online: true, lastSeenTimestamp: lastSeenMs });
+            setPeerStatus({ online: true, lastSeenTimestamp: statusData.last_changed, debug: "RTDB reported: ONLINE" });
           } else {
-            // 离线或无数据时，回退到 Firestore
-            try {
-              const userDocRef = doc(db, "users", peerId);
-              const docSnap = await getDoc(userDocRef);
-              if (docSnap.exists()) {
-                const ls = docSnap.data().lastSeen;
-                const lastSeenMs = ls?.toDate ? ls.toDate().getTime() : null;
-                setPeerStatus({ online: false, lastSeenTimestamp: lastSeenMs });
-              } else {
-                setPeerStatus({ online: false, lastSeenTimestamp: null });
-              }
-            } catch (e) {
-              console.warn("Failed to read Firestore lastSeen fallback:", e);
-              setPeerStatus({ online: false, lastSeenTimestamp: null });
-            }
+            setPeerStatus(prev => ({ ...prev, online: false, lastSeenTimestamp: statusData?.last_changed || prev.lastSeenTimestamp, debug: "RTDB reported: OFFLINE or null." }));
           }
         },
-        (err) => { console.error("rtOnValue error:", err); }
+        (err) => { 
+            setPeerStatus({ online: false, lastSeenTimestamp: null, debug: `RTDB Error: ${err.message}` });
+        }
       );
     } catch (e) {
-      console.error("Exception while setting onValue:", e);
+      setPeerStatus({ online: false, lastSeenTimestamp: null, debug: `Exception: ${e.message}` });
     }
 
     return () => {
       cancelled = true;
-      if (typeof unsub === "function") unsub();
+      if (typeof unsubRTDB === "function") unsubRTDB();
     };
   }, [peerId]);
-
-  // 使用 useMemo 避免不必要的重计算
-  const headerStatus = useMemo(() => {
-    if (peerStatus.online) return { label: "在线", colorClass: "text-green-400" };
-    return { label: formatLastSeen(peerStatus.lastSeenTimestamp), colorClass: "text-gray-400" };
-  }, [peerStatus]);
 
   return (
     <div className="h-screen w-full bg-gray-100 dark:bg-black flex flex-col">
@@ -126,32 +114,36 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             <span className="font-bold text-lg text-gray-900 dark:text-white">
               {peerUser?.displayName || "聊天对象"}
             </span>
-            <span className={`text-xs font-semibold ${headerStatus.colorClass}`}>
-              {headerStatus.label}
+            <span className={`text-xs font-semibold ${peerStatus.online ? 'text-green-500' : 'text-gray-400'}`}>
+              {formatLastSeen(peerStatus.lastSeenTimestamp)}
             </span>
           </div>
         </div>
-        
-        {/* 右上角更多按钮 (仅作占位) */}
-        <button className="text-gray-500 dark:text-gray-300">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01" />
-            </svg>
-        </button>
       </header>
+
+      {/* ✅ ---【核心修改：增加实时仪表盘】--- ✅ */}
+      <div style={{
+          margin: '20px',
+          background: '#111', color: 'white', padding: '15px',
+          borderRadius: '8px', fontSize: '12px', fontFamily: 'monospace',
+          border: '1px solid #444'
+      }}>
+          <h4 style={{ margin: 0, padding: 0, fontWeight: 'bold', color: '#00ff00', borderBottom: '1px solid #333', paddingBottom: '5px', marginBottom: '10px' }}>-- 实时状态仪表盘 --</h4>
+          <p><strong>Peer ID:</strong> {peerId || 'N/A'}</p>
+          <p><strong>rtDb Loaded:</strong> {rtDb ? <span style={{color: 'lime'}}>Yes</span> : <span style={{color: 'red'}}>No</span>}</p>
+          <hr style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.2)' }} />
+          <p><strong>Status (online):</strong> {peerStatus.online ? <span style={{color: 'lime'}}>true</span> : <span style={{color: 'red'}}>false</span>}</p>
+          <p><strong>Status (timestamp):</strong> {peerStatus.lastSeenTimestamp || 'null'}</p>
+          <p><strong>Status (formatted):</strong> {formatLastSeen(peerStatus.lastSeenTimestamp)}</p>
+          <hr style={{ margin: '8px 0', borderColor: 'rgba(255,255,255,0.2)' }} />
+          <p><strong>Debug Info:</strong> <span style={{color: 'yellow'}}>{peerStatus.debug}</span></p>
+      </div>
 
       {/* 主内容区 (仅作占位) */}
       <main className="flex-1 p-4 text-center text-gray-500">
-        <p>这里是聊天内容区</p>
-        <p className="mt-4">请专注于顶部的在线状态是否正确</p>
+        <p>这是一个极简的测试页面。</p>
+        <p className="mt-4">请专注于顶部的在线状态和下方的“仪表盘”是否正确。</p>
       </main>
-
-      {/* 底部输入框 (仅作占位) */}
-      <footer className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
-        <div className="w-full h-10 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center px-4 text-gray-400">
-            输入框占位...
-        </div>
-      </footer>
     </div>
   );
 }
