@@ -405,11 +405,9 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                         <h1 className="font-bold text-lg text-white truncate max-w-[50vw]">{peerUser?.displayName || "聊天"}</h1>
                         {/* 核心修改：显示在线状态或最后在线时间 */}
                         {peerStatus.online ? ( 
-                            <span className="text-xs text-white/80 font-semibold flex items-center gap-1">
-                                <div className="w-2 h-2 bg-green-400 rounded-full"></div>在线
-                            </span> 
+                            <span className="text-green-200 text-xs">在线</span> 
                         ) : ( 
-                            <span className="text-xs text-white/60">
+                            <span className="text-gray-200 text-xs">
                                 {formatLastSeen(peerStatus.lastSeenTimestamp)}
                             </span> 
                         )}
