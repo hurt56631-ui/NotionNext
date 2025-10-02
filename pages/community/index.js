@@ -1,7 +1,7 @@
-// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 已优化手势和UI)
+// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 已修复手势捕获问题)
 
 import { useTransition, animated } from '@react-spring/web';
-// ✅ 移除 useDrag, 引入 useSwipeable
+// ✅ 引入 useSwipeable, 它将替代 useDrag
 import { useSwipeable } from 'react-swipeable';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
@@ -118,9 +118,7 @@ const CommunityPage = () => {
         const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
         const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
 
-        // 精华筛选
         const essenceCondition = currentSort === '精华' ? [where('isEssence', '==', true)] : [];
-        // 置顶排序（强制优先显示）
         const topCondition = currentSort === '默认' ? [orderBy('isTop', 'desc')] : [];
 
         const q = query(postsRef, ...categoryCondition, ...essenceCondition, ...topCondition, ...baseConditions, ...paginationCondition);
@@ -150,7 +148,7 @@ const CommunityPage = () => {
     }
   }, [currentCategory, currentSort, db]);
 
-  // ✅ 全新的手势处理逻辑
+  // ✅ 优化后的手势处理逻辑 (使用 react-swipeable)
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = CATEGORIES.indexOf(currentCategory);
@@ -166,7 +164,6 @@ const CommunityPage = () => {
         setCurrentCategory(CATEGORIES[currentIndex - 1]);
       }
     },
-    // ✅ 核心配置：高灵敏度、大范围、防浏览器手势
     delta: 30, // 触发滑动所需的最小像素移动，数值越小越灵敏
     preventDefaultTouchmoveEvent: true, // 阻止触摸移动事件的默认行为，关键在于避免触发浏览器侧滑返回
     trackMouse: true, // 允许在桌面上用鼠标拖动来触发滑动
@@ -250,15 +247,16 @@ const CommunityPage = () => {
         </div>
 
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
-          {/* ✅ 修复：移除了 py-3，解决与状态栏的间隙问题 */}
+          {/* ✅ 已修复：移除了 py-3，解决与状态栏的间隙问题 */}
           <div className="sticky top-0 z-30">
             <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
           </div>
 
-          {/* ✅ 应用新的手势绑定 */}
-          <div {...swipeHandlers} className="relative mt-4" style={{ touchAction: 'pan-y' }}>
+          {/* ✅ 核心修复：将手势绑定移出，只保留容器 */}
+          <div className="relative mt-4" style={{ touchAction: 'pan-y' }}>
             {transitions((style, item) => (
-              <animated.div key={item} style={{ ...style, width: '100%' }}>
+              // ✅ 核心修复：将手势绑定 {...swipeHandlers} 应用到这里的 animated.div
+              <animated.div {...swipeHandlers} key={item} style={{ ...style, width: '100%' }}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
                   {renderPostsContent()}
                 </div>
