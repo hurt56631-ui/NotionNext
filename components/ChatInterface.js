@@ -1,10 +1,12 @@
-// /components/ChatInterface.js (最终修复版 - 为所有账号启用正确的未读消息逻辑)
+// /components/ChatInterface.js (最终完美集成版 - 包含 writeBatch、智能输入和 UI 优化)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment } from "firebase/firestore";
+// ✅ 确保导入 writeBatch
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment, writeBatch } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash } from "lucide-react";
+// ✅ 导入 Mic 图标
+import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash, Mic } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
 // 全局样式 (无变化)
@@ -18,8 +20,10 @@ const GlobalScrollbarStyle = () => (
     `}</style>
 );
 
-// 组件与图标 (无变化)
-const CircleTranslateIcon = () => ( <div className="w-6 h-6 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-sm border border-white/30 transition-colors">译</div> );
+// 组件与图标 (已更新)
+const CircleTranslateIcon = ({ size = 6 }) => (
+    <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div>
+);
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
 
 // TTS 功能模块 (无变化)
@@ -47,9 +51,12 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const [searchActive, setSearchActive] = useState(false);
   const [peerStatus, setPeerStatus] = useState({ online: false });
   const [unreadCount, setUnreadCount] = useState(0);
-  
   const [background, setBackground] = useState({ dataUrl: null, opacity: 0.2 });
 
+  // ✅ 语音识别相关状态
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
+  
   const messagesEndRef = useRef(null);
   const mainScrollRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -58,9 +65,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef(null);
   
+  // ✅ 默认设置中包含语音识别语言
   const defaultSettings = { 
       autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal',
       sourceLang: '中文', targetLang: '缅甸语',
+      speechLang: 'zh-CN', // 默认语音识别语言为中文
       ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
@@ -130,49 +139,125 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // ✅ ---【核心终极修复】--- ✅
-  // 修改 sendMessage 函数，使其在发送消息时：
-  // 1. 为对方增加未读计数
-  // 2. 将自己的未读计数清零
+  // ✅ ---【核心修复：使用 writeBatch 确保准确性】--- ✅
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
-    if (!content.trim() || !user?.uid || !peerUser?.id) return;
+    if (!content.trim() || !user?.uid || !peerUser?.id || !chatId) {
+      console.error("SendMessage Aborted: Missing user, peerUser, chatId, or content.");
+      return;
+    }
     setSending(true);
     try {
-      // 1. 添加新消息到 messages 子集合
-      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
-      await addDoc(messagesRef, {
+      const batch = writeBatch(db);
+      const chatDocRef = doc(db, "privateChats", chatId);
+      const newMessageRef = doc(collection(chatDocRef, "messages"));
+
+      // 操作 A：添加新消息
+      batch.set(newMessageRef, {
         text: content.trim(),
         uid: user.uid,
         createdAt: serverTimestamp()
       });
-      
-      // 2. 更新主聊天文档
-      const chatDocRef = doc(db, "privateChats", chatId);
-      
-      const updateData = {
-        members: [user.uid, peerUser.id],
+
+      // 操作 B：更新主聊天文档
+      batch.update(chatDocRef, {
+        members: [user.uid, peerUser.id], 
         lastMessage: content.trim(),
         lastMessageAt: serverTimestamp(),
-        // 为对方的未读数 +1
+        // 为对方(peerUser)的未读数 +1
         [`unreadCounts.${peerUser.id}`]: increment(1),
-        // 同时，将自己的未读数设置为 0，因为自己发的消息对自己总是已读
-        [`unreadCounts.${user.uid}`]: 0 
-      };
+        // 同时，将自己(user)的未读数设置为 0
+        [`unreadCounts.${user.uid}`]: 0
+      });
 
-      // 使用 setDoc 和 { merge: true } 一次性更新所有字段
-      // merge: true 确保如果 unreadCounts 字段不存在，它会被创建而不是覆盖整个文档
-      await setDoc(chatDocRef, updateData, { merge: true });
+      // 提交所有操作
+      await batch.commit();
       
       setInput("");
       setMyTranslationResult(null);
     } catch (e) {
-      console.error("SendMessage Error:", e);
-      alert(`发送失败: ${e.message}`);
+      if (e.code === 'not-found') {
+        // Fallback：如果主文档不存在，尝试使用 setDoc 创建它
+        try {
+            const chatDocRef = doc(db, "privateChats", chatId);
+            await setDoc(chatDocRef, {
+                members: [user.uid, peerUser.id],
+                lastMessage: content.trim(),
+                lastMessageAt: serverTimestamp(),
+                [`unreadCounts.${peerUser.id}`]: 1,
+                [`unreadCounts.${user.uid}`]: 0
+            }, { merge: true });
+            const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+            await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
+            setInput("");
+            setMyTranslationResult(null);
+        } catch (creationError) {
+             console.error("Failed to create chat document after initial failure:", creationError);
+             alert(`发送失败，无法创建聊天记录: ${creationError.message}`);
+        }
+      } else {
+        console.error("SendMessage Batch Error:", e);
+        alert(`发送失败: ${e.message}`);
+      }
     } finally {
       setSending(false);
     }
   };
+
+  // ✅ 新增语音识别处理函数
+  const handleSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("抱歉，您的浏览器不支持语音识别功能。请尝试使用最新版的 Chrome 浏览器。");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = cfg.speechLang;
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setInput('');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onerror = (event) => {
+      console.error("语音识别错误:", event.error);
+      setIsListening(false);
+      // 如果识别失败，清空输入框
+      setInput('');
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map(result => result[0])
+        .map(result => result.transcript)
+        .join('');
+      
+      setInput(transcript);
+
+      // 当一句话识别结束时，直接发送
+      if (event.results[0].isFinal && transcript.trim()) {
+        sendMessage(transcript);
+      }
+    };
+
+    recognition.start();
+  };
+
 
   const handleScroll = () => { const el = mainScrollRef.current; if (el) { const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100; isAtBottomRef.current = atBottom; if (atBottom && unreadCount > 0) { setUnreadCount(0); } } };
   const handleRecallMessage = async (message) => { if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); } };
@@ -184,7 +269,31 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const handleTranslateMyInput = async () => { if (!input.trim()) return; setIsTranslating(true); setMyTranslationResult(null); try { const prompt = getMyInputPrompt(cfg.sourceLang, cfg.targetLang); const resultText = await callAIHelper(prompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const parsedResult = parseSingleTranslation(resultText); setMyTranslationResult(parsedResult); } catch (error) { alert(error.message); } finally { setIsTranslating(false); } };
   const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerUser?.displayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。"); };
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
-  const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
+  
+  const LongPressMenu = ({ message, onClose }) => { 
+    const mine = message.uid === user?.uid; 
+    const isPinyinVisible = showPinyinFor === message.id; 
+    return ( 
+      <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> 
+        <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> 
+          <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> 
+          {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} 
+          
+          {/* ✅ 更新长按菜单的翻译图标 */}
+          {!message.recalled && 
+            <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full">
+              <div className="w-5 h-5 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-xs font-bold text-gray-600">译</div>
+              翻译
+            </button>
+          } 
+
+          {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} 
+          {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} 
+          {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} 
+        </div> 
+      </div> 
+    ); 
+  };
   
   const MessageRow = ({ message, isLastMessage }) => { 
     const mine = message.uid === user?.uid; 
@@ -205,7 +314,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
           </div> 
           {isPeersLastMessage && !message.recalled && (
               <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
-                  <div className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors">译</div>
+                  <CircleTranslateIcon size={6} />
               </button>
           )}
         </div> 
@@ -285,13 +394,30 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
             <div className="p-2">
               <div className="flex items-end w-full max-w-4xl mx-auto p-1 bg-gray-100 rounded-2xl border border-gray-200">
                 <textarea
-                  ref={textareaRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                  placeholder="输入消息..."
-                  className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar" rows="1"
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  placeholder={isListening ? "正在聆听..." : "输入消息..."}
+                  className="flex-1 bg-transparent focus:outline-none text-black text-base resize-none overflow-y-auto max-h-[40vh] mx-2 py-2.5 leading-6 placeholder-gray-500 font-normal thin-scrollbar"
+                  rows="1"
+                  readOnly={isListening}
                 />
                 <div className="flex items-center flex-shrink-0 ml-1 self-end">
-                    <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">{isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300">译</div>}</button>
-                    <button onClick={() => sendMessage()} disabled={sending || !input.trim()} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1"><Send size={18} /></button>
+                  <button onClick={handleTranslateMyInput} className="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-blue-500 disabled:opacity-30" title="AI 翻译">
+                      {isTranslating ? <div className="w-5 h-5 border-2 border-dashed rounded-full animate-spin border-blue-500"></div> : <CircleTranslateIcon />}
+                  </button>
+                  
+                  {/* ✅ 智能按钮：根据输入状态切换语音/发送 */}
+                  {input.trim() === '' ? (
+                    <button onClick={handleSpeechRecognition} className={`w-10 h-10 flex items-center justify-center rounded-full text-white transition-all ml-1 ${isListening ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`} title="语音输入">
+                      <Mic size={18} />
+                    </button>
+                  ) : (
+                    <button onClick={() => sendMessage()} disabled={sending} className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white shadow-md disabled:bg-gray-400 disabled:shadow-none transition-all ml-1" title="发送">
+                      <Send size={18} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -332,7 +458,29 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                 )}
               </div>
 
-              <div className="p-3 rounded-lg bg-white space-y-3"><h4 className="font-bold text-sm">翻译语言</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">源语言 (你的语言)</span><input type="text" value={cfg.sourceLang} onChange={e => setCfg(c => ({...c, sourceLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">目标语言 (对方语言)</span><input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label></div>
+              {/* ✅ 语音和翻译设置，包含语音识别语言 */}
+              <div className="p-3 rounded-lg bg-white space-y-3">
+                <h4 className="font-bold text-sm">语音和翻译</h4>
+                <label className="flex items-center justify-between text-sm">
+                  <span className="font-bold">语音识别语言</span>
+                  <select 
+                    value={cfg.speechLang} 
+                    onChange={e => setCfg(c => ({...c, speechLang: e.target.value}))} 
+                    className="p-1 border rounded text-sm bg-white border-gray-300"
+                  >
+                    <option value="zh-CN">中文 (普通话)</option>
+                    <option value="en-US">英语 (美国)</option>
+                    <option value="my-MM">缅甸语</option>
+                    <option value="ja-JP">日语</option>
+                    <option value="ko-KR">韩语</option>
+                    <option value="es-ES">西班牙语 (西班牙)</option>
+                    <option value="fr-FR">法语 (法国)</option>
+                  </select>
+                </label>
+                <label className="flex items-center justify-between text-sm"><span className="font-bold">源语言 (你的语言)</span><input type="text" value={cfg.sourceLang} onChange={e => setCfg(c => ({...c, sourceLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
+                <label className="flex items-center justify-between text-sm"><span className="font-bold">目标语言 (对方语言)</span><input type="text" value={cfg.targetLang} onChange={e => setCfg(c => ({...c, targetLang: e.target.value}))} className="w-28 p-1 text-center border rounded text-sm bg-white border-gray-300"/></label>
+              </div>
+              
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">AI翻译设置 (OpenAI兼容)</h4><input placeholder="接口地址" value={cfg.ai.endpoint} onChange={e => setCfg(c => ({...c, ai: {...c.ai, endpoint: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="API Key" type="password" value={cfg.ai.apiKey} onChange={e => setCfg(c => ({...c, ai: {...c.ai, apiKey: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/><input placeholder="模型 (e.g., gemini-pro)" value={cfg.ai.model} onChange={e => setCfg(c => ({...c, ai: {...c.ai, model: e.target.value}}))} className="w-full p-2 border rounded text-sm bg-white border-gray-300 placeholder-gray-400"/></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm">自动化</h4><label className="flex items-center justify-between text-sm"><span className="font-bold">自动朗读对方消息</span><input type="checkbox" checked={cfg.autoPlayTTS} onChange={e => setCfg(c => ({...c, autoPlayTTS: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label><label className="flex items-center justify-between text-sm"><span className="font-bold">自动翻译对方消息</span><input type="checkbox" checked={cfg.autoTranslate} onChange={e => setCfg(c => ({...c, autoTranslate: e.target.checked}))} className="h-5 w-5 text-blue-500 border-gray-300 rounded focus:ring-blue-500"/></label></div>
               <div className="p-3 rounded-lg bg-white space-y-2"><h4 className="font-bold text-sm text-red-500">危险操作</h4><button onClick={handleDeleteAllMessages} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">删除全部聊天记录</button><button onClick={handleBlockUser} className="w-full text-left p-2 hover:bg-red-500/10 rounded-md text-red-500 font-bold text-sm">拉黑对方</button></div>
