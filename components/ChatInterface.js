@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完整版 - 修复编译错误，集成 RTDB 实时在线状态)
+// /components/ChatInterface.js (终极完整版 - 已修复编译错误，集成 RTDB 实时在线状态)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 useRouter 用于返回导航
@@ -26,8 +26,9 @@ const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'str
 const ttsCache = new Map();
 const preloadTTS = async (text) => { if (!text || ttsCache.has(text)) return; try { const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`; const response = await fetch(url); if (!response.ok) throw new Error('API Error'); const blob = await response.blob(); const audio = new Audio(URL.createObjectURL(blob)); ttsCache.set(text, audio); } catch (error) { console.error(`预加载 "${text}" 失败:`, error); } };
 const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play().catch(error => console.error("TTS playback failed:", error)); } }); } };
-const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
-const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s](.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
+// ✅ ---【核心编译错误修复】--- ✅
+const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices && data.choices.message) return data.choices.message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
+const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s](.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch.trim(), backTranslation: backTranslationMatch.trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
 
 // --- ✅ 辅助函数：【已优化】格式化时间戳为“最后在线时间” ---
 const formatLastSeen = (timestamp) => {
@@ -134,7 +135,7 @@ alert('保存背景失败，可能是图片太大或存储空间已满。');
 };
 
 const onFileChange = (e) => {
-const file = e.target.files?.[0];
+const file = e.target.files?.;
 if (!file) return;
 const reader = new FileReader();
 reader.onload = () => {
@@ -311,13 +312,13 @@ recognition.onerror = (event) => {
 
 recognition.onresult = (event) => {
   const transcript = Array.from(event.results)
-    .map(result => result[0])
+    .map(result => result)
     .map(result => result.transcript)
     .join('');
   
   setInput(transcript);
 
-  if (event.results[0].isFinal && transcript.trim()) {
+  if (event.results.isFinal && transcript.trim()) {
     sendMessage(transcript);
   }
 };
@@ -341,7 +342,7 @@ const LongPressMenu = ({ message, onClose }) => {
 const mine = message.uid === user?.uid;
 const isPinyinVisible = showPinyinFor === message.id;
 return (
-<div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}>
+<div className="fixed inset-0 bg-black/30 z- flex items-center justify-center" onClick={onClose}>
 <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}>
 <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button>
 {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>}
@@ -406,6 +407,7 @@ return (
     <div className="flex items-center space-x-3">
         {/* 返回按钮 */}
         <button onClick={() => router.back()} className="text-gray-600 dark:text-gray-300">
+            {/* 建议使用一个图标库，比如 FontAwesome */}
             <i className="fas fa-arrow-left"></i>
         </button>
 
@@ -433,13 +435,13 @@ return (
         </div>
     </div>
 
-    {/* 右上角更多按钮 (这里可以替换成 Settings 按钮) */}
+    {/* 右上角更多按钮 (例如设置) */}
     <button onClick={() => setSettingsOpen(true)} className="text-gray-600 dark:text-gray-300">
         <i className="fas fa-ellipsis-v"></i>
     </button>
   </div>
   
-  {/* 注意：pt-14 是基于旧 header 高度的，新 header 可能需要调整 */}
+  {/* 主要聊天区域，注意 pt-20 是为了给新的 Header 留出空间 */}
   <main ref={mainScrollRef} onScroll={handleScroll} className="h-full overflow-y-auto w-full thin-scrollbar px-4 pt-20 pb-20 relative z-10">
     <div>
         {filteredMessages.map((msg, index) => (
@@ -579,7 +581,7 @@ return (
     )}
   </AnimatePresence>
   {longPressedMessage && <LongPressMenu message={longPressedMessage} onClose={() => setLongPressedMessage(null)} />}
-  {correctionMode.active && ( <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 z-[70] flex items-center justify-center p-4"> <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="w-full max-w-md bg-white text-black border border-gray-200 rounded-lg shadow-xl p-4 space-y-3"> <h3 className="font-bold text-lg">修改消息</h3> <p className="text-sm p-3 bg-gray-100 rounded-md">{correctionMode.message.text}</p> <textarea value={correctionMode.text} onChange={e => setCorrectionMode(c => ({...c, text: e.target.value}))} rows={4} className="w-full p-2 border rounded bg-white border-gray-300" /> <div className="flex justify-end gap-2"> <button onClick={() => setCorrectionMode({ active: false, message: null, text: ''})} className="px-4 py-2 rounded-md bg-gray-200 text-sm">取消</button> <button onClick={sendCorrection} className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm">确认修改</button> </div> </motion.div> </motion.div> )}
+  {correctionMode.active && ( <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 z- flex items-center justify-center p-4"> <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="w-full max-w-md bg-white text-black border border-gray-200 rounded-lg shadow-xl p-4 space-y-3"> <h3 className="font-bold text-lg">修改消息</h3> <p className="text-sm p-3 bg-gray-100 rounded-md">{correctionMode.message.text}</p> <textarea value={correctionMode.text} onChange={e => setCorrectionMode(c => ({...c, text: e.target.value}))} rows={4} className="w-full p-2 border rounded bg-white border-gray-300" /> <div className="flex justify-end gap-2"> <button onClick={() => setCorrectionMode({ active: false, message: null, text: ''})} className="px-4 py-2 rounded-md bg-gray-200 text-sm">取消</button> <button onClick={sendCorrection} className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm">确认修改</button> </div> </motion.div> </motion.div> )}
 </div>
 
 );
