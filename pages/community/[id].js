@@ -1,306 +1,304 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+// pages/community/[id].js (贴吧版 - 加强最终版)
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import { useAuth } from '@/lib/AuthContext';
+import {
+  doc, getDoc, collection, query, where, orderBy, onSnapshot,
+  addDoc, updateDoc, deleteDoc, increment, serverTimestamp
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, collection, query, where, orderBy, addDoc, serverTimestamp, updateDoc, increment } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 
-// ✅ 导入所有需要的 Lucide 图标
-import { Heart, MessageSquare, Send, ChevronDown, Volume2 } from 'lucide-react';
+const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
+const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
+const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-import { AdSlot } from '@/components/GoogleAdsense';
-import NotionPage from '@/components/NotionPage';
-import WWAds from '@/components/WWAds';
-import { useGlobal } from '@/lib/global';
-import { isBrowser } from '@/lib/utils';
-import FloatTocButton from '@/themes/heo/components/FloatTocButton'; 
-import { PostLock } from '@/themes/heo/components/PostLock';       
-import AISummary from '@/components/AISummary';
-import ArticleExpirationNotice from '@/components/ArticleExpirationNotice';
+/** === TTS 缓存与函数 === */
+const ttsCache = new Map();
 
-// --- 辅助函数：时间格式化 (保持不变) ---
-const formatTimeAgo = (ts) => {
-  if (!ts) return '不久前';
+const preloadTTS = async (text) => {
+  if (ttsCache.has(text)) return;
   try {
-    const date = ts?.toDate ? ts.toDate() : new Date(ts);
-    return formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
-  } catch (e) { return '日期错误'; }
+    const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=-20`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('API Error');
+    const blob = await response.blob();
+    const audio = new Audio(URL.createObjectURL(blob));
+    ttsCache.set(text, audio);
+  } catch (error) {
+    console.error(`预加载 "${text}" 失败:`, error);
+  }
 };
 
-// ===================================================================
-// =============  ✅ 新增：楼中楼评论区相关组件  =============
-// ===================================================================
-
-// --- 回复输入框组件 ---
-const CommentInput = ({ postId, parentComment, onCommentAdded, placeholder }) => {
-    const { user } = useAuth();
-    const [content, setContent] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const textareaRef = useRef(null);
-
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.focus();
-        }
-    }, []);
-
-    const handleSubmit = async () => {
-        if (!content.trim() || !user || isSubmitting) return;
-        setIsSubmitting(true);
-        try {
-            await addDoc(collection(db, 'posts', postId, 'comments'), {
-                content: content.trim(),
-                authorId: user.uid,
-                authorName: user.displayName,
-                authorAvatar: user.photoURL,
-                parentCommentId: parentComment.id, // 标记父评论ID
-                replyToUser: parentComment.authorName, // 标记回复给谁
-                createdAt: serverTimestamp(),
-            });
-            setContent('');
-            if (onCommentAdded) onCommentAdded();
-        } catch (error) {
-            console.error("发表评论失败:", error);
-            alert("发表评论失败，请重试。");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-    
-    if (!user) return null;
-
-    return (
-        <div className="flex items-start space-x-3 mt-4">
-            <img src={user.photoURL || '/img/avatar.svg'} alt="你的头像" className="w-9 h-9 rounded-full" />
-            <div className="flex-1">
-                <textarea
-                    ref={textareaRef}
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder={placeholder}
-                    className="w-full bg-gray-100 dark:bg-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                    rows="2"
-                />
-                <div className="flex justify-end mt-2">
-                    <button onClick={handleSubmit} disabled={isSubmitting || !content.trim()} className="px-4 py-1.5 rounded-full text-white bg-blue-500 text-sm font-semibold disabled:bg-gray-400 transition-colors active:scale-95">
-                        发布
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+const playCachedTTS = (text) => {
+  if (ttsCache.has(text)) {
+    ttsCache.get(text).play();
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) ttsCache.get(text).play();
+    });
+  }
 };
 
-
-// --- 单个评论/回复渲染组件 (楼中楼) ---
-const ReplyItem = ({ reply, onReply }) => {
-    return (
-        <div className="flex space-x-3">
-            <Link href={`/profile/${reply.authorId}`}>
-                <a className="flex-shrink-0"><img src={reply.authorAvatar || '/img/avatar.svg'} alt={reply.authorName} className="w-8 h-8 rounded-full" /></a>
-            </Link>
-            <div className="flex-1 text-sm">
-                <div>
-                    <Link href={`/profile/${reply.authorId}`}><a className="font-semibold text-gray-800 dark:text-gray-200 hover:underline">{reply.authorName}</a></Link>
-                    {reply.replyToUser && <span className="text-gray-500 mx-1">回复</span>}
-                    {reply.replyToUser && <span className="font-semibold text-blue-500">{reply.replyToUser}</span>}
-                    <span className="text-gray-700 dark:text-gray-300 ml-1.5">{reply.content}</span>
-                </div>
-                <div className="mt-1 flex items-center space-x-4 text-xs text-gray-400">
-                    <span>{formatTimeAgo(reply.createdAt)}</span>
-                    <button onClick={onReply} className="font-semibold hover:text-blue-500">回复</button>
-                </div>
-            </div>
-        </div>
-    );
+/** 解析视频 URL */
+const parseVideoUrl = (post) => {
+  if (!post) return null;
+  if (post.videoUrl) {
+    try { new URL(post.videoUrl); return post.videoUrl; } catch {}
+  }
+  const urls = post.content?.match(/https?:\/\/[^\s<>"']+/g) || [];
+  const patterns = [/youtu/, /vimeo/, /tiktok/, /facebook/, /twitch/, /dailymotion/, /bilibili/, /\.(mp4|webm|ogg|mov)$/i];
+  return urls.find(u => patterns.some(p => p.test(u))) || null;
 };
+const removeUrlFromText = (text, url) => text?.replace(url, '').trim() || '';
 
-// --- 评论楼层组件 (包含折叠和楼中楼) ---
-const CommentFloor = ({ comment, postId }) => {
-  const [replies, setReplies] = useState([]);
-  const [isExpanded, setIsExpanded] = useState(false); // 控制折叠状态
-  const [showReplyInput, setShowReplyInput] = useState(false);
+const PostDetailPage = () => {
+  const router = useRouter();
+  const { id } = router.query;
+  const { user, loading: authLoading } = useAuth();
+  const [post, setPost] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [commentContent, setCommentContent] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(false);
+
+  const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
+  const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
+
+  /** 获取帖子 */
+  const fetchPost = useCallback(async () => {
+    if (!id) return;
+    try {
+      const ref = doc(db, 'posts', id);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        setPost({ id: snap.id, ...snap.data() });
+        // 浏览量 +1
+        updateDoc(ref, { viewsCount: increment(1) });
+      } else {
+        setError('帖子不存在或已被删除');
+      }
+    } catch (e) {
+      console.error(e);
+      setError('加载帖子失败');
+    }
+  }, [id]);
+
+  /** 获取评论 */
+  const fetchComments = useCallback(() => {
+    if (!id) return () => {};
+    const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
+    return onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setComments(data);
+      setLoading(false);
+    });
+  }, [id]);
 
   useEffect(() => {
-      if (!comment.id) return;
-      const q = query(
-          collection(db, 'posts', postId, 'comments'),
-          where('parentCommentId', '==', comment.id),
-          orderBy('createdAt', 'asc')
-      );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-          const fetchedReplies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setReplies(fetchedReplies);
-      });
-      return () => unsubscribe();
-  }, [postId, comment.id]);
+    if (id) {
+      setLoading(true);
+      fetchPost();
+      const unsub = fetchComments();
+      return () => unsub();
+    }
+  }, [id, fetchPost, fetchComments]);
 
-  const displayedReplies = isExpanded ? replies : replies.slice(0, 3);
+  /** 发表评论 */
+  const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
+    e.preventDefault();
+    const text = parentId ? inputRef?.current?.value : commentContent;
+    if (!text || !text.trim()) return;
+    if (!user) return setShowLoginModal(true);
+    try {
+      await addDoc(collection(db, 'comments'), {
+        postId: id,
+        parentId,
+        content: text.trim(),
+        authorId: user.uid,
+        authorName: user.displayName || '匿名',
+        authorAvatar: user.photoURL,
+        createdAt: serverTimestamp()
+      });
+      if (parentId && inputRef?.current) inputRef.current.value = '';
+      else setCommentContent('');
+    } catch (err) {
+      console.error(err);
+      alert('评论失败');
+    }
+  };
+
+  /** 点赞 */
+  const toggleLike = async () => {
+    if (!user || !post) return setShowLoginModal(true);
+    const ref = doc(db, 'posts', id);
+    const hasLiked = post.likers?.includes(user.uid);
+    try {
+      if (hasLiked) {
+        await updateDoc(ref, {
+          likesCount: increment(-1),
+          likers: post.likers.filter(u => u !== user.uid)
+        });
+      } else {
+        await updateDoc(ref, {
+          likesCount: increment(1),
+          likers: [...(post.likers || []), user.uid]
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+  const hasLiked = user && post?.likers?.includes(user.uid);
+
+  /** 踩 */
+  const toggleDislike = async () => {
+    if (!user || !post) return setShowLoginModal(true);
+    const ref = doc(db, 'posts', id);
+    const hasDisliked = post.dislikers?.includes(user.uid);
+    try {
+      if (hasDisliked) {
+        await updateDoc(ref, {
+          dislikesCount: increment(-1),
+          dislikers: post.dislikers.filter(u => u !== user.uid)
+        });
+      } else {
+        await updateDoc(ref, {
+          dislikesCount: increment(1),
+          dislikers: [...(post.dislikers || []), user.uid]
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+  const hasDisliked = user && post?.dislikers?.includes(user.uid);
+
+  /** 收藏 */
+  const toggleFavorite = async () => {
+    if (!user || !post) return setShowLoginModal(true);
+    const userRef = doc(db, 'users', user.uid);
+    const hasFav = user.favorites?.includes(post.id);
+    try {
+      if (hasFav) {
+        await updateDoc(userRef, { favorites: user.favorites.filter(pid => pid !== post.id) });
+      } else {
+        await updateDoc(userRef, { favorites: [...(user.favorites || []), post.id] });
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  /** 删除帖子 */
+  const deletePost = async () => {
+    if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
+    if (confirm('确认删除此帖子吗？')) {
+      await deleteDoc(doc(db, 'posts', id));
+      router.push('/community');
+    }
+  };
+
+  // --- UI ---
+  if (authLoading || loading) return <LayoutBaseDynamic><p>加载中...</p></LayoutBaseDynamic>;
+  if (error || !post) return <LayoutBaseDynamic><p>{error}</p></LayoutBaseDynamic>;
 
   return (
-    <div className="py-5 border-t border-gray-100 dark:border-gray-700">
-        <div className="flex space-x-4">
-            <Link href={`/profile/${comment.authorId}`}>
-                <a className="flex-shrink-0"><img src={comment.authorAvatar || '/img/avatar.svg'} alt={comment.authorName} className="w-10 h-10 rounded-full" /></a>
-            </Link>
-            <div className="flex-1">
-                <p className="font-semibold text-gray-800 dark:text-gray-200">{comment.authorName}</p>
-                <p className="text-gray-700 dark:text-gray-300 mt-2">{comment.content}</p>
-                <div className="mt-2 flex items-center space-x-4 text-xs text-gray-400">
-                    <span>{formatTimeAgo(comment.createdAt)}</span>
-                    <button onClick={() => setShowReplyInput(!showReplyInput)} className="font-semibold hover:text-blue-500">回复</button>
-                </div>
-
-                {/* 楼中楼回复 */}
-                {replies.length > 0 && (
-                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg space-y-4">
-                        {displayedReplies.map(reply => (
-                            <ReplyItem key={reply.id} reply={reply} onReply={() => setShowReplyInput(true)} />
-                        ))}
-                        {replies.length > 3 && !isExpanded && (
-                            <button onClick={() => setIsExpanded(true)} className="text-sm font-semibold text-blue-500 hover:underline flex items-center">
-                                展开其余 {replies.length - 3} 条回复 <ChevronDown size={16} className="ml-1" />
-                            </button>
-                        )}
-                        {showReplyInput && <CommentInput postId={postId} parentComment={comment} placeholder={`回复 @${comment.authorName}`} onCommentAdded={() => setShowReplyInput(false)} />}
-                    </div>
-                )}
-
-                {replies.length === 0 && showReplyInput && (
-                    <div className="mt-4">
-                        <CommentInput postId={postId} parentComment={comment} placeholder={`回复 @${comment.authorName}`} onCommentAdded={() => setShowReplyInput(false)} />
-                    </div>
-                )}
+    <LayoutBaseDynamic>
+      <div className="container mx-auto max-w-3xl py-6">
+        {/* 帖子内容 */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 mb-8">
+          <div className="flex justify-between items-start">
+            <h1 className="text-3xl font-bold mb-2">{post.title}</h1>
+            <div className="space-x-2">
+              <button onClick={() => playCachedTTS(post.title)}>🔊</button>
+              <button onClick={() => navigator.share?.({ title: post.title, url: window.location.href })}>📤</button>
+              {(user?.isAdmin || user?.uid === post?.authorId) && (
+                <button onClick={deletePost} className="text-red-600">⚙ 删除</button>
+              )}
             </div>
+          </div>
+          <div className="flex items-center text-sm text-gray-500 space-x-2 mb-4">
+            <img src={post.authorAvatar || '/img/avatar.svg'} className="w-8 h-8 rounded-full" />
+            <span>{post.authorName}</span>
+            <span>· {post.createdAt?.toDate?.().toLocaleString() || '未知时间'}</span>
+            <span>· 浏览 {post.viewsCount || 0}</span>
+          </div>
+          {videoUrl && <VideoEmbed url={videoUrl} controls />}
+          <div className="prose dark:prose-invert max-w-none my-4">
+            <PostContent content={cleanedContent} />
+            <button onClick={() => playCachedTTS(cleanedContent)}>🔊 朗读正文</button>
+          </div>
+          <div className="flex space-x-4">
+            <button onClick={toggleLike} className={hasLiked ? 'text-red-500' : ''}>👍 {post.likesCount || 0}</button>
+            <button onClick={toggleDislike} className={hasDisliked ? 'text-blue-500' : ''}>👎 {post.dislikesCount || 0}</button>
+            <button onClick={toggleFavorite}>⭐ 收藏</button>
+          </div>
         </div>
+
+        {/* 评论区 */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+          <h2 className="text-xl font-bold mb-4">评论 ({comments.length})</h2>
+          {(showAllComments ? comments.filter(c => !c.parentId) : comments.filter(c => !c.parentId).slice(0, 3))
+            .map(c => (
+              <CommentItem key={c.id} comment={c} comments={comments} onReply={handleCommentSubmit} user={user} />
+            ))}
+          {comments.filter(c => !c.parentId).length > 3 && (
+            <button onClick={() => setShowAllComments(!showAllComments)} className="text-blue-500 text-sm mt-2">
+              {showAllComments ? '收起评论' : '展开更多评论'}
+            </button>
+          )}
+
+          {/* 评论框放最底部 */}
+          <form onSubmit={e => handleCommentSubmit(e, null)} className="mt-6">
+            <textarea
+              value={commentContent}
+              onChange={e => setCommentContent(e.target.value)}
+              placeholder={user ? "写下你的评论..." : "请登录后评论"}
+              className="w-full border rounded p-2"
+            />
+            <button type="submit" className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">发表评论</button>
+          </form>
+        </div>
+      </div>
+      <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+    </LayoutBaseDynamic>
+  );
+};
+
+export default PostDetailPage;
+
+/** 评论组件 */
+const CommentItem = ({ comment, comments, onReply, user }) => {
+  const [showReply, setShowReply] = useState(false);
+  const [showAllReplies, setShowAllReplies] = useState(false);
+  const inputRef = useRef(null);
+  const childComments = comments.filter(c => c.parentId === comment.id);
+
+  return (
+    <div className="border-b border-gray-200 dark:border-gray-700 mb-4 pb-2">
+      <div className="flex items-center space-x-2 mb-1">
+        <img src={comment.authorAvatar || '/img/avatar.svg'} className="w-6 h-6 rounded-full" />
+        <span className="font-semibold">{comment.authorName}</span>
+        <span className="text-xs text-gray-400">{comment.createdAt?.toDate?.().toLocaleString() || ''}</span>
+        <button onClick={() => playCachedTTS(comment.content)}>🔊</button>
+      </div>
+      <p className="ml-8">{comment.content}</p>
+      <div className="ml-8 mt-1">
+        <button onClick={() => setShowReply(!showReply)} className="text-xs text-blue-500">回复</button>
+        {showReply && (
+          <form onSubmit={(e) => { onReply(e, comment.id, inputRef); setShowReply(false); }} className="mt-2">
+            <textarea ref={inputRef} className="w-full border rounded p-2" rows="2" />
+            <button type="submit" className="mt-1 px-3 py-1 bg-blue-500 text-white rounded">提交</button>
+          </form>
+        )}
+        {(showAllReplies ? childComments : childComments.slice(0, 6)).map(child => (
+          <CommentItem key={child.id} comment={child} comments={comments} onReply={onReply} user={user} />
+        ))}
+        {childComments.length > 6 && (
+          <button onClick={() => setShowAllReplies(!showAllReplies)} className="text-xs text-blue-500">
+            {showAllReplies ? '收起回复' : '展开更多回复'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
-
-// --- 新的评论区主组件 ---
-const NewCommentSection = ({ post }) => {
-    const { user } = useAuth();
-    const [comments, setComments] = useState([]);
-    const postId = post?.id;
-
-    useEffect(() => {
-        if (!postId) return;
-        const q = query(
-            collection(db, 'posts', postId, 'comments'),
-            where('parentCommentId', '==', null),
-            orderBy('createdAt', 'desc')
-        );
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setComments(fetchedComments);
-        }, (error) => console.error("加载评论失败:", error));
-        return () => unsubscribe();
-    }, [postId]);
-
-    const handlePostComment = async (content) => {
-        if (!user || !content) return false;
-        try {
-            await addDoc(collection(db, 'posts', postId, 'comments'), {
-                content,
-                authorId: user.uid,
-                authorName: user.displayName,
-                authorAvatar: user.photoURL,
-                parentCommentId: null,
-                createdAt: serverTimestamp(),
-            });
-            await updateDoc(doc(db, 'posts', postId), { commentCount: increment(1) });
-            return true;
-        } catch (error) {
-            console.error("评论失败:", error);
-            alert("评论失败，请重试。");
-            return false;
-        }
-    };
-
-    return (
-        <div id="comments" className='duration-200 px-5'>
-            <div className='text-2xl font-bold dark:text-white mb-6 flex items-center gap-2'>
-                <MessageSquare/>
-                <span>评论 ({post?.commentCount || 0})</span>
-            </div>
-            {user ? (
-                <div className="mb-8">
-                    <CommentInput postId={postId} onCommentAdded={() => {}} placeholder="留下你的精彩评论吧..." />
-                </div>
-            ) : (
-                <div className="text-center p-4 border dark:border-gray-700 rounded-lg mb-8">
-                    <p className='dark:text-gray-300'>请<button onClick={() => alert('请实现登录弹窗')} className="text-blue-500 font-bold mx-1 hover:underline">登录</button>后发表评论</p>
-                </div>
-            )}
-
-            <div>
-                {comments.map(comment => (
-                    <CommentFloor key={comment.id} comment={comment} postId={postId} />
-                ))}
-                {comments.length === 0 && <p className="text-center text-gray-500 py-10">还没有评论，快来抢沙发吧！</p>}
-            </div>
-        </div>
-    );
-};
-
-
-/**
- * 文章详情页布局
- */
-const LayoutSlug = props => {
-  const { post, lock, validPassword } = props;
-  const { fullWidth } = useGlobal();
-  const router = useRouter();
-
-  // 404 跳转逻辑
-  useEffect(() => {
-    if (!post) {
-      setTimeout(() => {
-          if (isBrowser) {
-            const article = document.querySelector('#article-wrapper');
-            if (!article) {
-              router.push('/404').then(() => console.warn('找不到页面', router.asPath));
-            }
-          }
-        }, 5000
-      );
-    }
-  }, [post, router]);
-
-  return (
-    <>
-      <div className={`article w-full ${fullWidth ? '' : 'xl:max-w-5xl mx-auto'} bg-white dark:bg-[#18171d] dark:border-gray-600 lg:shadow-md lg:border rounded-2xl lg:p-4`}>
-        {lock && <PostLock validPassword={validPassword} />}
-
-        {!lock && post && (
-          <div id='article-wrapper'>
-            <article itemScope itemType='https://schema.org/Article'>
-              <section className='px-5 justify-center mx-auto'>
-                <ArticleExpirationNotice post={post} />
-                <AISummary aiSummary={post.aiSummary} />
-                <WWAds orientation='horizontal' className='w-full' />
-                {post && <NotionPage post={post} />}
-                <WWAds orientation='horizontal' className='w-full' />
-              </section>
-            </article>
-
-            <div className="mt-8">
-                <hr className='my-4 border-dashed' />
-                <div className='py-2'>
-                  <AdSlot />
-                </div>
-                <NewCommentSection post={post} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      <FloatTocButton {...props} />
-    </>
-  );
-};
-
-export default LayoutSlug;
