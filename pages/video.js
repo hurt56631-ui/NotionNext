@@ -9,7 +9,7 @@ import { useGlobal } from '@/lib/global';
 const ShortVideoPage = () => {
   const { locale } = useGlobal(); // 如果您的组件需要多语言支持，可以保留
 
-  return <VerticalShortVideoPlayer useProxy={true} />;
+  return <VerticalShortVideoPlayer useProxy={false} />;
 };
 
 /**
