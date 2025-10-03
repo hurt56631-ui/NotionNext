@@ -1,70 +1,67 @@
 // themes/heo/components/VerticalShortVideoPlayer.jsx
-// 功能：全屏竖版短视频流（上下文整页切换）+ 边播边缓存
+// 新版本：适配返回 JSON 的新版 proxy API
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useDrag } from '@use-gesture/react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// 默认 API 列表
-const DEFAULT_APIS = [
-  'http://api.xingchenfu.xyz/API/hssp.php', 'http://api.xingchenfu.xyz/API/wmsc.php',
-  'http://api.xingchenfu.xyz/API/tianmei.php', 'http://api.xingchenfu.xyz/API/cdxl.php',
-  'http://api.xingchenfu.xyz/API/yzxl.php', 'http://api.xingchenfu.xyz/API/rwsp.php',
-  'http://api.xingchenfu.xyz/API/nvda.php', 'http://api.xingchenfu.xyz/API/bsxl.php',
-  'http://api.xingchenfu.xyz/API/zzxjj.php', 'http://api.xingchenfu.xyz/API/qttj.php',
-  'http://api.xingchenfu.xyz/API/xqtj.php', 'http://api.xingchenfu.xyz/API/sktj.php',
-  'http://api.xingchenfu.xyz/API/cossp.php', 'http://api.xingchenfu.xyz/API/xiaohulu.php',
-  'http://api.xingchenfu.xyz/API/manhuay.php', 'http://api.xingchenfu.xyz/API/bianzhuang.php',
-  'http://api.xingchenfu.xyz/API/jk.php', 'https://v2.xxapi.cn/api/meinv?return=302',
-  'https://api.jkyai.top/API/jxhssp.php', 'https://api.jkyai.top/API/jxbssp.php',
-  'https://api.jkyai.top/API/rmtmsp/api.php', 'https://api.jkyai.top/API/qcndxl.php',
-  'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php'
-];
+const API_ENDPOINT = '/api/proxy'; // 我们的后端API地址
+const CACHE_SIZE = 5; // 同时缓存/预加载的视频数量
+const PRELOAD_THRESHOLD = 2; // 当剩余视频少于这个数时，触发新的加载
 
-// 主组件
-export default function VerticalShortVideoPlayer({
-  apiList = DEFAULT_APIS,
-  cacheSize = 3, // 缓存数量
-  preloadThreshold = 1, // 当缓存 <= 该值时触发补充
-  useProxy = false,
-  proxyPath = process.env.NEXT_PUBLIC_PROXY_PATH || '/api/proxy'
-}) {
-  const [videos, setVideos] = useState([]); // 存储待播放视频列表 [{id, url}]
-  const [index, setIndex] = useState(0); // 当前播放索引
-  const [isMuted, setIsMuted] = useState(true); // 默认静音
+export default function VerticalShortVideoPlayer() {
+  const [videos, setVideos] = useState([]); // 存储已获取的视频URL: [{id, url}]
+  const [index, setIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(true);
   const [autoPlayNext, setAutoPlayNext] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  const videoRefs = useRef([]); // 存储 video 元素的引用
+  const videoRefs = useRef([]);
+  const isFetching = useRef(false); // 防止并发请求
 
-  // 工具函数
-  const getRandomAPI = useCallback(() => {
-    const raw = apiList[Math.floor(Math.random() * apiList.length)];
-    return `${raw}${raw.includes('?') ? '&' : '?'}t=${Date.now()}`;
-  }, [apiList]);
+  // 核心函数：从后端获取一批新的视频URL
+  const fetchVideoUrls = useCallback(async (count) => {
+    if (isFetching.current) return;
+    isFetching.current = true;
+    setError(null);
 
-  const buildSrc = useCallback((url) => {
-    if (!useProxy) return url;
-    return `${proxyPath}?url=${encodeURIComponent(url)}`;
-  }, [useProxy, proxyPath]);
+    const promises = Array(count).fill(0).map(() => 
+        fetch(API_ENDPOINT).then(res => {
+            if (!res.ok) throw new Error(`API error: ${res.statusText}`);
+            return res.json();
+        })
+    );
 
-  // 填充视频列表
-  const fillVideoQueue = useCallback(async () => {
-    const newVideos = [];
-    for (let i = 0; i < cacheSize; i++) {
-      newVideos.push({ id: Date.now() + i, url: getRandomAPI() });
+    try {
+      const results = await Promise.all(promises);
+      const newVideos = results
+        .filter(data => data && data.videoUrl)
+        .map(data => ({ id: Date.now() + Math.random(), url: data.videoUrl }));
+
+      if (newVideos.length > 0) {
+        setVideos(prev => [...prev, ...newVideos]);
+      } else {
+        throw new Error("未能获取到任何有效的视频URL");
+      }
+    } catch (e) {
+      console.error("获取视频URL失败:", e);
+      setError(e.message);
+    } finally {
+      isFetching.current = false;
     }
-    setVideos(prev => [...prev, ...newVideos]);
-  }, [cacheSize, getRandomAPI]);
+  }, []);
 
   // 初始化加载
   useEffect(() => {
-    fillVideoQueue();
+    fetchVideoUrls(CACHE_SIZE);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  // 播放当前索引的视频
+  // 播放控制与预加载触发
   useEffect(() => {
+    if (videos.length === 0) return;
+
     videoRefs.current.forEach((video, i) => {
       if (video) {
         if (i === index) {
@@ -72,82 +69,72 @@ export default function VerticalShortVideoPlayer({
           video.play().catch(e => console.warn('自动播放被阻止:', e));
         } else {
           video.pause();
-          video.currentTime = 0; // 重置非当前视频的播放进度
+          video.currentTime = 0;
         }
       }
     });
-    // 补充视频队列
-    if (videos.length - index <= preloadThreshold) {
-      fillVideoQueue();
-    }
-  }, [index, videos, fillVideoQueue, preloadThreshold]);
 
-  // 手势绑定
+    // 当需要时，预加载更多视频
+    if (videos.length - index <= PRELOAD_THRESHOLD) {
+      fetchVideoUrls(CACHE_SIZE);
+    }
+  }, [index, videos, fetchVideoUrls]);
+
+  const bind = useDrag(/* ... 手势代码和之前一样 ... */);
+  // ... (省略bind手势代码，和之前版本保持一致)
   const bind = useDrag(({ last, movement: [, my], velocity: [, vy], direction: [, dy] }) => {
-    if (!last) return;
+    if (!last || videos.length === 0) return;
     if (my < -80 || (vy > 0.6 && dy < 0)) {
-      setIndex(i => Math.min(i + 1, videos.length - 1)); // 下一条
+      setIndex(i => Math.min(i + 1, videos.length - 1));
     } else if (my > 80 || (vy > 0.6 && dy > 0)) {
-      setIndex(i => Math.max(0, i - 1)); // 上一条
+      setIndex(i => Math.max(0, i - 1));
     }
   }, { axis: 'y', pointer: { touch: true } });
+
+
+  if (error && videos.length === 0) {
+    return <div className="w-full h-screen bg-black flex flex-col items-center justify-center text-white/80"><p>加载视频失败</p><p className="text-sm mt-2">{error}</p><button onClick={() => fetchVideoUrls(CACHE_SIZE)} className="mt-4 px-4 py-2 bg-gray-700 rounded">重试</button></div>
+  }
 
   return (
     <div className="w-full h-screen bg-black relative overflow-hidden touch-action-pan-y" {...bind()}>
       <AnimatePresence initial={false}>
-        <motion.div
-          key={index}
-          className="absolute inset-0 w-full h-full"
-          initial={{ y: '0%' }}
-          animate={{ y: `-${index * 100}%` }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        >
-          {videos.map((video, i) => (
-            <div key={video.id} className="w-full h-full absolute" style={{ top: `${i * 100}%` }}>
-              <video
-                ref={el => videoRefs.current[i] = el}
-                src={buildSrc(video.url)}
-                className="w-full h-full object-contain bg-black"
-                playsInline
-                muted={isMuted}
-                controls={false}
-                loop // 循环播放当前视频
-                onCanPlay={() => { if (i === index) setIsLoading(false); }}
-                onWaiting={() => { if (i === index) setIsLoading(true); }}
-                onEnded={() => { if (autoPlayNext) setIndex(i => i + 1); }}
-              />
-              {/* UI 覆盖层 */}
-              {index === i && (
-                <div className="absolute inset-0 flex flex-col justify-between p-4 z-10 pointer-events-none">
-                  <div className="text-white/80 text-sm">
-                    {isLoading && '加载中...'}
+          {/* ... (省略渲染部分代码，和之前版本保持一致，但src直接使用video.url) ... */}
+          <motion.div
+            key={index}
+            className="absolute inset-0 w-full h-full"
+            initial={{ y: '0%' }}
+            animate={{ y: `-${index * 100}%` }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            {videos.map((video, i) => (
+              <div key={video.id} className="w-full h-full absolute" style={{ top: `${i * 100}%` }}>
+                <video
+                  ref={el => videoRefs.current[i] = el}
+                  src={video.url} // 直接使用获取到的URL
+                  className="w-full h-full object-contain bg-black"
+                  playsInline muted={isMuted} controls={false} loop
+                  onCanPlay={() => { if (i === index) setIsLoading(false); }}
+                  onWaiting={() => { if (i === index) setIsLoading(true); }}
+                  onEnded={() => { if (autoPlayNext && index < videos.length - 1) setIndex(i => i + 1); }}
+                />
+                {index === i && (
+                  <div className="absolute inset-0 flex items-center justify-center p-4 z-10 pointer-events-none">
+                    {isLoading && <div className="text-white/80 text-lg">加载中...</div>}
                   </div>
-                  {/* 你可以在这里添加视频标题、作者信息等 */}
-                </div>
-              )}
-            </div>
-          ))}
-        </motion.div>
+                )}
+              </div>
+            ))}
+          </motion.div>
       </AnimatePresence>
 
-      {/* 全局控制按钮 */}
+      {/* ... (省略UI控制按钮和指示器代码，和之前版本保持一致) ... */}
       <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-4">
-        <button onClick={() => setIsMuted(m => !m)} className="px-4 py-2 rounded-lg bg-black/50 text-white backdrop-blur-sm">
-          {isMuted ? '静音' : '取消静音'}
-        </button>
-        <button onClick={() => setAutoPlayNext(p => !p)} className="px-4 py-2 rounded-lg bg-black/50 text-white backdrop-blur-sm">
-          {autoPlayNext ? '连播: 开' : '连播: 关'}
-        </button>
+        <button onClick={() => setIsMuted(m => !m)} className="px-4 py-2 rounded-lg bg-black/50 text-white backdrop-blur-sm">{isMuted ? '静音' : '取消静音'}</button>
+        <button onClick={() => setAutoPlayNext(p => !p)} className="px-4 py-2 rounded-lg bg-black/50 text-white backdrop-blur-sm">{autoPlayNext ? '连播: 开' : '连播: 关'}</button>
       </div>
-
-      {/* 页面指示器 */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2">
-        {videos.slice(0, 10).map((_, i) => ( // 最多显示10个点
-          <div
-            key={i}
-            className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${index === i ? 'bg-white scale-150' : 'bg-white/50'}`}
-          />
-        ))}
+        {videos.slice(0, 10).map((_, i) => <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${index === i ? 'bg-white scale-150' : 'bg-white/50'}`}/>)}
       </div>
     </div>
   );
