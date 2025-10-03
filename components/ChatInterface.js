@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完美版 - 实现智能时间显示和已读回执)
+// /components/ChatInterface.js (最终完美版 - 实现HelloTalk红绿对比改错 & 智能时间 & 已读回执)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db, rtDb } from "@/lib/firebase"; 
@@ -8,52 +8,110 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash, Mic } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
-// --- 【新增】智能时间格式化辅助函数 ---
+
+// --- 智能时间格式化辅助函数 ---
 const formatMessageTime = (currentMsg, prevMsg) => {
     if (!currentMsg?.createdAt?.toDate) return null;
-
     const currentTime = currentMsg.createdAt.toDate();
-    
-    // 如果有上一条消息，判断时间间隔是否超过5分钟
     if (prevMsg?.createdAt?.toDate) {
         const prevTime = prevMsg.createdAt.toDate();
         const diffInMinutes = (currentTime.getTime() - prevTime.getTime()) / (1000 * 60);
-        if (diffInMinutes < 5) {
-            return null; // 5分钟内的消息不重复显示时间
-        }
+        if (diffInMinutes < 5) return null;
     }
-
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
-
     const format = (d, fmt) => {
-        const o = {
-            "M+": d.getMonth() + 1,
-            "d+": d.getDate(),
-            "H+": d.getHours(),
-            "m+": d.getMinutes(),
-        };
+        const o = {"M+": d.getMonth() + 1, "d+": d.getDate(), "H+": d.getHours(), "m+": d.getMinutes()};
         if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (d.getFullYear() + "").substr(4 - RegExp.$1.length));
-        for (let k in o)
-            if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+        for (let k in o) if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
         return fmt;
     };
+    if (currentTime >= todayStart) return format(currentTime, "HH:mm");
+    if (currentTime >= yesterdayStart) return `昨天 ${format(currentTime, "HH:mm")}`;
+    if (currentTime.getFullYear() === now.getFullYear()) return format(currentTime, "M月d日 HH:mm");
+    return format(currentTime, "yyyy年M月d日 HH:mm");
+};
 
-    if (currentTime >= todayStart) {
-        return format(currentTime, "HH:mm"); // 今天：14:30
+// --- 【核心】文本差异对比算法 (LCS) ---
+const computeDiff = (original, corrected) => {
+    const tokenize = (text) => text.match(/[a-zA-Z0-9]+|[\u4e00-\u9fa5]|[\s]+|[^a-zA-Z0-9\u4e00-\u9fa5\s]/g) || [];
+    const originalTokens = tokenize(original);
+    const correctedTokens = tokenize(corrected);
+    const n = originalTokens.length;
+    const m = correctedTokens.length;
+    const dp = Array(n + 1).fill(0).map(() => Array(m + 1).fill(0));
+    for (let i = 1; i <= n; i++) {
+        for (let j = 1; j <= m; j++) {
+            if (originalTokens[i - 1] === correctedTokens[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
     }
-    if (currentTime >= yesterdayStart) {
-        return `昨天 ${format(currentTime, "HH:mm")}`; // 昨天：昨天 20:15
+    const result = [];
+    let i = n, j = m;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && originalTokens[i - 1] === correctedTokens[j - 1]) {
+            result.unshift({ type: 'common', value: originalTokens[i - 1] });
+            i--; j--;
+        } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            result.unshift({ type: 'added', value: correctedTokens[j - 1] });
+            j--;
+        } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
+            result.unshift({ type: 'removed', value: originalTokens[i - 1] });
+            i--;
+        } else { break; }
     }
-    if (currentTime.getFullYear() === now.getFullYear()) {
-        return format(currentTime, "M月d日 HH:mm"); // 今年更早：5月20日 16:40
-    }
-    return format(currentTime, "yyyy年M月d日 HH:mm"); // 跨年份：2023年12月31日 23:59
+    return result;
+};
+
+// --- 【全新】HelloTalk 风格的改错显示组件 ---
+const CorrectionDisplay = ({ original, corrected, style, isMine }) => {
+    const diffs = computeDiff(original, corrected);
+    // 根据消息归属决定中性文字颜色
+    const neutralTextColor = isMine ? 'text-white' : 'text-black';
+
+    return (
+        <div className="space-y-1" style={style}>
+            {/* 原始错误行 */}
+            <div className="flex items-center">
+                <p className="whitespace-pre-wrap break-words leading-relaxed">
+                    {diffs.map((part, index) => {
+                        if (part.type === 'removed') {
+                            return <span key={index} className="text-red-500">{part.value}</span>;
+                        }
+                        if (part.type === 'common') {
+                             return <span key={index} className={neutralTextColor}>{part.value}</span>;
+                        }
+                        return null; // 在原始行不显示新增部分
+                    })}
+                </p>
+                <X size={16} className="text-red-500 ml-2 flex-shrink-0" />
+            </div>
+
+            {/* 修改正确行 */}
+            <div className="flex items-center">
+                 <p className="whitespace-pre-wrap break-words leading-relaxed">
+                    {diffs.map((part, index) => {
+                        if (part.type === 'added') {
+                            return <span key={index} className="text-green-500">{part.value}</span>;
+                        }
+                        if (part.type === 'common') {
+                            return <span key={index} className={neutralTextColor}>{part.value}</span>;
+                        }
+                        return null; // 在正确行不显示删除部分
+                    })}
+                </p>
+                <Check size={16} className="text-green-500 ml-2 flex-shrink-0" />
+            </div>
+        </div>
+    );
 };
 
 
-// ... (其他辅助函数和组件保持不变) ...
+// ... 其他辅助函数和组件 ...
 const GlobalScrollbarStyle = () => ( <style>{`.thin-scrollbar::-webkit-scrollbar{width:2px;height:2px;}.thin-scrollbar::-webkit-scrollbar-track{background:transparent;}.thin-scrollbar::-webkit-scrollbar-thumb{background-color:#e5e7eb;border-radius:20px;}.thin-scrollbar:hover::-webkit-scrollbar-thumb{background-color:#9ca3af;}.thin-scrollbar{scrollbar-width:thin;scrollbar-color:#9ca3af transparent;}`}</style> );
 const CircleTranslateIcon = ({ size = 6 }) => ( <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
@@ -63,14 +121,11 @@ const playCachedTTS = (text) => { if (ttsCache.has(text)) { ttsCache.get(text).p
 const callAIHelper = async (prompt, textToTranslate, apiKey, apiEndpoint, model) => { if (!apiKey || !apiEndpoint) { throw new Error("请在设置中配置AI翻译接口地址和密钥。"); } const fullPrompt = `${prompt}\n\n以下是需要翻译的文本：\n"""\n${textToTranslate}\n"""`; try { const response = await fetch(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: model, messages: [{ role: 'user', content: fullPrompt }] }) }); if (!response.ok) { const errorBody = await response.text(); throw new Error(`AI接口请求失败: ${response.status} ${errorBody}`); } const data = await response.json(); if (data.choices && data.choices[0] && data.choices[0].message) return data.choices[0].message.content; return JSON.stringify(data); } catch (error) { console.error("调用AI翻译失败:", error); throw error; } };
 const parseSingleTranslation = (text) => { const translationMatch = text.match(/\*\*(.*?)\*\*/s); const backTranslationMatch = text.match(/回译[:：\s]*(.*)/is); if (translationMatch && backTranslationMatch) { return { translation: translationMatch[1].trim(), backTranslation: backTranslationMatch[1].trim() }; } const firstLine = text.split(/\r?\n/).find(l => l.trim().length > 0) || text; return { translation: firstLine.trim(), backTranslation: "解析失败" }; };
 const formatLastSeen = (timestamp) => { if (!timestamp) return '离线'; const now = Date.now(); const diff = now - timestamp; const minutes = Math.floor(diff / 60000); const hours = Math.floor(diff / 3600000); const days = Math.floor(diff / 86400000); if (minutes < 1) return '在线'; if (minutes < 60) return `${minutes} 分钟前`; if (hours < 24) return `${hours} 小时前`; if (days < 7) return `${days} 天前`; return new Date(timestamp).toLocaleDateString(); };
-const computeDiff = (original, corrected) => { const tokenize = (text) => text.match(/[a-zA-Z0-9]+|[\u4e00-\u9fa5]|[\s]+|[^a-zA-Z0-9\u4e00-\u9fa5\s]/g) || []; const originalTokens = tokenize(original); const correctedTokens = tokenize(corrected); const n = originalTokens.length; const m = correctedTokens.length; const dp = Array(n + 1).fill(0).map(() => Array(m + 1).fill(0)); for (let i = 1; i <= n; i++) { for (let j = 1; j <= m; j++) { if (originalTokens[i - 1] === correctedTokens[j - 1]) { dp[i][j] = dp[i - 1][j - 1] + 1; } else { dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]); } } } const result = []; let i = n, j = m; while (i > 0 || j > 0) { if (i > 0 && j > 0 && originalTokens[i - 1] === correctedTokens[j - 1]) { result.unshift({ type: 'common', value: originalTokens[i - 1] }); i--; j--; } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) { result.unshift({ type: 'added', value: correctedTokens[j - 1] }); j--; } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) { result.unshift({ type: 'removed', value: originalTokens[i - 1] }); i--; } else { break; } } return result; };
-const CorrectionDisplay = ({ original, corrected, style }) => { const diffs = computeDiff(original, corrected); return ( <div className="whitespace-pre-wrap break-words leading-relaxed" style={style}> {diffs.map((part, index) => { if (part.type === 'removed') { return <s key={index} className="text-red-500 decoration-red-500 no-underline">{part.value}</s>; } if (part.type === 'added') { return <span key={index} className="text-green-600 font-semibold">{part.value}</span>; } return <span key={index}>{part.value}</span>; })} </div> ); };
-
 
 export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const user = currentUser;
   const [messages, setMessages] = useState([]);
-  const [chatInfo, setChatInfo] = useState(null); // 【新增】存储聊天元信息，包含已读状态
+  const [chatInfo, setChatInfo] = useState(null);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -97,7 +152,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const defaultSettings = { autoTranslate: false, autoPlayTTS: false, fontSize: 16, fontWeight: 'normal', sourceLang: '中文', targetLang: '缅甸语', speechLang: 'zh-CN', ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-pro" } };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings_v3"); return savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; } catch { return defaultSettings; } });
 
-  // ... (useEffect 钩子，大部分无变化) ...
   useEffect(() => { const vv = window.visualViewport; const footerEl = document.getElementById("chat-footer"); const mainEl = mainScrollRef.current; function onViewport() { if (!footerEl || !mainEl || !vv) return; const bottomOffset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop); footerEl.style.bottom = bottomOffset + "px"; mainEl.style.paddingBottom = `calc(5.5rem + ${bottomOffset}px)`; } if (vv) { vv.addEventListener("resize", onViewport); vv.addEventListener("scroll", onViewport); onViewport(); } return () => { if (vv) { vv.removeEventListener("resize", onViewport); vv.removeEventListener("scroll", onViewport); } }; }, []);
   useEffect(() => { if (chatId) { try { const key = `chat_bg_v2_${chatId}`; const savedBg = localStorage.getItem(key); if (savedBg) { setBackground(JSON.parse(savedBg)); } } catch (e) { console.error('加载聊天背景失败', e); } } }, [chatId]);
   const saveBackground = (newBg) => { setBackground(newBg); try { localStorage.setItem(`chat_bg_v2_${chatId}`, JSON.stringify(newBg)); } catch (err) { console.error('保存聊天背景失败', err); alert('保存背景失败，可能是图片太大或存储空间已满。'); } };
@@ -107,26 +161,21 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { if (isAtBottomRef.current) { const timer = setTimeout(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }); }, 50); return () => clearTimeout(timer); } }, [messages]);
   useEffect(() => { if (!peerUser?.id || typeof window === 'undefined' || !rtDb) { setPeerStatus({ online: false, lastSeenTimestamp: null }); return; } const peerStatusRef = rtRef(rtDb, `/status/${peerUser.id}`); const unsubscribeRTDB = onValue(peerStatusRef, (snapshot) => { const statusData = snapshot.val(); if (statusData && statusData.state === 'online') { setPeerStatus({ online: true, lastSeenTimestamp: statusData.last_changed }); } else if (statusData) { setPeerStatus({ online: false, lastSeenTimestamp: statusData.last_changed }); } else { const peerFirestoreRef = doc(db, 'users', peerUser.id); getDoc(peerFirestoreRef).then(docSnap => { if (docSnap.exists()) { const lastSeen = docSnap.data().lastSeen; const firestoreTime = lastSeen?.toDate()?.getTime() || null; setPeerStatus({ online: false, lastSeenTimestamp: firestoreTime }); } }); } }); const peerFirestoreRef = doc(db, 'users', peerUser.id); const unsubscribeFirestore = onSnapshot(peerFirestoreRef, (docSnap) => { if (docSnap.exists()) { const lastSeen = docSnap.data().lastSeen; if (lastSeen && typeof lastSeen.toDate === 'function') { const firestoreTime = lastSeen.toDate().getTime(); setPeerStatus(prev => { if (prev.online) return prev; return { online: false, lastSeenTimestamp: firestoreTime }; }); } } }); return () => { unsubscribeRTDB(); unsubscribeFirestore(); }; }, [peerUser?.id]);
 
-  // 【核心修改】分离出更新已读状态的函数
   const updateReadStatus = useCallback(async () => {
       if (!chatId || !user?.uid) return;
       const chatDocRef = doc(db, "privateChats", chatId);
       try {
           await updateDoc(chatDocRef, {
               [`readStatus.${user.uid}`]: serverTimestamp(),
-              [`unreadCounts.${user.uid}`]: 0 // 清空自己的未读计数
+              [`unreadCounts.${user.uid}`]: 0
           });
       } catch (error) {
           console.error("更新已读状态失败:", error);
       }
   }, [chatId, user?.uid]);
 
-
-  // 【核心修改】监听消息和聊天元信息
   useEffect(() => {
     if (!chatId || !user) return;
-    
-    // 1. 监听消息列表
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
     const unsubMessages = onSnapshot(q, (snap) => {
@@ -138,7 +187,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         if (newPeerMessagesCount > 0 && !isAtBottomRef.current) {
           setUnreadCount(prev => prev + newPeerMessagesCount);
         } else if (isAtBottomRef.current) {
-            updateReadStatus(); // 如果在底部，新消息来了自动标记为已读
+            updateReadStatus();
         }
       }
       setMessages(arr);
@@ -150,7 +199,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       }
     }, (err) => console.error("监听消息错误:", err));
 
-    // 2. 监听聊天主文档（为了获取已读状态）
     const chatDocRef = doc(db, "privateChats", chatId);
     const unsubChatInfo = onSnapshot(chatDocRef, (doc) => {
         if (doc.exists()) {
@@ -158,7 +206,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         }
     });
 
-    // 初始进入时更新一次已读状态
     updateReadStatus();
 
     return () => {
@@ -167,13 +214,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     };
   }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate, updateReadStatus]);
 
-
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // 【核心修改】sendMessage 函数，在首次创建聊天时初始化 readStatus
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
     if (!content.trim() || !user?.uid || !peerUser?.id || !chatId) return;
@@ -182,23 +227,8 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       const batch = writeBatch(db);
       const chatDocRef = doc(db, "privateChats", chatId);
       const newMessageRef = doc(collection(chatDocRef, "messages"));
-
-      batch.set(newMessageRef, {
-        text: content.trim(),
-        uid: user.uid,
-        createdAt: serverTimestamp()
-      });
-
-      batch.update(chatDocRef, {
-        members: [user.uid, peerUser.id], 
-        lastMessage: content.trim(),
-        lastMessageAt: serverTimestamp(),
-        [`unreadCounts.${peerUser.id}`]: increment(1),
-        [`unreadCounts.${user.uid}`]: 0,
-        // 更新我自己的已读时间戳
-        [`readStatus.${user.uid}`]: serverTimestamp(),
-      });
-
+      batch.set(newMessageRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
+      batch.update(chatDocRef, { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp(), [`unreadCounts.${peerUser.id}`]: increment(1), [`unreadCounts.${user.uid}`]: 0, [`readStatus.${user.uid}`]: serverTimestamp(), });
       await batch.commit();
       setInput("");
       setMyTranslationResult(null);
@@ -206,18 +236,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       if (e.code === 'not-found') {
         try {
             const chatDocRef = doc(db, "privateChats", chatId);
-            // 首次创建聊天时，初始化双方的 readStatus
-            await setDoc(chatDocRef, {
-                members: [user.uid, peerUser.id],
-                lastMessage: content.trim(),
-                lastMessageAt: serverTimestamp(),
-                unreadCounts: { [peerUser.id]: 1, [user.uid]: 0 },
-                readStatus: {
-                    [user.uid]: serverTimestamp(), // 我自己当然是已读
-                    [peerUser.id]: null // 对方还未读
-                }
-            }, { merge: true });
-            
+            await setDoc(chatDocRef, { members: [user.uid, peerUser.id], lastMessage: content.trim(), lastMessageAt: serverTimestamp(), unreadCounts: { [peerUser.id]: 1, [user.uid]: 0 }, readStatus: { [user.uid]: serverTimestamp(), [peerUser.id]: null } }, { merge: true });
             const messagesRef = collection(db, `privateChats/${chatId}/messages`);
             await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
             setInput("");
@@ -237,7 +256,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   
   const handleSpeechRecognition = () => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能。请尝试使用最新版的 Chrome 浏览器。"); return; } if (isListening) { recognitionRef.current?.stop(); return; } const recognition = new SpeechRecognition(); recognition.lang = cfg.speechLang; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setInput(''); }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.onerror = (event) => { console.error("语音识别错误:", event.error); setIsListening(false); setInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); setInput(transcript); if (event.results[0].isFinal && transcript.trim()) { sendMessage(transcript); } }; recognition.start(); };
   
-  // 【核心修改】handleScroll 函数，滚动到底部时更新已读状态
   const handleScroll = () => {
     const el = mainScrollRef.current;
     if (el) {
@@ -245,7 +263,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         isAtBottomRef.current = atBottom;
         if (atBottom) {
             if (unreadCount > 0) setUnreadCount(0);
-            updateReadStatus(); // 滚动到底部，标记为已读
+            updateReadStatus();
         }
     }
   };
@@ -261,7 +279,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
   const LongPressMenu = ({ message, onClose }) => { const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white rounded-lg shadow-xl p-2 flex flex-col gap-1 text-black border border-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><div className="w-5 h-5 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-xs font-bold text-gray-600">译</div>翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> ); };
 
-  // 【核心修改】MessageRow 组件，接收新 props 并渲染时间和已读状态
   const MessageRow = ({ message, prevMessage, isLastMessage, peerReadTimestamp }) => { 
     const mine = message.uid === user?.uid; 
     const longPressTimer = useRef(); 
@@ -271,16 +288,11 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
     const isPeersLastMessage = !mine && isLastMessage;
 
-    // 智能时间显示
     const timeString = formatMessageTime(message, prevMessage);
 
-    // 已读状态显示逻辑
     const showReadReceipt = 
-        mine && // 是我的消息
-        isLastMessage && // 是所有消息中的最后一条
-        peerReadTimestamp && // 对方的已读时间存在
-        message.createdAt?.toDate && // 我的消息发送时间存在
-        message.createdAt.toDate() <= peerReadTimestamp.toDate(); // 且我的消息时间早于或等于对方的已读时间
+        mine && isLastMessage && peerReadTimestamp &&
+        message.createdAt?.toDate && message.createdAt.toDate() <= peerReadTimestamp.toDate();
 
     return ( 
       <>
@@ -290,8 +302,24 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}> 
           <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> 
           <div className={`flex items-center gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> 
-            <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-sm ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-white text-black rounded-bl-none"}`}> 
-              {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <CorrectionDisplay original={message.correction.originalText} corrected={message.correction.correctedText} style={messageStyle} /> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} 
+            <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-sm ${mine ? "bg-blue-500 text-white" : "bg-white text-black"}`}> 
+              
+              {/* ---【核心修改】应用全新的改错组件 --- */}
+              {message.recalled ? ( 
+                <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> 
+              ) : message.correction ? ( 
+                <CorrectionDisplay 
+                  original={message.correction.originalText} 
+                  corrected={message.correction.correctedText} 
+                  style={messageStyle}
+                  isMine={mine}
+                /> 
+              ) : ( 
+                <p className="whitespace-pre-wrap break-words" style={messageStyle}>
+                  <PinyinText text={message.text} showPinyin={showPinyinFor === message.id} />
+                </p> 
+              )} 
+
               {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} 
             </div> 
             {isPeersLastMessage && !message.recalled && (
@@ -299,7 +327,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
                     <CircleTranslateIcon size={6} />
                 </button>
             )}
-            {/* 显示已读状态 */}
             {showReadReceipt && (
                 <span className="text-xs text-gray-400 self-end mb-1">已读</span>
             )}
@@ -322,7 +349,6 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       
       <main ref={mainScrollRef} onScroll={handleScroll} className="h-full overflow-y-auto w-full thin-scrollbar px-4 pt-14 pb-20 relative z-10">
         <div>
-            {/* 【核心修改】渲染消息时传入更多 props */}
             {filteredMessages.map((msg, index) => (
               <MessageRow 
                 message={msg} 
