@@ -54,90 +54,97 @@ const usePartnerStatus = (partnerId) => {
     return status;
 };
 
-// --- 单个语伴卡片骨架屏 ---
+// --- 单个语伴卡片骨架屏 (已更新为列表样式) ---
 const PartnerCardSkeleton = () => (
-    <div className="relative w-full max-w-sm mx-auto aspect-[3/4] bg-gray-200 dark:bg-gray-700 rounded-2xl overflow-hidden shadow-lg animate-pulse">
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent">
-            <div className="h-6 bg-gray-400 rounded w-1/2 mb-2"></div>
-            <div className="h-4 bg-gray-400 rounded w-1/3"></div>
+    <div className="w-full max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 flex items-center space-x-4 animate-pulse">
+        <div className="w-16 h-16 rounded-full bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
+        <div className="flex-grow space-y-3">
+            <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-1/3"></div>
+            <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-1/2"></div>
+            <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-2/3"></div>
         </div>
+        <div className="w-12 h-12 rounded-full bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
     </div>
 );
 
-// --- 单个语伴卡片组件 (全新美化版 - 适配单列) ---
+
+// --- 单个语伴卡片组件 (全新列表卡片模式) ---
 const LanguagePartnerCard = ({ partner, onSayHi }) => {
     const router = useRouter();
     const onlineStatus = usePartnerStatus(partner.uid);
     const interests = partner.interests || [];
 
+    // Mock bios based on the screenshot for visual fidelity
+    const getBio = (name) => {
+        const bios = {
+            '兰妮': '你好, 我来自越南😗',
+            '想摸鱼': '想交可爱的朋友, 你可以找我👩‍🎤',
+            'Helly': 'Mình là Helly rất vui được làm quen với mọi người ❤️❤️'
+        };
+        return bios[name] || `很高兴认识你！`;
+    };
+
     return (
         <div 
             onClick={() => router.push(`/profile/${partner.uid}`)}
-            className="relative w-full max-w-sm mx-auto aspect-[3/4] bg-gray-200 dark:bg-gray-800 rounded-2xl overflow-hidden shadow-lg group cursor-pointer"
+            className="w-full max-w-2xl mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 flex items-center space-x-4 cursor-pointer transition-transform hover:scale-[1.02]"
         >
-            {/* 背景图 */}
-            <img 
-                src={partner.profileBackground || partner.photoURL || '/img/bg_fallback.jpg'} 
-                alt={`${partner.displayName} 的背景`}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            />
-             {/* 在线状态 */}
-             {onlineStatus && (
-                <div className="absolute top-4 left-4 flex items-center bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full">
-                    <span className={`w-2 h-2 rounded-full mr-1.5 ${onlineStatus === '在线' ? 'bg-green-400' : 'bg-gray-400'}`}></span>
-                    {onlineStatus}
-                </div>
-            )}
-            
-            {/* 渐变遮罩 + 内容 */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent flex flex-col justify-end p-4 text-white">
-                {/* 打招呼按钮 */}
-                <div className="absolute top-4 right-4">
-                    <button 
-                        onClick={(e) => { e.stopPropagation(); onSayHi(partner); }}
-                        className="w-12 h-12 rounded-full bg-blue-500/80 backdrop-blur-sm text-white flex items-center justify-center hover:bg-blue-500 shadow-lg transition-all active:scale-90"
-                        aria-label="打招呼"
-                    >
-                        <Send size={20} />
-                    </button>
-                </div>
+            {/* Avatar & Online Status */}
+            <div className="relative flex-shrink-0">
+                <img 
+                    className="w-16 h-16 rounded-full object-cover" 
+                    src={partner.photoURL || '/img/avatar.svg'} 
+                    alt={partner.displayName} 
+                />
+                {onlineStatus === '在线' && (
+                    <span className="absolute bottom-0 right-0 block h-4 w-4 bg-green-400 rounded-full border-2 border-white dark:border-gray-800"></span>
+                )}
+            </div>
 
-                {/* 基本信息 */}
-                <div className="transform transition-transform duration-300 group-hover:-translate-y-2">
-                    <h3 className="text-2xl font-bold tracking-tight">{partner.displayName || '新用户'}</h3>
-                    <div className="flex items-center text-sm mt-1 opacity-90">
-                        {partner.gender === 'male' && <i className="fas fa-mars text-blue-300 mr-1.5"></i>}
-                        {partner.gender === 'female' && <i className="fas fa-venus text-pink-300 mr-1.5"></i>}
-                        {partner.age && <span>{partner.age}岁</span>}
-                        {partner.nationality && <MapPin size={14} className="ml-2 mr-1" />}
-                        {partner.nationality && <span>{partner.nationality}</span>}
-                    </div>
+            {/* Middle Content */}
+            <div className="flex-grow overflow-hidden">
+                <p className="text-lg font-bold text-black dark:text-white truncate">{partner.displayName || '新用户'}</p>
+                
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <span className="font-semibold">{partner.nativeLanguage || 'VI'}</span>
+                    <Languages size={16} className="mx-1.5 text-gray-400" />
+                    <span className="font-semibold">{partner.learningLanguage || 'CN'}</span>
                 </div>
+                
+                {onlineStatus && onlineStatus !== '在线' && (
+                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{onlineStatus}活跃</p>
+                )}
 
-                {/* 语言和兴趣 (默认隐藏，悬停时上浮显示) */}
-                <div className="pt-2 max-h-0 opacity-0 group-hover:max-h-48 group-hover:opacity-100 transition-all duration-300 overflow-hidden">
-                    <div className="mt-2 text-xs space-y-2">
-                        <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-full px-2 py-1 w-fit">
-                            <Globe size={12} className="mr-1.5"/>
-                            <span>母语: <span className="font-semibold">{partner.nativeLanguage || '未知'}</span></span>
-                        </div>
-                        <div className="flex items-center bg-black/30 backdrop-blur-sm rounded-full px-2 py-1 w-fit">
-                            <MessageSquare size={12} className="mr-1.5"/>
-                            <span>在学: <span className="font-semibold">{partner.learningLanguage || '未知'}</span></span>
-                        </div>
-                    </div>
-                    {interests.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                            {interests.slice(0, 3).map(interest => (
-                                <span key={interest} className="text-xs bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5">{interest}</span>
-                            ))}
-                        </div>
-                    )}
+                <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 truncate">
+                    {getBio(partner.displayName)}
+                </p>
+                
+                {/* Tags */}
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {/* Add some example tags to match the image */}
+                    <span className="text-xs font-medium rounded-full px-2.5 py-1 bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200">新加入</span>
+                    <span className="text-xs font-medium rounded-full px-2.5 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">同龄人</span>
+                    
+                    {interests.slice(0, 2).map(interest => (
+                         <span key={interest} className="text-xs font-medium rounded-full px-2.5 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">{interest}</span>
+                    ))}
                 </div>
+            </div>
+
+            {/* Say Hi Button */}
+            <div className="flex-shrink-0 self-center">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onSayHi(partner); }}
+                    className="w-12 h-12 rounded-full bg-purple-500 text-white flex items-center justify-center hover:bg-purple-600 shadow-lg transition-all active:scale-90"
+                    aria-label="打招呼"
+                >
+                    <Send size={20} />
+                </button>
             </div>
         </div>
     );
 };
+
 
 // --- 语伴列表主组件 (已改造) ---
 const LanguagePartnerList = () => {
@@ -244,10 +251,10 @@ const LanguagePartnerList = () => {
                     </div>
                 </div>
 
-                {/* ✅ 单列网格布局 */}
-                <div className="flex flex-col items-center space-y-6">
+                {/* ✅ 单列列表布局 */}
+                <div className="flex flex-col items-center space-y-4">
                     {loading ? (
-                        Array.from({ length: 3 }).map((_, i) => <PartnerCardSkeleton key={i} />)
+                        Array.from({ length: 4 }).map((_, i) => <PartnerCardSkeleton key={i} />)
                     ) : filteredPartners.length > 0 ? (
                         filteredPartners.map(partner => (
                             <LanguagePartnerCard 
