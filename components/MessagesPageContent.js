@@ -1,4 +1,4 @@
-// /components/MessagesPageContent.js (最终美化版 - 高端语伴功能)
+// /components/MessagesPageContent.js (最终化版 - 高端语伴功能)
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
