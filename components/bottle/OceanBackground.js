@@ -1,14 +1,14 @@
-// components/bottle/OceanBackground.js
-import React from 'react';
+// 文件路径: components/bottle/OceanBackground.js
 
-// 这个组件使用纯CSS来创建动态的波浪效果
-const OceanBackground = () => {
+import styles from '../../styles/Bottle.module.css';
+
+// 这个组件现在直接从 Bottle.module.css 获取样式
+// 我们将在 CSS 文件中定义动画
+export default function OceanBackground() {
   return (
-    <div className="ocean">
-      <div className="wave"></div>
-      <div className="wave"></div>
+    <div className={styles.ocean}>
+      <div className={styles.wave}></div>
+      <div className={styles.wave}></div>
     </div>
   );
-};
-
-export default OceanBackground;
+}
