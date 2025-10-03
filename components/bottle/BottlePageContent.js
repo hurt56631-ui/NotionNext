@@ -13,7 +13,6 @@ import styles from '../../styles/Bottle.module.css';
 import OceanBackground from './OceanBackground';
 import ThrowBottleModal from './ThrowBottleModal';
 import PickedBottleModal from './PickedBottleModal';
-import BottomNavBar from './BottomNavBar';
 
 // 注意函数名，我们导出为 default
 export default function BottlePageContent() {
@@ -119,7 +118,6 @@ export default function BottlePageContent() {
       </div>
       <ThrowBottleModal isOpen={isThrowModalOpen} onClose={() => setThrowModalOpen(false)} />
       {pickedBottle && (<PickedBottleModal bottle={pickedBottle} onClose={() => setPickedBottle(null)} />)}
-      <BottomNavBar />
     </div>
   );
 }
