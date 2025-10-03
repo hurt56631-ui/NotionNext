@@ -1,35 +1,46 @@
-// 文件路径: pages/bottle/settings.js
+// 文件路径: pages/bottle/settings.js (完整替换)
 
 import { useState, useEffect } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { onAuthStateChanged } from 'firebase/auth'; // 引入 onAuthStateChanged
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../../lib/firebase';
 import Link from 'next/link';
-import styles from '../../styles/Settings.module.css'; // 我们需要为它创建一个新的 CSS 文件
+import styles from '../../styles/Settings.module.css';
 
 export default function SettingsPage() {
-  const [user] = useAuthState(auth);
+  // ▼▼▼ 核心修改 ▼▼▼
+  // const [user] = useAuthState(auth); // <<< 删除这一行
+  const [user, setUser] = useState(null); // <<< 我们用自己的 state 来管理用户
+  
   const [autoTranslate, setAutoTranslate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [feedback, setFeedback] = useState('');
 
-  // 当用户信息加载后，获取用户的设置
+  // ▼▼▼ 核心修改 ▼▼▼
+  // 使用 useEffect 手动监听用户登录状态，并根据状态获取数据
   useEffect(() => {
-    if (user) {
-      const settingsRef = doc(db, `users/${user.uid}/settings`, 'translation');
-      getDoc(settingsRef).then((docSnap) => {
-        if (docSnap.exists()) {
-          setAutoTranslate(docSnap.data().autoTranslate || false);
-        }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // 如果用户已登录，获取他们的设置
+        const settingsRef = doc(db, `users/${currentUser.uid}/settings`, 'translation');
+        getDoc(settingsRef).then((docSnap) => {
+          if (docSnap.exists()) {
+            setAutoTranslate(docSnap.data().autoTranslate || false);
+          }
+          setIsLoading(false);
+        });
+      } else {
+        // 如果用户未登录，直接结束加载
         setIsLoading(false);
-      });
-    } else if (user === null) {
-      // 用户未登录
-      setIsLoading(false);
-    }
-  }, [user]);
+      }
+    });
+    // 清理监听器
+    return () => unsubscribe();
+  }, []);
 
   const handleSaveSettings = async () => {
+    // 这里的逻辑不需要修改
     if (!user) {
       setFeedback('请先登录！');
       return;
@@ -49,12 +60,9 @@ export default function SettingsPage() {
   
   const handleSignOut = () => {
     auth.signOut();
-    // 可以跳转回主页
-    // import { useRouter } from 'next/router';
-    // const router = useRouter();
-    // router.push('/bottle');
   }
 
+  // JSX 渲染逻辑保持不变
   if (isLoading) {
     return <div className={styles.container}><p>正在加载...</p></div>;
   }
@@ -73,14 +81,8 @@ export default function SettingsPage() {
           <>
             <div className={styles.settingItem}>
               <label htmlFor="auto-translate">自动翻译捡到的瓶子</label>
-              <input
-                type="checkbox"
-                id="auto-translate"
-                checked={autoTranslate}
-                onChange={(e) => setAutoTranslate(e.target.checked)}
-              />
+              <input type="checkbox" id="auto-translate" checked={autoTranslate} onChange={(e) => setAutoTranslate(e.target.checked)} />
             </div>
-
             <button onClick={handleSaveSettings} className={styles.button}>保存设置</button>
             <button onClick={handleSignOut} className={`${styles.button} ${styles.buttonSecondary}`}>退出登录</button>
             {feedback && <p className={styles.feedback}>{feedback}</p>}
