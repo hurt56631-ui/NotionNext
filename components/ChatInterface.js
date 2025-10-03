@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完美版 - 修复所有编译/运错误，功能稳定)
+// /components/ChatInterface.js (终极完美版 - 修复所有编译/运错误，功能稳定，并实现 HelloTalk 式改错)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
@@ -352,6 +352,76 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
     ); 
   };
   
+  // --- 【新增】用于显示句子改错的组件 ---
+
+  // 辅助函数：使用LCS算法计算文本差异
+  const computeDiff = (original, corrected) => {
+      // 一个相对健壮的分词器，可以处理英文单词、中文单字、数字、空格和标点
+      const tokenize = (text) => text.match(/[a-zA-Z0-9]+|[\u4e00-\u9fa5]|[\s]+|[^a-zA-Z0-9\u4e00-\u9fa5\s]/g) || [];
+      
+      const originalTokens = tokenize(original);
+      const correctedTokens = tokenize(corrected);
+      const n = originalTokens.length;
+      const m = correctedTokens.length;
+      const dp = Array(n + 1).fill(0).map(() => Array(m + 1).fill(0));
+
+      // 构建LCS动态规划表
+      for (let i = 1; i <= n; i++) {
+          for (let j = 1; j <= m; j++) {
+              if (originalTokens[i - 1] === correctedTokens[j - 1]) {
+                  dp[i][j] = dp[i - 1][j - 1] + 1;
+              } else {
+                  dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+              }
+          }
+      }
+
+      // 从DP表回溯，生成差异结果
+      const result = [];
+      let i = n, j = m;
+      while (i > 0 || j > 0) {
+          if (i > 0 && j > 0 && originalTokens[i - 1] === correctedTokens[j - 1]) {
+              result.unshift({ type: 'common', value: originalTokens[i - 1] });
+              i--; j--;
+          } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+              result.unshift({ type: 'added', value: correctedTokens[j - 1] });
+              j--;
+          } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
+              result.unshift({ type: 'removed', value: originalTokens[i - 1] });
+              i--;
+          } else {
+              break; // 安全退出
+          }
+      }
+      return result;
+  };
+
+
+  // 改错显示组件：模仿HelloTalk风格
+  const CorrectionDisplay = ({ original, corrected, style }) => {
+      const diffs = computeDiff(original, corrected);
+
+      // 根据您的要求和图片示例，我们将错误部分标记为红色删除线，正确部分为绿色。
+      // 这比简单的下划线更能清晰地表达“替换”的含义，也更符合HelloTalk的风格。
+      return (
+          <div className="whitespace-pre-wrap break-words leading-relaxed" style={style}>
+              {diffs.map((part, index) => {
+                  if (part.type === 'removed') {
+                      // 使用 <s> 标签来实现删除线效果，并确保不会有下划线
+                      return <s key={index} className="text-red-500 decoration-red-500 no-underline">{part.value}</s>;
+                  }
+                  if (part.type === 'added') {
+                      // 新增的内容用绿色和粗体表示
+                      return <span key={index} className="text-green-600 font-semibold">{part.value}</span>;
+                  }
+                  // 相同的部分正常显示
+                  return <span key={index}>{part.value}</span>;
+              })}
+          </div>
+      );
+  };
+
+
   const MessageRow = ({ message, isLastMessage }) => { 
     const mine = message.uid === user?.uid; 
     const longPressTimer = useRef(); 
@@ -366,7 +436,22 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
         <img src={mine ? user.photoURL : peerUser?.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" /> 
         <div className={`flex items-center gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}> 
           <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchMove={handleTouchMove} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-sm ${mine ? "bg-blue-500 text-white rounded-br-none" : "bg-white text-black rounded-bl-none"}`}> 
-            {message.recalled ? ( <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> ) : message.correction ? ( <div className="space-y-1"> <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p> <p className="whitespace-pre-wrap break-words text-green-600" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p> </div> ) : ( <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p> )} 
+            
+            {/* --- 【核心修改】应用新的改错显示组件 --- */}
+            {message.recalled ? ( 
+              <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p> 
+            ) : message.correction ? ( 
+              <CorrectionDisplay 
+                original={message.correction.originalText} 
+                corrected={message.correction.correctedText} 
+                style={messageStyle} 
+              />
+            ) : ( 
+              <p className="whitespace-pre-wrap break-words" style={messageStyle}>
+                <PinyinText text={message.text} showPinyin={showPinyinFor === message.id} />
+              </p> 
+            )} 
+
             {translationResult && translationResult.messageId === message.id && ( <div className="mt-2 pt-2 border-t border-black/20"> <p className="text-sm opacity-90 whitespace-pre-wrap">{translationResult.text}</p> </div> )} 
           </div> 
           {isPeersLastMessage && !message.recalled && (
