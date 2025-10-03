@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (最终完美版 - 实现HelloTalk红绿对比改错 & 智能时间 & 已读回执)
+// /components/ChatInterface.js (最终完美版 - 实现HeloTalk红绿对比改错 & 智能时间 & 已读回执)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db, rtDb } from "@/lib/firebase"; 
