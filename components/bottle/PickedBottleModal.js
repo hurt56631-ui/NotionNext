@@ -1,33 +1,50 @@
-import { useRouter } from 'next/router';
+// 文件路径: components/bottle/PickedBottleModal.js
+
 import { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
-import { FaPaperPlane, FaUndo, FaVolumeUp } from 'react-icons/fa';
-import { playCachedTTS, preloadTTS } from '../../lib/aiUtils';
-import TranslationView from './TranslationView';
+import { FaUndo } from 'react-icons/fa';
 import styles from '../../styles/Bottle.module.css';
 
+// 这是一个简化的 TranslationView 占位组件，您可以后续实现
+function TranslationView({ originalText }) {
+  return (
+    <div className={styles.translationView}>
+      <h4>翻译结果 (占位)</h4>
+      <p>{originalText}</p>
+    </div>
+  );
+}
+
 export default function PickedBottleModal({ bottle, onClose }) {
-  const router = useRouter();
   const [userSettings, setUserSettings] = useState(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    // 假设的获取用户翻译设置的逻辑
     if (bottle && auth.currentUser) {
-      preloadTTS(bottle.content);
       const fetchSettings = async () => {
         const settingsRef = doc(db, `users/${auth.currentUser.uid}/settings`, 'translation');
         const docSnap = await getDoc(settingsRef);
-        setUserSettings(docSnap.exists() ? docSnap.data() : null);
+        setUserSettings(docSnap.exists() ? docSnap.data() : { autoTranslate: false });
       };
       fetchSettings();
     }
   }, [bottle]);
 
   const handleThrowBack = async () => {
-    if (!auth.currentUser) return alert("请先登录！");
+    if (!auth.currentUser) {
+      setError("请先登录！");
+      return;
+    }
+    if (!bottle || !bottle.id) {
+        setError("瓶子信息错误！");
+        return;
+    }
 
     setIsActionLoading(true);
+    setError('');
     const bottleRef = doc(db, 'bottles', bottle.id);
 
     try {
@@ -37,70 +54,64 @@ export default function PickedBottleModal({ bottle, onClose }) {
         pickedBy: null,
         pickedAt: null,
       });
-      onClose();
+      onClose(); // 成功后关闭
     } catch (error) {
       console.error("扔回失败:", error);
-      alert(`扔回失败: ${error.message}`);
+      setError(`扔回失败: ${error.message}`);
+    } finally {
+        setIsActionLoading(false);
     }
-    setIsActionLoading(false);
   };
-  
-  const handleReply = () => { /* ... 此部分逻辑不变 ... */ };
-  const getDriftTime = () => { /* ... 此部分逻辑不变 ... */ };
+
+  const getDriftTime = () => {
+    if (!bottle?.createdAt) return '未知时间';
+    const now = new Date();
+    const thrownDate = bottle.createdAt instanceof Date ? bottle.createdAt : bottle.createdAt.toDate();
+    const diff = now.getTime() - thrownDate.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 1) return '刚刚';
+    if (hours < 24) return `${hours}小时前`;
+    return `${Math.floor(hours / 24)}天前`;
+  };
 
   if (!bottle) return null;
-  
-  // 其余 JSX 代码与之前完全相同
+
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
-        {/* ... 省略与之前版本完全相同的 JSX 代码 ... */}
-        {/* 核心变化是在 handleThrowBack 函数里 */}
-    </div>
-  );
-}
-``      const bottleDoc = querySnapshot.docs[0];
-      const bottleRef = doc(db, 'bottles', bottleDoc.id);
-
-      // 3. 使用事务来安全地“捞起”瓶子
-      await runTransaction(db, async (transaction) => {
-        const freshBottleSnap = await transaction.get(bottleRef);
-        if (!freshBottleSnap.exists()) {
-          throw "这个瓶子已经消失了！";
-        }
-        if (freshBottleSnap.data().status !== 'drifting') {
-          throw "哎呀，手滑了，瓶子被别人先捞走了！";
-        }
+      <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.bottleHeader}>
+          <img
+            src={bottle.throwerAvatar || '/default-avatar.png'}
+            alt={bottle.throwerName}
+            className={styles.avatar}
+          />
+          <div>
+            <strong>{bottle.throwerName}</strong>
+            <small>漂流于 {getDriftTime()}</small>
+          </div>
+        </div>
         
-        // 更新瓶子状态
-        transaction.update(bottleRef, { 
-          status: "picked",
-          pickedBy: user.uid,
-          pickedAt: serverTimestamp()
-        });
+        <div className={styles.bottleMessage}>
+          <p>{bottle.content}</p>
+        </div>
+
+        {userSettings?.autoTranslate && <TranslationView originalText={bottle.content} />}
         
-        // 成功捞到，准备显示
-        const bottleData = freshBottleSnap.data();
-        setPickedBottle({
-            ...bottleData,
-            id: freshBottleSnap.id,
-            createdAt: bottleData.createdAt.toDate() // 将 Timestamp 转为 Date
-        });
-      });
+        {error && <p className={styles.errorText}>{error}</p>}
 
-      setFeedback('');
-
-    } catch (error) {
-      console.error("捞瓶子失败:", error);
-      showFeedback(typeof error === 'string' ? error : "捞瓶子时发生错误，请重试。");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // JSX 部分与之前版本完全相同
-  return (
-    <div className={styles.pageContainer}>
-      {/* ... 省略与之前版本完全相同的 JSX 代码 ... */}
+        <div className={styles.modalActions}>
+          <button
+            className={`${styles.button} ${styles.buttonSecondary}`}
+            onClick={handleThrowBack}
+            disabled={isActionLoading}
+          >
+            <FaUndo /> {isActionLoading ? '正在扔回...' : '扔回海里'}
+          </button>
+          <button className={styles.button} onClick={onClose}>
+            关闭
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
