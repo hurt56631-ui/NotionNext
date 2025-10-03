@@ -1,4 +1,4 @@
-// /components/bottle/BottlePageContent.js (最终集成版)
+// /components/bottle/BottlePageContent.js (最终成版)
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
