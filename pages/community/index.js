@@ -1,7 +1,6 @@
-// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 已修复手势捕获问题)
+// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 分类 & 手势修复)
 
 import { useTransition, animated } from '@react-spring/web';
-// ✅ 引入 useSwipeable, 它将替代 useDrag
 import { useSwipeable } from 'react-swipeable';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, where, orderBy, limit, getDocs, startAfter } from 'firebase/firestore';
@@ -20,23 +19,17 @@ const POSTS_PER_PAGE = 10;
 const CATEGORIES = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
 
 const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
-  const categories = CATEGORIES;
   const sortOptions = ['默认', '最新', '最热', '精华'];
   const [activeSort, setActiveSort] = useState('默认');
 
-  const handleCategoryClick = (category) => onCategoryChange(category);
-  const handleSortClick = (sort) => {
-    setActiveSort(sort);
-    onSortChange(sort);
-  };
-
   return (
     <div className="rounded-xl shadow-md backdrop-blur-lg bg-gray-100/80 dark:bg-gray-900/70 p-3">
+      {/* 分类 Tabs */}
       <div className="flex justify-around items-center border-b border-white/20 dark:border-white/10">
-        {categories.map((category) => (
+        {CATEGORIES.map((category) => (
           <button
             key={category}
-            onClick={() => handleCategoryClick(category)}
+            onClick={() => onCategoryChange(category)}
             className="relative px-2 py-2 text-base font-medium transition-colors"
           >
             <span
@@ -54,11 +47,15 @@ const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
           </button>
         ))}
       </div>
+      {/* 排序 Tabs */}
       <div className="flex justify-end items-center pt-2 space-x-2">
         {sortOptions.map((sort) => (
           <button
             key={sort}
-            onClick={() => handleSortClick(sort)}
+            onClick={() => {
+              setActiveSort(sort);
+              onSortChange(sort);
+            }}
             className={`px-4 py-1 text-xs rounded-lg transition-colors ${
               activeSort === sort
                 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold'
@@ -83,17 +80,16 @@ const CommunityPage = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
   const [currentSort, setCurrentSort] = useState('最新');
-  const [swipeDirection, setSwipeDirection] = useState(0); // -1 for right, 1 for left
-  
+  const [swipeDirection, setSwipeDirection] = useState(0);
+
   const [chatTarget, setChatTarget] = useState(null);
 
-  const updateLastVisible = useCallback((newDoc) => {
-    lastVisibleRef.current = newDoc;
-  }, []);
+  const updateLastVisible = (doc) => (lastVisibleRef.current = doc);
 
   const fetchPosts = useCallback(
     async (isInitial = false) => {
       if (loadingMore) return;
+
       if (isInitial) {
         setLoading(true);
         setPosts([]);
@@ -102,71 +98,82 @@ const CommunityPage = () => {
       } else {
         setLoadingMore(true);
       }
-      if (typeof window === 'undefined' || !db) {
-        setLoading(false);
-        setLoadingMore(false);
-        return;
-      }
+
       try {
-        const postsRef = collection(db, 'posts');
-        let orderClause;
-        if (currentSort === '最热') orderClause = orderBy('likesCount', 'desc');
-        else if (currentSort === '最新') orderClause = orderBy('createdAt', 'desc');
-        else orderClause = orderBy('createdAt', 'desc');
+        let q = collection(db, 'posts');
+        let conditions = [];
 
-        const baseConditions = [orderClause, limit(POSTS_PER_PAGE)];
-        const categoryCondition = currentCategory !== '推荐' ? [where('category', '==', currentCategory)] : [];
-        const paginationCondition = !isInitial && lastVisibleRef.current ? [startAfter(lastVisibleRef.current)] : [];
+        // 分类过滤
+        if (currentCategory !== '推荐') {
+          conditions.push(where('category', '==', currentCategory));
+        }
 
-        const essenceCondition = currentSort === '精华' ? [where('isEssence', '==', true)] : [];
-        const topCondition = currentSort === '默认' ? [orderBy('isTop', 'desc')] : [];
+        // 精华过滤
+        if (currentSort === '精华') {
+          conditions.push(where('isEssence', '==', true));
+        }
 
-        const q = query(postsRef, ...categoryCondition, ...essenceCondition, ...topCondition, ...baseConditions, ...paginationCondition);
-        const documentSnapshots = await getDocs(q);
-        const newPosts = documentSnapshots.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        setPosts((prevPosts) => (isInitial ? newPosts : [...prevPosts, ...newPosts]));
-        const newLastVisibleDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
-        updateLastVisible(newLastVisibleDoc);
-        setHasMore(documentSnapshots.docs.length >= POSTS_PER_PAGE);
-      } catch (error) {
-        console.error('获取帖子失败:', error);
-        setPosts([]);
+        // 排序逻辑
+        if (currentSort === '最热') {
+          conditions.push(orderBy('likesCount', 'desc'));
+        } else {
+          // 默认和最新都按时间
+          conditions.push(orderBy('createdAt', 'desc'));
+        }
+
+        // 默认排序再加置顶
+        if (currentSort === '默认') {
+          conditions.unshift(orderBy('isTop', 'desc'));
+        }
+
+        // 翻页
+        if (!isInitial && lastVisibleRef.current) {
+          conditions.push(startAfter(lastVisibleRef.current));
+        }
+
+        conditions.push(limit(POSTS_PER_PAGE));
+        q = query(q, ...conditions);
+
+        const snapshot = await getDocs(q);
+        const newPosts = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+        setPosts((prev) => (isInitial ? newPosts : [...prev, ...newPosts]));
+        updateLastVisible(snapshot.docs[snapshot.docs.length - 1] || null);
+        setHasMore(snapshot.docs.length >= POSTS_PER_PAGE);
+      } catch (err) {
+        console.error('获取帖子失败:', err);
+        if (isInitial) setPosts([]);
         setHasMore(false);
       } finally {
-        if (isInitial) setLoading(false);
-        else setLoadingMore(false);
+        isInitial ? setLoading(false) : setLoadingMore(false);
       }
     },
-    [currentCategory, currentSort, db, updateLastVisible, loadingMore]
+    [currentCategory, currentSort, loadingMore]
   );
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && db) {
-      fetchPosts(true);
-    } else {
-      setLoading(false);
-    }
-  }, [currentCategory, currentSort, db]);
+    if (db) fetchPosts(true);
+  }, [currentCategory, currentSort]);
 
-  // ✅ 优化后的手势处理逻辑 (使用 react-swipeable)
+  // ✅ 手势绑定在 animated.div，始终可滑
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      const currentIndex = CATEGORIES.indexOf(currentCategory);
-      if (currentIndex < CATEGORIES.length - 1) {
-        setSwipeDirection(1); // 向左滑，新内容从右边来
-        setCurrentCategory(CATEGORIES[currentIndex + 1]);
+      const idx = CATEGORIES.indexOf(currentCategory);
+      if (idx < CATEGORIES.length - 1) {
+        setSwipeDirection(1);
+        setCurrentCategory(CATEGORIES[idx + 1]);
       }
     },
     onSwipedRight: () => {
-      const currentIndex = CATEGORIES.indexOf(currentCategory);
-      if (currentIndex > 0) {
-        setSwipeDirection(-1); // 向右滑，新内容从左边来
-        setCurrentCategory(CATEGORIES[currentIndex - 1]);
+      const idx = CATEGORIES.indexOf(currentCategory);
+      if (idx > 0) {
+        setSwipeDirection(-1);
+        setCurrentCategory(CATEGORIES[idx - 1]);
       }
     },
-    delta: 30, // 触发滑动所需的最小像素移动，数值越小越灵敏
-    preventDefaultTouchmoveEvent: true, // 阻止触摸移动事件的默认行为，关键在于避免触发浏览器侧滑返回
-    trackMouse: true, // 允许在桌面上用鼠标拖动来触发滑动
+    delta: 30,
+    preventDefaultTouchmoveEvent: true,
+    trackMouse: true,
   });
 
   const transitions = useTransition(currentCategory, {
@@ -177,6 +184,7 @@ const CommunityPage = () => {
     exitBeforeEnter: true,
   });
 
+  // 无限加载
   const observer = useRef();
   const loadMoreRef = useCallback(
     (node) => {
@@ -192,36 +200,16 @@ const CommunityPage = () => {
     [loading, loadingMore, hasMore, fetchPosts]
   );
 
-  const handleOpenChat = (targetUser) => {
-    if (!user) {
-      setShowLoginModal(true);
-      return;
-    }
-    if (user.uid === targetUser.uid) {
-      alert('不能和自己聊天哦！');
-      return;
-    }
-    setChatTarget(targetUser);
-  };
-
-  const handleCloseChat = () => setChatTarget(null);
-
-  const handleNewPostClick = (e) => {
-    if (!user) {
-      e.preventDefault();
-      setShowLoginModal(true);
-    }
-  };
-
   const renderPostsContent = () => {
-    if (loading && posts.length === 0)
+    if (loading && posts.length === 0) {
       return (
         <div className="p-12 text-center text-gray-500">
           <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...
         </div>
       );
+    }
     if (posts.length > 0) {
-      return posts.map((post) => <PostItem key={post.id} post={post} onOpenChat={handleOpenChat} />);
+      return posts.map((post) => <PostItem key={post.id} post={post} onOpenChat={setChatTarget} />);
     }
     return (
       <div className="p-12 text-center text-gray-500">
@@ -234,28 +222,26 @@ const CommunityPage = () => {
   return (
     <LayoutBase>
       <div className="bg-gray-50 dark:bg-black min-h-screen flex flex-col">
+        {/* 顶部 Banner */}
         <div
           className="relative h-56 md:h-64 bg-cover bg-center"
-          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto.format&fit=crop')" }}
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1519389950473-47ba0277781c?q=80&w=2070&auto=format&fit=crop')" }}
         >
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-4">
-            <div className="animate-fade-in">
-              <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">中文学习社区</h1>
-              <p className="mt-4 text-base md:text-lg font-light text-white/80 drop-shadow">· 学如逆水行舟，不进则退 ·</p>
-            </div>
+            <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg">中文学习社区</h1>
+            <p className="mt-4 text-base md:text-lg font-light text-white/80 drop-shadow">· 学如逆水行舟，不进则退 ·</p>
           </div>
         </div>
 
+        {/* 分类 Tabs */}
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
-          {/* ✅ 已修复：移除了 py-3，解决与状态栏的间隙问题 */}
           <div className="sticky top-0 z-30">
             <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
           </div>
 
-          {/* ✅ 核心修复：将手势绑定移出，只保留容器 */}
+          {/* ✅ Swipe 区域 */}
           <div className="relative mt-4" style={{ touchAction: 'pan-y' }}>
             {transitions((style, item) => (
-              // ✅ 核心修复：将手势绑定 {...swipeHandlers} 应用到这里的 animated.div
               <animated.div {...swipeHandlers} key={item} style={{ ...style, width: '100%' }}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
                   {renderPostsContent()}
@@ -264,20 +250,23 @@ const CommunityPage = () => {
             ))}
           </div>
 
+          {/* 加载更多 */}
           <div className="text-center py-8">
-            {loadingMore && (
-              <p className="text-gray-500">
-                <i className="fas fa-spinner fa-spin mr-2"></i> 加载中...
-              </p>
-            )}
+            {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
             {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
           </div>
           <div ref={loadMoreRef} style={{ height: '1px' }} />
         </div>
 
+        {/* 发帖按钮 */}
         <Link href="/community/new" passHref>
           <a
-            onClick={handleNewPostClick}
+            onClick={(e) => {
+              if (!user) {
+                e.preventDefault();
+                setShowLoginModal(true);
+              }
+            }}
             className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95"
             aria-label="发布新帖"
           >
@@ -285,8 +274,11 @@ const CommunityPage = () => {
           </a>
         </Link>
       </div>
+
+      {/* 登录弹窗 */}
       <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
 
+      {/* 私聊窗口 */}
       <AnimatePresence>
         {chatTarget && (
           <PrivateChat
@@ -294,7 +286,7 @@ const CommunityPage = () => {
             peerUid={chatTarget.uid}
             peerDisplayName={chatTarget.displayName}
             currentUser={user}
-            onClose={handleCloseChat}
+            onClose={() => setChatTarget(null)}
           />
         )}
       </AnimatePresence>
