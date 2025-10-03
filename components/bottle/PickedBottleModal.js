@@ -58,77 +58,7 @@ export default function PickedBottleModal({ bottle, onClose }) {
     </div>
   );
 }
-```*(注意: `PickedBottleModal.js` 的 JSX 部分没有变化，你只需更新 `handleThrowBack` 函数即可。为了完整性，你可以替换整个文件。)*
-
-#### 3.3 `BottlePage/index.js` - (捞瓶子)
-
-这是最复杂的修改。我们需要在这里实现随机查询和**事务**操作，以防止两个人同时捞到同一个瓶子。
-
-**文件路径**: `pages/bottle/index.js`
-**完整新代码**:
-```jsx
-import { useState } from 'react';
-import { collection, query, where, limit, getDocs, runTransaction, doc, serverTimestamp } from 'firebase/firestore';
-import { db, functions, auth } from '../../lib/firebase';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import Link from 'next/link';
-import { FiPlus, FiGitMerge } from 'react-icons/fi';
-import { FaCog } from 'react-icons/fa';
-import styles from '../../styles/Bottle.module.css';
-
-import OceanBackground from '../../components/bottle/OceanBackground';
-import ThrowBottleModal from '../../components/bottle/ThrowBottleModal';
-import PickedBottleModal from '../../components/bottle/PickedBottleModal';
-
-export default function BottlePage() {
-  const [user] = useAuthState(auth);
-  const [isThrowModalOpen, setThrowModalOpen] = useState(false);
-  const [pickedBottle, setPickedBottle] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [feedback, setFeedback] = useState('');
-
-  const showFeedback = (message) => {
-    setFeedback(message);
-    setTimeout(() => setFeedback(''), 3000);
-  };
-
-  const handlePickBottle = async () => {
-    if (!user) return alert("请先登录！");
-
-    setIsLoading(true);
-    setFeedback('正在大海里捞一个瓶子...');
-    
-    try {
-      const bottlesRef = collection(db, 'bottles');
-      const randomValue = Math.random();
-
-      // 1. 尝试查询一个随机瓶子
-      const q1 = query(bottlesRef,
-        where("status", "==", "drifting"),
-        where("throwerId", "!=", user.uid),
-        where("random", ">=", randomValue),
-        limit(1)
-      );
-      let querySnapshot = await getDocs(q1);
-
-      // 2. 如果第一次没找到，反向再查一次，确保覆盖所有范围
-      if (querySnapshot.empty) {
-        const q2 = query(bottlesRef,
-          where("status", "==", "drifting"),
-          where("throwerId", "!=", user.uid),
-          where("random", "<", randomValue),
-          limit(1)
-        );
-        querySnapshot = await getDocs(q2);
-      }
-
-      if (querySnapshot.empty) {
-        showFeedback("大海空空如也，过会儿再来试试吧。");
-        setIsLoading(false);
-        return;
-      }
-
-      const bottleDoc = querySnapshot.docs[0];
+``      const bottleDoc = querySnapshot.docs[0];
       const bottleRef = doc(db, 'bottles', bottleDoc.id);
 
       // 3. 使用事务来安全地“捞起”瓶子
