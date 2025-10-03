@@ -54,7 +54,7 @@ export default function BottleSettingsPage() {
       alert('设置已保存！');
     } catch (error) {
       console.error("Error saving settings:", error);
-      alert('保存失败，请检查控制台错误。');
+      alert('保存失败，请查控制台错误。');
     }
     setIsSaving(false);
   };
