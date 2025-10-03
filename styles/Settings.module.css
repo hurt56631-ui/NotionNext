@@ -1,0 +1,63 @@
+/* 文件路径: styles/Settings.module.css */
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  font-family: sans-serif;
+}
+.card {
+  background: white;
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 450px;
+}
+.card h1 {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: #333;
+}
+.backLink {
+  display: block;
+  margin-bottom: 1.5rem;
+  color: #007bff;
+  text-decoration: none;
+}
+.settingItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid #eee;
+}
+.settingItem label {
+  font-size: 1rem;
+  color: #555;
+}
+.settingItem input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+.button {
+  width: 100%;
+  padding: 0.8rem;
+  font-size: 1rem;
+  color: white;
+  background-color: #007bff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 2rem;
+}
+.buttonSecondary {
+    background-color: #dc3545;
+    margin-top: 1rem;
+}
+.feedback {
+  text-align: center;
+  margin-top: 1rem;
+  color: #28a745;
+}
