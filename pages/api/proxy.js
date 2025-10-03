@@ -1,71 +1,54 @@
-// pages/api/proxy.js
+const API_URLS_INTERNAL = [
+    'https://api.vvhan.com/api/girl',
+    'https://api.vvhan.com/api/video',
+    'https://api.vvhan.com/api/dongman',
+    'http://api.xingchenfu.xyz/API/hssp.php',
+    'http://api.xingchenfu.xyz/API/tianmei.php',
+];
+
+const fetchWithTimeout = (url, options, timeout = 8000) =>
+    Promise.race([
+        fetch(url, options),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时')), timeout))
+    ]);
 
 export default async function handler(req, res) {
-  const targetUrl = req.query.url;
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  if (!targetUrl) {
-    return res.status(400).json({ error: 'URL parameter is required' });
-  }
+    const { url: requestedUrl } = req.query;
+    let currentApiUrls = requestedUrl ? [decodeURIComponent(requestedUrl)] : [...API_URLS_INTERNAL].sort(() => 0.5 - Math.random());
 
-  let decodedUrl;
-  try {
-    decodedUrl = decodeURIComponent(targetUrl);
-    // 简单的URL格式验证
-    if (!decodedUrl.startsWith('http')) {
-        throw new Error('Invalid URL format');
-    }
-  } catch (e) {
-    return res.status(400).json({ error: 'Invalid URL parameter' });
-  }
+    for (const apiUrl of currentApiUrls) {
+        try {
+            console.log(`[Server] 请求 API: ${apiUrl}`);
+            const response = await fetchWithTimeout(apiUrl, { method: 'GET', redirect: 'manual' });
 
-  try {
-    // 使用 fetch 发起请求
-    // { cache: 'no-store' } 确保每次都是新的请求
-    const response = await fetch(decodedUrl, { 
-      headers: {
-        // 模拟一个浏览器User-Agent，有些API可能会检查这个
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': decodedUrl // 有些视频API会检查来源
-      },
-      redirect: 'follow', // 告诉 fetch 自动处理301/302重定向
-      cache: 'no-store'
-    });
+            let finalVideoUrl = null;
 
-    // 如果第三方API返回错误
-    if (!response.ok) {
-      throw new Error(`Failed to fetch from target URL: ${response.statusText}`);
-    }
+            if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
+                finalVideoUrl = response.headers.get('location');
+            } else if (response.ok) {
+                const ct = response.headers.get('content-type') || '';
+                if (ct.includes('application/json')) {
+                    const json = await response.json();
+                    finalVideoUrl = json.url || json.video || json.data || null;
+                } else if (ct.includes('text/html')) {
+                    const text = await response.text();
+                    const match = text.match(/https?:\/\/[^'" ]+\.(mp4|m3u8)/);
+                    if (match) finalVideoUrl = match[0];
+                } else if (response.url.match(/\.(mp4|m3u8)$/)) {
+                    finalVideoUrl = response.url;
+                }
+            }
 
-    // 将视频流（ReadableStream）直接 pipe 到响应中
-    // 这是最高效的方式，服务器不需要把整个视频下载完再发送
-    const contentType = response.headers.get('content-type') || 'video/mp4';
-    const contentLength = response.headers.get('content-length');
-
-    res.setHeader('Content-Type', contentType);
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
-    }
-    // 对于Vercel等环境，使用流的方式返回
-    if (response.body) {
-        // Node.js 18+ and Vercel support piping ReadableStream directly
-        response.body.pipe(res);
-    } else {
-        // Fallback for environments that don't support stream piping
-        const buffer = await response.arrayBuffer();
-        res.status(200).send(Buffer.from(buffer));
+            if (finalVideoUrl) {
+                console.log(`[Server] 成功获取视频 URL: ${finalVideoUrl}`);
+                return res.status(200).json({ videoUrl: finalVideoUrl });
+            }
+        } catch (err) {
+            console.warn(`[Server] API ${apiUrl} 失败: ${err.message}`);
+        }
     }
 
-  } catch (error) {
-    console.error('Proxy Error:', error);
-    res.status(502).json({ error: 'Proxy request failed', details: error.message });
-  }
+    return res.status(500).json({ error: '所有视频源都加载失败' });
 }
-
-// 如果你的Next.js版本支持，可以导出一个config来关闭bodyParser
-// 因为我们在处理流，不需要Next.js预先解析请求体
-export const config = {
-  api: {
-    bodyParser: false,
-    responseLimit: false, // 关闭响应大小限制
-  },
-};
