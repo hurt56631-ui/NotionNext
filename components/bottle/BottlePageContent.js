@@ -1,6 +1,6 @@
-// /components/bottle/BottlePageContent.js (最终成版)
+// /components/bottle/BottlePageContent.js (最终修复版)
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, limit, getDocs, runTransaction, doc, serverTimestamp, addDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
@@ -10,11 +10,10 @@ import styles from '../../styles/Bottle.module.css';
 
 import ThrowBottleModal from './ThrowBottleModal';
 import PickedBottleModal from './PickedBottleModal';
-import SettingsModal from './SettingsModal'; // ✅ 引入新组件
-import { translateText } from '../../lib/openai'; // ✅ 引入新功能
+import SettingsModal from './SettingsModal';
+import { translateText } from '../../lib/openai';
 
-// ... (playSound 函数保持不变) ...
-
+const playSound = (soundFile) => { try { new Audio(soundFile).play(); } catch (e) { console.error("Audio error:", e); } };
 const today = () => new Date().toISOString().split('T')[0];
 
 export default function BottlePageContent() {
@@ -31,88 +30,98 @@ export default function BottlePageContent() {
     const [throwAnimation, setThrowAnimation] = useState(false);
     const [feedback, setFeedback] = useState('');
 
-    // ✅ 核心修改: 获取并管理用户数据 (次数、设置)
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            setUser(currentUser);
-            if (currentUser) {
-                const userRef = doc(db, 'users', currentUser.uid);
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists()) {
-                    const data = userSnap.data();
-                    // 检查是否需要重置每日次数
-                    if (data.dailyUsage?.lastReset !== today()) {
-                        const newUsage = { throwCount: 5, pickCount: 15, lastReset: today() };
-                        await updateDoc(userRef, { dailyUsage: newUsage });
-                        setUserData({ ...data, dailyUsage: newUsage });
-                    } else {
-                        setUserData(data);
-                    }
-                } else {
-                    // 为新用户创建数据结构
-                    const initialData = { uid: currentUser.uid, displayName: currentUser.displayName, dailyUsage: { throwCount: 5, pickCount: 15, lastReset: today() }, translationSettings: { apiKey: "", apiUrl: "https://api.openai.com/v1/chat/completions", model: "gpt-3.5-turbo", targetLang: "中文" } };
-                    await setDoc(userRef, initialData);
-                    setUserData(initialData);
-                }
-            } else {
-                setUserData(null);
+    const fetchUserData = useCallback(async (currentUser) => {
+        if (!currentUser) { setUserData(null); setLoadingUser(false); return; }
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        let currentData;
+        if (userSnap.exists()) {
+            currentData = userSnap.data();
+            if (currentData.dailyUsage?.lastReset !== today()) {
+                const newUsage = { throwCount: 5, pickCount: 15, lastReset: today() };
+                await updateDoc(userRef, { dailyUsage: newUsage });
+                currentData.dailyUsage = newUsage;
             }
-            setLoadingUser(false);
-        });
-        return () => unsubscribe();
+        } else {
+            currentData = { uid: currentUser.uid, displayName: currentUser.displayName, dailyUsage: { throwCount: 5, pickCount: 15, lastReset: today() }, translationSettings: { apiKey: "", apiUrl: "https://api.openai.com/v1/chat/completions", model: "gpt-3.5-turbo", targetLang: "中文" } };
+            await setDoc(userRef, currentData);
+        }
+        setUserData(currentData);
+        setLoadingUser(false);
     }, []);
 
-    // ... (showFeedback 函数保持不变) ...
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            fetchUserData(currentUser);
+        });
+        return () => unsubscribe();
+    }, [fetchUserData]);
+
+    const showFeedback = (message, duration = 3000) => { setFeedback(message); if (duration > 0) { setTimeout(() => setFeedback(''), 3000); } };
 
     const handleThrowBottle = async ({ content, category }) => {
-        if (!user || !userData) return;
-        if (userData.dailyUsage.throwCount <= 0) { showFeedback("今天的扔瓶子次数已用完！"); return; }
-        
+        if (!user || !userData || userData.dailyUsage.throwCount <= 0) { showFeedback("今天的扔瓶子次数已用完！"); return; }
         setIsLoading(true);
-        const newBottle = { /* ... (与之前相同) ... */ };
+        const newBottle = { content, category, throwerId: user.uid, throwerName: user.displayName || "匿名", throwerAvatar: user.photoURL, createdAt: serverTimestamp(), status: "drifting", pickedBy: null, pickedAt: null, random: Math.random() };
         try {
             await addDoc(collection(db, 'bottles'), newBottle);
-            // 更新次数
-            const userRef = doc(db, 'users', user.uid);
-            await updateDoc(userRef, { "dailyUsage.throwCount": userData.dailyUsage.throwCount - 1 });
-            
+            await updateDoc(doc(db, 'users', user.uid), { "dailyUsage.throwCount": userData.dailyUsage.throwCount - 1 });
             playSound('/sounds/reng.mp3');
             setThrowModalOpen(false);
-            setThrowAnimation(true); // 触发扔瓶子动画
+            setThrowAnimation(true);
             setTimeout(() => setThrowAnimation(false), 2000);
-        } catch (error) { /* ... */ } 
-        finally { setIsLoading(false); }
+        } catch (error) { showFeedback(`扔瓶子失败: ${error.message}`); } 
+        finally { setIsLoading(false); fetchUserData(user); }
     };
 
     const handlePickBottle = async () => {
-        if (!user || !userData) return;
-        if (userData.dailyUsage.pickCount <= 0) { showFeedback("今天的捞瓶子次数已用完！"); return; }
-
-        setIsPickingAnimation(true); // 显示捞瓶子动画
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { "dailyUsage.pickCount": userData.dailyUsage.pickCount - 1 });
-
-        // 模拟捞瓶子过程和概率
-        setTimeout(async () => {
-            if (Math.random() > 1 / 3) {
-                showFeedback("唉，捞到了一个空瓶子...");
+        if (isLoading) return;
+        if (!user || !userData || userData.dailyUsage.pickCount <= 0) { showFeedback("今天的捞瓶子次数已用完！"); return; }
+        setIsLoading(true);
+        setIsPickingAnimation(true);
+        try {
+            await updateDoc(doc(db, 'users', user.uid), { "dailyUsage.pickCount": userData.dailyUsage.pickCount - 1 });
+            setTimeout(async () => {
+                if (Math.random() > 0.33) {
+                    showFeedback("唉，捞到了一个空瓶子...");
+                } else {
+                    const bottlesRef = collection(db, 'bottles');
+                    const randomValue = Math.random();
+                    const q = query(bottlesRef, where("status", "==", "drifting"), where("throwerId", "!=", user.uid), where("random", ">=", randomValue), limit(1));
+                    const querySnapshot = await getDocs(q);
+                    const bottleDoc = querySnapshot.docs[0];
+                    if (!bottleDoc) { showFeedback("大海空空如也..."); } else {
+                         await runTransaction(db, async (transaction) => {
+                            const bottleRef = doc(db, 'bottles', bottleDoc.id);
+                            const freshBottleSnap = await transaction.get(bottleRef);
+                            if (freshBottleSnap.data()?.status !== 'drifting') { throw new Error("手滑了，瓶子被别人先捞走了！"); }
+                            transaction.update(bottleRef, { status: "picked", pickedBy: user.uid, pickedAt: serverTimestamp() });
+                            playSound('/sounds/lao.mp3');
+                            setPickedBottle({ id: freshBottleSnap.id, ...freshBottleSnap.data() });
+                        });
+                    }
+                }
                 setIsPickingAnimation(false);
-                return;
-            }
-            // ... (捞瓶子的数据库逻辑，与之前相同) ...
-            // 成功后:
-            // setPickedBottle({ ... });
-            setIsPickingAnimation(false);
-        }, 2000); // 动画持续2秒
+                setIsLoading(false);
+                fetchUserData(user);
+            }, 2000);
+        } catch (error) { showFeedback(error.message); setIsLoading(false); setIsPickingAnimation(false); fetchUserData(user); }
     };
 
-    const handleThrowBack = async (bottle) => { /* ... (逻辑不变) ... */ };
-    const handlePickAnother = () => { /* ... (逻辑不变) ... */ };
+    const handleThrowBack = async (bottle) => {
+        if (!bottle) return;
+        setPickedBottle(null);
+        const bottleRef = doc(db, 'bottles', bottle.id);
+        await updateDoc(bottleRef, { status: 'drifting', pickedBy: null, pickedAt: null });
+        showFeedback("瓶子已放回大海。");
+    };
+
+    const handlePickAnother = () => { setPickedBottle(null); setTimeout(() => handlePickBottle(), 300); };
     
     const handleSaveSettings = async (newSettings) => {
         if (!user) return;
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { translationSettings: newSettings });
+        await updateDoc(doc(db, 'users', user.uid), { translationSettings: newSettings });
         setIsSettingsOpen(false);
         showFeedback("设置已保存！");
     };
@@ -123,29 +132,47 @@ export default function BottlePageContent() {
     };
 
     const handleAnonymousReply = async (bottle, replyContent) => {
-        // ... (与上一个回复中的代码相同，用于创建私信) ...
+        if (!user || !replyContent.trim()) return;
+        const chatId = [bottle.throwerId, user.uid].sort().join('_');
+        const chatRef = doc(db, 'privateChats', chatId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const chatDoc = await transaction.get(chatRef);
+                if (!chatDoc.exists()) { transaction.set(chatRef, { members: [bottle.throwerId, user.uid], createdAt: serverTimestamp(), isPinned: false }); }
+                const newMsgRef = doc(collection(chatRef, 'messages'));
+                transaction.set(newMsgRef, { senderId: user.uid, text: replyContent, createdAt: serverTimestamp() });
+                transaction.update(chatRef, { lastMessage: replyContent, lastMessageAt: serverTimestamp(), unreadCounts: { [bottle.throwerId]: 1 } });
+                transaction.delete(doc(db, 'bottles', bottle.id));
+            });
+            setPickedBottle(null);
+            showFeedback("回复成功！你们已成为好友。");
+        } catch (error) { showFeedback("回复失败，请重试。"); }
     };
 
-    // ... (handleLogin, loadingUser return ... )
+    if (loadingUser) { return <div className="loading-screen">正在连接海洋...</div>; }
 
     return (
         <div className={styles.pageContainer}>
-            {/* ... (Header JSX 不变) ... */}
-            
-            {/* ✅ 动画: 扔瓶子 */}
-            {throwAnimation && <div className={styles.throwAnimation}>...</div>}
-            
-            {/* ✅ 动画: 捞瓶子 */}
-            {isPickingAnimation && <div className={styles.pickingOverlay}>...</div>}
+            <div className={styles.header}>
+                <h1>海洋</h1>
+                <div className={styles.headerIcons}>
+                    <FiSettings className={styles.headerIcon} aria-label="Settings" onClick={() => setIsSettingsOpen(true)} />
+                    {user ? ( <img src={user.photoURL || '/default-avatar.png'} alt="My Profile" className={styles.profileIcon} /> ) 
+                    : ( <button onClick={() => alert('请实现登录功能')} style={{background: 'none', border: 'none'}}> <img src={'/default-avatar.png'} alt="Login" className={styles.profileIcon} /> </button> )}
+                </div>
+            </div>
+            {feedback && <div className={styles.feedbackBanner}>{feedback}</div>}
+            {throwAnimation && <div className={styles.throwAnimation}><img src="/images/jian.png" alt="throwing bottle"/></div>}
+            {isPickingAnimation && <div className={styles.pickingOverlay}><div className={styles.pickingAnimation}><img src="/images/lao.png" alt="picking bottle"/><span>捞瓶子...</span></div></div>}
 
             <div className={styles.bottomActions}>
-                 <button className={styles.fab} onClick={() => user ? setThrowModalOpen(true) : showFeedback('请先登录！')}>
+                 <button className={styles.fab} onClick={() => user ? setThrowModalOpen(true) : showFeedback('请先登录！')} disabled={isLoading}>
                     <img src="/images/jian.png" alt="扔一个" className={styles.fabIcon} />
-                    <span>扔一个 ({userData?.dailyUsage?.throwCount || 0})</span>
+                    <span>扔一个 <span className={styles.countBadge}>{userData?.dailyUsage?.throwCount || 0}</span></span>
                 </button>
-                <button className={styles.fab} onClick={handlePickBottle}>
+                <button className={styles.fab} onClick={handlePickBottle} disabled={isLoading}>
                     <img src="/images/lao.png" alt="捞一个" className={styles.fabIcon} />
-                    <span>捞一个 ({userData?.dailyUsage?.pickCount || 0})</span>
+                    <span>捞一个 <span className={styles.countBadge}>{userData?.dailyUsage?.pickCount || 0}</span></span>
                 </button>
                 <Link href="/messages" passHref>
                     <a className={styles.fab}>
@@ -169,4 +196,4 @@ export default function BottlePageContent() {
             )}
         </div>
     );
-            }
+}
