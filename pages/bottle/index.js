@@ -12,7 +12,6 @@ import styles from '../../styles/Bottle.module.css';
 import OceanBackground from '../../components/bottle/OceanBackground';
 import ThrowBottleModal from '../../components/bottle/ThrowBottleModal';
 import PickedBottleModal from '../../components/bottle/PickedBottleModal';
-import BottomNavBar from '../../components/bottle/BottomNavBar';
 
 export default function BottlePage() {
   // ▼▼▼ 核心修改 ▼▼▼
