@@ -1,4 +1,4 @@
-// /components/bottle/ThrowBottleModal.js (最终简化版)
+// /components/bottle/ThrowBottleModal.js (最简化版)
 
 import { useState } from 'react';
 import styles from '../../styles/Bottle.module.css';
