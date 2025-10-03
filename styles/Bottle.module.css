@@ -1,4 +1,5 @@
 /* 文件路径: styles/Bottle.module.css */
+/* 这个文件包含了漂流瓶功能所需的所有样式 */
 
 .pageContainer {
   width: 100vw;
@@ -9,6 +10,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .header {
@@ -44,6 +46,10 @@
   border: none;
   cursor: pointer;
   padding: 0;
+  transition: transform 0.2s;
+}
+.headerIcon:hover {
+    transform: scale(1.1);
 }
 
 .profileIcon {
@@ -51,6 +57,7 @@
   height: 40px;
   border-radius: 50%;
   border: 2px solid white;
+  cursor: pointer;
 }
 
 .feedbackBanner {
@@ -61,6 +68,12 @@
   border-radius: 20px;
   font-size: 1rem;
   z-index: 10;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .actionButtons {
@@ -75,6 +88,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.5);
   color: white;
@@ -82,10 +96,10 @@
   border-radius: 50%;
   width: 90px;
   height: 90px;
-  justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease-in-out;
   backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .fab:hover {
@@ -107,7 +121,7 @@
   margin-top: 0.25rem;
 }
 
-/* Modal Styles */
+/* --- Modal Styles --- */
 .modalOverlay {
   position: fixed;
   top: 0;
@@ -120,6 +134,7 @@
   align-items: center;
   z-index: 1000;
   backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .modalContent {
@@ -132,6 +147,7 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
 .modalContent h2 {
@@ -141,11 +157,17 @@
 
 .modalContent textarea {
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border-radius: 8px;
   border: 1px solid #ccc;
   font-size: 1rem;
   resize: vertical;
+  min-height: 120px;
+}
+.modalContent textarea:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,.25);
 }
 
 .modalActions {
@@ -159,9 +181,14 @@
   border: none;
   border-radius: 8px;
   font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
   background-color: #007bff;
   color: white;
+  transition: background-color 0.2s;
+}
+.button:hover {
+    background-color: #0056b3;
 }
 .button:disabled {
   opacity: 0.5;
@@ -171,13 +198,16 @@
 .buttonSecondary {
   background-color: #6c757d;
 }
+.buttonSecondary:hover {
+    background-color: #5a6268;
+}
 
 .errorText {
   color: #dc3545;
   font-size: 0.9rem;
 }
 
-/* Picked Bottle Modal Styles */
+/* --- Picked Bottle Modal Specific Styles --- */
 .bottleHeader {
   display: flex;
   align-items: center;
@@ -190,6 +220,7 @@
   width: 50px;
   height: 50px;
   border-radius: 50%;
+  object-fit: cover;
 }
 
 .bottleHeader div {
@@ -203,6 +234,7 @@
 
 .bottleHeader small {
   color: #6c757d;
+  font-size: 0.8rem;
 }
 
 .bottleMessage {
@@ -210,36 +242,55 @@
   min-height: 100px;
   white-space: pre-wrap; /* Respects newlines */
   word-wrap: break-word;
+  line-height: 1.6;
 }
-/* 文件路径: styles/Bottle.module.css (在文件末尾追加) */
 
-/* Ocean Background Styles */
+/* --- Translation View Styles --- */
+.translationView {
+  border-top: 1px dashed #ccc;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  color: #555;
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+}
+.translationView h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  color: #333;
+  font-weight: 600;
+}
+.translationView p {
+    margin: 0;
+}
+
+
+/* --- Ocean Background with Animation --- */
 .ocean {
   height: 100%;
   width: 100%;
   position: absolute;
   top: 0;
   left: 0;
-  background: linear-gradient(to top, #0077be, #0099ff);
+  background: linear-gradient(to top, #005c97, #363795);
   overflow: hidden;
   z-index: 0; /* 确保在最底层 */
 }
 
 .wave {
-  background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJncmFkIiBncmFkaWVudFVuaXRzPSJvYmplY3RCb3VuZGluZ0JveCIgeDE9IjAuMCIgeTE9IjAuMCIgeDI9IjEuMCIgeTI9IjEuMCI+PHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzAwOTlmZiIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzAwNzdhYyIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHg9IjAiIHk9IjAiIHdpZGV0PSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JhZCkiIC8+PC9zdmc+) no-repeat;
-  background-size: 100% 100%;
+  background: rgba(255, 255, 255, 0.15);
   position: absolute;
-  bottom: 0;
+  bottom: -50px; /* Start below the viewport */
   left: -50%;
   width: 200%;
   height: 200px;
-  opacity: 0.5;
   border-radius: 45%;
   animation: wave-animation 10s infinite linear;
 }
 
 .wave:nth-of-type(2) {
-  bottom: 10px;
+  bottom: -40px; /* Slightly different position */
   border-radius: 47%;
   opacity: 0.7;
   animation: wave-animation 15s infinite linear reverse;
@@ -247,9 +298,9 @@
 
 @keyframes wave-animation {
   0% {
-    transform: rotate(0deg) translate(0, 0);
+    transform: rotate(0deg);
   }
   100% {
-    transform: rotate(360deg) translate(0, 0);
+    transform: rotate(360deg);
   }
 }
