@@ -14,17 +14,44 @@ import { useSwipeable } from 'react-swipeable';
 import VerticalShortVideoPlayer from '@/themes/heo/components/VerticalShortVideoPlayer';
 
 // ===================================================================
-// =============  ✅ 0. 新增：时间格式化工具函数  =============
+// =============  ✅ 0. 新增：可复用组件和工具函数  =============
 // ===================================================================
 
 /**
+ * ✅ 新增：带国旗的头像组件
+ * 这是一个可复用的组件，用于显示用户头像并在右下角叠加国旗。
+ * @param {object} user - 包含 photoURL 和 countryCode 的用户对象
+ * @param {string} sizeClass - Tailwind CSS 尺寸类名 (例如 'w-14 h-14')
+ * @param {string} flagSizeClass - Tailwind CSS 旗帜尺寸类名 (例如 'w-5 h-5')
+ */
+const AvatarWithFlag = ({ user, sizeClass = 'w-14 h-14', flagSizeClass = 'w-5 h-5' }) => {
+    if (!user) return null;
+
+    const countryCode = user.countryCode || 'vn'; // 默认越南国旗
+
+    return (
+        <div className={`relative flex-shrink-0`}>
+            <img 
+                className={`${sizeClass} rounded-full object-cover`} 
+                src={user.photoURL || '/img/avatar.svg'} 
+                alt={user.displayName || 'Avatar'} 
+            />
+            <img 
+                className={`absolute -bottom-1 -right-1 ${flagSizeClass} rounded-full border-2 border-white object-cover`} 
+                src={`https://flagcdn.com/${countryCode.toLowerCase()}.svg`} 
+                alt={`${countryCode} flag`}
+            />
+        </div>
+    );
+};
+
+
+/**
  * 将 Firestore Timestamp 或 Date 对象格式化为相对时间字符串
- * @param {Date | object} date - 日期对象或 Firestore Timestamp
- * @returns {string} 格式化后的时间字符串
  */
 const formatRelativeTime = (date) => {
     if (!date) return '';
-    const d = date.toDate ? date.toDate() : date; // 兼容 Firestore Timestamp 和原生 Date
+    const d = date.toDate ? date.toDate() : date;
     const now = new Date();
     const diff = now.getTime() - d.getTime();
     const seconds = Math.floor(diff / 1000);
@@ -32,20 +59,12 @@ const formatRelativeTime = (date) => {
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
 
-    if (seconds < 60) {
-        return '刚刚';
-    } else if (minutes < 60) {
-        return `${minutes}分钟前`;
-    } else if (hours < 24) {
-        return `${hours}小时前`;
-    } else if (days === 1) {
-        return '昨天';
-    } else if (days > 1 && days < 7) {
-        return `${days}天前`;
-    } else {
-        // 超过一周，直接显示日期
-        return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-    }
+    if (seconds < 60) return '刚刚';
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    if (days === 1) return '昨天';
+    if (days > 1 && days < 7) return `${days}天前`;
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 };
 
 
@@ -76,20 +95,15 @@ const usePartnerStatus = (partnerId) => {
 const PartnerListItem = ({ partner, onSayHi }) => {
     const router = useRouter();
     const { text: statusText, isOnline } = usePartnerStatus(partner.uid);
-    const countryCode = partner.countryCode || 'vn';
-
+    
     const genderSymbol = partner.gender === 'male' ? '♂' : partner.gender === 'female' ? '♀' : '';
     const genderColor = partner.gender === 'male' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600';
 
     return (
         <div className="relative w-full max-w-4xl mx-auto flex items-center p-3 space-x-3">
-            <div className="relative flex-shrink-0 cursor-pointer" onClick={() => router.push(`/profile/${partner.uid}`)}>
-                <img className="w-14 h-14 rounded-full object-cover" src={partner.photoURL || '/img/avatar.svg'} alt={partner.displayName} />
-                <img 
-                    className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white object-cover" 
-                    src={`https://flagcdn.com/${countryCode.toLowerCase()}.svg`} 
-                    alt={countryCode} 
-                />
+            {/* ✅ 修改：使用新的 AvatarWithFlag 组件 */}
+            <div className="cursor-pointer" onClick={() => router.push(`/profile/${partner.uid}`)}>
+                <AvatarWithFlag user={partner} sizeClass="w-14 h-14" flagSizeClass="w-5 h-5"/>
             </div>
             
             <div className="flex-grow flex items-center min-w-0">
@@ -204,7 +218,7 @@ const LanguagePartnerList = () => {
                 </div>
                 {loading 
                     ? Array.from({ length: 5 }).map((_, i) => <PartnerListItemSkeleton key={i} />)
-                    : partners.map((partner, index) => <PartnerListItem key={partner.uid} partner={partner} onSayHi={handleSayHi} />)
+                    : partners.map((partner) => <PartnerListItem key={partner.uid} partner={partner} onSayHi={handleSayHi} />)
                 }
             </div>
             <div className="h-24"></div>
@@ -282,9 +296,9 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
             onContextMenu={handleContextMenu}
             className={`relative flex items-center p-4 transition-colors ${isPinned ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
         >
-            <div className="relative">
-                <img src={convo.otherUser.photoURL || '/img/avatar.svg'} alt={convo.otherUser.displayName} className="w-14 h-14 rounded-full object-cover"/>
-            </div>
+            {/* ✅ 修改：使用新的 AvatarWithFlag 组件 */}
+            <AvatarWithFlag user={convo.otherUser} sizeClass="w-14 h-14" flagSizeClass="w-5 h-5"/>
+            
             <div className="ml-4 flex-1 overflow-hidden">
                 <div className="flex justify-between items-center">
                     <p className="font-semibold truncate text-gray-800">{convo.otherUser.displayName || '未知用户'}</p>
@@ -365,8 +379,6 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
         router.push(`/messages/${convo.id}`);
     };
 
-
-
     if (authLoading || loading) { return <div className="p-8 text-center text-gray-500">正在加载...</div>; }
     if (!user) { return <div className="p-8 text-center text-gray-500">请先登录以查看私信。</div>; }
 
@@ -411,7 +423,6 @@ const MessagesPageContent = () => {
   const { totalUnreadCount } = useUnreadCount();
   const tabKeys = ['messages', 'discover', 'partners', 'jobs', 'bookshelf'];
   
-  // ✅ 新增：为全屏容器创建一个 ref
   const pageContainerRef = useRef(null);
 
   useEffect(() => {
@@ -423,12 +434,13 @@ const MessagesPageContent = () => {
     if (activeTab !== 'messages') { return; }
     
     setLoading(true);
+
+    // ✅ 修复：移除了错误的 where 子句，改为在客户端进行过滤，以修复查询
     const chatsQuery = query(
         collection(db, 'privateChats'), 
         where('members', 'array-contains', user.uid),
-        where(`isHiddenFor_${user.uid}`, '!=', true),
         orderBy('lastMessageAt', 'desc'), 
-        limit(30)
+        limit(50) // 稍微多获取一些数据，以防最新的都被隐藏了
     );
 
     const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
@@ -440,7 +452,7 @@ const MessagesPageContent = () => {
         });
         
         const resolvedChats = await Promise.all(chatsWithPlaceholders.map(async (chat) => {
-            if (!chat.otherUser.id) return chat;
+            if (!chat.otherUser.id) return null; // 过滤掉没有对方用户的无效聊天
             try {
                 const userProfileDoc = await getDoc(doc(db, 'users', chat.otherUser.id));
                 if (userProfileDoc.exists()) {
@@ -454,14 +466,20 @@ const MessagesPageContent = () => {
             }
             return chat;
         }));
-        setConversations(resolvedChats.filter(Boolean));
+
+        // ✅ 修复：在客户端过滤掉被隐藏的对话
+        const visibleChats = resolvedChats.filter(chat => {
+            return chat && !chat[`isHiddenFor_${user.uid}`];
+        });
+
+        setConversations(visibleChats);
         setLoading(false);
       }, (error) => { console.error('获取会话列表出错:', error); setLoading(false); }
     );
     return () => unsubscribe();
   }, [user, authLoading, activeTab]);
   
-  // ✅ 新增：处理全屏模式的 Effect
+  // 处理全屏模式的 Effect
   useEffect(() => {
     const element = pageContainerRef.current;
     if (!element) return;
@@ -483,18 +501,15 @@ const MessagesPageContent = () => {
     };
 
     if (activeTab === 'discover') {
-        // 如果当前不是全屏状态，则请求全屏
         if (!isFullScreen()) {
             requestFullScreen();
         }
     } else {
-        // 如果当前是全屏状态，则退出全屏
         if (isFullScreen()) {
             exitFullScreen();
         }
     }
 
-    // 组件卸载时，确保退出全屏
     return () => {
         if (isFullScreen()) {
             exitFullScreen();
@@ -530,7 +545,6 @@ const MessagesPageContent = () => {
 
   return (
     <LayoutBase>
-      {/* ✅ 修改：为容器添加 ref */}
       <div ref={pageContainerRef} className={`flex flex-col min-h-screen bg-white ${activeTab === 'discover' ? 'h-screen' : ''}`}>
         {activeTab !== 'discover' && (
           <MessageHeader activeTab={activeTab} setActiveTab={setActiveTab} totalUnreadCount={totalUnreadCount}/>
