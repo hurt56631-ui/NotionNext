@@ -49,8 +49,8 @@ const variants = {
 // 主组件
 export default function VerticalShortVideoPlayer({
     apiList = DEFAULT_APIS,
-    cacheSize = 5, // 适当增加缓存，体验更流畅
-    preloadThreshold = 2,
+    cacheSize = 9, // 适当增加缓存，体验更流畅
+    preloadThreshold = 3,
     useProxy = false,
     proxyPath = process.env.NEXT_PUBLIC_PROXY_PATH || '/api/proxy'
 }) {
