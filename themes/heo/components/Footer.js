@@ -1,4 +1,4 @@
-// /components/Footer.js (已修复 '提示登录' 逻辑)
+// /components/Footer.js (已修改按钮位置、名称和面板高度)
 
 import { BeiAnGongAn } from '@/components/BeiAnGongAn'
 import CopyRightDate from '@/components/CopyRightDate'
@@ -11,52 +11,45 @@ import React, { useState, useEffect } from 'react'
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 import { useAuth } from '@/lib/AuthContext'
-import { useUnreadCount } from '@/lib/UnreadCountContext' 
+import { useUnreadCount } from '@/lib/UnreadCountContext'
 import dynamic from 'next/dynamic'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 const Footer = () => {
   const router = useRouter()
-  // ✅ 关键：这里获取 loading 状态
-  const { user, authLoading } = useAuth() 
-  
-  const { totalUnreadCount } = useUnreadCount(); 
+  const { user, authLoading } = useAuth()
+  const { totalUnreadCount } = useUnreadCount()
 
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [isDrawerOpen, setDrawerOpen] = useState(false)
 
-  const pagesWithBottomNav = ['/', '/community', '/messages', '/me'];
-  const isChatPage = router.pathname.startsWith('/messages/') && router.query.chatId;
-  const showBottomNav = pagesWithBottomNav.includes(router.pathname) && !isChatPage;
+  const pagesWithBottomNav = ['/', '/community', '/messages', '/me']
+  const isChatPage = router.pathname.startsWith('/messages/') && router.query.chatId
+  const showBottomNav = pagesWithBottomNav.includes(router.pathname) && !isChatPage
 
-  const handleOpenDrawer = () => { router.push(router.asPath + '#ai-chat', undefined, { shallow: true }); setDrawerOpen(true); };
-  const handleCloseDrawer = () => { if (window.location.hash === '#ai-chat') { router.back(); } else { setDrawerOpen(false); } };
-  useEffect(() => { const handleHashChange = () => { if (window.location.hash !== '#ai-chat') { setDrawerOpen(false); } }; window.addEventListener('popstate', handleHashChange); return () => { window.removeEventListener('popstate', handleHashChange); }; }, [router]);
-  
-  // ✅ 核心修复：只有当 authLoading 为 false 时，才检查 user
-  const handleAuthRedirect = (e) => { 
+  const handleOpenDrawer = () => { router.push(router.asPath + '#ai-chat', undefined, { shallow: true }); setDrawerOpen(true) }
+  const handleCloseDrawer = () => { if (window.location.hash === '#ai-chat') { router.back() } else { setDrawerOpen(false) } }
+  useEffect(() => { const handleHashChange = () => { if (window.location.hash !== '#ai-chat') { setDrawerOpen(false) } }; window.addEventListener('popstate', handleHashChange); return () => { window.removeEventListener('popstate', handleHashChange) } }, [router])
+
+  const handleAuthRedirect = (e) => {
     if (authLoading) {
-        // 如果还在加载，阻止默认跳转，但不弹窗，避免在认证进行时干扰
-        e.preventDefault();
-        return;
+      e.preventDefault()
+      return
     }
-    if (!user) { 
-        e.preventDefault(); 
-        setShowLoginModal(true); 
-    } 
-  };
-  
-  const showDesktopFooter = router.pathname === '/';
+    if (!user) {
+      e.preventDefault()
+      setShowLoginModal(true)
+    }
+  }
 
-  const defaultColor = 'text-gray-500 dark:text-gray-400';
-  const activeColor = 'text-purple-500 dark:text-purple-400';
+  const showDesktopFooter = router.pathname === '/'
 
-  // ✅ 优化：在 authLoading 时，底部导航栏不应该允许点击关键按钮
+  const defaultColor = 'text-gray-500 dark:text-gray-400'
+  const activeColor = 'text-purple-500 dark:text-purple-400'
+
   if (authLoading) {
-      // 可以在这里返回一个禁用版的 Footer，或者让 Footer 里的 Link 禁用。
-      // 为简化，我们直接返回一个只包含一个 loading 状态的 div
-      // 但为了不改变您的 Layout 结构，我们使用 Link 上的 disabled 逻辑
+    // 可以在这里返回一个加载状态的UI，但为保持结构一致，我们在Link上处理禁用状态
   }
 
   return (
@@ -77,27 +70,13 @@ const Footer = () => {
       )}
 
       {showBottomNav && (
-        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-20 flex justify-around items-center px-2'>
-          
-          <Link href='/' className={`flex flex-col items-center ${router.pathname === '/' ? activeColor : defaultColor} px-2 py-1`}>
-            <i className='fas fa-home text-xl'></i>
-            <span className='text-sm mt-1'>主页</span>
-          </Link>
-          
-          <button onClick={handleOpenDrawer} className={`flex flex-col items-center ${defaultColor} px-2 py-1`}>
-            <i className='fas fa-robot text-xl'></i>
-            <span className='text-sm mt-1'>AI助手</span>
-          </button>
-          
-          <Link href='/community' className={`flex flex-col items-center ${router.pathname === '/community' ? activeColor : defaultColor} px-2 py-1`}>
-            <i className='fas fa-users text-xl'></i>
-            <span className='text-sm mt-1'>社区</span>
-          </Link>
-          
-          {/* ✅ 核心修复：消息和个人中心的跳转需要等待认证完成 */}
-          <Link 
-            href='/messages' 
-            onClick={handleAuthRedirect} 
+        // ✅ 高度修改: h-20 改为 h-16
+        <div className='fixed bottom-0 left-0 right-0 w-full bg-white dark:bg-[#1a191d] border-t dark:border-t-[#3D3D3F] shadow-lg lg:hidden z-30 h-16 flex justify-around items-center px-2'>
+
+          {/* ✅ 位置和名称修改: 主页 -> 消息 */}
+          <Link
+            href='/messages'
+            onClick={handleAuthRedirect}
             className={`flex flex-col items-center ${router.pathname === '/messages' ? activeColor : defaultColor} px-2 py-1 relative ${authLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
               {totalUnreadCount > 0 && (
@@ -109,10 +88,27 @@ const Footer = () => {
               <i className='fas fa-comment-alt text-xl'></i>
               <span className='text-sm mt-1'>消息</span>
           </Link>
-          
-          <Link 
-            href='/me' 
-            onClick={handleAuthRedirect} 
+
+          <button onClick={handleOpenDrawer} className={`flex flex-col items-center ${defaultColor} px-2 py-1`}>
+            <i className='fas fa-robot text-xl'></i>
+            <span className='text-sm mt-1'>AI助手</span>
+          </button>
+
+          <Link href='/community' className={`flex flex-col items-center ${router.pathname === '/community' ? activeColor : defaultColor} px-2 py-1`}>
+            <i className='fas fa-users text-xl'></i>
+            <span className='text-sm mt-1'>社区</span>
+          </Link>
+
+          {/* ✅ 位置和名称修改: 消息 -> 学习 (原主页) */}
+          <Link href='/' className={`flex flex-col items-center ${router.pathname === '/' ? activeColor : defaultColor} px-2 py-1`}>
+            {/* 使用一个更符合“学习”的图标，例如 fas fa-book-open */}
+            <i className='fas fa-book-open text-xl'></i>
+            <span className='text-sm mt-1'>学习</span>
+          </Link>
+
+          <Link
+            href='/me'
+            onClick={handleAuthRedirect}
             className={`flex flex-col items-center ${router.pathname === '/me' ? activeColor : defaultColor} px-2 py-1 ${authLoading ? 'cursor-not-allowed opacity-50' : ''}`}
           >
             <i className='fas fa-user text-xl'></i>
