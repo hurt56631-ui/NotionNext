@@ -11,6 +11,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
 import { useUnreadCount } from '@/lib/UnreadCountContext';
 import { useSwipeable } from 'react-swipeable';
+import VerticalShortVideoPlayer from '@/themes/heo/components/VerticalShortVideoPlayer';
+
+
 
 // ===================================================================
 // =============  ✅ 1. 语伴列表相关组件 (全新列表模式)  =============
@@ -448,7 +451,7 @@ const MessagesPageContent = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'messages': return <ConversationList conversations={conversations} loading={loading} user={user} authLoading={authLoading} />;
-      case 'discover': return (<div className="p-8 text-center text-gray-500">动态功能正在开发中...</div>);
+      case 'discover': return <VerticalShortVideoPlayer useProxy={false} />;
       case 'partners': return <LanguagePartnerList />; // ✅ 使用我们重构后的新组件
       case 'jobs': return (<div className="p-8 text-center text-gray-500">找工作功能正在开发中...</div>);
       case 'bookshelf': return (<div className="p-8 text-center text-gray-500">书柜功能正在开发中...</div>);
