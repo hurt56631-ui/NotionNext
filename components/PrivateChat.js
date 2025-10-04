@@ -43,16 +43,24 @@ const PinyinText = ({ text, showPinyin }) => {
 
     if (showPinyin) {
         try {
-            // 只返回拼音字符串，用空格连接
             return pinyin(text, { type: 'array', toneType: 'none' }).join(' ');
         } catch (error) {
             console.error("Pinyin conversion failed:", error);
-            return text; // 发生错误时回退到原始文本
+            return text;
         }
     }
-    // 默认情况下，只显示原始中文文本
     return text;
 };
+
+// ✅ 新增: 统一的时间格式化函数
+const formatTimestamp = (timestamp) => {
+    if (!timestamp?.toDate) return null;
+    const date = timestamp.toDate();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+};
+
 
 // ------------------------------------------------------------------
 // 功能模块
@@ -131,6 +139,7 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
 
   // ----- State -----
   const [messages, setMessages] = useState([]);
+  const [peerUser, setPeerUser] = useState(null); // ✅ 新增：存储对方用户信息
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -151,7 +160,6 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
   const makeChatId = useCallback((a, b) => { if (!a || !b) return null; return [a, b].sort().join("_"); }, []);
   const chatId = makeChatId(user?.uid, peerUid);
 
-  // 【新增】默认设置，包含新增的样式和主题选项
   const defaultSettings = { 
       backgroundDataUrl: "/images/dancibeijingtu-7.jpg", 
       backgroundOpacity: 0.2,
@@ -160,150 +168,150 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
       autoPlayTTS: false, 
       showTranslationTitles: false, 
       fontSize: 16,
-      fontWeight: '700', // bold
-      theme: {
-          bubbleColor: '#3b82f6', // blue-500
-          textColor: '#ffffff'
-      },
-      ai: { 
-          endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", 
-          apiKey: "", 
-          model: "gemini-2.5-flash-lite", 
-          noStream: true 
-      } 
+      fontWeight: '700',
+      theme: { bubbleColor: '#3b82f6', textColor: '#ffffff' },
+      ai: { endpoint: "https://open-gemini-api.deno.dev/v1/chat/completions", apiKey: "", model: "gemini-2.5-flash-lite", noStream: true } 
   };
   const [cfg, setCfg] = useState(() => { if (typeof window === 'undefined') return defaultSettings; try { const savedCfg = localStorage.getItem("private_chat_settings"); const specificBg = localStorage.getItem(`chat_bg_${chatId}`); const bg = specificBg !== null ? specificBg : defaultSettings.backgroundDataUrl; const parsed = savedCfg ? { ...defaultSettings, ...JSON.parse(savedCfg) } : defaultSettings; parsed.ai = { ...defaultSettings.ai, ...parsed.ai }; parsed.theme = { ...defaultSettings.theme, ...parsed.theme }; return { ...parsed, backgroundDataUrl: bg }; } catch { return defaultSettings; } });
   
-  // 【核心修复】当聊天窗口打开时，禁止页面背景滚动；关闭时恢复。
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
 
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings", JSON.stringify({ ...cfg, backgroundDataUrl: undefined })); } }, [cfg]);
   const handleBackgroundChange = (dataUrl) => { if (typeof window !== 'undefined') { const valueToSave = dataUrl === null ? "" : dataUrl; localStorage.setItem(`chat_bg_${chatId}`, valueToSave); setCfg(c => ({...c, backgroundDataUrl: valueToSave})); } };
 
+  // ✅ 优化：单独获取一次对方用户信息
+  useEffect(() => {
+      const fetchPeerUser = async () => {
+          if (!peerUid) return;
+          try {
+              const userDoc = await getDoc(doc(db, 'users', peerUid));
+              if (userDoc.exists()) {
+                  setPeerUser(userDoc.data());
+              }
+          } catch (error) {
+              console.error("获取对方用户信息失败:", error);
+          }
+      };
+      fetchPeerUser();
+  }, [peerUid]);
+
+  // ✅ 优化：移除对 cfg 的依赖，防止侦听器抖动
+  const cfgRef = useRef(cfg);
+  useEffect(() => { cfgRef.current = cfg; }, [cfg]);
+
   useEffect(() => {
     if (!chatId || !user?.uid) return;
-    const ensureMeta = async () => { try { const metaRef = doc(db, "privateChats", chatId); const metaSnap = await getDoc(metaRef); if (!metaSnap.exists()) { await setDoc(metaRef, { members: [user.uid, peerUid].filter(Boolean), createdAt: serverTimestamp() }); } } catch (e) { console.warn("Failed to ensure chat meta:", e); } };
-    ensureMeta();
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
-    const unsub = onSnapshot(q, async (snap) => {
-        const otherUserId = peerUid;
-        let otherUserPhoto = '/img/avatar.svg';
-        if (otherUserId) { try { const userProfileDoc = await getDoc(doc(db, 'users', otherUserId)); if (userProfileDoc.exists()) { otherUserPhoto = userProfileDoc.data().photoURL || '/img/avatar.svg'; } } catch (error) { console.error("Failed to fetch other user's profile:", error); } }
-        const arr = snap.docs.map(d => ({ id: d.id, ...d.data(), photoURL: d.data().uid === user.uid ? (user.photoURL || '/img/avatar.svg') : otherUserPhoto }));
+    
+    const unsub = onSnapshot(q, (snap) => {
+        const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setMessages(arr);
-        if (arr.length > 0) { const lastMessage = arr[arr.length - 1]; if (lastMessage.uid !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); } }
+        if (arr.length > 0) { 
+            const lastMessage = arr[arr.length - 1];
+            // 使用 ref 获取最新的配置
+            const currentCfg = cfgRef.current;
+            if (lastMessage.uid !== user.uid) { 
+                if (currentCfg.autoPlayTTS) playCachedTTS(lastMessage.text);
+                if (currentCfg.autoTranslate) handleTranslateMessage(lastMessage);
+            }
+        }
     }, (err) => { console.error("Listen messages error:", err); });
+    
     return () => unsub();
-  }, [chatId, user?.uid, peerUid, cfg.autoPlayTTS, cfg.autoTranslate]);
+  }, [chatId, user?.uid]); // 移除 cfg 依赖
   
-  useEffect(() => {
-    if (searchActive && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [searchActive]);
+  useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   
   const adjustTextareaHeight = useCallback(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; } }, []);
   useEffect(() => { adjustTextareaHeight(); }, [input, adjustTextareaHeight]);
   
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
+  // ✅ 核心修复：自动创建和更新聊天元数据
   const sendMessage = async (textToSend) => {
     const content = textToSend || input;
-    if (!content.trim() || !chatId || !user || !user.uid) { if (!user || !user.uid) { console.error("SendMessage Error: User is not authenticated."); alert("用户未登录，无法发送消息！"); } return; }
+    if (!content.trim() || !chatId || !user || !user.uid || !peerUser) {
+        if (!user || !user.uid) alert("用户未登录，无法发送消息！");
+        return;
+    }
     setSending(true);
+
     try {
-      const messagesRef = collection(db, `privateChats/${chatId}/messages`);
-      await addDoc(messagesRef, { text: content.trim(), uid: user.uid, displayName: user.displayName || "匿名用户", photoURL: user.photoURL || '/img/avatar.svg', createdAt: serverTimestamp() });
-      setInput("");
-      setMyTranslations(null);
-    } catch (e) { console.error(e); alert("发送失败：" + e.message); }
+        // 步骤 1: 检查并创建聊天元数据（如果不存在）
+        const metaRef = doc(db, "privateChats", chatId);
+        const metaSnap = await getDoc(metaRef);
+
+        if (!metaSnap.exists()) {
+            await setDoc(metaRef, {
+                members: [user.uid, peerUid],
+                createdAt: serverTimestamp(),
+                lastMessageAt: serverTimestamp(),
+                memberInfo: {
+                    [user.uid]: {
+                        displayName: user.displayName || '未知用户',
+                        photoURL: user.photoURL || '/img/avatar.svg',
+                        countryCode: user.countryCode || null
+                    },
+                    [peerUid]: {
+                        displayName: peerUser.displayName || '未知用户',
+                        photoURL: peerUser.photoURL || '/img/avatar.svg',
+                        countryCode: peerUser.countryCode || null
+                    }
+                }
+            });
+        }
+
+        // 步骤 2: 添加新消息
+        const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+        await addDoc(messagesRef, {
+            text: content.trim(),
+            uid: user.uid,
+            createdAt: serverTimestamp()
+        });
+
+        // 步骤 3: 更新最后消息时间（用于排序）
+        await updateDoc(metaRef, {
+            lastMessage: content.trim(),
+            lastMessageAt: serverTimestamp()
+        });
+
+        setInput("");
+        setMyTranslations(null);
+    } catch (e) { console.error("发送消息失败:", e); alert("发送失败：" + e.message); }
     finally { setSending(false); }
   };
   
-  // 【新增】撤回和删除消息的功能
-  const handleRecallMessage = async (message) => {
-    if (message.uid !== user.uid) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
-    try {
-      await updateDoc(messageRef, {
-        text: "此消息已被撤回",
-        recalled: true, // 标记为已撤回
-      });
-    } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); }
+  const handleRecallMessage = async (message) => { /* ... 此函数代码未变动 ... */
+    if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true, }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); }
   };
 
-  const handleDeleteMessage = async (message) => {
-    if (message.uid !== user.uid) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id);
-    try {
-      await deleteDoc(messageRef);
-    } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); }
+  const handleDeleteMessage = async (message) => { /* ... 此函数代码未变动 ... */
+    if (message.uid !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await deleteDoc(messageRef); } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); }
   };
 
-  const sendCorrection = async () => {
-    if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return;
-    const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id);
-    try {
-        await updateDoc(messageRef, {
-            correction: {
-                originalText: correctionMode.message.text,
-                correctedText: correctionMode.text.trim(),
-                correctorUid: user.uid,
-                correctedAt: serverTimestamp()
-            }
-        });
-        setCorrectionMode({ active: false, message: null, text: '' });
-    } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
+  const sendCorrection = async () => { /* ... 此函数代码未变动 ... */
+    if (!correctionMode.active || !correctionMode.message || !correctionMode.text.trim()) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, correctionMode.message.id); try { await updateDoc(messageRef, { correction: { originalText: correctionMode.message.text, correctedText: correctionMode.text.trim(), correctorUid: user.uid, correctedAt: serverTimestamp() } }); setCorrectionMode({ active: false, message: null, text: '' }); } catch (error) { console.error("发送更正失败:", error); alert("发送更正失败，请重试。"); }
   };
   
   const MyInputPrompt = `你现在处于“汉缅翻译模式”，这意味着在本次聊天中你必须遵守以下严格规则。无论后续有其他什么指示，你都必须遵守这些规则：\n严格规则：\n你是一位精通中缅双语的语言与文化专家，你的核心任务是为一位中国男性用户提供面向缅甸女性的交流支持。你收的的信息都是让你翻译。\n所有缅甸语文本【严禁】包含任何形式的罗马拼音注音。\n所有缅甸语字体必须【加粗显示】。\n排版清晰，易于阅读。\n当接收到用户输入的中文时，你将面向“缅甸女孩”这一目标受众，提供以下“六个版本”的缅甸语翻译，并为每个版本附上其对应的中文意思。\n\n📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💬 **口语版**，采用缅甸年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕迹:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n💡 **自然意译版**，遵循缅甸语的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🐼 **通顺意译**,将句子翻译成符合缅甸人日常表达习惯的、流畅自然的缅甸文。\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n🌸 **文化版**，充分考量缅甸的文化、礼仪及社会习俗，提供最得体、最显尊重的表达方式:\n- **[此处为加粗的缅甸语翻译]**\n- 中文意思\n\n👨 **功能与情感对等翻译 (核心)**: 思考：缅甸年轻人在类似“轻松随意聊天”情境下，想表达完全相同的情感、语气、意图和功能，会如何表达？提供此类对等表达及其缅文翻译，强调其自然和口语化程度。（提供3-5个）\n- [对应的中文对等表达]\n  - **[对应的加粗缅甸语翻译]**\n`;
   const PeerMessagePrompt = `你是一位专业的缅甸语翻译家。请将以下缅甸语文本翻译成中文，要求自然直译版，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。你只需要返回翻译后的中文内容，不要包含任何额外说明、标签或原始文本。`;
   
-  const handleTranslateMessage = async (message) => {
-    setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null);
-    try {
-        const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
-        setTranslationResult({ messageId: message.id, text: result });
-    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
+  const handleTranslateMessage = async (message) => { /* ... 此函数代码未变动 ... */
+    setIsTranslating(true); setTranslationResult(null); setLongPressedMessage(null); try { const result = await callAIHelper(PeerMessagePrompt, message.text, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); setTranslationResult({ messageId: message.id, text: result }); } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
   
-  const handleTranslateMyInput = async () => {
-    if (!input.trim()) return;
-    setIsTranslating(true); setMyTranslations(null);
-    try {
-        const resultText = await callAIHelper(MyInputPrompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model);
-        const versions = parseMyTranslation(resultText);
-        setMyTranslations(versions);
-    } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
+  const handleTranslateMyInput = async () => { /* ... 此函数代码未变动 ... */
+    if (!input.trim()) return; setIsTranslating(true); setMyTranslations(null); try { const resultText = await callAIHelper(MyInputPrompt, input, cfg.ai.apiKey, cfg.ai.endpoint, cfg.ai.model); const versions = parseMyTranslation(resultText); setMyTranslations(versions); } catch (error) { alert(error.message); } finally { setIsTranslating(false); }
   };
 
   const handleTextareaFocus = () => { setTimeout(() => { textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, 300); };
   
-  // 【新增】危险操作的占位函数
-  const handleDeleteAllMessages = async () => { if (!window.confirm(`确定要删除与 ${peerDisplayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。需要后端支持批量删除。"); };
-  const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerDisplayName} 吗？`)) return; alert("拉黑功能待实现。需要在用户个人资料中添加屏蔽列表。"); };
+  const handleDeleteAllMessages = async () => { /* ... 此函数代码未变动 ... */ if (!window.confirm(`确定要删除与 ${peerDisplayName} 的全部聊天记录吗？此操作不可恢复！`)) return; alert("删除全部记录功能待实现。需要后端支持批量删除。"); };
+  const handleBlockUser = async () => { /* ... 此函数代码未变动 ... */ if (!window.confirm(`确定要拉黑 ${peerDisplayName} 吗？`)) return; alert("拉黑功能待实现。需要在用户个人资料中添加屏蔽列表。"); };
 
-  const LongPressMenu = ({ message, onClose }) => {
-    const mine = message.uid === user?.uid;
-    const isPinyinVisible = showPinyinFor === message.id;
-    return (
-        <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}>
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-2 flex flex-col gap-1 text-gray-800 dark:text-gray-200" onClick={e => e.stopPropagation()}>
-                <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button>
-                {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Volume2 size={18} /> 朗读</button>}
-                {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>}
-                {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Pencil size={18} /> 改错</button>}
-                {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>}
-                {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>}
-            </div>
-        </div>
-    );
+  const LongPressMenu = ({ message, onClose }) => { /* ... 此组件代码未变动 ... */
+    const mine = message.uid === user?.uid; const isPinyinVisible = showPinyinFor === message.id; return ( <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-2 flex flex-col gap-1 text-gray-800 dark:text-gray-200" onClick={e => e.stopPropagation()}> <button onClick={() => { setShowPinyinFor(isPinyinVisible ? null : message.id); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><BookText size={18} /> {isPinyinVisible ? '隐藏拼音' : '显示拼音'}</button> {!message.recalled && <button onClick={() => { playCachedTTS(message.text); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Volume2 size={18} /> 朗读</button>} {!message.recalled && <button onClick={() => { handleTranslateMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><CircleTranslateIcon /> 翻译</button>} {!mine && !message.recalled && <button onClick={() => { setCorrectionMode({ active: true, message: message, text: message.text }); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><Pencil size={18} /> 改错</button>} {mine && !message.recalled && <button onClick={() => { handleRecallMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full"><RotateCcw size={18} /> 撤回</button>} {mine && <button onClick={() => { handleDeleteMessage(message); onClose(); }} className="flex items-center gap-3 px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md w-full text-red-500"><Trash2 size={18} /> 删除</button>} </div> </div> );
   };
 
   const MessageRow = ({ message }) => {
@@ -312,43 +320,45 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); };
     const handleTouchEnd = () => { clearTimeout(longPressTimer.current); };
     
-    const messageStyle = {
-      fontSize: `${cfg.fontSize}px`,
-      fontWeight: cfg.fontWeight
-    };
-
-    const bubbleStyle = mine ? {
-      backgroundColor: cfg.theme.bubbleColor,
-      color: cfg.theme.textColor,
-    } : {};
+    const photoURL = mine ? (user?.photoURL || '/img/avatar.svg') : (peerUser?.photoURL || '/img/avatar.svg');
+    
+    const messageStyle = { fontSize: `${cfg.fontSize}px`, fontWeight: cfg.fontWeight };
+    const bubbleStyle = mine ? { backgroundColor: cfg.theme.bubbleColor, color: cfg.theme.textColor } : {};
+    
+    // ✅ 新增：时间戳显示
+    const timestamp = formatTimestamp(message.createdAt);
 
     return (
-      <div className={`flex items-end gap-2 my-2 ${mine ? "flex-row-reverse" : ""}`}>
-        <img src={message.photoURL || '/img/avatar.svg'} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
-        <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
-          <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} style={bubbleStyle} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-md ${mine ? "rounded-br-none" : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none"}`}>
-            {message.recalled ? (
-              <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p>
-            ) : message.correction ? (
-              <div className="space-y-1">
-                <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
-                <p className="whitespace-pre-wrap break-words text-green-600 dark:text-green-400" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
-              </div>
-            ) : (
-              <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
-            )}
-            {translationResult && translationResult.messageId === message.id && (
-              <div className="mt-2 pt-2 border-t border-gray-500/30">
-                <p className="text-sm opacity-90 whitespace-pre-wrap" style={{fontWeight: 'normal'}}>{translationResult.text}</p>
-              </div>
+      <div className={`flex flex-col items-start gap-1 my-2 ${mine ? "items-end" : ""}`}>
+        <div className={`flex items-end gap-2 w-full ${mine ? "flex-row-reverse" : ""}`}>
+          <img src={photoURL} alt="avatar" className="w-8 h-8 rounded-full mb-1 flex-shrink-0" />
+          <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
+            <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onContextMenu={(e) => { e.preventDefault(); setLongPressedMessage(message); }} style={bubbleStyle} className={`relative max-w-[70vw] sm:max-w-[70%] px-4 py-2 rounded-2xl shadow-md ${mine ? "rounded-br-none" : "bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none"}`}>
+              {message.recalled ? (
+                <p className="whitespace-pre-wrap break-words italic opacity-70 text-sm">此消息已被撤回</p>
+              ) : message.correction ? (
+                <div className="space-y-1">
+                  <p className="whitespace-pre-wrap break-words opacity-60 line-through" style={messageStyle}><PinyinText text={message.correction.originalText} showPinyin={showPinyinFor === message.id} /></p>
+                  <p className="whitespace-pre-wrap break-words text-green-600 dark:text-green-400" style={messageStyle}><Check size={16} className="inline mr-1"/> <PinyinText text={message.correction.correctedText} showPinyin={showPinyinFor === message.id} /></p>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap break-words" style={messageStyle}><PinyinText text={message.text} showPinyin={showPinyinFor === message.id} /></p>
+              )}
+              {translationResult && translationResult.messageId === message.id && (
+                <div className="mt-2 pt-2 border-t border-gray-500/30">
+                  <p className="text-sm opacity-90 whitespace-pre-wrap" style={{fontWeight: 'normal'}}>{translationResult.text}</p>
+                </div>
+              )}
+            </div>
+            {!mine && !message.recalled && (
+                <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
+                    <CircleTranslateIcon />
+                </button>
             )}
           </div>
-          {!mine && !message.recalled && (
-              <button onClick={() => handleTranslateMessage(message)} className="self-end flex-shrink-0 active:scale-90 transition-transform duration-100" aria-label="翻译">
-                  <CircleTranslateIcon />
-              </button>
-          )}
         </div>
+        {/* ✅ UI修复：时间戳改为白色，并调整位置 */}
+        {timestamp && <div className={`text-xs text-white/80 px-2 ${mine ? 'mr-10' : 'ml-10'}`}>{timestamp}</div>}
       </div>
     );
   };
@@ -369,7 +379,10 @@ export default function PrivateChat({ peerUid, peerDisplayName, currentUser, onC
                 </motion.div>
             ) : (
                 <motion.div key="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-between w-full">
-                    <div className="w-10"></div>
+                    {/* ✅ 修改：增加返回按钮 */}
+                    <button onClick={onClose} className="p-2 -ml-2 text-white drop-shadow-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
                     <h1 className="font-bold text-lg text-white drop-shadow-md absolute left-1/2 -translate-x-1/2 truncate max-w-[50%]">{peerDisplayName || "聊天"}</h1>
                     <div className="flex items-center gap-1">
                         <button onClick={() => setSearchActive(true)} className="p-2 text-white drop-shadow-md"><Search /></button>
