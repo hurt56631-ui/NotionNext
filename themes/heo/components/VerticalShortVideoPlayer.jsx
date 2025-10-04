@@ -1,6 +1,6 @@
 // themes/heo/components/VerticalShortVideoPlayer.jsx
 // 功能：全屏竖版短视频/图片流（上下文整页切换）+ 边播边缓存 + 交互优化
-// 版本：3.1 (根据用户需求进行交互和布局重构)
+// 版本：3.2 (修复手势切换 & 优化动画流畅度)
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useDrag } from '@use-gesture/react';
@@ -118,7 +118,7 @@ export default function VerticalShortVideoPlayer({
             setApiStatus(prev => ({ ...prev, [originalUrl]: { failures: (prev[originalUrl]?.failures || 0) + 1 } }));
             return null;
         }
-    }, [getRandomAPI]);
+    }, [getRandomAPI, apiStatus]); // apiStatus 依赖项修正
 
     const fillMediaQueue = useCallback(async () => {
         const needed = cacheSize - (mediaQueue.length - page);
@@ -230,23 +230,29 @@ export default function VerticalShortVideoPlayer({
         }
     };
 
-    // ✅ 手势处理简化：移除长按，只保留单击和滑动
-    const bind = useDrag(({ tap, last, movement: [, my], velocity: [, vy], direction: [, dy] }) => {
-        // 1. 处理单击
+    // ✅ 修复手势 & 提高灵敏度
+    const bind = useDrag(({ down, tap, last, movement: [, my], velocity: [, vy], direction: [, dy] }) => {
+        // 1. 处理单击事件
         if (tap) {
             handleScreenTap();
             return;
         }
 
         // 2. 处理滑动切换
-        if (last && (Math.abs(my) > window.innerHeight / 4 || (vy > 0.5 && dy !== 0))) {
-            paginate(my < 0 ? 1 : -1);
+        // 提高灵敏度：滑动超过80px或速度足够快时触发
+        const triggerDistance = 80; 
+        const triggerVelocity = 0.4;
+
+        // 在手指离开屏幕时，判断是否满足切换条件
+        if (!down && last && (Math.abs(my) > triggerDistance || (vy > triggerVelocity && dy !== 0))) {
+            paginate(my < 0 ? 1 : -1); // my < 0 是上滑，my > 0 是下滑
         }
     }, {
         axis: 'y',
         filterTaps: true,
         taps: true,
-        threshold: 20,
+        // 降低开始拖动的阈值，让手势响应更快
+        threshold: 10,
     });
 
     const currentMedia = mediaQueue[page];
@@ -265,7 +271,8 @@ export default function VerticalShortVideoPlayer({
                         initial="enter"
                         animate="center"
                         exit="exit"
-                        transition={{ y: { type: 'spring', stiffness: 350, damping: 40 }, opacity: { duration: 0.2 } }}
+                        // ✅ 优化切换动画，使其更流畅
+                        transition={{ y: { type: 'spring', stiffness: 300, damping: 30 }, opacity: { duration: 0.25 } }}
                         className="absolute inset-0 w-full h-full"
                      >
                         {currentMedia.type === 'video' ? (
@@ -318,7 +325,7 @@ export default function VerticalShortVideoPlayer({
                 )}
             </AnimatePresence>
 
-            {/* ✅ 修改：按钮移至右侧，仿抖音布局 */}
+            {/* 按钮移至右侧，仿抖音布局 */}
             <motion.div
                 className="absolute top-1/2 right-3 -translate-y-1/2 z-30"
                 animate={{ opacity: showControls ? 1 : 0, x: showControls ? 0 : 20 }}
@@ -350,4 +357,4 @@ export default function VerticalShortVideoPlayer({
             </motion.div>
         </div>
     );
-                        }
+}
