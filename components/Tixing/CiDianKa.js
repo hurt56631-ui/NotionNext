@@ -1,6 +1,6 @@
-// components/Tixing/CiDianKa.js (V33 - Immersive Fullscreen & Click-to-Reveal)
+// components/Tixing/CiDianKa.js (V33.1 - Critical Bug Fix for Animation Library Conflict)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useTransition, animated, AnimatePresence } from '@react-spring/web';
+import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaRandom, FaSortAmountDown } from 'react-icons/fa';
@@ -125,7 +125,7 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
   return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动朗读</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayFront} onChange={(e) => handleSettingChange('autoPlayFront', e.target.checked)} /> 自动朗读单词</label><label><input type="checkbox" checked={settings.autoPlayOnReveal} onChange={(e) => handleSettingChange('autoPlayOnReveal', e.target.checked)} /> 点击时朗读释义</label></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动切换下一个单词</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoSwitchNext} onChange={(e) => handleSettingChange('autoSwitchNext', e.target.checked)} /> 5秒后自动切换</label></div></div></div></div>);
 };
 
-// ===================== 主组件 CiDianKa (V33) =====================
+// ===================== 主组件 CiDianKa (V33.1 - Bug Fix) =====================
 const CiDianKa = ({ flashcards = [] }) => {
   const [settings, setSettings] = useCardSettings();
   
@@ -141,7 +141,7 @@ const CiDianKa = ({ flashcards = [] }) => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [showStrokeOrder, setShowStrokeOrder] = useState(false);
-  const [isRevealed, setIsRevealed] = useState(false); // ✅ 新增: 控制释义显示
+  const [isRevealed, setIsRevealed] = useState(false);
   
   const recognitionRef = useRef(null);
   const autoSwitchTimerRef = useRef(null);
@@ -160,7 +160,7 @@ const CiDianKa = ({ flashcards = [] }) => {
     }
   }, [settings.autoSwitchNext, navigate, pauseAutoSwitch]);
 
-  const transitions = useTransition(currentIndex, {
+  const cardTransitions = useTransition(currentIndex, {
     from: (direction) => ({ opacity: 0, transform: `translateY(${direction > 0 ? '100%' : '-100%'}) scale(0.95)` }),
     enter: { opacity: 1, transform: 'translateY(0%) scale(1)' },
     leave: (direction) => ({ opacity: 0, transform: `translateY(${direction < 0 ? '100%' : '-100%'}) scale(0.95)`, position: 'absolute' }),
@@ -169,16 +169,22 @@ const CiDianKa = ({ flashcards = [] }) => {
     onRest: () => { setRecognizedText(''); setShowStrokeOrder(false); setIsRevealed(false); },
   });
 
+  // ✅ 修复: 使用 useTransition 来管理释义动画
+  const detailsTransitions = useTransition(isRevealed, {
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    enter: { opacity: 1, transform: 'translateY(0px)' },
+    leave: { opacity: 0, transform: 'translateY(20px)' },
+    config: { tension: 300, friction: 30 },
+  });
+
   const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], tap, event }) => {
     if (event.target.closest('[data-no-gesture]')) return;
     
-    // ✅ 单击事件，用于显示/隐藏释义
     if (tap) {
       setIsRevealed(r => !r);
       return;
     }
     
-    // ✅ 滑动事件，用于切换单词
     if (!down) {
       const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 20);
       if (isSignificantDrag) {
@@ -187,7 +193,6 @@ const CiDianKa = ({ flashcards = [] }) => {
     }
   }, { axis: 'y', filterTaps: true, taps: true });
 
-  // ✅ 自动朗读单词
   useEffect(() => {
     const currentCard = cards[currentIndex];
     if (settings.autoPlayFront && currentCard) {
@@ -196,7 +201,6 @@ const CiDianKa = ({ flashcards = [] }) => {
     }
   }, [currentIndex, cards, settings.autoPlayFront]);
 
-  // ✅ 点击显示释义时，朗读释义
   useEffect(() => {
     if (isRevealed && settings.autoPlayOnReveal) {
         const currentCard = cards[currentIndex];
@@ -209,13 +213,11 @@ const CiDianKa = ({ flashcards = [] }) => {
     }
   }, [isRevealed, currentIndex, cards, settings.autoPlayOnReveal]);
 
-
   useEffect(() => {
     resetAutoSwitchTimer();
     return pauseAutoSwitch;
   }, [currentIndex, resetAutoSwitchTimer, pauseAutoSwitch]);
   
-  // ✅ 新增: 沉浸式全屏
   useEffect(() => {
     const elem = document.documentElement;
     const enterFullscreen = () => {
@@ -276,7 +278,7 @@ const CiDianKa = ({ flashcards = [] }) => {
       
       <div style={styles.gestureArea} {...bind()} />
 
-      {transitions((style, i) => {
+      {cardTransitions((style, i) => {
         const cardData = cards[i];
         if (!cardData) return null;
         const backgroundStyle = getBgStyle(currentBg);
@@ -288,16 +290,9 @@ const CiDianKa = ({ flashcards = [] }) => {
                     <div style={styles.mainContent}>
                       <div style={styles.header}><div style={pinyinStyle}>{cardData.pinyin}</div><div style={hanziStyle}>{cardData.word}</div></div>
                       
-                      {/* 释义和例句容器 */}
-                      <AnimatePresence>
-                        {isRevealed && (
-                           <animated.div
-                            style={styles.detailsContainer}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            transition={{ duration: 0.4 }}
-                           >
+                      {detailsTransitions((detailsStyle, item) => 
+                        item && (
+                           <animated.div style={{ ...styles.detailsContainer, ...detailsStyle }}>
                                 <div style={styles.meaningSection}>
                                     <SmartTextRenderer text={cardData.meaning} style={detailsTextStyle} />
                                 </div>
@@ -307,8 +302,8 @@ const CiDianKa = ({ flashcards = [] }) => {
                                     </div>
                                 )}
                            </animated.div>
-                        )}
-                      </AnimatePresence>
+                        )
+                      )}
 
                       <StrokeOrderDisplay word={cardData.word} isVisible={showStrokeOrder} />
                       {isListening && <div style={styles.listeningText}>正在听...</div>}
