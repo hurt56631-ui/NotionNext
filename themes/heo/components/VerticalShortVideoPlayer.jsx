@@ -1,14 +1,15 @@
 // themes/heo/components/VerticalShortVideoPlayer.jsx
-// 最终优化版：极致流畅的全屏竖版短视频/图片流
-// 新增：即时缓冲反馈 + “跟手”滑动动画 + 健壮的错误处理
+// 最终毕业版：极致流畅 + 图片支持 + 超灵敏手势
+// 新增：智能媒体类型检测、图片API源、图片自动播放、手势灵敏度调优
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useDrag } from '@use-gesture/react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
-import { FaVolumeMute, FaVolumeUp, FaUndo, FaPlay, FaForward, FaWifi } from 'react-icons/fa';
+import { FaVolumeMute, FaVolumeUp, FaUndo, FaPlay, FaForward, FaWifi } from 'framer-motion';
 
-// 内置的 API 列表 (作为备用)
+// --- ✅ 优化：新增多个图片API，确保图片内容 ---
 const DEFAULT_APIS = [...new Set([
+    // 视频 API
     'http://api.xingchenfu.xyz/API/hssp.php', 'http://api.xingchenfu.xyz/API/wmsc.php',
     'http://api.xingchenfu.xyz/API/tianmei.php', 'http://api.xingchenfu.xyz/API/cdxl.php',
     'http://api.xingchenfu.xyz/API/yzxl.php', 'http://api.xingchenfu.xyz/API/rwsp.php',
@@ -16,17 +17,15 @@ const DEFAULT_APIS = [...new Set([
     'http://api.xingchenfu.xyz/API/zzxjj.php', 'http://api.xingchenfu.xyz/API/qttj.php',
     'http://api.xingchenfu.xyz/API/xqtj.php', 'http://api.xingchenfu.xyz/API/sktj.php',
     'http://api.xingchenfu.xyz/API/cossp.php', 'http://api.xingchenfu.xyz/API/xiaohulu.php',
-    'http://api.xingchenfu.xyz/API/manhuay.php', 'http://api.xingchenfu.xyz/API/bianzhuang.php',
-    'http://api.xingchenfu.xyz/API/jk.php', 'https://v2.xxapi.cn/api/meinv?return=302',
-    'https://api.jkyai.top/API/jxhssp.php', 'https://api.jkyai.top/API/jxbssp.php',
-    'https://api.jkyai.top/API/rmtmsp/api.php', 'https://api.jkyai.top/API/qcndxl.php',
-    'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php', 'http://api.xingchenfu.xyz/API/wsb.php',
-    'http://api.xingchenfu.xyz/API/dlzp.php', 'http://api.xingchenfu.xyz/API/xgg.php',
-    'http://api.xingchenfu.xyz/API/sbkl.php', 'http://api.xingchenfu.xyz/API/ommn.php',
-    'http://api.xingchenfu.xyz/API/cxldb.php', 'http://api.xingchenfu.xyz/API/xqyl.php',
-    'http://api.xingchenfu.xyz/API/hstp.php', 'http://api.xingchenfu.xyz/API/boy.php',
-    'http://api.xingchenfu.xyz/API/ndym.php', 'http://api.xingchenfu.xyz/API/gzlxjj.php',
+    'https://v2.xxapi.cn/api/meinv?return=32', 'https://api.jkyai.top/API/jxhssp.php',
+    'https://api.jkyai.top/API/jxbssp.php', 'https://api.jkyai.top/API/rmtmsp/api.php',
+    'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php',
+    // 图片 API
+    'https://api.btstu.cn/sjbz/api.php', // 随机壁纸
+    'https://www.dmoe.cc/random.php', // 随机动漫壁纸
+    'https://api.lolicon.app/setu/v2?size=regular&r18=0', // 随机二次元图片
     'http://api.xingchenfu.xyz/API/youhuotu.php',
+    'http://api.xingchenfu.xyz/API/hstp.php'
 ])];
 
 const EXTERNAL_API_LIST_URL = 'https://tiktok.999980.xyz/index.txt';
@@ -37,11 +36,7 @@ const variants = {
         y: direction > 0 ? '100%' : '-100%',
         opacity: 0
     }),
-    center: {
-        zIndex: 1,
-        y: '0%',
-        opacity: 1
-    },
+    center: { zIndex: 1, y: '0%', opacity: 1 },
     exit: (direction) => ({
         zIndex: 0,
         y: direction < 0 ? '100%' : '-100%',
@@ -65,8 +60,8 @@ const fetchWithRetry = async (fn, retries = 3) => {
 
 // 主组件
 export default function VerticalShortVideoPlayer({
-    cacheSize = 12, // 增加缓存，让体验更丝滑
-    preloadThreshold = 5, // 提前更多进行预加载
+    cacheSize = 12,
+    preloadThreshold = 5,
     useProxy = false,
     proxyPath = process.env.NEXT_PUBLIC_PROXY_PATH || '/api/proxy'
 }) {
@@ -80,15 +75,11 @@ export default function VerticalShortVideoPlayer({
     const [isLoading, setIsLoading] = useState(true);
     const [isPaused, setIsPaused] = useState(false);
     const [showControls, setShowControls] = useState(true);
-    
-    // --- 新增状态 ---
-    const [isBuffering, setIsBuffering] = useState(false); // 用于处理滑到末尾时的加载状态
-    const [fetchError, setFetchError] = useState(null); // 用于处理加载失败
+    const [isBuffering, setIsBuffering] = useState(false);
+    const [fetchError, setFetchError] = useState(null);
 
     const mediaRefs = useRef({});
     const hideControlsTimeout = useRef(null);
-
-    // --- 新增：用于“跟手”动画 ---
     const dragY = useMotionValue(0);
     const scale = useTransform(dragY, [0, window.innerHeight], [1, 0.8]);
 
@@ -121,9 +112,18 @@ export default function VerticalShortVideoPlayer({
 
     const buildSrc = useCallback((url) => (useProxy ? `${proxyPath}?url=${encodeURIComponent(url)}` : url), [useProxy, proxyPath]);
 
-    const getContentTypeFromUrl = (url) => {
-        if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) return 'video';
+    // --- ✅ 修复：更健壮的媒体类型检测，优先使用 Content-Type ---
+    const getMediaType = (url, headers) => {
+        const contentType = headers.get('Content-Type');
+        if (contentType) {
+            if (contentType.startsWith('image/')) return 'image';
+            if (contentType.startsWith('video/')) return 'video';
+        }
+        // 当 Content-Type 不明确时，回退到URL后缀判断
         if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url)) return 'image';
+        if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) return 'video';
+        
+        // 默认认为是视频，兼容大部分API
         return 'video';
     };
 
@@ -134,20 +134,25 @@ export default function VerticalShortVideoPlayer({
             const response = await fetch(getRandomAPI(), { signal: controller.signal });
             clearTimeout(timeoutId);
             if (!response.ok) return null;
+
             const finalUrl = response.url;
-            if (!finalUrl.match(/\.(mp4|mov|webm|jpg|jpeg|png|gif|webp)(\?|$)/i)) return null;
-            const contentType = response.headers.get('Content-Type');
-            if (contentType && (contentType.includes('text/html') || contentType.includes('application/json'))) return null;
-            const type = getContentTypeFromUrl(finalUrl);
+            // 使用新的、更准确的类型检测函数
+            const type = getMediaType(finalUrl, response.headers);
+
+            // 再次过滤掉非媒体内容
+            const finalContentType = response.headers.get('Content-Type');
+            if (finalContentType && (finalContentType.includes('text/html') || finalContentType.includes('application/json'))) {
+                return null;
+            }
+
             return { id: Date.now() + Math.random(), url: finalUrl, type };
         };
         return fetchWithRetry(fetchFn);
     }, [getRandomAPI]);
 
-    // --- 修改：填充媒体队列，增加错误处理和缓冲状态 ---
     const fillMediaQueue = useCallback(async () => {
         const needed = cacheSize - (mediaQueue.length - page);
-        if (needed <= 0) return true; // 返回true表示队列充足
+        if (needed <= 0) return true;
 
         const promises = Array.from({ length: needed }, fetchMedia);
         const results = await Promise.all(promises);
@@ -155,30 +160,37 @@ export default function VerticalShortVideoPlayer({
 
         if (newMedia.length > 0) {
             setMediaQueue(prev => [...prev, ...newMedia]);
-            setFetchError(null); // 成功获取，清除错误
+            setFetchError(null);
             return true;
         } else if (mediaQueue.length === 0) {
-            // 如果首次加载就完全失败
             setFetchError('无法加载媒体资源，请检查网络连接或刷新重试。');
             return false;
         }
-        return mediaQueue.length > 0; // 如果已有媒体但未获取到新的，也算成功
+        return mediaQueue.length > 0;
     }, [cacheSize, mediaQueue.length, page, fetchMedia]);
 
     const tryFillQueue = useCallback(async () => {
         setIsBuffering(true);
         setFetchError(null);
-        const success = await fillMediaQueue();
-        if (!success && mediaQueue.length === 0) {
-            // 如果队列为空且填充失败，显示错误
-        }
+        await fillMediaQueue();
         setIsBuffering(false);
-    }, [fillMediaQueue, mediaQueue.length]);
+    }, [fillMediaQueue]);
 
     useEffect(() => {
         tryFillQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const paginate = useCallback((newDirection) => {
+        const newPage = page + newDirection;
+        if (newPage < 0) return;
+        if (newPage >= mediaQueue.length) {
+            tryFillQueue();
+            return;
+        }
+        setPage([newPage, newDirection]);
+        dragY.set(0);
+    }, [page, mediaQueue.length, tryFillQueue, dragY]);
 
     // 资源回收
     useEffect(() => {
@@ -190,6 +202,7 @@ export default function VerticalShortVideoPlayer({
         });
     }, [mediaQueue]);
 
+    // 播放/预加载/图片自动播放 核心逻辑
     useEffect(() => {
         if (mediaQueue.length === 0) return;
         const currentItem = mediaQueue[page];
@@ -210,32 +223,34 @@ export default function VerticalShortVideoPlayer({
                 setIsLoading(false);
             }
         }
+        
+        // --- ✅ 新增：图片自动播放逻辑 ---
+        let imageTimeoutId = null;
+        if (currentItem.type === 'image' && autoPlayNext) {
+            imageTimeoutId = setTimeout(() => {
+                paginate(1);
+            }, 5000); // 图片停留5秒
+        }
 
+        // 预加载
         if (mediaQueue.length > 0 && mediaQueue.length - page <= preloadThreshold) {
-            fillMediaQueue(); // 在后台静默填充
+            fillMediaQueue();
         }
-    }, [page, mediaQueue, preloadThreshold, fillMediaQueue]);
 
-    // --- 修改：翻页逻辑，处理缓冲状态 ---
-    const paginate = (newDirection) => {
-        const newPage = page + newDirection;
-        if (newPage < 0) return;
-        if (newPage >= mediaQueue.length) {
-            tryFillQueue(); // 滑到末尾，触发带加载状态的填充
-            return;
-        }
-        setPage([newPage, newDirection]);
-        dragY.set(0); // 切换后重置拖动值
-    };
-
+        return () => {
+            if (imageTimeoutId) clearTimeout(imageTimeoutId);
+        };
+    }, [page, mediaQueue, autoPlayNext, preloadThreshold, fillMediaQueue, paginate]);
+    
+    // --- ✅ 优化：手势灵敏度提升 ---
     const bind = useDrag(({ down, last, movement: [, my], velocity: [, vy], direction: [, dy] }) => {
         if (down) {
             dragY.set(my);
         } else {
-            if (last && (Math.abs(my) > window.innerHeight / 3.5 || (vy > 0.6 && dy !== 0))) {
+            // 降低滑动距离和速度阈值，让切换更容易触发
+            if (last && (Math.abs(my) > window.innerHeight / 4.5 || (vy > 0.5 && dy !== 0))) {
                 paginate(my < 0 ? 1 : -1);
             } else {
-                // 未达到阈值，弹回
                 motion.animate(dragY, 0, { type: 'spring', stiffness: 300, damping: 30 });
             }
         }
@@ -260,20 +275,20 @@ export default function VerticalShortVideoPlayer({
         const videoEl = mediaRefs.current[currentItem.id];
         if (videoEl) {
             if (videoEl.paused) {
-                videoEl.play();
-                setIsPaused(false);
+                videoEl.play(); setIsPaused(false);
             } else {
-                videoEl.pause();
-                setIsPaused(true);
+                videoEl.pause(); setIsPaused(true);
             }
         }
     };
 
     const handleMediaError = (id) => {
         console.error(`媒体 (ID: ${id}) 加载失败，将自动跳到下一个。`);
+        const currentPageId = mediaQueue[page]?.id;
         setMediaQueue(prev => prev.filter(item => item.id !== id));
-        if (page >= mediaQueue.length - 1) {
-             paginate(1);
+        // 如果失败的是当前页，立即翻页
+        if (id === currentPageId) {
+            paginate(1);
         }
     };
     
@@ -298,7 +313,7 @@ export default function VerticalShortVideoPlayer({
                         exit="exit"
                         transition={{ y: { type: 'spring', stiffness: 350, damping: 40 }, opacity: { duration: 0.2 } }}
                         className="absolute inset-0 w-full h-full"
-                        style={{ y: dragY, scale }} // 应用“跟手”动画
+                        style={{ y: dragY, scale }}
                         onClick={(e) => {
                             e.stopPropagation();
                             handleInteraction();
@@ -331,15 +346,13 @@ export default function VerticalShortVideoPlayer({
                 )}
             </AnimatePresence>
 
-            {/* 加载动画 */}
             {(isLoading || isBuffering) && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 pointer-events-none z-20">
                     <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    {isBuffering && <p className="text-white mt-4">正在缓冲更多视频...</p>}
+                    {isBuffering && <p className="text-white mt-4">正在缓冲更多内容...</p>}
                 </div>
             )}
             
-            {/* 错误提示 */}
             {fetchError && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-40" onClick={tryFillQueue}>
                     <FaWifi className="text-white/80 text-5xl mb-4" />
@@ -354,7 +367,6 @@ export default function VerticalShortVideoPlayer({
                 </div>
             )}
 
-            {/* 底部控制栏 */}
             <AnimatePresence>
                 {showControls && (
                     <motion.div
