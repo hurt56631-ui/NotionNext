@@ -1,7 +1,7 @@
 // pages/DiscoverPageContent.js
 
 import React, { useState } from 'react';
-import { LayoutBase } from '@/themes/heo'; // 假设你的基础布局组件在这里
+import { LayoutBase } from '@/themes/heo'; // 假设你的基础布局组件这里
 import { Loader2, Link, PlayCircle } from 'lucide-react'; // 引入一些图标
 
 // 视频播放器组件
