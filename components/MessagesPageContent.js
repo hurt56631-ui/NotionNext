@@ -1,6 +1,6 @@
 // /components/MessagesPageContent.js (修改版 - 已应用所有新需求)
 
-import React, 'useState', useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db, rtDb } from '@/lib/firebase';
