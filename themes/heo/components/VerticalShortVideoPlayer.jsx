@@ -1,13 +1,12 @@
 // themes/heo/components/VerticalShortVideoPlayer.jsx
-// 最终毕业版：极致流畅 + 图片支持 + 超灵敏手势
-// 新增：智能媒体类型检测、图片API源、图片自动播放、手势灵敏度调优
+// 最终毕业版 v1.1 (SSR 修复)：修复了 "window is not defined" 的构建错误
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useDrag } from '@use-gesture/react';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
-import { FaVolumeMute, FaVolumeUp, FaUndo, FaPlay, FaForward, FaWifi } from 'framer-motion';
+import { FaVolumeMute, FaVolumeUp, FaUndo, FaPlay, FaForward, FaWifi } from 'react-icons/fa';
 
-// --- ✅ 优化：新增多个图片API，确保图片内容 ---
+// API 列表
 const DEFAULT_APIS = [...new Set([
     // 视频 API
     'http://api.xingchenfu.xyz/API/hssp.php', 'http://api.xingchenfu.xyz/API/wmsc.php',
@@ -17,13 +16,13 @@ const DEFAULT_APIS = [...new Set([
     'http://api.xingchenfu.xyz/API/zzxjj.php', 'http://api.xingchenfu.xyz/API/qttj.php',
     'http://api.xingchenfu.xyz/API/xqtj.php', 'http://api.xingchenfu.xyz/API/sktj.php',
     'http://api.xingchenfu.xyz/API/cossp.php', 'http://api.xingchenfu.xyz/API/xiaohulu.php',
-    'https://v2.xxapi.cn/api/meinv?return=32', 'https://api.jkyai.top/API/jxhssp.php',
+    'https://v2.xxapi.cn/api/meinv?return=302', 'https://api.jkyai.top/API/jxhssp.php',
     'https://api.jkyai.top/API/jxbssp.php', 'https://api.jkyai.top/API/rmtmsp/api.php',
     'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php',
     // 图片 API
-    'https://api.btstu.cn/sjbz/api.php', // 随机壁纸
-    'https://www.dmoe.cc/random.php', // 随机动漫壁纸
-    'https://api.lolicon.app/setu/v2?size=regular&r18=0', // 随机二次元图片
+    'https://api.btstu.cn/sjbz/api.php',
+    'https://www.dmoe.cc/random.php',
+    'https://api.lolicon.app/setu/v2?size=regular&r18=0',
     'http://api.xingchenfu.xyz/API/youhuotu.php',
     'http://api.xingchenfu.xyz/API/hstp.php'
 ])];
@@ -32,16 +31,9 @@ const EXTERNAL_API_LIST_URL = 'https://tiktok.999980.xyz/index.txt';
 
 // 定义页面切换动画
 const variants = {
-    enter: (direction) => ({
-        y: direction > 0 ? '100%' : '-100%',
-        opacity: 0
-    }),
+    enter: (direction) => ({ y: direction > 0 ? '100%' : '-100%', opacity: 0 }),
     center: { zIndex: 1, y: '0%', opacity: 1 },
-    exit: (direction) => ({
-        zIndex: 0,
-        y: direction < 0 ? '100%' : '-100%',
-        opacity: 0
-    })
+    exit: (direction) => ({ zIndex: 0, y: direction < 0 ? '100%' : '-100%', opacity: 0 })
 };
 
 // 智能重试函数
@@ -69,7 +61,15 @@ export default function VerticalShortVideoPlayer({
     const [mediaQueue, setMediaQueue] = useState([]);
     const [[page, direction], setPage] = useState([0, 0]);
     
-    // 状态管理
+    // --- ✅ 修复：将对 window 对象的访问移至 useEffect ---
+    const [windowHeight, setWindowHeight] = useState(1000); // 为服务器端渲染提供一个默认高度
+
+    useEffect(() => {
+        // 这个 effect 只会在客户端执行，此时 window 对象是可用的
+        setWindowHeight(window.innerHeight);
+    }, []); // 空依赖数组确保只运行一次
+    
+    // 状态管理 (此处的 localStorage 写法是安全的，因为它在 useState 的 lazy initializer 中)
     const [isMuted, setIsMuted] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('short-video-isMuted') === 'true' : true);
     const [autoPlayNext, setAutoPlayNext] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('short-video-autoPlayNext') !== 'false' : true);
     const [isLoading, setIsLoading] = useState(true);
@@ -81,7 +81,8 @@ export default function VerticalShortVideoPlayer({
     const mediaRefs = useRef({});
     const hideControlsTimeout = useRef(null);
     const dragY = useMotionValue(0);
-    const scale = useTransform(dragY, [0, window.innerHeight], [1, 0.8]);
+    // --- ✅ 修复：使用 state 中的 windowHeight 而不是直接访问 window.innerHeight ---
+    const scale = useTransform(dragY, [0, windowHeight], [1, 0.8]);
 
     // 从外部 TXT 加载 API 列表
     useEffect(() => {
@@ -102,8 +103,8 @@ export default function VerticalShortVideoPlayer({
     }, []);
 
     // 状态持久化
-    useEffect(() => { localStorage.setItem('short-video-isMuted', isMuted); }, [isMuted]);
-    useEffect(() => { localStorage.setItem('short-video-autoPlayNext', autoPlayNext); }, [autoPlayNext]);
+    useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('short-video-isMuted', isMuted); }, [isMuted]);
+    useEffect(() => { if (typeof window !== 'undefined') localStorage.setItem('short-video-autoPlayNext', autoPlayNext); }, [autoPlayNext]);
 
     const getRandomAPI = useCallback(() => {
         const raw = apiList[Math.floor(Math.random() * apiList.length)];
@@ -112,18 +113,14 @@ export default function VerticalShortVideoPlayer({
 
     const buildSrc = useCallback((url) => (useProxy ? `${proxyPath}?url=${encodeURIComponent(url)}` : url), [useProxy, proxyPath]);
 
-    // --- ✅ 修复：更健壮的媒体类型检测，优先使用 Content-Type ---
     const getMediaType = (url, headers) => {
         const contentType = headers.get('Content-Type');
         if (contentType) {
             if (contentType.startsWith('image/')) return 'image';
             if (contentType.startsWith('video/')) return 'video';
         }
-        // 当 Content-Type 不明确时，回退到URL后缀判断
         if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url)) return 'image';
         if (/\.(mp4|mov|webm)(\?|$)/i.test(url)) return 'video';
-        
-        // 默认认为是视频，兼容大部分API
         return 'video';
     };
 
@@ -134,17 +131,12 @@ export default function VerticalShortVideoPlayer({
             const response = await fetch(getRandomAPI(), { signal: controller.signal });
             clearTimeout(timeoutId);
             if (!response.ok) return null;
-
             const finalUrl = response.url;
-            // 使用新的、更准确的类型检测函数
             const type = getMediaType(finalUrl, response.headers);
-
-            // 再次过滤掉非媒体内容
             const finalContentType = response.headers.get('Content-Type');
             if (finalContentType && (finalContentType.includes('text/html') || finalContentType.includes('application/json'))) {
                 return null;
             }
-
             return { id: Date.now() + Math.random(), url: finalUrl, type };
         };
         return fetchWithRetry(fetchFn);
@@ -153,7 +145,6 @@ export default function VerticalShortVideoPlayer({
     const fillMediaQueue = useCallback(async () => {
         const needed = cacheSize - (mediaQueue.length - page);
         if (needed <= 0) return true;
-
         const promises = Array.from({ length: needed }, fetchMedia);
         const results = await Promise.all(promises);
         const newMedia = results.filter(Boolean);
@@ -192,17 +183,13 @@ export default function VerticalShortVideoPlayer({
         dragY.set(0);
     }, [page, mediaQueue.length, tryFillQueue, dragY]);
 
-    // 资源回收
     useEffect(() => {
         const currentQueueIds = new Set(mediaQueue.map(item => item.id));
         Object.keys(mediaRefs.current).forEach(id => {
-            if (!currentQueueIds.has(parseFloat(id))) {
-                delete mediaRefs.current[id];
-            }
+            if (!currentQueueIds.has(parseFloat(id))) delete mediaRefs.current[id];
         });
     }, [mediaQueue]);
 
-    // 播放/预加载/图片自动播放 核心逻辑
     useEffect(() => {
         if (mediaQueue.length === 0) return;
         const currentItem = mediaQueue[page];
@@ -224,31 +211,24 @@ export default function VerticalShortVideoPlayer({
             }
         }
         
-        // --- ✅ 新增：图片自动播放逻辑 ---
         let imageTimeoutId = null;
         if (currentItem.type === 'image' && autoPlayNext) {
-            imageTimeoutId = setTimeout(() => {
-                paginate(1);
-            }, 5000); // 图片停留5秒
+            imageTimeoutId = setTimeout(() => paginate(1), 5000);
         }
 
-        // 预加载
         if (mediaQueue.length > 0 && mediaQueue.length - page <= preloadThreshold) {
             fillMediaQueue();
         }
 
-        return () => {
-            if (imageTimeoutId) clearTimeout(imageTimeoutId);
-        };
+        return () => { if (imageTimeoutId) clearTimeout(imageTimeoutId); };
     }, [page, mediaQueue, autoPlayNext, preloadThreshold, fillMediaQueue, paginate]);
     
-    // --- ✅ 优化：手势灵敏度提升 ---
     const bind = useDrag(({ down, last, movement: [, my], velocity: [, vy], direction: [, dy] }) => {
         if (down) {
             dragY.set(my);
         } else {
-            // 降低滑动距离和速度阈值，让切换更容易触发
-            if (last && (Math.abs(my) > window.innerHeight / 4.5 || (vy > 0.5 && dy !== 0))) {
+            // --- ✅ 修复：使用 state 中的 windowHeight ---
+            if (last && (Math.abs(my) > windowHeight / 4.5 || (vy > 0.5 && dy !== 0))) {
                 paginate(my < 0 ? 1 : -1);
             } else {
                 motion.animate(dragY, 0, { type: 'spring', stiffness: 300, damping: 30 });
@@ -274,11 +254,8 @@ export default function VerticalShortVideoPlayer({
         if (!currentItem || currentItem.type !== 'video') return;
         const videoEl = mediaRefs.current[currentItem.id];
         if (videoEl) {
-            if (videoEl.paused) {
-                videoEl.play(); setIsPaused(false);
-            } else {
-                videoEl.pause(); setIsPaused(true);
-            }
+            if (videoEl.paused) { videoEl.play(); setIsPaused(false); }
+            else { videoEl.pause(); setIsPaused(true); }
         }
     };
 
@@ -286,10 +263,7 @@ export default function VerticalShortVideoPlayer({
         console.error(`媒体 (ID: ${id}) 加载失败，将自动跳到下一个。`);
         const currentPageId = mediaQueue[page]?.id;
         setMediaQueue(prev => prev.filter(item => item.id !== id));
-        // 如果失败的是当前页，立即翻页
-        if (id === currentPageId) {
-            paginate(1);
-        }
+        if (id === currentPageId) paginate(1);
     };
     
     const currentMedia = mediaQueue[page];
@@ -305,30 +279,20 @@ export default function VerticalShortVideoPlayer({
             <AnimatePresence initial={false} custom={direction}>
                 {currentMedia && (
                      <motion.div
-                        key={page}
-                        custom={direction}
-                        variants={variants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
+                        key={page} custom={direction} variants={variants}
+                        initial="enter" animate="center" exit="exit"
                         transition={{ y: { type: 'spring', stiffness: 350, damping: 40 }, opacity: { duration: 0.2 } }}
                         className="absolute inset-0 w-full h-full"
                         style={{ y: dragY, scale }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleInteraction();
-                            handleTogglePlay();
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleInteraction(); handleTogglePlay(); }}
                      >
                         {currentMedia.type === 'video' ? (
                             <video
                                 ref={el => { if (el) mediaRefs.current[currentMedia.id] = el; }}
                                 src={buildSrc(currentMedia.url)}
                                 className="w-full h-full object-cover bg-black"
-                                playsInline muted={isMuted} loop={!autoPlayNext}
-                                referrerPolicy="no-referrer"
-                                onCanPlay={() => setIsLoading(false)}
-                                onWaiting={() => setIsLoading(true)}
+                                playsInline muted={isMuted} loop={!autoPlayNext} referrerPolicy="no-referrer"
+                                onCanPlay={() => setIsLoading(false)} onWaiting={() => setIsLoading(true)}
                                 onEnded={() => { if (autoPlayNext) paginate(1); }}
                                 onError={() => handleMediaError(currentMedia.id)}
                             />
@@ -370,9 +334,7 @@ export default function VerticalShortVideoPlayer({
             <AnimatePresence>
                 {showControls && (
                     <motion.div
-                        initial={{ opacity: 0, y: '100%' }}
-                        animate={{ opacity: 1, y: '0%' }}
-                        exit={{ opacity: 0, y: '100%' }}
+                        initial={{ opacity: 0, y: '100%' }} animate={{ opacity: 1, y: '0%' }} exit={{ opacity: 0, y: '100%' }}
                         transition={{ duration: 0.3, ease: 'easeInOut' }}
                         className="absolute bottom-0 left-0 right-0 p-4 pb-6 bg-gradient-to-t from-black/60 to-transparent z-30 flex items-center justify-center gap-5"
                         onClick={(e) => e.stopPropagation()}
@@ -386,7 +348,7 @@ export default function VerticalShortVideoPlayer({
                         <button onClick={() => paginate(1)} className="p-3 rounded-full bg-black/50 text-white backdrop-blur-sm">
                             <FaForward size={18}/>
                         </button>
-                        <button onClick={() => window.location.reload()} className="p-3 rounded-full bg-black/50 text-white backdrop-blur-sm">
+                        <button onClick={() => { if (typeof window !== 'undefined') window.location.reload(); }} className="p-3 rounded-full bg-black/50 text-white backdrop-blur-sm">
                             <FaUndo size={18}/>
                         </button>
                     </motion.div>
