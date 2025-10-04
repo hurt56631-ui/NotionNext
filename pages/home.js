@@ -5,12 +5,26 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 
 // 使用 next/dynamic 动态导入我们刚才创建的客户端组件
-// 关键在于 { ssr: false }，它告诉 Next.js 不要在服务器上渲染这个组件
-const DynamicHomePage = dynamic(() => import('../components/HomePageClient'), {
-  ssr: false,
-  // 可以在组件加载时显示一个 loading 状态
-  loading: () => <p>Loading...</p> 
-});
+// 通过 .then(mod => mod.default) 明确指定使用默认导出的组件
+// 这是修复 React Error #130 的关键
+const DynamicHomePage = dynamic(() => 
+  import('../components/HomePageClient').then(mod => mod.default), 
+  {
+    ssr: false,
+    // 可以在组件加载时显示一个更友好的 loading 状态
+    loading: () => (
+      <div style={{
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontFamily: 'sans-serif'
+      }}>
+        <p>正在加载页面...</p>
+      </div>
+    )
+  }
+);
 
 const Home = () => {
   return (
