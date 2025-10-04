@@ -25,7 +25,7 @@ const DEFAULT_APIS = [...new Set([
 ])];
 
 // --- 新增功能：外部 TXT 视频列表地址 ---
-//const TXT_VIDEO_LIST_URL = 'https://tiktok.999980.xyz/index.txt';
+const TXT_VIDEO_LIST_URL = 'https://tiktok.999980.xyz/index.txt';
 
 // 2. 页面切换动画（保持不变）
 const variants = {
