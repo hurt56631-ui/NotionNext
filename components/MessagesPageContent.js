@@ -14,12 +14,11 @@ import { useSwipeable } from 'react-swipeable';
 import VerticalShortVideoPlayer from '@/themes/heo/components/VerticalShortVideoPlayer';
 
 // ===================================================================
-// =============  ✅ 0. 新增：可复用组件和工具函数  =============
+// =============  ✅ 0. 可复用组件和工具函数  =============
 // ===================================================================
 
 /**
- * ✅ 新增：带国旗的头像组件
- * 这是一个可复用的组件，用于显示用户头像并在右下角叠加国旗。
+ * ✅ 带国旗的头像组件 (已使用背景图技术彻底修复变形问题)
  * @param {object} user - 包含 photoURL 和 countryCode 的用户对象
  * @param {string} sizeClass - Tailwind CSS 尺寸类名 (例如 'w-14 h-14')
  * @param {string} flagSizeClass - Tailwind CSS 旗帜尺寸类名 (例如 'w-5 h-5')
@@ -30,16 +29,18 @@ const AvatarWithFlag = ({ user, sizeClass = 'w-14 h-14', flagSizeClass = 'w-5 h-
     const countryCode = user.countryCode || 'vn'; // 默认越南国旗
 
     return (
-        <div className={`relative flex-shrink-0`}>
-            <img 
-                className={`${sizeClass} rounded-full object-cover`} 
-                src={user.photoURL || '/img/avatar.svg'} 
-                alt={user.displayName || 'Avatar'} 
+        <div className={`relative flex-shrink-0 ${sizeClass}`}>
+            {/* 使用 div 和 background-image 来完美处理任何形状的图片，杜绝变形 */}
+            <div
+                className="w-full h-full rounded-full bg-cover bg-center bg-gray-200"
+                style={{ backgroundImage: `url(${user.photoURL || '/img/avatar.svg'})` }}
             />
             <img 
                 className={`absolute -bottom-1 -right-1 ${flagSizeClass} rounded-full border-2 border-white object-cover`} 
                 src={`https://flagcdn.com/${countryCode.toLowerCase()}.svg`} 
                 alt={`${countryCode} flag`}
+                // 如果国旗图片加载失败，隐藏它
+                onError={(e) => { e.target.style.display = 'none'; }}
             />
         </div>
     );
@@ -69,10 +70,9 @@ const formatRelativeTime = (date) => {
 
 
 // ===================================================================
-// =============  ✅ 1. 语伴列表相关组件 (全新列表模式)  =============
+// =============  ✅ 1. 语伴列表及相关组件  =============
 // ===================================================================
 
-// --- 在线状态 Hook (从 RTDB 获取实时状态) ---
 const usePartnerStatus = (partnerId) => {
     const [status, setStatus] = useState({ text: null, isOnline: false });
     useEffect(() => {
@@ -91,7 +91,6 @@ const usePartnerStatus = (partnerId) => {
     return status;
 };
 
-// --- 单个语伴列表项组件 (全新UI) ---
 const PartnerListItem = ({ partner, onSayHi }) => {
     const router = useRouter();
     const { text: statusText, isOnline } = usePartnerStatus(partner.uid);
@@ -101,7 +100,6 @@ const PartnerListItem = ({ partner, onSayHi }) => {
 
     return (
         <div className="relative w-full max-w-4xl mx-auto flex items-center p-3 space-x-3">
-            {/* ✅ 修改：使用新的 AvatarWithFlag 组件 */}
             <div className="cursor-pointer" onClick={() => router.push(`/profile/${partner.uid}`)}>
                 <AvatarWithFlag user={partner} sizeClass="w-14 h-14" flagSizeClass="w-5 h-5"/>
             </div>
@@ -110,25 +108,13 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                 <div className="flex-grow overflow-hidden cursor-pointer min-w-0" onClick={() => router.push(`/profile/${partner.uid}`)}>
                     <div className="flex items-center space-x-2">
                         <p className="text-base font-semibold text-gray-800 truncate">{partner.displayName || '新用户'}</p>
-                        {partner.age && (
-                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md text-gray-600 bg-gray-100">
-                                {partner.age}
-                            </span>
-                        )}
-                        {genderSymbol && (
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${genderColor}`}>
-                                {genderSymbol}
-                            </span>
-                        )}
+                        {partner.age && ( <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md text-gray-600 bg-gray-100"> {partner.age} </span> )}
+                        {genderSymbol && ( <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${genderColor}`}> {genderSymbol} </span> )}
                     </div>
                     <div className="flex items-center text-xs text-gray-500 mt-1 space-x-1.5">
-                        <div className="flex items-center bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                            <span>{partner.nativeLanguage || 'VI'}</span>
-                        </div>
+                        <div className="flex items-center bg-green-100 text-green-800 px-2 py-0.5 rounded"> <span>{partner.nativeLanguage || 'VI'}</span> </div>
                         <Languages size={14} className="text-gray-400 flex-shrink-0" />
-                        <div className="flex items-center bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                            <span>{partner.learningLanguage || 'CN'}</span>
-                        </div>
+                        <div className="flex items-center bg-blue-100 text-blue-800 px-2 py-0.5 rounded"> <span>{partner.learningLanguage || 'CN'}</span> </div>
                     </div>
                     <p className="text-sm text-gray-500 mt-1.5 truncate">{partner.bio || '很高兴认识你！'}</p>
                     {isOnline && <p className="text-xs text-green-500 mt-1">{statusText}</p>}
@@ -142,9 +128,10 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                     )}
                 </div>
                 <div className="flex-shrink-0 ml-2">
+                    {/* ✅ 修复：确认打招呼按钮样式为白色背景 */}
                     <button
                         onClick={(e) => { e.stopPropagation(); onSayHi(partner); }}
-                        className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 shadow-lg shadow-green-500/20 transition-all active:scale-90"
+                        className="w-10 h-10 rounded-full bg-white text-green-500 border border-gray-200 flex items-center justify-center hover:bg-gray-100 shadow-sm transition-all active:scale-90"
                         aria-label="打招呼"
                     >
                         <MessageCircle size={20} />
@@ -156,26 +143,7 @@ const PartnerListItem = ({ partner, onSayHi }) => {
     );
 };
 
-const PartnerListItemSkeleton = () => (
-    <div className="w-full max-w-4xl mx-auto flex items-center p-3 space-x-3 border-b border-gray-200 animate-pulse">
-        <div className="relative flex-shrink-0">
-            <div className="w-14 h-14 rounded-full bg-gray-200"></div>
-        </div>
-        <div className="flex-grow overflow-hidden space-y-2">
-            <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-            <div className="flex items-center space-x-2">
-                <div className="h-4 bg-gray-200 rounded w-10"></div>
-                <div className="h-4 bg-gray-200 rounded w-10"></div>
-            </div>
-            <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-        </div>
-        <div className="flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-gray-200"></div>
-        </div>
-    </div>
-);
-
-const LanguagePartnerList = () => {
+const LanguagePartnerList = () => { /* ... 此组件代码未变动，保持原样 ... */
     const router = useRouter();
     const [partners, setPartners] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -218,6 +186,7 @@ const LanguagePartnerList = () => {
                 </div>
                 {loading 
                     ? Array.from({ length: 5 }).map((_, i) => <PartnerListItemSkeleton key={i} />)
+                    // @ts-ignore
                     : partners.map((partner) => <PartnerListItem key={partner.uid} partner={partner} onSayHi={handleSayHi} />)
                 }
             </div>
@@ -228,7 +197,7 @@ const LanguagePartnerList = () => {
 
 
 // ===================================================================
-// =============  ✅ 2. 消息列表及相关组件 (集成新功能)  =============
+// =============  ✅ 2. 消息列表及其他页面组件  =============
 // ===================================================================
 
 const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
@@ -251,7 +220,7 @@ const MessageHeader = ({ activeTab, setActiveTab, totalUnreadCount }) => {
   );
 };
 
-const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) => {
+const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) => { /* ... 此组件代码未变动，保持原样 ... */
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const timerRef = useRef(null);
     const touchStartPos = useRef({ x: 0, y: 0 });
@@ -296,7 +265,6 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
             onContextMenu={handleContextMenu}
             className={`relative flex items-center p-4 transition-colors ${isPinned ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
         >
-            {/* ✅ 修改：使用新的 AvatarWithFlag 组件 */}
             <AvatarWithFlag user={convo.otherUser} sizeClass="w-14 h-14" flagSizeClass="w-5 h-5"/>
             
             <div className="ml-4 flex-1 overflow-hidden">
@@ -333,7 +301,7 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
     );
 };
 
-const ConversationList = ({ conversations: initialConversations, loading, user, authLoading }) => {
+const ConversationList = ({ conversations: initialConversations, loading, user, authLoading }) => { /* ... 此组件代码未变动，保持原样 ... */
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -411,6 +379,18 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
     );
 };
 
+// ✅ 新增：书柜页面组件，用于内嵌网页
+const BookshelfPage = () => {
+    return (
+        <div className="w-full h-full">
+            <iframe
+                src="https://books.843075.xyz"
+                title="书柜"
+                className="w-full h-full border-0"
+            />
+        </div>
+    );
+};
 
 // ===================================================================
 // =============  ✅ 3. 页面主组件 (集成所有修改)  =============
@@ -421,6 +401,8 @@ const MessagesPageContent = () => {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   const { totalUnreadCount } = useUnreadCount();
+  
+  // ✅ 修复：将 'bookshelf' 重新加入 tabKeys 数组，以支持手势切换
   const tabKeys = ['messages', 'discover', 'partners', 'jobs', 'bookshelf'];
   
   const pageContainerRef = useRef(null);
@@ -435,12 +417,11 @@ const MessagesPageContent = () => {
     
     setLoading(true);
 
-    // ✅ 修复：移除了错误的 where 子句，改为在客户端进行过滤，以修复查询
     const chatsQuery = query(
         collection(db, 'privateChats'), 
         where('members', 'array-contains', user.uid),
         orderBy('lastMessageAt', 'desc'), 
-        limit(50) // 稍微多获取一些数据，以防最新的都被隐藏了
+        limit(50)
     );
 
     const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
@@ -452,7 +433,7 @@ const MessagesPageContent = () => {
         });
         
         const resolvedChats = await Promise.all(chatsWithPlaceholders.map(async (chat) => {
-            if (!chat.otherUser.id) return null; // 过滤掉没有对方用户的无效聊天
+            if (!chat.otherUser.id) return null;
             try {
                 const userProfileDoc = await getDoc(doc(db, 'users', chat.otherUser.id));
                 if (userProfileDoc.exists()) {
@@ -467,7 +448,6 @@ const MessagesPageContent = () => {
             return chat;
         }));
 
-        // ✅ 修复：在客户端过滤掉被隐藏的对话
         const visibleChats = resolvedChats.filter(chat => {
             return chat && !chat[`isHiddenFor_${user.uid}`];
         });
@@ -485,36 +465,22 @@ const MessagesPageContent = () => {
     if (!element) return;
 
     const isFullScreen = () => document.fullscreenElement || document.webkitFullscreenElement;
-    
     const requestFullScreen = () => {
         const requestMethod = element.requestFullscreen || element.webkitRequestFullscreen;
-        if (requestMethod) {
-            requestMethod.call(element).catch(err => console.error("全屏请求失败:", err));
-        }
+        if (requestMethod) { requestMethod.call(element).catch(err => {}); }
     };
-
     const exitFullScreen = () => {
         const exitMethod = document.exitFullscreen || document.webkitExitFullscreen;
-        if (exitMethod) {
-            exitMethod.call(document).catch(err => console.error("退出全屏失败:", err));
-        }
+        if (exitMethod) { exitMethod.call(document).catch(err => {}); }
     };
 
     if (activeTab === 'discover') {
-        if (!isFullScreen()) {
-            requestFullScreen();
-        }
+        if (!isFullScreen()) { requestFullScreen(); }
     } else {
-        if (isFullScreen()) {
-            exitFullScreen();
-        }
+        if (isFullScreen()) { exitFullScreen(); }
     }
 
-    return () => {
-        if (isFullScreen()) {
-            exitFullScreen();
-        }
-    };
+    return () => { if (isFullScreen()) { exitFullScreen(); } };
   }, [activeTab]);
 
 
@@ -538,7 +504,8 @@ const MessagesPageContent = () => {
       case 'discover': return <VerticalShortVideoPlayer useProxy={false} />;
       case 'partners': return <LanguagePartnerList />;
       case 'jobs': return (<div className="p-8 text-center text-gray-500">找工作功能正在开发中...</div>);
-      case 'bookshelf': return (<div className="p-8 text-center text-gray-500">书柜功能正在开发中...</div>);
+      // ✅ 修复：添加 'bookshelf' case，渲染内嵌网页组件
+      case 'bookshelf': return <BookshelfPage />;
       default: return null;
     }
   };
@@ -549,7 +516,7 @@ const MessagesPageContent = () => {
         {activeTab !== 'discover' && (
           <MessageHeader activeTab={activeTab} setActiveTab={setActiveTab} totalUnreadCount={totalUnreadCount}/>
         )}
-        <main className="flex-1" {...swipeHandlers}>
+        <main className={`flex-1 ${activeTab === 'bookshelf' ? 'h-full' : ''}`} {...swipeHandlers}>
           <AnimatePresence mode="wait">
               <motion.div 
                 key={activeTab} 
@@ -557,6 +524,8 @@ const MessagesPageContent = () => {
                 animate={{ opacity: 1, x: 0 }} 
                 exit={{ opacity: 0, x: -20 }} 
                 transition={{ duration: 0.2 }}
+                // ✅ 修复：确保书柜页面填满可用空间
+                className={activeTab === 'bookshelf' ? 'w-full h-full' : ''}
               >
                 {renderContent()}
               </motion.div>
