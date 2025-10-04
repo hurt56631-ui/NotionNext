@@ -336,4 +336,4 @@ const MessagesPageContent = () => {
   );
 };
 
-export default MessagesPageContent;};
+export default MessagesPageContent;
