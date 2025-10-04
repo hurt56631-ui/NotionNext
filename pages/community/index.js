@@ -1,4 +1,4 @@
-// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 分类 & 手势修复)
+// pages/community/index.js (贴吧版 + 私信功能完全集成最终版 - 分类 & 手势 & 布局修复)
 
 import { useTransition, animated } from '@react-spring/web';
 import { useSwipeable } from 'react-swipeable';
@@ -18,9 +18,8 @@ const LayoutBase = dynamic(() => import('@/themes/heo').then(mod => mod.LayoutBa
 const POSTS_PER_PAGE = 10;
 const CATEGORIES = ['推荐', '讨论', '日常生活', '问答', '资源共享'];
 
-const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
+const StickyNavTabs = ({ activeCategory, onCategoryChange, activeSort, onSortChange }) => {
   const sortOptions = ['默认', '最新', '最热', '精华'];
-  const [activeSort, setActiveSort] = useState('默认');
 
   return (
     <div className="rounded-xl shadow-md backdrop-blur-lg bg-gray-100/80 dark:bg-gray-900/70 p-3">
@@ -52,10 +51,7 @@ const StickyNavTabs = ({ activeCategory, onCategoryChange, onSortChange }) => {
         {sortOptions.map((sort) => (
           <button
             key={sort}
-            onClick={() => {
-              setActiveSort(sort);
-              onSortChange(sort);
-            }}
+            onClick={() => onSortChange(sort)}
             className={`px-4 py-1 text-xs rounded-lg transition-colors ${
               activeSort === sort
                 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-semibold'
@@ -79,96 +75,108 @@ const CommunityPage = () => {
   const [hasMore, setHasMore] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(CATEGORIES[0]);
-  const [currentSort, setCurrentSort] = useState('最新');
+  const [currentSort, setCurrentSort] = useState('默认');
   const [swipeDirection, setSwipeDirection] = useState(0);
 
   const [chatTarget, setChatTarget] = useState(null);
 
-  const updateLastVisible = (doc) => (lastVisibleRef.current = doc);
+  const fetchPosts = useCallback(async (isInitial = false) => {
+    // 防止重复加载
+    if (!isInitial && loadingMore) return;
+    
+    if (isInitial) {
+      setLoading(true);
+      setPosts([]);
+      lastVisibleRef.current = null;
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
 
-  const fetchPosts = useCallback(
-    async (isInitial = false) => {
-      if (loadingMore) return;
+    try {
+      let conditions = [];
 
+      // 分类过滤
+      if (currentCategory !== '推荐') {
+        conditions.push(where('category', '==', currentCategory));
+      }
+
+      // 精华过滤
+      if (currentSort === '精华') {
+        conditions.push(where('isEssence', '==', true));
+      }
+
+      // 排序逻辑
+      if (currentSort === '最热') {
+        conditions.push(orderBy('likesCount', 'desc'));
+      }
+      
+      // 默认和最新都按时间排序, 默认排序额外增加置顶逻辑
+      if (currentSort === '默认') {
+        conditions.push(orderBy('isTop', 'desc'));
+      }
+      conditions.push(orderBy('createdAt', 'desc'));
+
+
+      // 分页加载
+      if (!isInitial && lastVisibleRef.current) {
+        conditions.push(startAfter(lastVisibleRef.current));
+      }
+
+      conditions.push(limit(POSTS_PER_PAGE));
+      const q = query(collection(db, 'posts'), ...conditions);
+
+      const snapshot = await getDocs(q);
+      const newPosts = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+      setPosts((prevPosts) => isInitial ? newPosts : [...prevPosts, ...newPosts]);
+      
+      if (snapshot.docs.length > 0) {
+        lastVisibleRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+      
+      setHasMore(snapshot.docs.length >= POSTS_PER_PAGE);
+    } catch (err) {
+      console.error('获取帖子失败:', err);
+      if (isInitial) setPosts([]);
+      setHasMore(false);
+    } finally {
       if (isInitial) {
-        setLoading(true);
-        setPosts([]);
-        updateLastVisible(null);
-        setHasMore(true);
+        setLoading(false);
       } else {
-        setLoadingMore(true);
+        setLoadingMore(false);
       }
+    }
+  }, [currentCategory, currentSort]); // 依赖项保持不变
 
-      try {
-        let q = collection(db, 'posts');
-        let conditions = [];
-
-        // 分类过滤
-        if (currentCategory !== '推荐') {
-          conditions.push(where('category', '==', currentCategory));
-        }
-
-        // 精华过滤
-        if (currentSort === '精华') {
-          conditions.push(where('isEssence', '==', true));
-        }
-
-        // 排序逻辑
-        if (currentSort === '最热') {
-          conditions.push(orderBy('likesCount', 'desc'));
-        } else {
-          // 默认和最新都按时间
-          conditions.push(orderBy('createdAt', 'desc'));
-        }
-
-        // 默认排序再加置顶
-        if (currentSort === '默认') {
-          conditions.unshift(orderBy('isTop', 'desc'));
-        }
-
-        // 翻页
-        if (!isInitial && lastVisibleRef.current) {
-          conditions.push(startAfter(lastVisibleRef.current));
-        }
-
-        conditions.push(limit(POSTS_PER_PAGE));
-        q = query(q, ...conditions);
-
-        const snapshot = await getDocs(q);
-        const newPosts = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-        setPosts((prev) => (isInitial ? newPosts : [...prev, ...newPosts]));
-        updateLastVisible(snapshot.docs[snapshot.docs.length - 1] || null);
-        setHasMore(snapshot.docs.length >= POSTS_PER_PAGE);
-      } catch (err) {
-        console.error('获取帖子失败:', err);
-        if (isInitial) setPosts([]);
-        setHasMore(false);
-      } finally {
-        isInitial ? setLoading(false) : setLoadingMore(false);
-      }
-    },
-    [currentCategory, currentSort, loadingMore]
-  );
-
+  // 当分类或排序变化时，触发初始加载
   useEffect(() => {
-    if (db) fetchPosts(true);
-  }, [currentCategory, currentSort]);
+    fetchPosts(true);
+  }, [fetchPosts]);
 
-  // ✅ 手势绑定在 animated.div，始终可滑
+  const handleCategoryChange = (category) => {
+    if (category === currentCategory) return;
+    const currentIndex = CATEGORIES.indexOf(currentCategory);
+    const nextIndex = CATEGORIES.indexOf(category);
+    setSwipeDirection(nextIndex > currentIndex ? 1 : -1);
+    setCurrentCategory(category);
+  };
+  
+  const handleSortChange = (sort) => {
+      setCurrentSort(sort);
+  }
+
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const idx = CATEGORIES.indexOf(currentCategory);
       if (idx < CATEGORIES.length - 1) {
-        setSwipeDirection(1);
-        setCurrentCategory(CATEGORIES[idx + 1]);
+        handleCategoryChange(CATEGORIES[idx + 1]);
       }
     },
     onSwipedRight: () => {
       const idx = CATEGORIES.indexOf(currentCategory);
       if (idx > 0) {
-        setSwipeDirection(-1);
-        setCurrentCategory(CATEGORIES[idx - 1]);
+        handleCategoryChange(CATEGORIES[idx - 1]);
       }
     },
     delta: 30,
@@ -177,6 +185,7 @@ const CommunityPage = () => {
   });
 
   const transitions = useTransition(currentCategory, {
+    key: currentCategory,
     from: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '100%' : '-100%'})` },
     enter: { opacity: 1, transform: 'translateX(0%)' },
     leave: { opacity: 0, transform: `translateX(${swipeDirection > 0 ? '-50%' : '50%'})`, position: 'absolute' },
@@ -184,7 +193,6 @@ const CommunityPage = () => {
     exitBeforeEnter: true,
   });
 
-  // 无限加载
   const observer = useRef();
   const loadMoreRef = useCallback(
     (node) => {
@@ -201,7 +209,7 @@ const CommunityPage = () => {
   );
 
   const renderPostsContent = () => {
-    if (loading && posts.length === 0) {
+    if (loading) {
       return (
         <div className="p-12 text-center text-gray-500">
           <i className="fas fa-spinner fa-spin mr-2 text-2xl"></i> 正在努力加载...
@@ -212,7 +220,7 @@ const CommunityPage = () => {
       return posts.map((post) => <PostItem key={post.id} post={post} onOpenChat={setChatTarget} />);
     }
     return (
-      <div className="p-12 text-center text-gray-500">
+      <div className="p-12 text-center text-gray-500 rounded-xl bg-white dark:bg-gray-800 shadow-md">
         <p className="text-lg">这里空空如也 🤔</p>
         <p className="mt-2 text-sm">成为第一个在此分类下发帖的人吧！</p>
       </div>
@@ -233,14 +241,20 @@ const CommunityPage = () => {
           </div>
         </div>
 
-        {/* 分类 Tabs */}
+        {/* 主体内容区域 */}
         <div className="container mx-auto px-3 md:px-6 -mt-16 relative z-10 flex-grow">
+          {/* 粘性导航 */}
           <div className="sticky top-0 z-30">
-            <StickyNavTabs activeCategory={currentCategory} onCategoryChange={setCurrentCategory} onSortChange={setCurrentSort} />
+            <StickyNavTabs 
+              activeCategory={currentCategory} 
+              onCategoryChange={handleCategoryChange} 
+              activeSort={currentSort}
+              onSortChange={handleSortChange}
+            />
           </div>
 
-          {/* ✅ Swipe 区域 */}
-          <div className="relative mt-4" style={{ touchAction: 'pan-y' }}>
+          {/* 手势滑动区域 & 帖子列表 */}
+          <div className="relative mt-4 overflow-x-hidden" style={{ touchAction: 'pan-y' }}>
             {transitions((style, item) => (
               <animated.div {...swipeHandlers} key={item} style={{ ...style, width: '100%' }}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md divide-y divide-gray-200 dark:divide-gray-700">
@@ -248,9 +262,15 @@ const CommunityPage = () => {
                 </div>
               </animated.div>
             ))}
+             {/* 修复：当帖子为空时，显示提示信息，并确保其样式正确*/}
+            {!loading && posts.length === 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md">
+                    {renderPostsContent()}
+                </div>
+            )}
           </div>
 
-          {/* 加载更多 */}
+          {/* 加载更多指示器 */}
           <div className="text-center py-8">
             {loadingMore && <p className="text-gray-500"><i className="fas fa-spinner fa-spin mr-2"></i> 加载中...</p>}
             {!hasMore && posts.length > 0 && <p className="text-gray-400">—— 到底啦 ——</p>}
@@ -260,18 +280,18 @@ const CommunityPage = () => {
 
         {/* 发帖按钮 */}
         <Link href="/community/new" passHref>
-          <a
+          <div
             onClick={(e) => {
               if (!user) {
                 e.preventDefault();
                 setShowLoginModal(true);
               }
             }}
-            className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95"
+            className="fixed bottom-20 right-6 z-40 h-14 w-14 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all transform hover:scale-110 active:scale-95 cursor-pointer"
             aria-label="发布新帖"
           >
             <i className="fas fa-pen text-xl"></i>
-          </a>
+          </div>
         </Link>
       </div>
 
