@@ -18,7 +18,20 @@ const DEFAULT_APIS = [
   'http://api.xingchenfu.xyz/API/jk.php', 'https://v2.xxapi.cn/api/meinv?return=302',
   'https://api.jkyai.top/API/jxhssp.php', 'https://api.jkyai.top/API/jxbssp.php',
   'https://api.jkyai.top/API/rmtmsp/api.php', 'https://api.jkyai.top/API/qcndxl.php',
-  'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php'
+  'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php','http://api.xingchenfu.xyz/API/cossp.php',
+  'http://api.xingchenfu.xyz/API/wsb.php', 'http://api.xingchenfu.xyz/API/wmsc.php',
+  'http://api.xingchenfu.xyz/API/dlzp.php', 'http://api.xingchenfu.xyz/API/xgg.php',
+  'http://api.xingchenfu.xyz/API/sbkl.php', 'http://api.xingchenfu.xyz/API/ommn.php',
+  'http://api.xingchenfu.xyz/API/cxldb.php', 'http://api.xingchenfu.xyz/API/xqyl.php',
+  'http://api.xingchenfu.xyz/API/qttj.php', 'http://api.xingchenfu.xyz/API/hstp.php',
+  'http://api.xingchenfu.xyz/API/bianzhuang.php', 'http://api.xingchenfu.xyz/API/xqtj.php',
+  'http://api.xingchenfu.xyz/API/tianmei.php', 'http://api.xingchenfu.xyz/API/cdxl.php',
+  'http://api.xingchenfu.xyz/API/boy.php', 'http://api.xingchenfu.xyz/API/yzxl.php',
+  'http://api.xingchenfu.xyz/API/rwsp.php', 'http://api.xingchenfu.xyz/API/nvda.php',
+  'http://api.xingchenfu.xyz/API/ndym.php', 'http://api.xingchenfu.xyz/API/hssp.php',
+  'http://api.xingchenfu.xyz/API/bsxl.php', 'http://api.xingchenfu.xyz/API/gzlxjj.php',
+  'http://api.xingchenfu.xyz/API/sktj.php', 'http://api.xingchenfu.xyz/API/zzxjj.php',
+  'http://api.xingchenfu.xyz/API/jk.php', 'http://api.xingchenfu.xyz/API/youhuotu.php',
 ];
 
 // 主组件
