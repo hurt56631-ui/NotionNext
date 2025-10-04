@@ -1,6 +1,6 @@
 // themes/heo/components/VerticalShortVideoPlayer.jsx
 // 功能：全屏竖版短视频/图片流（上下文整页切换）+ 边播边缓存 + 交互优化
-// 版本：5.0 (功能完整版 - 多样化点赞、自动跳过、默认有声等)
+// 版本：6.0 (Final - 修复手势冲突，重构交互逻辑)
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useDrag } from '@use-gesture/react';
@@ -18,12 +18,35 @@ const getInitialState = (key, defaultValue) => {
 
 // 1. API 列表
 const DEFAULT_APIS = [...new Set([
-'http://api.xingchenfu.xyz/API/wsb.php', 'http://api.xingchenfu.xyz/API/xgg.php',
- 'http://api.xingchenfu.xyz/API/ommn.php',
+    'http://api.xingchenfu.xyz/API/hssp.php', 'http://api.xingchenfu.xyz/API/wmsc.php',
+    'http://api.xingchenfu.xyz/API/tianmei.php', 'http://api.xingchenfu.xyz/API/cdxl.php',
+    'http://api.xingchenfu.xyz/API/yzxl.php', 'http://api.xingchenfu.xyz/API/rwsp.php',
+    'http://api.xingchenfu.xyz/API/nvda.php', 'http://api.xingchenfu.xyz/API/bsxl.php',
+    'http://api.xingchenfu.xyz/API/zzxjj.php', 'http://api.xingchenfu.xyz/API/qttj.php',
+    'http://api.xingchenfu.xyz/API/xqtj.php', 'http://api.xingchenfu.xyz/API/sktj.php',
+    'http://api.xingchenfu.xyz/API/cossp.php', 'http://api.xingchenfu.xyz/API/xiaohulu.php',
+    'http://api.xingchenfu.xyz/API/manhuay.php', 'http://api.xingchenfu.xyz/API/bianzhuang.php',
+    'http://api.xingchenfu.xyz/API/jk.php', 'https://v2.xxapi.cn/api/meinv?return=302',
+    'https://api.jkyai.top/API/jxhssp.php', 'https://api.jkyai.top/API/jxbssp.php',
+    'https://api.jkyai.top/API/rmtmsp/api.php', 'https://api.jkyai.top/API/qcndxl.php',
+    'https://www.hhlqilongzhu.cn/api/MP4_xiaojiejie.php', 'http://api.xingchenfu.xyz/API/wsb.php',
+    'http://api.xingchenfu.xyz/API/dlzp.php', 'http://api.xingchenfu.xyz/API/xgg.php',
+    'http://api.xingchenfu.xyz/API/sbkl.php', 'http://api.xingchenfu.xyz/API/ommn.php',
+    'http://api.xingchenfu.xyz/API/cxldb.php', 'http://api.xingchenfu.xyz/API/xqyl.php',
+    'http://api.xingchenfu.xyz/API/hstp.php', 'http://api.xingchenfu.xyz/API/boy.php',
+    'http://api.xingchenfu.xyz/API/ndym.php', 'http://api.xingchenfu.xyz/API/gzlxjj.php',
+    'http://api.xingchenfu.xyz/API/youhuotu.php',
 ])];
 
 // --- 外部 TXT 视频列表地址 ---
 const TXT_VIDEO_LIST_URL = 'https://tiktok.999980.xyz/index.txt';
+
+// --- ✅ 新增：多样化的点赞图标 ---
+const likeIcons = [
+    { Icon: FaHeart, color: '#ff0050' },
+    { Icon: FaThumbsUp, color: '#00a8ff' },
+    { Icon: FaStar, color: '#ffc107' }
+];
 
 // 2. 页面切换动画
 const variants = {
@@ -32,17 +55,13 @@ const variants = {
     exit: (direction) => ({ zIndex: 0, y: direction < 0 ? '100%' : '-100%', opacity: 0 })
 };
 
-// ✅ 新增：多样化的点赞图标
-const likeIcons = [
-    { Icon: FaHeart, color: '#ff0050' },
-    { Icon: FaThumbsUp, color: '#00a8ff' },
-    { Icon: FaStar, color: '#ffc107' }
-];
-
+// 主组件
 export default function VerticalShortVideoPlayer({
     apiList = DEFAULT_APIS,
     cacheSize = 9,
-    preloadThreshold = 3
+    preloadThreshold = 3,
+    useProxy = false, // 代理相关参数保留，但默认逻辑不使用
+    proxyPath = process.env.NEXT_PUBLIC_PROXY_PATH || '/api/proxy'
 }) {
     const [mediaQueue, setMediaQueue] = useState([]);
     const [[page, direction], setPage] = useState([0, 0]);
@@ -53,13 +72,12 @@ export default function VerticalShortVideoPlayer({
     const [apiStatus, setApiStatus] = useState(() => apiList.reduce((acc, api) => ({ ...acc, [api]: { failures: 0 } }), {}));
     const [showControls, setShowControls] = useState(false);
     const [isFastForwarding, setIsFastForwarding] = useState(false);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
-    const [likes, setLikes] = useState([]); // 存储点赞动画
+    const [likes, setLikes] = useState([]); // ✅ 新增：用于点赞动画
 
     const mediaRefs = useRef({});
     const controlsTimer = useRef(null);
     const autoSkipTimer = useRef(null);
-    const lastTapTime = useRef(0);
+    const tapTimeout = useRef(null); // ✅ 新增：用于区分单击和双击
 
     const getRandomAPI = useCallback(() => {
         const availableApis = apiList.filter(api => (apiStatus[api]?.failures || 0) < 3);
@@ -72,8 +90,10 @@ export default function VerticalShortVideoPlayer({
         }
         return { url: `${selectedApi}${selectedApi.includes('?') ? '&' : '?'}t=${Date.now()}`, originalUrl: selectedApi };
     }, [apiList, apiStatus]);
-    
-    const buildSrc = (url) => url; // 简化处理，默认不走代理
+
+    const buildSrc = useCallback((url) => {
+        return useProxy ? `${proxyPath}?url=${encodeURIComponent(url)}` : url;
+    }, [useProxy, proxyPath]);
 
     const getMediaType = (url, headers) => {
         const contentType = headers?.get('Content-Type');
@@ -136,14 +156,14 @@ export default function VerticalShortVideoPlayer({
             document.removeEventListener('contextmenu', handleContextMenu);
         };
     }, []);
-
+    
     useEffect(() => { localStorage.setItem('player_isMuted', JSON.stringify(isMuted)); }, [isMuted]);
     useEffect(() => { localStorage.setItem('player_autoPlayNext', JSON.stringify(autoPlayNext)); }, [autoPlayNext]);
 
     useEffect(() => {
         const activeIds = new Set(mediaQueue.slice(Math.max(0, page - 3), page + 3).map(m => m.id));
         Object.keys(mediaRefs.current).forEach(id => {
-            if (!activeIds.has(String(id))) { // 确保类型匹配
+            if (!activeIds.has(String(id))) {
                 delete mediaRefs.current[id];
             }
         });
@@ -152,7 +172,6 @@ export default function VerticalShortVideoPlayer({
     useEffect(() => {
         const initializeQueue = async () => {
             setIsLoading(true);
-            setShowControls(true);
             try {
                 const response = await fetch(TXT_VIDEO_LIST_URL);
                 if (response.ok) {
@@ -163,23 +182,24 @@ export default function VerticalShortVideoPlayer({
                 }
             } catch (error) { console.error("加载TXT视频列表失败:", error); }
             await fillMediaQueue();
+            setIsLoading(false);
         };
         initializeQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    
+
     useEffect(() => {
         if (!mediaQueue[page]) return;
         const currentItem = mediaQueue[page];
         Object.values(mediaRefs.current).forEach(mediaEl => {
-            if (mediaEl?.tagName === 'VIDEO' && !mediaEl.paused) mediaEl.pause();
+            if (mediaEl && mediaEl.tagName === 'VIDEO' && !mediaEl.paused) mediaEl.pause();
         });
         const currentMediaRef = mediaRefs.current[currentItem.id];
         if (currentMediaRef) {
             if (currentItem.type === 'video') {
                 setIsLoading(true); setIsPaused(false);
                 currentMediaRef.currentTime = 0;
-                currentMediaRef.play().catch(() => console.warn('自动播放被阻止，等待用户交互。'));
+                currentMediaRef.play().catch(() => console.warn('自动播放被阻止'));
             } else {
                 setIsLoading(false);
             }
@@ -187,12 +207,11 @@ export default function VerticalShortVideoPlayer({
         if (mediaQueue.length - page <= preloadThreshold) fillMediaQueue();
     }, [page, mediaQueue, preloadThreshold, fillMediaQueue]);
 
-    // ✅ 优化：加载超时自动切换
     useEffect(() => {
         clearTimeout(autoSkipTimer.current);
         if (isLoading) {
             autoSkipTimer.current = setTimeout(() => {
-                if (isLoading) { // 双重检查，确保在定时器触发时仍然在加载
+                if (isLoading) {
                     console.warn("加载超时，自动切换到下一个视频。");
                     paginate(1);
                 }
@@ -209,7 +228,26 @@ export default function VerticalShortVideoPlayer({
         }
     };
 
-    const handleDoubleClick = (e) => {
+    const handleSingleTap = useCallback(() => {
+        const currentItem = mediaQueue[page];
+        if (!currentItem || currentItem.type !== 'video') return;
+        const videoEl = mediaRefs.current[currentItem.id];
+        if (videoEl) {
+            if (videoEl.paused) {
+                videoEl.play();
+                setIsPaused(false);
+                if (controlsTimer.current) clearTimeout(controlsTimer.current);
+                controlsTimer.current = setTimeout(() => setShowControls(false), 4000);
+            } else {
+                videoEl.pause();
+                setIsPaused(true);
+                if (controlsTimer.current) clearTimeout(controlsTimer.current);
+            }
+            setShowControls(true);
+        }
+    }, [mediaQueue, page]);
+
+    const handleDoubleTap = useCallback((e) => {
         const { Icon, color } = likeIcons[Math.floor(Math.random() * likeIcons.length)];
         const newLike = {
             id: Date.now(),
@@ -217,39 +255,27 @@ export default function VerticalShortVideoPlayer({
             y: e.clientY,
             IconComponent: Icon,
             color: color,
-            rotation: (Math.random() - 0.5) * 40 // -20 to 20 degrees
+            rotation: (Math.random() - 0.5) * 40
         };
         setLikes(currentLikes => [...currentLikes, newLike]);
         setTimeout(() => {
             setLikes(currentLikes => currentLikes.filter(l => l.id !== newLike.id));
         }, 1200);
-    };
+    }, []);
 
     const bind = useDrag(({ down, tap, last, movement: [, my], velocity: [, vy], direction: [, dy], event, initial: [ix], dragging }) => {
         event.stopPropagation();
         const videoEl = mediaRefs.current[mediaQueue[page]?.id];
 
         if (tap) {
-            const now = Date.now();
-            if (now - lastTapTime.current < 300) { // 双击
-                handleDoubleClick(event);
-                lastTapTime.current = 0;
-            } else { // 单击
-                const currentItem = mediaQueue[page];
-                if (videoEl && currentItem.type === 'video') {
-                    if (videoEl.paused) {
-                        videoEl.play();
-                        setIsPaused(false);
-                        controlsTimer.current = setTimeout(() => setShowControls(false), 4000);
-                    } else {
-                        videoEl.pause();
-                        setIsPaused(true);
-                        clearTimeout(controlsTimer.current);
-                    }
-                    setShowControls(true);
-                }
+            clearTimeout(tapTimeout.current); // 清除上一个单击的延迟
+            if (event.detail === 1) { // 浏览器原生单击事件
+                tapTimeout.current = setTimeout(() => {
+                    handleSingleTap();
+                }, 250); // 250ms延迟以等待可能的双击
+            } else if (event.detail === 2) { // 浏览器原生双击事件
+                handleDoubleTap(event);
             }
-            lastTapTime.current = now;
             return;
         }
 
@@ -264,6 +290,7 @@ export default function VerticalShortVideoPlayer({
                 videoEl.playbackRate = 1.0;
                 setIsFastForwarding(false);
             }
+            // ✅ 手势切换逻辑恢复
             if (Math.abs(my) > window.innerHeight / 4 || (vy > 0.5 && dy !== 0)) {
                 paginate(my < 0 ? 1 : -1);
             }
@@ -273,8 +300,11 @@ export default function VerticalShortVideoPlayer({
     const currentMedia = mediaQueue[page];
 
     return (
-        <div className="w-full h-screen bg-black relative select-none touch-pan-y overflow-hidden" {...bind()}>
-            <AnimatePresence>
+        <div 
+            className="w-full h-screen bg-black relative select-none touch-pan-y overflow-hidden"
+            {...bind()}
+        >
+            <AnimatePresence initial={false}>
                 {currentMedia && (
                      <motion.div
                         key={page} custom={direction} variants={variants}
@@ -288,10 +318,7 @@ export default function VerticalShortVideoPlayer({
                                 src={buildSrc(currentMedia.url)}
                                 className="w-full h-full object-cover"
                                 playsInline muted={isMuted} loop={!autoPlayNext} referrerPolicy="no-referrer"
-                                onCanPlay={() => {
-                                    setIsLoading(false);
-                                    if (isInitialLoad) setIsInitialLoad(false);
-                                }}
+                                onCanPlay={() => setIsLoading(false)}
                                 onWaiting={() => setIsLoading(true)}
                                 onEnded={() => { if (autoPlayNext) paginate(1); }}
                                 onError={() => handleMediaError(currentMedia.id)}
@@ -300,11 +327,8 @@ export default function VerticalShortVideoPlayer({
                             <img
                                 src={buildSrc(currentMedia.url)}
                                 className="w-full h-full object-cover"
-                                alt="media content" referrerPolicy="no-referrer"
-                                onLoad={() => {
-                                    setIsLoading(false);
-                                    if (isInitialLoad) setIsInitialLoad(false);
-                                }}
+                                alt="media" referrerPolicy="no-referrer"
+                                onLoad={() => setIsLoading(false)}
                                 onError={() => handleMediaError(currentMedia.id)}
                             />
                         )}
@@ -327,25 +351,12 @@ export default function VerticalShortVideoPlayer({
                 ))}
             </AnimatePresence>
 
-            <AnimatePresence>
             {isLoading && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 pointer-events-none z-30">
-                    {isInitialLoad ? (
-                        <motion.h1
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1, transition: { delay: 0.3 } }}
-                            className="text-2xl font-bold text-white tracking-widest drop-shadow-lg"
-                        >
-                            发现精彩
-                        </motion.h1>
-                    ) : (
-                        <div className="w-16 h-16 border-4 border-white/80 border-t-transparent rounded-full animate-spin"></div>
-                    )}
-                </motion.div>
+                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 pointer-events-none z-30">
+                    <div className="w-16 h-16 border-4 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                </div>
             )}
-            </AnimatePresence>
-
+            
             <AnimatePresence>
                 {isPaused && (
                     <motion.div
@@ -358,7 +369,8 @@ export default function VerticalShortVideoPlayer({
             
             {isFastForwarding && (
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 p-3 bg-black/50 rounded-lg text-white z-20 pointer-events-none">
-                    <FaForward /> <span>2.0x</span>
+                    <FaForward />
+                    <span>2.0x</span>
                 </div>
             )}
 
