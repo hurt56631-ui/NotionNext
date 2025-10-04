@@ -1,4 +1,4 @@
-// /components/MessagesPage-FINAL-FIX.js (已按您的要求修改)
+// /components/MessagesPage.js (FIXED)
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
@@ -230,39 +230,66 @@ const MessagesPageContent = () => {
     const tabKeys = ['messages', 'discover', 'partners', 'jobs', 'bookshelf'];
     const pageContainerRef = useRef(null);
   
+    // =======================================================================================
+    // =============  ✅ FIX: 修复了 N+1 查询问题，大幅降低 Firestore 读取次数  =============
+    // =======================================================================================
     useEffect(() => {
         if (authLoading || !user) {
             if (!authLoading) setLoading(false);
             setConversations([]);
             return;
         }
-        if (activeTab !== 'messages') { return; }
+        if (activeTab !== 'messages') { 
+            return; 
+        }
         
         setLoading(true);
-        const chatsQuery = query(collection(db, 'privateChats'), where('members', 'array-contains', user.uid), orderBy('lastMessageAt', 'desc'), limit(50));
-        const unsubscribe = onSnapshot(chatsQuery, async (snapshot) => {
-            const chatsWithPlaceholders = snapshot.docs.map(doc => {
-                const chatData = doc.data();
-                const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
-                const otherUserId = chatData.members.find((id) => id !== user.uid);
-                return { id: doc.id, ...chatData, unreadCount: unreadCount, otherUser: { id: otherUserId || null, displayName: '加载中...', photoURL: '/img/avatar.svg' } };
-            });
-            const resolvedChats = await Promise.all(chatsWithPlaceholders.map(async (chat) => {
-                if (!chat.otherUser.id) return null;
-                try {
-                    const userProfileDoc = await getDoc(doc(db, 'users', chat.otherUser.id));
-                    if (userProfileDoc.exists()) { chat.otherUser = { id: userProfileDoc.id, ...userProfileDoc.data() }; } 
-                    else { chat.otherUser.displayName = '未知用户'; }
-                } catch (error) { console.error(`获取用户 ${chat.otherUser.id} 信息失败:`, error); chat.otherUser.displayName = '加载失败'; }
-                return chat;
-            }));
-            const visibleChats = resolvedChats.filter(chat => chat && !chat[`isHiddenFor_${user.uid}`]);
-            setConversations(visibleChats);
-            setLoading(false);
-        }, (error) => { console.error('获取会话列表出错:', error); setLoading(false); }
+        const chatsQuery = query(
+            collection(db, 'privateChats'), 
+            where('members', 'array-contains', user.uid), 
+            orderBy('lastMessageAt', 'desc'), 
+            limit(50)
         );
+
+        // onSnapshot 现在只执行一次查询，然后直接处理数据，不再进行循环读取
+        const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
+            // 🔴 旧的、低效的逻辑已被移除
+            // const chatsWithPlaceholders = snapshot.docs.map(...);
+            // const resolvedChats = await Promise.all(...); // <--- 这个是导致费用暴增的元凶！
+
+            // ✅ 新的、高效的逻辑：
+            const resolvedChats = snapshot.docs.map(doc => {
+                const chatData = doc.data();
+                const otherUserId = chatData.members.find((id) => id !== user.uid);
+                
+                // 直接从聊天文档的冗余数据 `memberInfo` 中获取对方信息
+                // 这样就避免了为每个聊天都去 `users` 集合进行一次 `getDoc`
+                const otherUser = chatData.memberInfo?.[otherUserId] || { 
+                    displayName: '未知用户', 
+                    photoURL: '/img/avatar.svg' 
+                };
+                
+                const unreadCount = chatData.unreadCounts?.[user.uid] || 0;
+                
+                return { 
+                    id: doc.id, 
+                    ...chatData, 
+                    unreadCount: unreadCount, 
+                    // 确保 otherUser 对象包含 id 和其他信息
+                    otherUser: { id: otherUserId, ...otherUser } 
+                };
+            }).filter(chat => chat && !chat[`isHiddenFor_${user.uid}`]); // 过滤掉当前用户已隐藏的聊天
+
+            setConversations(resolvedChats);
+            setLoading(false);
+        }, (error) => { 
+            console.error('获取会话列表出错:', error); 
+            setLoading(false); 
+        });
+
+        // 返回清理函数，在组件卸载时取消侦听
         return () => unsubscribe();
-    }, [user, authLoading, activeTab]);
+    }, [user, authLoading, activeTab]); // 依赖项保持不变
     
     useEffect(() => {
         const element = pageContainerRef.current; if (!element) return;
