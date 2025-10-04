@@ -5,8 +5,8 @@ import { useRouter } from 'next/router';
 import { useAuth } from '@/lib/AuthContext';
 import { db, rtDb } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
-import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc } from 'firebase/firestore'; // ✅ 修改：新增 import updateDoc
-import { Compass, Briefcase, MessageSquare, Sparkles, User, Users, Heart as HeartIcon, Languages, MapPin, Send, Search, BookOpen, Globe, MessageCircle } from 'lucide-react'; // ✅ 修改：新增 MessageCircle icon
+import { collection, query, where, onSnapshot, doc, getDoc, orderBy, limit, updateDoc } from 'firebase/firestore';
+import { Compass, Briefcase, MessageSquare, Sparkles, User, Users, Heart as HeartIcon, Languages, MapPin, Send, Search, BookOpen, Globe, MessageCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LayoutBase } from '@/themes/heo';
 import { useUnreadCount } from '@/lib/UnreadCountContext';
@@ -78,13 +78,11 @@ const PartnerListItem = ({ partner, onSayHi }) => {
     const { text: statusText, isOnline } = usePartnerStatus(partner.uid);
     const countryCode = partner.countryCode || 'vn';
 
-    // ✅ 新增：性别显示映射
     const genderSymbol = partner.gender === 'male' ? '♂' : partner.gender === 'female' ? '♀' : '';
     const genderColor = partner.gender === 'male' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600';
 
     return (
         <div className="relative w-full max-w-4xl mx-auto flex items-center p-3 space-x-3">
-            {/* 头像和国旗 */}
             <div className="relative flex-shrink-0 cursor-pointer" onClick={() => router.push(`/profile/${partner.uid}`)}>
                 <img className="w-14 h-14 rounded-full object-cover" src={partner.photoURL || '/img/avatar.svg'} alt={partner.displayName} />
                 <img 
@@ -95,11 +93,9 @@ const PartnerListItem = ({ partner, onSayHi }) => {
             </div>
             
             <div className="flex-grow flex items-center min-w-0">
-                {/* 中间信息区 */}
                 <div className="flex-grow overflow-hidden cursor-pointer min-w-0" onClick={() => router.push(`/profile/${partner.uid}`)}>
                     <div className="flex items-center space-x-2">
                         <p className="text-base font-semibold text-gray-800 truncate">{partner.displayName || '新用户'}</p>
-                        {/* ✅ 新增：显示年龄和性别 */}
                         {partner.age && (
                             <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md text-gray-600 bg-gray-100">
                                 {partner.age}
@@ -111,7 +107,6 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                             </span>
                         )}
                     </div>
-                    {/* 语言标签 */}
                     <div className="flex items-center text-xs text-gray-500 mt-1 space-x-1.5">
                         <div className="flex items-center bg-green-100 text-green-800 px-2 py-0.5 rounded">
                             <span>{partner.nativeLanguage || 'VI'}</span>
@@ -121,11 +116,9 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                             <span>{partner.learningLanguage || 'CN'}</span>
                         </div>
                     </div>
-                    {/* 个人简介和在线状态 */}
                     <p className="text-sm text-gray-500 mt-1.5 truncate">{partner.bio || '很高兴认识你！'}</p>
                     {isOnline && <p className="text-xs text-green-500 mt-1">{statusText}</p>}
                     
-                    {/* ✅ 新增：兴趣爱好标签 */}
                     {partner.interests && partner.interests.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                             {partner.interests.slice(0, 3).map(interest => (
@@ -134,9 +127,7 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                         </div>
                     )}
                 </div>
-                {/* 打招呼按钮 */}
                 <div className="flex-shrink-0 ml-2">
-                    {/* ✅ 修改：打招呼按钮样式变小 */}
                     <button
                         onClick={(e) => { e.stopPropagation(); onSayHi(partner); }}
                         className="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 shadow-lg shadow-green-500/20 transition-all active:scale-90"
@@ -146,13 +137,11 @@ const PartnerListItem = ({ partner, onSayHi }) => {
                     </button>
                 </div>
             </div>
-            {/* ✅ 修改：自定义分割线，不包含头像部分 */}
             <div className="absolute bottom-0 left-[76px] right-0 h-px bg-gray-200" />
         </div>
     );
 };
 
-// --- 骨架屏组件 (用于加载时占位) ---
 const PartnerListItemSkeleton = () => (
     <div className="w-full max-w-4xl mx-auto flex items-center p-3 space-x-3 border-b border-gray-200 animate-pulse">
         <div className="relative flex-shrink-0">
@@ -172,7 +161,6 @@ const PartnerListItemSkeleton = () => (
     </div>
 );
 
-// --- 语伴列表主组件 (已完全改造) ---
 const LanguagePartnerList = () => {
     const router = useRouter();
     const [partners, setPartners] = useState([]);
@@ -254,7 +242,6 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
     const timerRef = useRef(null);
     const touchStartPos = useRef({ x: 0, y: 0 });
 
-    // ✅ 新增：判断当前会话是否被当前用户置顶
     const isPinned = convo[`isPinned_${currentUser?.uid}`] || false;
 
     const handleTouchStart = (e) => {
@@ -274,7 +261,7 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
 
     const handlePinClick = (e) => {
         e.stopPropagation();
-        onPin(convo); // ✅ 修改：传递整个 convo 对象
+        onPin(convo);
         handleCloseMenu();
     };
 
@@ -301,11 +288,9 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
             <div className="ml-4 flex-1 overflow-hidden">
                 <div className="flex justify-between items-center">
                     <p className="font-semibold truncate text-gray-800">{convo.otherUser.displayName || '未知用户'}</p>
-                    {/* ✅ 修改：使用相对时间格式化 */}
                     {convo.lastMessageAt && (<p className="text-xs text-gray-500">{formatRelativeTime(convo.lastMessageAt)}</p>)}
                 </div>
                 <div className="flex justify-between items-start mt-1">
-                    {/* ✅ 修改：增大消息正文字体 */}
                     <p className="text-base text-gray-600 truncate">{convo.lastMessage || '...'}</p>
                     {convo.unreadCount > 0 && (<span className="ml-2 flex-shrink-0 text-xs text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center font-semibold">{convo.unreadCount > 99 ? '99+' : convo.unreadCount}</span>)}
                 </div>
@@ -322,7 +307,6 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
                         className="absolute top-1/2 right-6 -translate-y-1/2 z-30 bg-white shadow-xl rounded-lg flex text-sm overflow-hidden border border-gray-200"
                     >
-                        {/* ✅ 修改：动态显示“置顶”或“取消置顶” */}
                         <button onClick={handlePinClick} className="px-4 py-2.5 hover:bg-gray-100 transition-colors">{isPinned ? '取消置顶' : '置顶'}</button>
                         <div className="w-px bg-gray-200"></div>
                         <button onClick={handleDeleteClick} className="px-4 py-2.5 text-red-600 hover:bg-red-50 transition-colors">删除</button>
@@ -330,7 +314,6 @@ const ConversationListItem = ({ convo, onClick, onPin, onDelete, currentUser }) 
                 </>
             )}
             </AnimatePresence>
-            {/* ✅ 修改：自定义分割线 */}
             <div className="absolute bottom-0 left-[80px] right-0 h-px bg-gray-200" />
         </li>
     );
@@ -340,10 +323,8 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
     const router = useRouter();
     const [searchTerm, setSearchTerm] = useState('');
 
-    // ✅ 修改：置顶和删除逻辑已实现
     const handlePinConversation = async (convo) => {
         if (!user) return;
-        console.log(`Toggling pin for conversation: ${convo.id}`);
         const chatRef = doc(db, 'privateChats', convo.id);
         const pinField = `isPinned_${user.uid}`;
         const currentPinStatus = convo[pinField] || false;
@@ -356,7 +337,6 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
 
     const handleDeleteConversation = async (chatId) => {
         if (!user) return;
-        console.log(`Deleting conversation: ${chatId}`);
         const chatRef = doc(db, 'privateChats', chatId);
         const deleteField = `isHiddenFor_${user.uid}`;
         try {
@@ -373,7 +353,6 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
             if (aIsPinned !== bIsPinned) {
                 return aIsPinned ? -1 : 1;
             }
-            // 如果置顶状态相同，则按最后消息时间排序
             return (b.lastMessageAt?.toMillis() || 0) - (a.lastMessageAt?.toMillis() || 0);
         });
 
@@ -385,6 +364,8 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
         if (!user?.uid || !convo.otherUser?.id) return;
         router.push(`/messages/${convo.id}`);
     };
+
+
 
     if (authLoading || loading) { return <div className="p-8 text-center text-gray-500">正在加载...</div>; }
     if (!user) { return <div className="p-8 text-center text-gray-500">请先登录以查看私信。</div>; }
@@ -402,7 +383,6 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
             {initialConversations.length === 0 && !loading && (<div className="p-8 text-center text-gray-500">还没有任何私信哦。</div>)}
             {sortedAndFilteredConversations.length === 0 && initialConversations.length > 0 && (<div className="p-8 text-center text-gray-500">找不到匹配的聊天记录。</div>)}
             
-            {/* ✅ 修改：移除 ul 的 divide-y，分割线在 li 内部实现 */}
             <ul>
                 {sortedAndFilteredConversations.map((convo) => (
                     <ConversationListItem
@@ -411,7 +391,7 @@ const ConversationList = ({ conversations: initialConversations, loading, user, 
                         onClick={handleConversationClick}
                         onPin={handlePinConversation}
                         onDelete={handleDeleteConversation}
-                        currentUser={user} // ✅ 新增：传递当前用户
+                        currentUser={user}
                     />
                 ))}
             </ul>
@@ -430,6 +410,9 @@ const MessagesPageContent = () => {
   const [loading, setLoading] = useState(true);
   const { totalUnreadCount } = useUnreadCount();
   const tabKeys = ['messages', 'discover', 'partners', 'jobs', 'bookshelf'];
+  
+  // ✅ 新增：为全屏容器创建一个 ref
+  const pageContainerRef = useRef(null);
 
   useEffect(() => {
     if (authLoading || !user) {
@@ -440,11 +423,10 @@ const MessagesPageContent = () => {
     if (activeTab !== 'messages') { return; }
     
     setLoading(true);
-    // ✅ 修改：查询时过滤掉被当前用户“删除”的会话
     const chatsQuery = query(
         collection(db, 'privateChats'), 
         where('members', 'array-contains', user.uid),
-        where(`isHiddenFor_${user.uid}`, '!=', true), // 关键过滤条件
+        where(`isHiddenFor_${user.uid}`, '!=', true),
         orderBy('lastMessageAt', 'desc'), 
         limit(30)
     );
@@ -478,6 +460,48 @@ const MessagesPageContent = () => {
     );
     return () => unsubscribe();
   }, [user, authLoading, activeTab]);
+  
+  // ✅ 新增：处理全屏模式的 Effect
+  useEffect(() => {
+    const element = pageContainerRef.current;
+    if (!element) return;
+
+    const isFullScreen = () => document.fullscreenElement || document.webkitFullscreenElement;
+    
+    const requestFullScreen = () => {
+        const requestMethod = element.requestFullscreen || element.webkitRequestFullscreen;
+        if (requestMethod) {
+            requestMethod.call(element).catch(err => console.error("全屏请求失败:", err));
+        }
+    };
+
+    const exitFullScreen = () => {
+        const exitMethod = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exitMethod) {
+            exitMethod.call(document).catch(err => console.error("退出全屏失败:", err));
+        }
+    };
+
+    if (activeTab === 'discover') {
+        // 如果当前不是全屏状态，则请求全屏
+        if (!isFullScreen()) {
+            requestFullScreen();
+        }
+    } else {
+        // 如果当前是全屏状态，则退出全屏
+        if (isFullScreen()) {
+            exitFullScreen();
+        }
+    }
+
+    // 组件卸载时，确保退出全屏
+    return () => {
+        if (isFullScreen()) {
+            exitFullScreen();
+        }
+    };
+  }, [activeTab]);
+
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
@@ -506,8 +530,8 @@ const MessagesPageContent = () => {
 
   return (
     <LayoutBase>
-      <div className={`flex flex-col min-h-screen bg-white ${activeTab === 'discover' ? 'h-screen' : ''}`}>
-        {/* ✅ 修改：在“动态”页隐藏顶部导航栏 */}
+      {/* ✅ 修改：为容器添加 ref */}
+      <div ref={pageContainerRef} className={`flex flex-col min-h-screen bg-white ${activeTab === 'discover' ? 'h-screen' : ''}`}>
         {activeTab !== 'discover' && (
           <MessageHeader activeTab={activeTab} setActiveTab={setActiveTab} totalUnreadCount={totalUnreadCount}/>
         )}
