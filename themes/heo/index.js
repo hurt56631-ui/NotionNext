@@ -133,7 +133,7 @@ const LayoutBase = props => {
       </main>
 
       {/* 页脚 (修改：仅在首页 '/' 显示页脚) */}
-      <Footer />
+      {router.pathname === '/' && <Footer />}
 
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
@@ -516,4 +516,4 @@ export {
   LayoutSlug,
   LayoutTagIndex,
   CONFIG as THEME_CONFIG
-                  }
+  }
