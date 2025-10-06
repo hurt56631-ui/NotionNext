@@ -1,4 +1,4 @@
-// AIChatDrawer.js (最终修复版 - 增加数据清洗逻辑)
+// AIChatDrawer.js (最终修复版 - 增加数据清洗逻辑, 并集成语音识别后自动发送功能)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -99,6 +99,9 @@ const AiChatAssistant = ({ onClose }) => {
     const recognitionRef = useRef(null);
     const textareaRef = useRef(null);
     const lastAutoReadMessageId = useRef(null);
+    
+    // ✅ 1. 新增一个 ref 来引用 handleSubmit 函数，用于在回调中安全调用
+    const handleSubmitRef = useRef();
 
     useEffect(() => { setIsMounted(true); let finalSettings = { ...DEFAULT_SETTINGS }; const savedSettings = safeLocalStorageGet('ai_chat_settings'); if (savedSettings) { const parsed = JSON.parse(savedSettings); if (parsed.thirdPartyTtsConfig) { parsed.ttsVoice = parsed.thirdPartyTtsConfig.microsoftVoice || DEFAULT_SETTINGS.ttsVoice; delete parsed.thirdPartyTtsConfig; } parsed.prompts = (parsed.prompts || []).map(p => ({ ...p, model: p.model || DEFAULT_SETTINGS.selectedModel, ttsVoice: p.ttsVoice || DEFAULT_SETTINGS.ttsVoice, avatarUrl: p.avatarUrl || '' })); if (!parsed.chatModels || parsed.chatModels.length === 0) { parsed.chatModels = CHAT_MODELS_LIST; } if (!parsed.apiKeys) { parsed.apiKeys = []; } finalSettings = { ...DEFAULT_SETTINGS, ...parsed }; } if (typeof navigator !== 'undefined' && /FBAN|FBAV/i.test(navigator.userAgent)) { finalSettings.isFacebookApp = true; } setSettings(finalSettings); const savedConversations = safeLocalStorageGet('ai_chat_conversations'); const parsedConvs = savedConversations ? JSON.parse(savedConversations) : []; setConversations(parsedConvs); if (finalSettings.startWithNewChat || parsedConvs.length === 0) { createNewConversation(finalSettings.currentPromptId, true); } else { const firstConv = parsedConvs[0]; setCurrentConversationId(firstConv.id); if (firstConv.messages.length > 0) { lastAutoReadMessageId.current = firstConv.messages[firstConv.messages.length - 1]?.timestamp; } } }, []);
     
@@ -116,8 +119,66 @@ const AiChatAssistant = ({ onClose }) => {
     const handleRenameConversation = (id, newTitle) => { setConversations(prev => prev.map(c => c.id === id ? { ...c, title: newTitle } : c)); };
     const handleSaveSettings = (newSettings) => { setSettings(newSettings); setShowSettings(false); };
     const handleAssistantSelect = (promptId) => { const selectedPrompt = settings.prompts.find(p => p.id === promptId); if (!selectedPrompt) return; setSettings(s => ({ ...s, currentPromptId: promptId, selectedModel: selectedPrompt.model || s.selectedModel, ttsVoice: selectedPrompt.ttsVoice || s.ttsVoice })); setConversations(prevConvs => prevConvs.map(c => c.id === currentConversationId ? { ...c, promptId: promptId } : c)); setShowAssistantSelector(false); };
-    const startListening = useCallback(() => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } if (recognitionRef.current) recognitionRef.current.abort(); const recognition = new SpeechRecognition(); recognition.lang = settings.speechLanguage; recognition.interimResults = false; recognition.maxAlternatives = 1; recognition.onstart = () => setIsListening(true); recognition.onresult = (e) => { const transcript = e.results[0][0].transcript.trim(); setUserInput(transcript); }; recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); setError(`语音识别失败: ${event.error}`); setIsListening(false); }; recognition.onend = () => setIsListening(false); recognition.start(); recognitionRef.current = recognition; }, [settings.speechLanguage]);
-    const stopListening = useCallback(() => { if (recognitionRef.current) { recognitionRef.current.stop(); setIsListening(false); } }, []);
+    
+    // ✅ 2. 重写语音识别相关函数
+    const startListening = useCallback(() => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('您的浏览器不支持语音输入。');
+            return;
+        }
+        if (recognitionRef.current) {
+            recognitionRef.current.abort();
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = settings.speechLanguage;
+        recognition.interimResults = true; // 设置为 true 以获取实时结果
+        recognition.continuous = false;
+
+        recognitionRef.current = recognition;
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            setUserInput(''); // 开始时清空输入框
+        };
+
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join('');
+            
+            setUserInput(transcript); // 实时更新输入框内容
+
+            // 检查这是否是最终结果
+            if (event.results[0].isFinal && transcript.trim()) {
+                // 使用 ref 调用最新的 handleSubmit 函数自动发送
+                handleSubmitRef.current(false, transcript);
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech recognition error:", event.error);
+            setError(`语音识别失败: ${event.error}`);
+            // isListening 和 recognitionRef.current 会在 onend 中处理
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+            recognitionRef.current = null;
+        };
+
+        recognition.start();
+    }, [settings.speechLanguage, setError]); // 依赖项中不需要 handleSubmit
+
+    const stopListening = useCallback(() => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            // onend 会被自动触发，所以不需要在这里设置 isListening(false)
+        }
+    }, []);
+
     const handleImageSelection = (event) => { const files = Array.from(event.target.files); if (files.length === 0) return; const newImages = files.slice(0, 4 - selectedImages.length); newImages.forEach(file => { const reader = new FileReader(); reader.onload = (e) => { const base64Data = e.target.result.split(',')[1]; const newImage = { previewUrl: URL.createObjectURL(file), data: base64Data, type: file.type, name: file.name }; setSelectedImages(prev => [...prev, newImage]); }; reader.readAsDataURL(file); }); event.target.value = null; };
     const triggerImageInput = () => { if (imageInputRef.current) { imageInputRef.current.removeAttribute('capture'); imageInputRef.current.click(); } };
     const triggerCameraInput = () => { if (imageInputRef.current) { imageInputRef.current.setAttribute('capture', 'environment'); imageInputRef.current.click(); } };
@@ -194,14 +255,18 @@ const AiChatAssistant = ({ onClose }) => {
         }
     };
     
-    const handleSubmit = async (isRegenerate = false) => {
+    // ✅ 3. 修改 handleSubmit 函数，使其可以接收一个文本参数
+    const handleSubmit = async (isRegenerate = false, textToSend = null) => {
+        if (!currentConversation) return;
+
         let messagesForApi = [...currentConversation.messages];
         if (isRegenerate) {
             if (messagesForApi.length > 0 && messagesForApi[messagesForApi.length - 1].role === 'ai') {
                 messagesForApi.pop();
             }
         } else {
-            const textToProcess = userInput.trim();
+            // 如果有 textToSend 参数，则使用它，否则使用 userInput state
+            const textToProcess = (textToSend !== null ? textToSend : userInput).trim();
             if (!textToProcess && selectedImages.length === 0) {
                 setError('请输入文字或添加图片后再发送！');
                 return;
@@ -214,6 +279,9 @@ const AiChatAssistant = ({ onClose }) => {
         }
         await fetchAiResponse(messagesForApi);
     };
+
+    // ✅ 在每次渲染时更新 ref，确保它始终指向最新的 handleSubmit 函数
+    handleSubmitRef.current = handleSubmit;
 
     const handleTypingComplete = useCallback(() => { setConversations(prev => prev.map(c => { if (c.id === currentConversationId) { const updatedMessages = c.messages.map((msg, index) => index === c.messages.length - 1 ? { ...msg, isTyping: false } : msg); return { ...c, messages: updatedMessages }; } return c; })); }, [currentConversationId]);
 
@@ -256,7 +324,7 @@ const AiChatAssistant = ({ onClose }) => {
                                 <button type="button" onClick={triggerImageInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="选择图片"><i className="fas fa-image text-xl text-gray-500 dark:text-gray-400"></i></button>
                                 <button type="button" onClick={triggerCameraInput} className="p-2 rounded-full hover:bg-gray-500/10 dark:hover:bg-white/10" title="拍照"><i className="fas fa-camera text-xl text-gray-500 dark:text-gray-400"></i></button>
                             </div>
-                            <textarea ref={textareaRef} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(false); } }} placeholder="与 AI 聊天..." className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 text-base resize-none overflow-hidden mx-2 py-1 leading-6 max-h-36 placeholder-gray-500 dark:placeholder-gray-400" rows="1" style={{minHeight:'2.5rem'}} />
+                            <textarea ref={textareaRef} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(false); } }} placeholder={isListening ? "正在聆听..." : "与 AI 聊天..."} className="flex-1 bg-transparent focus:outline-none text-gray-800 dark:text-gray-200 text-base resize-none overflow-hidden mx-2 py-1 leading-6 max-h-36 placeholder-gray-500 dark:placeholder-gray-400" rows="1" style={{minHeight:'2.5rem'}} readOnly={isListening} />
                             <div className="flex items-center flex-shrink-0 ml-1">
                                 {!showSendButton ? ( <button type="button" onClick={isListening ? stopListening : startListening} className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${isListening ? 'text-white bg-red-500 animate-pulse' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-500/10 dark:hover:bg-white/10'}`} title="语音输入"> <i className="fas fa-microphone text-xl"></i> </button> ) : ( <button type="submit" className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full shadow-lg shadow-blue-500/30 hover:bg-blue-700 disabled:opacity-50 transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95" disabled={isLoading}> <i className="fas fa-arrow-up text-xl"></i> </button> )}
                             </div>
