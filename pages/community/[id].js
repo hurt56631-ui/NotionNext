@@ -1,4 +1,4 @@
-// pages/community/[id].js (最终修复版 - 解决音频警告并包含所有优化)
+// pages/community/[id].js (最终修复版 - 解决音频警告并增强健壮性)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -34,7 +34,7 @@ const preloadTTS = async (text) => {
   }
 };
 
-// [FIX] 在用户首次点击时才创建 Audio 对象
+// [FIX] 在用户首次点击时才创建 Audio 对象，以符合浏览器策略
 const playCachedTTS = (text) => {
   if (!text) return;
   if (currentAudio.instance) {
@@ -45,7 +45,8 @@ const playCachedTTS = (text) => {
   const play = () => {
     const audioSrc = ttsCache.get(text);
     if (audioSrc) {
-      const audio = new Audio(audioSrc); // 在用户手势（点击）后创建
+      // 在用户手势（点击）后创建 Audio 对象
+      const audio = new Audio(audioSrc); 
       currentAudio.instance = audio;
       audio.play();
       audio.onended = () => { currentAudio.instance = null; };
@@ -55,6 +56,7 @@ const playCachedTTS = (text) => {
   if (ttsCache.has(text)) {
     play();
   } else {
+    // 如果还没缓存，先加载，加载完再播放
     preloadTTS(text).then(play);
   }
 };
@@ -89,7 +91,11 @@ const PostDetailPage = () => {
   const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
 
   useEffect(() => {
-    if (!id) return;
+    // [FIX] 增加对 db 实例的检查，防止 Firebase 未初始化时调用
+    if (!id || !db) {
+        if (!db) console.error("Firestore (db) is not available.");
+        return;
+    }
     setLoading(true);
 
     const postRef = doc(db, 'posts', id);
@@ -98,6 +104,7 @@ const PostDetailPage = () => {
       if (snap.exists()) {
         const postData = { id: snap.id, ...snap.data() };
         setPost(postData);
+        // 预加载TTS
         preloadTTS(postData.title);
         preloadTTS(removeUrlFromText(postData.content, parseVideoUrl(postData)));
       } else {
@@ -111,8 +118,10 @@ const PostDetailPage = () => {
       setLoading(false);
     });
 
+    // 增加浏览量，只在组件首次挂载时执行一次
     updateDoc(postRef, { viewsCount: increment(1) }).catch(console.error);
     
+    // 实时监听评论
     const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
     const unsubscribeComments = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -121,6 +130,7 @@ const PostDetailPage = () => {
       console.error("评论监听失败:", err);
     });
 
+    // 组件卸载时，取消所有监听
     return () => {
       unsubscribePost();
       unsubscribeComments();
@@ -130,7 +140,7 @@ const PostDetailPage = () => {
   const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
     e.preventDefault();
     const text = parentId ? inputRef?.current?.value : commentContent;
-    if (!text || !text.trim()) return;
+    if (!text || !text.trim() || !db) return;
     if (!user) return setShowLoginModal(true);
     try {
       await addDoc(collection(db, 'comments'), {
@@ -151,7 +161,7 @@ const PostDetailPage = () => {
   };
 
   const toggleLike = async () => {
-    if (!user || !post) return setShowLoginModal(true);
+    if (!user || !post || !db) return setShowLoginModal(true);
     const ref = doc(db, 'posts', id);
     const hasLiked = post.likers?.includes(user.uid);
     const hasDisliked = post.dislikers?.includes(user.uid);
@@ -172,7 +182,7 @@ const PostDetailPage = () => {
   };
 
   const toggleDislike = async () => {
-    if (!user || !post) return setShowLoginModal(true);
+    if (!user || !post || !db) return setShowLoginModal(true);
     const ref = doc(db, 'posts', id);
     const hasLiked = post.likers?.includes(user.uid);
     const hasDisliked = post.dislikers?.includes(user.uid);
@@ -196,7 +206,7 @@ const PostDetailPage = () => {
   const hasDisliked = useMemo(() => user && post?.dislikers?.includes(user.uid), [user, post?.dislikers]);
 
   const toggleFavorite = async () => {
-    if (!user || !post) return setShowLoginModal(true);
+    if (!user || !post || !db) return setShowLoginModal(true);
     const userRef = doc(db, 'users', user.uid);
     const hasFav = (user.favorites || []).includes(post.id); 
     try {
@@ -209,7 +219,7 @@ const PostDetailPage = () => {
   };
 
   const deletePost = async () => {
-    if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
+    if (!(user?.isAdmin || user?.uid === post?.authorId) || !db) return;
     if (confirm('确认删除此帖子及其所有评论吗？此操作不可撤销。')) {
       try {
         const batch = writeBatch(db);
@@ -228,7 +238,7 @@ const PostDetailPage = () => {
 
   if (authLoading || loading) return <LayoutBaseDynamic><div className="text-center p-10">加载中...</div></LayoutBaseDynamic>;
   if (error) return <LayoutBaseDynamic><div className="text-center p-10 text-red-500">{error}</div></LayoutBaseDynamic>;
-  if (!post) return <LayoutBaseDynamic><div className="text-center p-10">帖子加载完成，但内容为空。</div></LayoutBaseDynamic>;
+  if (!post) return <LayoutBaseDynamic><div className="text-center p-10">帖子加载完成，但内容为空或已被删除。</div></LayoutBaseDynamic>;
 
   return (
     <LayoutBaseDynamic>
