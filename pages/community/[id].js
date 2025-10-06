@@ -1,4 +1,4 @@
-// pages/community/[id].js (最终优化版 - 包含所有修复和增强)
+// pages/community/[id].js (最终修复版 - 解决音频警告并包含所有优化)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -10,16 +10,17 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 
-// 动态导入组件以优化首屏加载
+// 动态导入组件
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-/** === TTS 缓存与优化后的播放函数 === */
-const ttsCache = new Map();
-const currentAudio = { instance: null }; // [OPTIMIZATION] 用于全局控制，确保只有一个音频在播放
+/** === TTS 缓存与优化后的播放函数 (修复 AudioContext 警告) === */
+const ttsCache = new Map(); // 缓存 Blob URL，而不是 Audio 对象
+const currentAudio = { instance: null };
 
+// 预加载只获取数据，不创建 Audio 对象
 const preloadTTS = async (text) => {
   if (!text || ttsCache.has(text)) return;
   try {
@@ -27,27 +28,26 @@ const preloadTTS = async (text) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error('API Error');
     const blob = await response.blob();
-    const audio = new Audio(URL.createObjectURL(blob));
-    ttsCache.set(text, audio);
+    ttsCache.set(text, URL.createObjectURL(blob)); // 缓存可以播放的 URL
   } catch (error) {
     console.error(`预加载TTS "${text}" 失败:`, error);
   }
 };
 
-// [OPTIMIZATION] 改进播放逻辑，防止多音轨重叠
+// [FIX] 在用户首次点击时才创建 Audio 对象
 const playCachedTTS = (text) => {
   if (!text) return;
-  // 停止当前正在播放的音频
   if (currentAudio.instance) {
     currentAudio.instance.pause();
     currentAudio.instance.currentTime = 0;
   }
 
   const play = () => {
-    const audio = ttsCache.get(text);
-    if (audio) {
-      audio.play();
+    const audioSrc = ttsCache.get(text);
+    if (audioSrc) {
+      const audio = new Audio(audioSrc); // 在用户手势（点击）后创建
       currentAudio.instance = audio;
+      audio.play();
       audio.onended = () => { currentAudio.instance = null; };
     }
   };
@@ -58,6 +58,7 @@ const playCachedTTS = (text) => {
     preloadTTS(text).then(play);
   }
 };
+
 
 /** === 视频URL解析 (无变化) === */
 const parseVideoUrl = (post) => {
@@ -87,19 +88,16 @@ const PostDetailPage = () => {
   const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
   const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
 
-  // [FIX] 帖子和评论的数据获取逻辑分离，并增强健壮性
   useEffect(() => {
     if (!id) return;
     setLoading(true);
 
     const postRef = doc(db, 'posts', id);
     
-    // 实时监听帖子本身的变化 (点赞数等)
     const unsubscribePost = onSnapshot(postRef, (snap) => {
       if (snap.exists()) {
         const postData = { id: snap.id, ...snap.data() };
         setPost(postData);
-        // [OPTIMIZATION] 预加载标题和正文TTS
         preloadTTS(postData.title);
         preloadTTS(removeUrlFromText(postData.content, parseVideoUrl(postData)));
       } else {
@@ -113,10 +111,8 @@ const PostDetailPage = () => {
       setLoading(false);
     });
 
-    // 增加浏览量，只在组件首次挂载时执行一次
     updateDoc(postRef, { viewsCount: increment(1) }).catch(console.error);
     
-    // 实时监听评论
     const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
     const unsubscribeComments = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -125,14 +121,12 @@ const PostDetailPage = () => {
       console.error("评论监听失败:", err);
     });
 
-    // 组件卸载时，取消所有监听
     return () => {
       unsubscribePost();
       unsubscribeComments();
     };
   }, [id]);
 
-  /** 发表评论 (逻辑无大改，保持原样) */
   const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
     e.preventDefault();
     const text = parentId ? inputRef?.current?.value : commentContent;
@@ -156,7 +150,6 @@ const PostDetailPage = () => {
     }
   };
 
-  /** [FIX] 点赞/点踩逻辑互斥 */
   const toggleLike = async () => {
     if (!user || !post) return setShowLoginModal(true);
     const ref = doc(db, 'posts', id);
@@ -202,11 +195,9 @@ const PostDetailPage = () => {
   const hasLiked = useMemo(() => user && post?.likers?.includes(user.uid), [user, post?.likers]);
   const hasDisliked = useMemo(() => user && post?.dislikers?.includes(user.uid), [user, post?.dislikers]);
 
-  /** [FIX] 收藏功能健壮性 */
   const toggleFavorite = async () => {
     if (!user || !post) return setShowLoginModal(true);
     const userRef = doc(db, 'users', user.uid);
-    // [FIX] 安全地处理 user.favorites 可能为 undefined 的情况
     const hasFav = (user.favorites || []).includes(post.id); 
     try {
       if (hasFav) {
@@ -217,19 +208,15 @@ const PostDetailPage = () => {
     } catch (e) { console.error("收藏失败:", e); }
   };
 
-  /** [OPTIMIZATION] 删除帖子时，同步删除其下所有评论 */
   const deletePost = async () => {
     if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
     if (confirm('确认删除此帖子及其所有评论吗？此操作不可撤销。')) {
       try {
         const batch = writeBatch(db);
-        // 1. 删除帖子本身
         batch.delete(doc(db, 'posts', id));
-        // 2. 查询并批量删除所有相关评论
         const commentsQuery = query(collection(db, 'comments'), where('postId', '==', id));
         const commentsSnapshot = await getDocs(commentsQuery);
         commentsSnapshot.forEach(commentDoc => batch.delete(commentDoc.ref));
-        // 3. 提交批量操作
         await batch.commit();
         router.push('/community');
       } catch (error) {
@@ -273,13 +260,13 @@ const PostDetailPage = () => {
             </div>
           )}
           <footer className="flex items-center space-x-4 border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-            <button onClick={toggleLike} className={`flex items-center space-x-1 ${hasLiked ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-gray-300'}`}>
+            <button onClick={toggleLike} className={`flex items-center space-x-1 ${hasLiked ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-gray-300'}`} disabled={authLoading}>
               <span>👍</span><span>{post.likesCount || 0}</span>
             </button>
-            <button onClick={toggleDislike} className={`flex items-center space-x-1 ${hasDisliked ? 'text-blue-500 font-bold' : 'text-gray-600 dark:text-gray-300'}`}>
+            <button onClick={toggleDislike} className={`flex items-center space-x-1 ${hasDisliked ? 'text-blue-500 font-bold' : 'text-gray-600 dark:text-gray-300'}`} disabled={authLoading}>
               <span>👎</span><span>{post.dislikesCount || 0}</span>
             </button>
-            <button onClick={toggleFavorite} className="flex items-center space-x-1 text-gray-600 dark:text-gray-300">
+            <button onClick={toggleFavorite} className="flex items-center space-x-1 text-gray-600 dark:text-gray-300" disabled={authLoading}>
               <span>⭐</span><span>收藏</span>
             </button>
           </footer>
@@ -304,9 +291,9 @@ const PostDetailPage = () => {
               placeholder={user ? "写下你的评论..." : "请登录后发表评论"}
               className="w-full border rounded p-2 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none"
               rows="3"
-              disabled={!user}
+              disabled={authLoading || !user}
             />
-            <button type="submit" disabled={!user || !commentContent.trim()} className="mt-2 px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400 disabled:cursor-not-allowed">
+            <button type="submit" disabled={authLoading || !user || !commentContent.trim()} className="mt-2 px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400 disabled:cursor-not-allowed">
               发表评论
             </button>
           </form>
@@ -319,15 +306,12 @@ const PostDetailPage = () => {
 
 export default PostDetailPage;
 
-/** 评论组件 (优化版) */
 const CommentItem = ({ comment, allComments, onReply, user, depth }) => {
   const [showReply, setShowReply] = useState(false);
   const [showAllReplies, setShowAllReplies] = useState(false);
   const inputRef = useRef(null);
-  // [OPTIMIZATION] 使用 useMemo 缓存子评论计算，避免不必要的重渲染
   const childComments = useMemo(() => allComments.filter(c => c.parentId === comment.id), [allComments, comment.id]);
   
-  // [FIX] 增加最大递归深度，防止无限循环导致浏览器崩溃
   if (depth > 5) return null; 
 
   return (
@@ -340,7 +324,6 @@ const CommentItem = ({ comment, allComments, onReply, user, depth }) => {
             <span className="text-gray-400">{comment.createdAt?.toDate?.().toLocaleString() || ''}</span>
             <button onClick={() => playCachedTTS(comment.content)} title="朗读评论" className="text-gray-400 hover:text-blue-500">🔊</button>
           </div>
-          {/* [FIX] 增加样式，支持换行和长文本自动折行 */}
           <p className="mt-1 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{comment.content}</p>
           <div className="mt-1">
             <button onClick={() => setShowReply(!showReply)} className="text-xs text-blue-500 hover:underline">回复</button>
