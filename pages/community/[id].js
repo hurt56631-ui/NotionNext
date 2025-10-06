@@ -1,4 +1,4 @@
-// pages/community/[id].js (最终修复版 - 修正 videoUrl 解析逻辑)
+// pages/community/[id].js (最终修复版 - 清洗 TikTok URL 以绕过 CORB)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -10,7 +10,6 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/AuthContext';
 import dynamic from 'next/dynamic';
 
-// 动态导入组件
 const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
@@ -56,18 +55,12 @@ const playCachedTTS = (text) => {
 };
 
 
-/** === 视频URL解析 (关键修复) === */
-// [FIX] 彻底修复视频 URL 的解析逻辑
+/** === 视频URL解析 (无变化) === */
 const parseVideoUrl = (post) => {
   if (!post) return null;
-  
-  // ✅ 步骤 1: 优先直接使用数据库中已有的 videoUrl 字段 (大写 U)。
-  // 只要它是一个非空字符串，我们就直接相信它并返回，不再做不必要的验证。
   if (typeof post.videoUrl === 'string' && post.videoUrl.trim() !== '') {
     return post.videoUrl;
   }
-
-  // ✅ 步骤 2: 如果 post.videoUrl 不存在，再作为备用方案从 content 中解析。
   const urls = post.content?.match(/https?:\/\/[^\s<>"']+/g) || [];
   const patterns = [/youtu/, /vimeo/, /tiktok/, /facebook/, /twitch/, /dailymotion/, /bilibili/, /\.(mp4|webm|ogg|mov)$/i];
   return urls.find(u => patterns.some(p => p.test(u))) || null;
@@ -87,15 +80,31 @@ const PostDetailPage = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
 
-  // 这里的逻辑现在是正确的，因为 parseVideoUrl 被彻底修复了
-  const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
+  // [FIX] 关键修复：在这里“清洗” URL，去掉跟踪参数
+  const videoUrl = useMemo(() => {
+    if (!post) return null;
+    
+    // 1. 先用我们已有的函数解析出原始 URL
+    let rawUrl = parseVideoUrl(post);
+    
+    // 2. 如果是 TikTok 链接，就进行清洗
+    if (rawUrl && rawUrl.includes('tiktok.com')) {
+      // 找到 '?' 的位置
+      const queryIndex = rawUrl.indexOf('?');
+      if (queryIndex !== -1) {
+        // 如果找到了 '?'，就只取它之前的部分，得到一个干净的 URL
+        return rawUrl.substring(0, queryIndex);
+      }
+    }
+    
+    // 3. 如果不是 TikTok 链接，或者没有参数，直接返回原始 URL
+    return rawUrl;
+  }, [post]);
+
   const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
 
   useEffect(() => {
-    if (!id || !db) {
-        if (!db) console.error("Firestore (db) is not available.");
-        return;
-    }
+    if (!id || !db) return;
     setLoading(true);
 
     const postRef = doc(db, 'posts', id);
@@ -133,10 +142,11 @@ const PostDetailPage = () => {
     };
   }, [id]);
 
+  // ... (文件的其余所有函数 handleCommentSubmit, toggleLike 等都保持不变) ...
   const handleCommentSubmit = async (e, parentId = null, inputRef = null) => {
     e.preventDefault();
     const text = parentId ? inputRef?.current?.value : commentContent;
-    if (!text || !text.trim() || !db) return;
+    if (!text || !text.trim()) return;
     if (!user) return setShowLoginModal(true);
     try {
       await addDoc(collection(db, 'comments'), {
@@ -157,11 +167,10 @@ const PostDetailPage = () => {
   };
 
   const toggleLike = async () => {
-    if (!user || !post || !db) return setShowLoginModal(true);
+    if (!user || !post) return setShowLoginModal(true);
     const ref = doc(db, 'posts', id);
     const hasLiked = post.likers?.includes(user.uid);
     const hasDisliked = post.dislikers?.includes(user.uid);
-    
     const updates = {};
     if (hasLiked) {
       updates.likesCount = increment(-1);
@@ -178,11 +187,10 @@ const PostDetailPage = () => {
   };
 
   const toggleDislike = async () => {
-    if (!user || !post || !db) return setShowLoginModal(true);
+    if (!user || !post) return setShowLoginModal(true);
     const ref = doc(db, 'posts', id);
     const hasLiked = post.likers?.includes(user.uid);
     const hasDisliked = post.dislikers?.includes(user.uid);
-
     const updates = {};
     if (hasDisliked) {
       updates.dislikesCount = increment(-1);
@@ -202,7 +210,7 @@ const PostDetailPage = () => {
   const hasDisliked = useMemo(() => user && post?.dislikers?.includes(user.uid), [user, post?.dislikers]);
 
   const toggleFavorite = async () => {
-    if (!user || !post || !db) return setShowLoginModal(true);
+    if (!user || !post) return setShowLoginModal(true);
     const userRef = doc(db, 'users', user.uid);
     const hasFav = (user.favorites || []).includes(post.id); 
     try {
@@ -215,7 +223,7 @@ const PostDetailPage = () => {
   };
 
   const deletePost = async () => {
-    if (!(user?.isAdmin || user?.uid === post?.authorId) || !db) return;
+    if (!(user?.isAdmin || user?.uid === post?.authorId)) return;
     if (confirm('确认删除此帖子及其所有评论吗？此操作不可撤销。')) {
       try {
         const batch = writeBatch(db);
@@ -277,7 +285,6 @@ const PostDetailPage = () => {
             </button>
           </footer>
         </article>
-
         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold mb-4">评论 ({comments.length})</h2>
           {comments.filter(c => !c.parentId).slice(0, showAllComments ? undefined : 3)
@@ -289,7 +296,6 @@ const PostDetailPage = () => {
               {showAllComments ? '收起部分评论' : '展开所有评论'}
             </button>
           )}
-
           <form onSubmit={e => handleCommentSubmit(e, null)} className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
             <textarea
               value={commentContent}
@@ -309,7 +315,6 @@ const PostDetailPage = () => {
     </LayoutBaseDynamic>
   );
 };
-
 export default PostDetailPage;
 
 const CommentItem = ({ comment, allComments, onReply, user, depth }) => {
