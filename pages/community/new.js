@@ -1,45 +1,49 @@
-// pages/community/new.js
+// pages/community/new.js (最终优化版 - 解决视频链接和高读取量问题)
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // 导入 Firestore 实例
-import { useAuth } from '@/lib/AuthContext'; // 导入用户认证上下文
-import { LayoutBase } from '@/themes/heo'; // 你的基础布局组件
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/lib/AuthContext';
+import { LayoutBase } from '@/themes/heo';
 import dynamic from 'next/dynamic';
 
-// 动态导入 AuthModal，确保只在客户端渲染
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
 
-// 社区帖子分类选项
+// [OPTIMIZATION] 将视频解析函数添加到此文件，以便在发帖前使用
+const parseVideoUrl = (text) => {
+  if (!text) return null;
+  // 正则表达式匹配常见的 URL 格式
+  const urls = text.match(/https?:\/\/[^\s<>"']+/g) || [];
+  // 包含常见视频平台和文件扩展名的模式
+  const patterns = [/youtu/, /vimeo/, /tiktok/, /facebook/, /twitch/, /dailymotion/, /bilibili/, /\.(mp4|webm|ogg|mov)$/i];
+  // 查找第一个匹配的 URL
+  return urls.find(u => patterns.some(p => p.test(u))) || null;
+};
+
 const categories = ['技术分享', '学习笔记', '资源分享', '日常交流'];
 
 const NewPostPage = () => {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth(); // 获取用户和认证加载状态
+  const { user, loading: authLoading } = useAuth();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [category, setCategory] = useState(categories[0]); // 默认选择第一个分类
-  const [isSubmitting, setIsSubmitting] = useState(false); // 控制提交按钮加载状态
-  const [error, setError] = useState(''); // 存储表单提交错误信息
-  const [showLoginModal, setShowLoginModal] = useState(false); // 控制登录弹窗
+  const [category, setCategory] = useState(categories[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // 确保只有登录用户才能访问此页面
   useEffect(() => {
-    // 如果认证状态加载完毕且用户未登录，则显示登录弹窗
     if (!authLoading && !user) {
       setShowLoginModal(true);
-      // 或者直接重定向到登录页/主页
-      // router.replace('/');
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // 清除之前的错误信息
+    setError('');
 
-    // 客户端表单验证
     if (!user) {
       setError('请先登录才能发布帖子！');
       setShowLoginModal(true);
@@ -57,30 +61,46 @@ const NewPostPage = () => {
       setError('请选择一个帖子分类。');
       return;
     }
-    
-    // 如果 db 实例在某些情况下未初始化（尽管 lib/firebase.js 已经处理了），也应避免操作
     if (!db) {
       setError('Firestore 数据库服务不可用，请稍后再试。');
       return;
     }
 
-    setIsSubmitting(true); // 开始提交，显示加载状态
+    setIsSubmitting(true);
 
     try {
-      // 准备帖子数据
+      // [OPTIMIZATION] 步骤 1: 智能解析视频链接
+      // 在提交前，从用户输入的内容中自动提取视频 URL
+      const videoUrl = parseVideoUrl(content);
+
+      // [OPTIMIZATION] 步骤 2: 数据反规范化 + 包含视频链接
+      // 准备要保存到 Firestore 的最终数据对象
       const newPostData = {
+        // --- 基础内容 ---
         title: title.trim(),
         content: content.trim(),
         category: category,
+        
+        // --- 反规范化 (Denormalization) ---
+        // 直接将作者信息复制到帖子文档中，避免 N+1 查询
         authorId: user.uid,
-        authorName: user.displayName || user.email || '匿名用户', // 提供一个默认作者名
-        authorAvatar: user.photoURL || '/images/avatar-placeholder.png', // 提供一个默认头像
-        createdAt: serverTimestamp(), // 使用 Firebase 服务器时间戳
+        authorName: user.displayName || '匿名用户',
+        authorAvatar: user.photoURL || '/img/avatar.svg', // 使用和你项目中一致的默认头像
+
+        // --- 视频链接 ---
+        // 将解析出的 videoUrl (可能为 null) 保存到文档中
+        videoUrl: videoUrl,
+
+        // --- 初始化元数据 ---
+        createdAt: serverTimestamp(),
         likesCount: 0,
         commentsCount: 0,
+        viewsCount: 0,
+        likers: [], // 初始化点赞者列表
+        dislikers: [] // 初始化点踩者列表
       };
 
-      // 将帖子数据添加到 Firestore 的 'posts' 集合中
+      // 将完整的帖子数据添加到 Firestore 的 'posts' 集合
       await addDoc(collection(db, 'posts'), newPostData);
 
       // 发帖成功，跳转到社区主页
@@ -90,11 +110,10 @@ const NewPostPage = () => {
       console.error("发布帖子失败:", err);
       setError(`发布帖子失败：${err.message || '未知错误'}`);
     } finally {
-      setIsSubmitting(false); // 结束提交，隐藏加载状态
+      setIsSubmitting(false);
     }
   };
 
-  // 如果正在加载认证信息或用户未登录，且未显示登录弹窗，显示加载状态或不渲染表单
   if (authLoading) {
     return (
       <LayoutBase>
@@ -105,7 +124,6 @@ const NewPostPage = () => {
     );
   }
 
-  // 如果用户未登录，AuthModal 会自动显示
   if (!user && !showLoginModal) {
     return (
       <LayoutBase>
@@ -123,14 +141,12 @@ const NewPostPage = () => {
           <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 text-center mb-8">发布新帖子</h1>
 
           <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 space-y-6">
-            {/* 错误信息显示 */}
             {error && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
 
-            {/* 标题 */}
             <div>
               <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 标题
@@ -147,7 +163,6 @@ const NewPostPage = () => {
               />
             </div>
 
-            {/* 分类选择 */}
             <div>
               <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 分类
@@ -168,7 +183,6 @@ const NewPostPage = () => {
               </select>
             </div>
 
-            {/* 内容 */}
             <div>
               <label htmlFor="content" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 内容
@@ -178,14 +192,13 @@ const NewPostPage = () => {
                 rows="10"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="在这里写下你的帖子内容..."
+                placeholder="在这里写下你的帖子内容... 如果有视频链接，请直接粘贴在这里。"
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-y"
                 disabled={isSubmitting}
                 required
               ></textarea>
             </div>
 
-            {/* 提交按钮 */}
             <button
               type="submit"
               disabled={isSubmitting}
