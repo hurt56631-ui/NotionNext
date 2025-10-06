@@ -1,4 +1,4 @@
-// pages/community/[id].js (最终修复版 - 解决音频警告并增强健壮性)
+// pages/community/[id].js (最终修复版 - 修正 videoUrl 解析逻辑)
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
@@ -16,11 +16,10 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 const LayoutBaseDynamic = dynamic(() => import('@/themes/heo').then(m => m.LayoutBase), { ssr: false });
 const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
 
-/** === TTS 缓存与优化后的播放函数 (修复 AudioContext 警告) === */
-const ttsCache = new Map(); // 缓存 Blob URL，而不是 Audio 对象
+/** === TTS 缓存与优化后的播放函数 (无变化) === */
+const ttsCache = new Map();
 const currentAudio = { instance: null };
 
-// 预加载只获取数据，不创建 Audio 对象
 const preloadTTS = async (text) => {
   if (!text || ttsCache.has(text)) return;
   try {
@@ -28,46 +27,47 @@ const preloadTTS = async (text) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error('API Error');
     const blob = await response.blob();
-    ttsCache.set(text, URL.createObjectURL(blob)); // 缓存可以播放的 URL
+    ttsCache.set(text, URL.createObjectURL(blob));
   } catch (error) {
     console.error(`预加载TTS "${text}" 失败:`, error);
   }
 };
 
-// [FIX] 在用户首次点击时才创建 Audio 对象，以符合浏览器策略
 const playCachedTTS = (text) => {
   if (!text) return;
   if (currentAudio.instance) {
     currentAudio.instance.pause();
     currentAudio.instance.currentTime = 0;
   }
-
   const play = () => {
     const audioSrc = ttsCache.get(text);
     if (audioSrc) {
-      // 在用户手势（点击）后创建 Audio 对象
-      const audio = new Audio(audioSrc); 
+      const audio = new Audio(audioSrc);
       currentAudio.instance = audio;
       audio.play();
       audio.onended = () => { currentAudio.instance = null; };
     }
   };
-
   if (ttsCache.has(text)) {
     play();
   } else {
-    // 如果还没缓存，先加载，加载完再播放
     preloadTTS(text).then(play);
   }
 };
 
 
-/** === 视频URL解析 (无变化) === */
+/** === 视频URL解析 (关键修复) === */
+// [FIX] 彻底修复视频 URL 的解析逻辑
 const parseVideoUrl = (post) => {
   if (!post) return null;
-  if (post.videoUrl) {
-    try { new URL(post.videoUrl); return post.videoUrl; } catch {}
+  
+  // ✅ 步骤 1: 优先直接使用数据库中已有的 videoUrl 字段 (大写 U)。
+  // 只要它是一个非空字符串，我们就直接相信它并返回，不再做不必要的验证。
+  if (typeof post.videoUrl === 'string' && post.videoUrl.trim() !== '') {
+    return post.videoUrl;
   }
+
+  // ✅ 步骤 2: 如果 post.videoUrl 不存在，再作为备用方案从 content 中解析。
   const urls = post.content?.match(/https?:\/\/[^\s<>"']+/g) || [];
   const patterns = [/youtu/, /vimeo/, /tiktok/, /facebook/, /twitch/, /dailymotion/, /bilibili/, /\.(mp4|webm|ogg|mov)$/i];
   return urls.find(u => patterns.some(p => p.test(u))) || null;
@@ -87,11 +87,11 @@ const PostDetailPage = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
 
+  // 这里的逻辑现在是正确的，因为 parseVideoUrl 被彻底修复了
   const videoUrl = useMemo(() => post && parseVideoUrl(post), [post]);
   const cleanedContent = useMemo(() => post ? removeUrlFromText(post.content, videoUrl) : '', [post, videoUrl]);
 
   useEffect(() => {
-    // [FIX] 增加对 db 实例的检查，防止 Firebase 未初始化时调用
     if (!id || !db) {
         if (!db) console.error("Firestore (db) is not available.");
         return;
@@ -104,7 +104,6 @@ const PostDetailPage = () => {
       if (snap.exists()) {
         const postData = { id: snap.id, ...snap.data() };
         setPost(postData);
-        // 预加载TTS
         preloadTTS(postData.title);
         preloadTTS(removeUrlFromText(postData.content, parseVideoUrl(postData)));
       } else {
@@ -118,10 +117,8 @@ const PostDetailPage = () => {
       setLoading(false);
     });
 
-    // 增加浏览量，只在组件首次挂载时执行一次
     updateDoc(postRef, { viewsCount: increment(1) }).catch(console.error);
     
-    // 实时监听评论
     const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
     const unsubscribeComments = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -130,7 +127,6 @@ const PostDetailPage = () => {
       console.error("评论监听失败:", err);
     });
 
-    // 组件卸载时，取消所有监听
     return () => {
       unsubscribePost();
       unsubscribeComments();
