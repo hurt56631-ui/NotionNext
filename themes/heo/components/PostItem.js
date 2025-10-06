@@ -1,4 +1,4 @@
-// themes/heo/components/PostItem.js (V9 - 已链接到独立聊天页面)
+// themes/heo/components/PostItem.js (V10 - 完整最终版)
 
 import React, { forwardRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -8,15 +8,17 @@ import dynamic from 'next/dynamic';
 import { doc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Volume2 } from 'lucide-react';
-
-const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
-const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
-
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
-// --- TTS 朗读功能模块 ---
+// 使用 dynamic import 动态加载，并禁用 SSR，防止 hydration 错误
+const VideoEmbed = dynamic(() => import('@/components/VideoEmbed'), { ssr: false });
+const PostContent = dynamic(() => import('@/components/PostContent'), { ssr: false });
+
+// === 🎧 TTS 模块 (优化版：防止音频重叠播放) ===
+let currentAudio = null;
 const ttsCache = new Map();
+
 const preloadTTS = async (text) => {
   if (ttsCache.has(text)) return;
   try {
@@ -26,185 +28,190 @@ const preloadTTS = async (text) => {
     const blob = await response.blob();
     const audio = new Audio(URL.createObjectURL(blob));
     ttsCache.set(text, audio);
-  } catch (error) { console.error(`预加载 "${text}" 失败:`, error); }
+  } catch (error) {
+    console.error(`预加载 "${text}" 失败:`, error);
+  }
 };
+
 const playCachedTTS = (text) => {
-  if (ttsCache.has(text)) { ttsCache.get(text).play(); }
-  else { preloadTTS(text).then(() => { if (ttsCache.has(text)) { ttsCache.get(text).play(); } }); }
+  // ✅ 优化：播放前先暂停当前正在播放的音频
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+  
+  if (ttsCache.has(text)) {
+    currentAudio = ttsCache.get(text);
+    currentAudio.play();
+  } else {
+    preloadTTS(text).then(() => {
+      if (ttsCache.has(text)) {
+        currentAudio = ttsCache.get(text);
+        currentAudio.play();
+      }
+    });
+  }
 };
-// --- TTS 模块结束 ---
 
-
+// === 🕓 时间格式化 ===
 const formatTimeAgo = (ts) => {
   if (!ts) return '不久前';
   try {
     const date = ts?.toDate ? ts.toDate() : new Date(ts);
     return formatDistanceToNow(date, { addSuffix: true, locale: zhCN });
-  } catch (e) {
+  } catch {
     return '日期错误';
   }
 };
 
+// === 🎥 视频识别 ===
 const parseVideoUrl = (postData) => {
   if (!postData) return null;
-  if (postData.videoUrl && typeof postData.videoUrl === 'string' && postData.videoUrl.trim() !== '') {
-    try { new URL(postData.videoUrl); return postData.videoUrl; } catch { /* not a valid URL */ }
+  const { videoUrl, content } = postData;
+  if (videoUrl && typeof videoUrl === 'string' && videoUrl.trim() !== '') {
+    try { new URL(videoUrl); return videoUrl; } catch { /* ignore */ }
   }
-  const text = postData.content;
-  if (!text || typeof text !== 'string') return null;
+  if (!content || typeof content !== 'string') return null;
   const urlRegex = /(https?:\/\/[^\s<>"'()]+)/g;
-  const allUrls = text.match(urlRegex);
-  if (!allUrls) return null;
-  const videoPatterns = [
-    /youtube\.com|youtu\.be/, /vimeo\.com/, /tiktok\.com/, /facebook\.com/, /twitch\.tv/, /dailymotion\.com/,
-    /bilibili\.com/, 
-    /\.(mp4|webm|ogg|mov)$/i 
-  ];
-  for (const url of allUrls) {
-    if (videoPatterns.some(p => p.test(url))) {
-      return url;
-    }
+  const urls = content.match(urlRegex);
+  if (!urls) return null;
+  const patterns = [ /youtube\.com|youtu\.be/, /tiktok\.com/, /douyin\.com/, /bilibili\.com/, /\.(mp4|webm|mov)$/i ];
+  for (const url of urls) {
+    if (patterns.some(p => p.test(url))) return url;
   }
   return null;
 };
 
 const removeUrlFromText = (text, urlToRemove) => {
-    if (!text || !urlToRemove || typeof text !== 'string') return text;
-    const escapedUrl = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-    const regex = new RegExp(escapedUrl, 'g');
-    return text.replace(regex, '').trim();
+  if (!text || !urlToRemove) return text;
+  const escaped = urlToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(escaped, 'g'), '').trim();
 };
 
-// --- 【核心修改】StartChatButton 组件 ---
+// === 💬 私信按钮 ===
 const StartChatButton = ({ targetUser }) => {
   const { user: currentUser } = useAuth();
   const router = useRouter();
-
-  if (!targetUser || !targetUser.uid || !currentUser) return null;
+  if (!targetUser?.uid || !currentUser || currentUser.uid === targetUser.uid) return null;
 
   const handleClick = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡到父元素（卡片点击）
-    
-    // 生成唯一的 chatId，确保顺序不影响结果
+    e.stopPropagation();
     const chatId = [currentUser.uid, targetUser.uid].sort().join('_');
-    
-    // 使用 router.push 进行页面跳转
     router.push(`/messages/${chatId}`);
   };
 
   return (
-    <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition" aria-label="私信">
+    <button onClick={handleClick} className="relative z-10 inline-flex items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition">
       <i className="far fa-comment-dots mr-2" /> 私信
     </button>
   );
 };
 
-// --- PostItemInner 组件 ---
-function PostItemInner({ post }, ref) { // 移除了 onOpenChat prop
+// === 🧩 主组件 ===
+function PostItemInner({ post }, ref) {
   const { user } = useAuth();
-  const router = useRouter(); 
+  const router = useRouter();
 
-  if (!post) {
-      return null; 
-  }
+  if (!post) return null;
 
+  // --- 优化后的 useMemo 逻辑 ---
   const videoUrl = useMemo(() => parseVideoUrl(post), [post]);
-
+  
   const cleanedContent = useMemo(() => {
-    if (!post || !post.content) return ''; 
-    const fullCleanedContent = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
-    const previewLength = 150; 
-    if (fullCleanedContent.length > previewLength) {
-      return fullCleanedContent.substring(0, previewLength) + '...';
-    }
-    return fullCleanedContent;
+    if (!post?.content) return '';
+    const full = videoUrl ? removeUrlFromText(post.content, videoUrl) : post.content;
+    return full.trim();
   }, [post, videoUrl]);
 
-  const hasLiked = useMemo(() => user && post.likers && post.likers.includes(user.uid), [user, post.likers]);
+  // ✅ 优化：根据你的要求，精准截断标题和正文
+  const title = post.title?.length > 20 ? post.title.slice(0, 20) + '…' : post.title;
+  const preview = cleanedContent
+    ? cleanedContent.length > 60
+      ? cleanedContent.slice(0, 60) + '…'
+      : cleanedContent
+    : '';
 
-  const handleLike = useCallback(async (e) => {
-    e.stopPropagation(); 
-    if (!user || !post || !db) return; 
+  const hasLiked = useMemo(() => user && post.likers?.includes(user.uid), [user, post.likers]);
 
-    const postDocRef = doc(db, 'posts', post.id);
+  // --- 优化后的事件处理函数 ---
+  const handleLike = useCallback(async () => {
+    if (!user || !db) return;
+    const postRef = doc(db, 'posts', post.id);
     try {
       if (hasLiked) {
-        await updateDoc(postDocRef, { likesCount: increment(-1), likers: arrayRemove(user.uid) });
+        await updateDoc(postRef, { likesCount: increment(-1), likers: arrayRemove(user.uid) });
       } else {
-        await updateDoc(postDocRef, { likesCount: increment(1), likers: arrayUnion(user.uid) });
+        await updateDoc(postRef, { likesCount: increment(1), likers: arrayUnion(user.uid) });
       }
-    } catch (error) {
-      console.error("点赞操作失败:", error);
-      alert("点赞/取消点赞失败，请重试。");
-    }
-  }, [user, post, hasLiked]);
+    } catch (err) { console.error('点赞失败:', err); }
+  }, [user, post.id, hasLiked]);
 
   const handleCardClick = useCallback(() => router.push(`/community/${post.id}`), [router, post.id]);
-  const handleActionClick = useCallback((e, callback) => {
-    e.stopPropagation(); 
-    if (callback) callback(e);
-  }, []);
-  const handleTtsClick = useCallback((e, text) => {
-    e.stopPropagation();
-    playCachedTTS(text);
-  }, []);
+  
+  const stopPropagation = useCallback((e) => e.stopPropagation(), []);
 
   return (
-    <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer">
+    <div ref={ref} onClick={handleCardClick} className="p-4 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors duration-200 cursor-pointer group">
+      {/* 👤 作者区 */}
       <div className="flex items-start mb-3">
-        <Link href={`/profile/${post.authorId}`} passHref> 
-          <a onClick={handleActionClick} className="relative z-10 flex items-center cursor-pointer group">
-            <img src={post.authorAvatar || '/img/avatar.svg'} alt={post.authorName || '作者头像'} className="w-12 h-12 rounded-full object-cover" />
-            <div className="ml-3 flex-grow">
+        <Link href={`/profile/${post.authorId}`} passHref>
+          <a onClick={stopPropagation} className="relative z-10 flex items-center">
+            <img src={post.authorAvatar || '/img/avatar.svg'} alt="头像" className="w-12 h-12 rounded-full object-cover" loading="lazy" />
+            <div className="ml-3">
               <p className="font-semibold text-gray-800 dark:text-gray-200 group-hover:text-blue-500">{post.authorName || '匿名用户'}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">{formatTimeAgo(post.createdAt)}</p>
             </div>
           </a>
         </Link>
         <div className="ml-auto">
-          {post.authorId && user && user.uid !== post.authorId && 
-            <StartChatButton 
-              targetUser={{ uid: post.authorId }} 
-            />
-          } 
+          <StartChatButton targetUser={{ uid: post.authorId }} />
         </div>
       </div>
 
-      <div className="space-y-3 block">
-        <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold dark:text-gray-100 group-hover:text-blue-500">
-              {post.title}
-            </h2>
-            <button onClick={(e) => handleTtsClick(e, post.title)} className="relative z-10 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 flex-shrink-0" aria-label="朗读标题">
-                <Volume2 size={18} />
+      {/* 📄 内容区 */}
+      <div className="space-y-3 ml-15"> {/* 增加左边距，与头像对齐 */}
+        {/* 标题 + 朗读 */}
+        {title && (
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="text-lg font-bold dark:text-gray-100 break-all line-clamp-1">{title}</h2>
+            <button onClick={(e) => { stopPropagation(e); playCachedTTS(post.title); }} className="relative z-10 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex-shrink-0 transition-colors" aria-label="朗读标题">
+              <Volume2 size={18} />
             </button>
-        </div>
-        
-        {videoUrl && (
-          <div className="relative pt-[56.25%] overflow-hidden rounded-lg shadow-md"> 
-            <VideoEmbed url={videoUrl} playing={false} controls={true} width='100%' height='100%' className="absolute top-0 left-0" />
           </div>
         )}
 
-        <div className="text-base font-semibold text-gray-700 dark:text-gray-300">
-          <PostContent content={cleanedContent} />
-        </div>
+        {/* 视频 */}
+        {videoUrl && (
+          // ✅ 优化：移除了有问题的 relative 容器
+          <div className="my-3 -ml-15" onClick={stopPropagation}> {/* 抵消外层边距，让视频撑满 */}
+            <VideoEmbed url={videoUrl} />
+          </div>
+        )}
+
+        {/* 正文 */}
+        {preview && (
+          <div className="text-base text-gray-700 dark:text-gray-300 font-medium leading-relaxed line-clamp-2">
+            <PostContent content={preview} />
+          </div>
+        )}
       </div>
 
-      <div className="flex justify-center items-center space-x-8 mt-4 text-gray-600 dark:text-gray-400">
-        <button onClick={handleLike} className={`relative z-10 flex items-center space-x-2 transition-colors ${hasLiked ? 'text-red-500' : 'hover:text-red-500'}`}>
-            <i className={`${hasLiked ? 'fas' : 'far'} fa-heart text-lg`} />
-            <span>{post.likesCount || 0}</span>
-        </button>
-        <button onClick={handleActionClick} className="relative z-10 flex items-center space-x-1 hover:text-gray-500">
-            <i className="far fa-thumbs-down text-lg" />
+      {/* ❤️ 底部操作区 */}
+      <div className="flex justify-around items-center mt-4 text-gray-600 dark:text-gray-400 -mb-2">
+        <button onClick={(e) => { stopPropagation(e); handleLike(); }} className={`flex items-center space-x-2 transition-colors duration-200 py-2 px-4 rounded-full ${hasLiked ? 'text-red-500' : 'hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'}`}>
+          <i className={`${hasLiked ? 'fas' : 'far'} fa-heart text-lg`} />
+          <span>{post.likesCount || 0}</span>
         </button>
         <Link href={`/community/${post.id}#comments`} passHref>
-            <a onClick={handleActionClick} className="relative z-10 flex items-center space-x-2 hover:text-green-500">
-                <i className="far fa-comment-dots text-lg" />
-                <span>{post.commentCount || 0}</span>
-            </a>
+          <a onClick={stopPropagation} className="flex items-center space-x-2 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 py-2 px-4 rounded-full transition-colors duration-200">
+            <i className="far fa-comment-dots text-lg" />
+            <span>{post.commentCount || 0}</span>
+          </a>
         </Link>
+        <button onClick={stopPropagation} className="flex items-center space-x-2 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 py-2 px-4 rounded-full transition-colors duration-200">
+            <i className="far fa-share-square text-lg" />
+            <span>分享</span>
+        </button>
       </div>
     </div>
   );
