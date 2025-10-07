@@ -52,6 +52,7 @@ const LayoutBase = props => {
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
   
+  // 首页将由 LayoutIndex 完全接管，所以这里对首页不做任何特殊处理
   if (router.route === '/') {
     return <>{children}</>
   }
@@ -88,8 +89,39 @@ const LayoutBase = props => {
   )
 }
 
-const HomePageHeader = ({ onMenuClick }) => { /* ... */ };
-const BottomNavBar = () => { /* ... */ };
+// 首页专用的简化 Header
+const HomePageHeader = ({ onMenuClick }) => {
+    return (
+        <header className='fixed top-0 left-0 z-50 p-4'>
+            <button onClick={onMenuClick} className='p-2 rounded-full bg-black/20 backdrop-blur-md hover:bg-black/30 text-white transition-colors'>
+                <MenuIcon size={24}/>
+            </button>
+        </header>
+    );
+};
+
+// 首页专用的底部导航栏
+const BottomNavBar = () => {
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页'},
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手'},
+        { href: '/community', icon: 'fas fa-users', label: '社区'},
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息'},
+        { href: '/profile', icon: 'fas fa-user', label: '我'},
+    ];
+    const router = useRouter();
+
+    return (
+        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+            {navItems.map(item => (
+                <SmartLink key={item.href} href={item.href} className='flex flex-col items-center justify-center w-1/5'>
+                    <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                    <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                </SmartLink>
+            ))}
+        </nav>
+    );
+};
 
 /**
  * 首页 - 最终修复版
@@ -116,50 +148,90 @@ const LayoutIndex = props => {
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
   }, []);
 
-  const contentSwipeHandlers = useSwipeable({ /* ... */ });
-  const sidebarSwipeHandlers = useSwipeable({ /* ... */ });
+  const contentSwipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
+    },
+    onSwipedRight: () => {
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
+    },
+    preventDefaultTouchmoveEvent: true,
+    trackMouse: true,
+    delta: 50 // 调整回50，避免过于灵敏导致和侧滑栏手势冲突
+  });
+
+  const sidebarSwipeHandlers = useSwipeable({
+      onSwipedRight: () => setIsSidebarOpen(true),
+      trackMouse: true,
+      delta: 80 // 侧滑栏需要更大的滑动距离才触发，避免误操作
+  });
 
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
         <Style/>
         
         {/* --- 侧边栏 --- */}
-        <AnimatePresence>{isSidebarOpen && ( /* ... */ )}</AnimatePresence>
+        <AnimatePresence>
+            {isSidebarOpen && (
+                <>
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className='fixed inset-0 bg-black/50 z-[99]'
+                    />
+                    <motion.div
+                        initial={{ x: '-100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '-100%' }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
+                    >
+                        <div className='p-4 h-full'>
+                            <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                            <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
 
         {/* --- 页面主体 --- */}
         <div className='relative flex-grow w-full h-full overflow-hidden' {...sidebarSwipeHandlers}>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
-            {/* --- 两层滚动容器 --- */}
+            {/* --- 滚动容器 --- */}
             {/* [修复] 添加 overscroll-behavior-y: contain; 阻止滚动穿透 */}
             <div className='relative h-full w-full overflow-y-auto overscroll-behavior-y-contain'>
                 {/* 背景层 (固定) */}
                 <div className='absolute top-0 left-0 right-0 h-[45vh] z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
                 {/* 空白占位，将内容推到英雄区下方 */}
-                <div className='h-[45vh]'></div>
+                <div className='h-[45vh] flex flex-col justify-end p-4 text-white'>
+                    <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+                    <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
+                </div>
 
                 {/* "抽屉"内容区 */}
-                <div className='relative z-10 min-h-[55vh] bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'>
-                    {/* 1. 顶部英雄内容 (现在是内容层的一部分，随内容滚动) */}
-                    <div className='-mt-[25vh] pt-20 pb-8 px-4 flex flex-col justify-end text-white'>
-                        <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
-                        <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
-                        
-                        {/* [修复] 卡片布局 */}
-                        <div className='mt-4 grid grid-cols-2 grid-rows-2 gap-4 h-40'>
-                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
-                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaTiktok size={32}/></div>
+                <div className='relative z-10 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'>
+                    {/* [修复] 卡片布局现在是"抽屉"的一部分，会随之滚动 */}
+                    <div className='p-4 -mt-16'>
+                        <div className='grid grid-cols-2 grid-rows-2 gap-4 h-40'>
+                            <a href="#" className='row-span-1 col-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
                             </a>
-                            <a href="#" className='col-span-1 row-span-2 rounded-xl overflow-hidden bg-black'>
+                            <a href="#" className='row-start-2 col-start-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center text-white'><FaFacebook size={32}/></div>
+                            </a>
+                            <div className='row-span-2 col-start-2 rounded-xl overflow-hidden bg-black'>
                                 <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-                            </a>
-                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
-                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaFacebook size={32}/></div>
-                            </a>
+                            </div>
                         </div>
                     </div>
-
+                    
                     <div className='sticky top-0 z-20 bg-white/80 dark:bg-black/70 backdrop-blur-lg'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
