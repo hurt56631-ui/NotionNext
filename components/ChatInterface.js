@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完美修复版 V3 - 统一 senderId)
+// /components/ChatInterface.js (终极调试版 - 集成详细日志)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db, rtDb } from "@/lib/firebase"; 
@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash, Mic } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
+// ... (所有辅助组件和函数 GlobalScrollbarStyle, CircleTranslateIcon, PinyinText, TTS/AI 模块, formatLastSeen 保持不变) ...
 const GlobalScrollbarStyle = () => ( <style>{`...`}</style> );
 const CircleTranslateIcon = ({ size = 6 }) => ( <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
@@ -90,7 +91,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   }, [peerUser?.id]);
 
   useEffect(() => {
-    if (!chatId || !user) return;
+    if (!chatId || !user?.uid) return;
     const messagesRef = collection(db, `privateChats/${chatId}/messages`);
     const q = query(messagesRef, orderBy("createdAt", "asc"), limit(5000));
     const unsub = onSnapshot(q, (snap) => {
@@ -98,95 +99,112 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       const oldMessagesCount = prevMessagesLengthRef.current;
       if (oldMessagesCount > 0 && arr.length > oldMessagesCount) {
         const newMessages = arr.slice(oldMessagesCount);
-        // ✅ 修复: 使用 senderId 判断新消息来源
         const newPeerMessagesCount = newMessages.filter(m => m.senderId !== user.uid).length;
-        if (newPeerMessagesCount > 0 && !isAtBottomRef.current) {
-          setUnreadCount(prev => prev + newPeerMessagesCount);
-        }
+        if (newPeerMessagesCount > 0 && !isAtBottomRef.current) { setUnreadCount(prev => prev + newPeerMessagesCount); }
       }
       setMessages(arr);
       prevMessagesLengthRef.current = arr.length;
       const lastMessage = arr[arr.length - 1];
-      // ✅ 修复: 使用 senderId 判断最后一条消息来源
-      if (lastMessage && lastMessage.senderId !== user.uid) {
-        if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text);
-        if (cfg.autoTranslate) handleTranslateMessage(lastMessage);
-      }
+      if (lastMessage && lastMessage.senderId !== user.uid) { if (cfg.autoPlayTTS) playCachedTTS(lastMessage.text); if (cfg.autoTranslate) handleTranslateMessage(lastMessage); }
     }, (err) => console.error("监听消息错误:", err));
     return () => unsub();
-  }, [chatId, user, cfg.autoPlayTTS, cfg.autoTranslate]);
+  }, [chatId, user?.uid, cfg.autoPlayTTS, cfg.autoTranslate]);
 
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem("private_chat_settings_v3", JSON.stringify(cfg)); } }, [cfg]);
   useEffect(() => { if (searchActive && searchInputRef.current) { searchInputRef.current.focus(); } }, [searchActive]);
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
+  // ==================== 【集成详细日志的 sendMessage 函数】 ====================
   const sendMessage = async (textToSend) => {
+    console.group("🚀 [sendMessage] 开始执行");
+
     const content = (textToSend || input).trim();
+    
+    // --- 日志点 1: 检查所有前提条件 ---
+    console.log("1. 检查前提条件...");
+    console.log(`  - 消息内容 (content): "${content}"`);
+    console.log("  - 当前用户 (user):", user);
+    console.log("  - 对方用户 (peerUser):", peerUser);
+    console.log(`  - 聊天ID (chatId): "${chatId}"`);
+
     if (!content || !user?.uid || !peerUser?.id || !chatId) {
-      console.error("SendMessage Aborted: Missing required data.");
+      console.error("❌ [sendMessage] 失败：前提条件不满足！函数提前退出。");
+      console.groupEnd();
+      alert("发送失败：缺少关键信息（用户、聊天对象或内容）。");
       return;
     }
+    
+    console.log("✅ 1. 前提条件满足。");
     setSending(true);
 
     try {
       const chatDocRef = doc(db, "privateChats", chatId);
+      
+      // --- 日志点 2: 执行事务 ---
+      console.log("2. 准备执行 Firestore Transaction...");
+      
       await runTransaction(db, async (transaction) => {
+        console.log("  - [Transaction] 事务内部开始...");
         const chatDocSnap = await transaction.get(chatDocRef);
         const newMessageRef = doc(collection(chatDocRef, "messages"));
 
         if (!chatDocSnap.exists()) {
-          transaction.set(chatDocRef, {
+          console.log("  - [Transaction] 聊天文档不存在，准备创建...");
+          const newChatData = {
             members: [user.uid, peerUser.id],
             createdAt: serverTimestamp(),
             lastMessage: content,
             lastMessageAt: serverTimestamp(),
             [`unreadCounts.${peerUser.id}`]: 1,
             [`unreadCounts.${user.uid}`]: 0
-          });
+          };
+          console.log("    - [Transaction] 新聊天文档数据:", newChatData);
+          transaction.set(chatDocRef, newChatData);
         } else {
-          transaction.update(chatDocRef, {
+          console.log("  - [Transaction] 聊天文档已存在，准备更新...");
+          const updateData = {
             lastMessage: content,
             lastMessageAt: serverTimestamp(),
             [`unreadCounts.${peerUser.id}`]: increment(1),
             [`unreadCounts.${user.uid}`]: 0
-          });
+          };
+          console.log("    - [Transaction] 更新数据:", updateData);
+          transaction.update(chatDocRef, updateData);
         }
         
-        transaction.set(newMessageRef, {
+        const newMessageData = {
           text: content,
           senderId: user.uid,
           createdAt: serverTimestamp()
-        });
+        };
+        console.log("  - [Transaction] 准备创建新消息...");
+        console.log("    - [Transaction] 新消息数据:", newMessageData);
+        transaction.set(newMessageRef, newMessageData);
+        console.log("  - [Transaction] 事务内部操作定义完毕。");
       });
+
+      console.log("✅ 3. Firestore Transaction 执行成功！");
 
       setInput("");
       setMyTranslationResult(null);
 
     } catch (error) {
-      console.error("SendMessage Transaction Error:", error);
-      alert(`发送失败，请重试: ${error.message}`);
+      // --- 日志点 3: 捕获并详细记录错误 ---
+      console.error("❌ [sendMessage] 失败：在执行 Transaction 时捕获到错误！");
+      console.error("  - 错误代码 (error.code):", error.code);
+      console.error("  - 错误信息 (error.message):", error.message);
+      console.error("  - 完整错误对象 (error):", error);
+      alert(`发送失败，请检查浏览器控制台获取详细错误信息。\n错误: ${error.message}`);
     } finally {
       setSending(false);
+      console.log("🏁 [sendMessage] 执行完毕。");
+      console.groupEnd();
     }
   };
+  // =========================================================================
 
-  const handleSpeechRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能。请尝试使用最新版的 Chrome 浏览器。"); return; }
-    if (isListening) { recognitionRef.current?.stop(); return; }
-    const recognition = new SpeechRecognition();
-    recognition.lang = cfg.speechLang;
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognitionRef.current = recognition;
-    recognition.onstart = () => { setIsListening(true); setInput(''); };
-    recognition.onend = () => { setIsListening(false); recognitionRef.current = null; };
-    recognition.onerror = (event) => { console.error("语音识别错误:", event.error); setIsListening(false); setInput(''); };
-    recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); setInput(transcript); if (event.results[0].isFinal && transcript.trim()) { sendMessage(transcript); } };
-    recognition.start();
-  };
-
+  const handleSpeechRecognition = () => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能。请尝试使用最新版的 Chrome 浏览器。"); return; } if (isListening) { recognitionRef.current?.stop(); return; } const recognition = new SpeechRecognition(); recognition.lang = cfg.speechLang; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setInput(''); }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.onerror = (event) => { console.error("语音识别错误:", event.error); setIsListening(false); setInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); setInput(transcript); if (event.results[0].isFinal && transcript.trim()) { sendMessage(transcript); } }; recognition.start(); };
   const handleScroll = () => { const el = mainScrollRef.current; if (el) { const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100; isAtBottomRef.current = atBottom; if (atBottom && unreadCount > 0) { setUnreadCount(0); } } };
   const handleRecallMessage = async (message) => { if (message.senderId !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await updateDoc(messageRef, { text: "此消息已被撤回", recalled: true }); } catch (error) { console.error("撤回消息失败:", error); alert("撤回失败"); } };
   const handleDeleteMessage = async (message) => { if (message.senderId !== user.uid) return; const messageRef = doc(db, `privateChats/${chatId}/messages`, message.id); try { await deleteDoc(messageRef); } catch (error) { console.error("删除消息失败:", error); alert("删除失败"); } };
@@ -199,7 +217,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   const handleBlockUser = async () => { if (!window.confirm(`确定要拉黑 ${peerUser?.displayName} 吗？`)) return; alert("拉黑功能待实现。"); };
   
   const LongPressMenu = ({ message, onClose }) => { 
-    const mine = message.senderId === user?.uid; // ✅ 修复: 使用 senderId
+    const mine = message.senderId === user?.uid;
     const isPinyinVisible = showPinyinFor === message.id; 
     return ( 
       <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center" onClick={onClose}> 
@@ -216,7 +234,7 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   };
   
   const MessageRow = ({ message, isLastMessage }) => { 
-    const mine = message.senderId === user?.uid; // ✅ 修复: 使用 senderId
+    const mine = message.senderId === user?.uid;
     const longPressTimer = useRef(); 
     const handleTouchStart = () => { longPressTimer.current = setTimeout(() => { setLongPressedMessage(message); }, 500); }; 
     const handleTouchEnd = () => { clearTimeout(longPressTimer.current); }; 
@@ -344,7 +362,5 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
       {longPressedMessage && <LongPressMenu message={longPressedMessage} onClose={() => setLongPressedMessage(null)} />}
       {correctionMode.active && ( <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 z-[70] flex items-center justify-center p-4"> <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="w-full max-w-md bg-white text-black border border-gray-200 rounded-lg shadow-xl p-4 space-y-3"> <h3 className="font-bold text-lg">修改消息</h3> <p className="text-sm p-3 bg-gray-100 rounded-md">{correctionMode.message.text}</p> <textarea value={correctionMode.text} onChange={e => setCorrectionMode(c => ({...c, text: e.target.value}))} rows={4} className="w-full p-2 border rounded bg-white border-gray-300" /> <div className="flex justify-end gap-2"> <button onClick={() => setCorrectionMode({ active: false, message: null, text: ''})} className="px-4 py-2 rounded-md bg-gray-200 text-sm">取消</button> <button onClick={sendCorrection} className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm">确认修改</button> </div> </motion.div> </motion.div> )}
     </div>
-  );
-}
   );
 }
