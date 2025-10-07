@@ -1,4 +1,4 @@
-// components/Tixing/PhraseCard.js (最终稳定版 - 解决所有已知问题)
+// components/Tixing/PhraseCard.js (最终增强版 - 解决所有已知问题和兼容性增强)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -24,17 +24,21 @@ const sounds = {
 let _howlInstance = null;
 let _currentAudioBlobUrl = null; 
 let _autoPlayTimer = null; 
-let _segmentTimer = null; // 分字朗读计时器
+let _segmentTimer = null; 
 
-// **修正：确保 playTTS 在播放前停止所有其他声音**
-const playTTS = (text, voice, rate, onEndCallback, e) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
-    
+// 停止所有音频
+const stopAllAudio = () => {
     Object.values(sounds).forEach(sound => sound.stop());
     if (_howlInstance?.playing()) _howlInstance.stop();
     clearTimeout(_autoPlayTimer);
     clearTimeout(_segmentTimer);
+};
+
+const playTTS = (text, voice, rate, onEndCallback, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
+    
+    stopAllAudio();
     
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
@@ -42,9 +46,7 @@ const playTTS = (text, voice, rate, onEndCallback, e) => {
     _howlInstance.play();
 };
 
-// **修正：分字朗读函数 (用于清晰朗读)**
 const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
-    // 移除所有标点符号，将句子分成单个汉字
     const characters = text.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g) || [];
     let charIndex = 0;
 
@@ -59,7 +61,6 @@ const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
         const rateValue = Math.round(rate / 2);
         const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(char)}&v=${voice}&r=${rateValue}`;
         
-        // 确保播放的是新的 Howl 实例
         if (_howlInstance?.playing()) _howlInstance.stop(); 
         
         _howlInstance = new Howl({ 
@@ -67,18 +68,13 @@ const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
             html5: true, 
             onend: () => {
                 charIndex++;
-                // 每个字之间间隔 300ms
                 _segmentTimer = setTimeout(playNext, 300); 
             }
         });
         _howlInstance.play();
     };
     
-    // 启动前先停止所有
-    if (_howlInstance?.playing()) _howlInstance.stop();
-    Object.values(sounds).forEach(sound => sound.stop());
-    clearTimeout(_autoPlayTimer);
-    clearTimeout(_segmentTimer);
+    stopAllAudio(); // 启动分字朗读前停止所有
     
     playNext();
 };
@@ -199,24 +195,18 @@ const PinyinVisualizer = React.memo(({ analysis }) => {
 const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
     const analysis = useMemo(() => {
         // **修正 3：忽略标点符号，专注于汉字对比**
-        const cleanCorrectWord = correctWord.replace(/[.,。，！？!?]/g, '');
-        const cleanUserText = userText.replace(/[.,。，！？!?]/g, '');
+        const cleanCorrectWord = correctWord.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g)?.join('') || '';
+        const cleanUserText = userText.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g)?.join('') || '';
         
         const correctPinyin = pinyinConverter(cleanCorrectWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(cleanUserText, { toneType: 'num', type: 'array', removeNonHan: true });
 
-        if (correctPinyin.length !== userPinyin.length) {
-            // 修正：不再严格判断长度，而是给出警告
-            console.warn(`Word length mismatch: Expected ${correctPinyin.length}, got ${userPinyin.length}`);
-        }
-        
         const effectiveLength = Math.min(correctPinyin.length, userPinyin.length);
         
         const results = Array.from({ length: effectiveLength }).map((_, index) => {
             const correctPy = correctPinyin[index];
             const userPy = userPinyin[index];
             
-            // 如果用户发音超长，后面的结果可能为空，这里需处理，但核心是对比前 effectiveLength 个字
             if (!correctPy || !userPy) return { char: cleanCorrectWord[index] || '?', pinyinMatch: false, user: { errors: { initial: true, final: true, tone: true } } };
             
             const correctParts = parsePinyin(correctPy);
@@ -236,7 +226,7 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
         });
 
         const correctCount = results.filter(r => r.pinyinMatch).length;
-        const accuracy = (correctCount / cleanCorrectWord.length * 100).toFixed(0);
+        const accuracy = (cleanCorrectWord.length > 0) ? (correctCount / cleanCorrectWord.length * 100).toFixed(0) : 0;
         const isPerfect = cleanCorrectWord.length === correctCount && cleanCorrectWord.length === cleanUserText.length;
         
         return { isCorrect: isPerfect, results, accuracy, cleanCorrectWord, cleanUserText, hasLengthMismatch: correctPinyin.length !== userPinyin.length };
@@ -259,8 +249,8 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
     // **修正：播放标准音时使用分字朗读**
     const playStandard = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
-        playSegmentedTTS(correctWord, 'zh-CN-XiaoyouNeural', 0);
-    }, [correctWord]);
+        playSegmentedTTS(analysis.cleanCorrectWord, 'zh-CN-XiaoyouNeural', 0);
+    }, [analysis.cleanCorrectWord]);
     
 
     if (!analysis) return null;
@@ -285,7 +275,7 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
                 <div style={styles.errorDetailsContainer}>
                     {analysis.hasLengthMismatch && (
                         <div style={styles.lengthError}>
-                            <h3>字数不符！请注意标点符号或漏读</h3>
+                            <h3>字数不符！</h3>
                             <p>目标: <strong>{analysis.cleanCorrectWord.length} 字</strong> &bull; 你读: <strong>{analysis.cleanUserText.length} 字</strong></p>
                         </div>
                     )}
@@ -382,7 +372,7 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
 });
 
 // =================================================================================
-// ===== Component: 设置面板 (移除笔顺设置) =========================================
+// ===== Component: 设置面板 (略) =================================================
 // =================================================================================
 const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
@@ -554,7 +544,7 @@ const PhraseCard = ({ flashcards = [] }) => {
 
       }).catch(err => {
           console.error("Failed to get audio stream:", err);
-          // 修正 1：确保 catch 块只使用 err 对象
+          // 修正 1：修复 catch 块的 ReferenceError 错误
           alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。错误信息: ' + (err.name || err.message));
           setIsListening(false);
       });
@@ -708,7 +698,7 @@ const styles = {
   // --- 右侧控制按钮 (小尺寸, 透明背景, 固定在右下方) ---
   rightControls: { position: 'fixed', bottom: '15%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, 
   rightIconButton: { 
-    background: 'rgba(255, 255, 255, 0.5)', 
+    background: 'rgba(255, 255, 255, 0.0)', // 修正：完全透明背景
     border: 'none', 
     cursor: 'pointer', 
     display: 'flex', 
