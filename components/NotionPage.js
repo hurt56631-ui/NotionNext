@@ -10,7 +10,8 @@ import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
 // --- 1. 导入你的所有自定义组件 ---
-const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false }) 
+const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false })
+const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false })
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
@@ -55,6 +56,10 @@ const CustomCode = (props) => {
         if (componentPath === '/components/AiTtsButton.js') {
           return <AiTtsButton {...parsedProps} />;
         }
+        if (componentPath === '/components/PhraseCard.js') {
+          return <PhraseCard {...parsedProps} />;
+        }
+
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
         }
