@@ -52,7 +52,10 @@ const LayoutBase = props => {
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
   
-  if (router.route === '/') { return <>{children}</> }
+  // 首页将由 LayoutIndex 完全接管
+  if (router.route === '/') {
+    return <>{children}</>
+  }
   
   const headerSlot = (
     <header>
@@ -84,11 +87,63 @@ const LayoutBase = props => {
   )
 }
 
-const HomePageHeader = ({ onMenuClick }) => { /* ... */ };
-const BottomNavBar = () => { /* ... */ };
+// 首页专用的简化 Header
+const HomePageHeader = ({ onMenuClick }) => {
+    return (
+        <header className='fixed top-0 left-0 z-50 p-4'>
+            <button onClick={onMenuClick} className='p-2 rounded-full bg-black/20 backdrop-blur-md hover:bg-black/30 text-white transition-colors'>
+                <MenuIcon size={24}/>
+            </button>
+        </header>
+    );
+};
+
+// 首页专用的底部导航栏
+const BottomNavBar = () => {
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页'},
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手'},
+        { href: '/community', icon: 'fas fa-users', label: '社区'},
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息'},
+        { href: '/profile', icon: 'fas fa-user', label: '我'},
+    ];
+    const router = useRouter();
+
+    return (
+        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+            {navItems.map(item => (
+                <SmartLink key={item.href} href={item.href} className='flex flex-col items-center justify-center w-1/5'>
+                    <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                    <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                </SmartLink>
+            ))}
+        </nav>
+    );
+};
+
+// 纤细滚动条样式
+const CustomScrollbarStyle = () => (
+    <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(150, 150, 150, 0.3);
+            border-radius: 10px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(100, 100, 100, 0.4);
+        }
+    `}</style>
+);
+
 
 /**
- * 首页 - "真·贴吧式"滚动最终版
+ * 首页 - "真·贴吧式"滚动最终修复版
  */
 const LayoutIndex = props => {
   const tabs = [
@@ -101,8 +156,7 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [backgroundUrl, setBackgroundUrl] = useState('');
-  const scrollRef = useRef(null); // 用于控制滚动
-
+  
   useEffect(() => {
     const backgrounds = [
         'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&q=80&w=2070',
@@ -125,10 +179,8 @@ const LayoutIndex = props => {
     delta: 50
   });
 
-  // 侧边栏手势现在绑定在最外层
   const sidebarSwipeHandlers = useSwipeable({
       onSwipedRight: (eventData) => {
-          // 只在屏幕左侧边缘 (前15%) 滑动时触发
           if (eventData.initial[0] < window.innerWidth * 0.15) {
               setIsSidebarOpen(true);
           }
@@ -140,7 +192,21 @@ const LayoutIndex = props => {
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarSwipeHandlers}>
         <Style/>
-        <AnimatePresence>{isSidebarOpen && ( /* Sidebar JSX */ )}</AnimatePresence>
+        <CustomScrollbarStyle />
+        
+        <AnimatePresence>
+            {isSidebarOpen && (
+                <>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className='fixed inset-0 bg-black/50 z-[99]' />
+                    <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'>
+                        <div className='p-4 h-full'>
+                            <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                            <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
         
         <div className='relative flex-grow w-full h-full'>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
@@ -154,30 +220,27 @@ const LayoutIndex = props => {
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('...')"}}>
+                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
                             <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
                         </a>
-                        <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('...')"}}>
+                        <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
                             <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaFacebook size={32}/></div>
                         </a>
                         <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allowFullScreen></iframe>
+                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* 滚动内容层 (z-20) */}
-            <div ref={scrollRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-behavior-y-contain custom-scrollbar'>
-                {/* 空白占位，把滚动起点推到固定内容下方 */}
+            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-behavior-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
-                
-                {/* "抽屉" */}
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[55vh]'>
+                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
-                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500'}`}>
+                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
                                 {tab.icon}
                                 <span className='text-sm font-semibold mt-1'>{tab.name}</span>
                                 <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
@@ -186,7 +249,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
 
-                    {/* [手势修复] 把手势监听和内容渲染放在一起 */}
                     <main {...contentSwipeHandlers} className="overscroll-behavior-x-contain">
                         {tabs.map(tab => (
                             <div key={tab.name} className={activeTab === tab.name ? 'block' : 'hidden'}>
@@ -205,7 +267,6 @@ const LayoutIndex = props => {
     </div>
   );
 };
-
 
 // =========================================================================
 // =============  ✅ 所有其他组件完整恢复如下  ✅ ===================
