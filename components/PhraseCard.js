@@ -1,4 +1,4 @@
-// components/Tixing/PhraseCard.js (最终稳定版 - 修复所有界面/逻辑/样式问题)
+// components/Tixing/PhraseCard.js (最终稳定版 - 解决所有已知问题)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -24,7 +24,7 @@ const sounds = {
 let _howlInstance = null;
 let _currentAudioBlobUrl = null; 
 let _autoPlayTimer = null; 
-let _segmentTimer = null; // 新增分字朗读计时器
+let _segmentTimer = null; // 分字朗读计时器
 
 // **修正：确保 playTTS 在播放前停止所有其他声音**
 const playTTS = (text, voice, rate, onEndCallback, e) => {
@@ -42,7 +42,7 @@ const playTTS = (text, voice, rate, onEndCallback, e) => {
     _howlInstance.play();
 };
 
-// **新增：分字朗读函数**
+// **修正：分字朗读函数 (用于清晰朗读)**
 const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
     // 移除所有标点符号，将句子分成单个汉字
     const characters = text.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g) || [];
@@ -55,11 +55,12 @@ const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
         }
 
         const char = characters[charIndex];
-        // 停止当前播放
-        if (_howlInstance?.playing()) _howlInstance.stop();
 
         const rateValue = Math.round(rate / 2);
         const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(char)}&v=${voice}&r=${rateValue}`;
+        
+        // 确保播放的是新的 Howl 实例
+        if (_howlInstance?.playing()) _howlInstance.stop(); 
         
         _howlInstance = new Howl({ 
             src: [ttsUrl], 
@@ -161,29 +162,84 @@ const HanziWriterDisplay = React.memo(({ chineseText, setWriterChar }) => {
     );
 });
 
+// =================================================================================
+// ===== Component: 视觉化拼音分析器 (不变) ===========================================
+// =================================================================================
+const PinyinVisualizer = React.memo(({ analysis }) => {
+    const { parts, errors } = analysis;
+    
+    const hasInitial = !!parts.initial;
+    const hasFinal = !!parts.final;
+    const hasTone = parts.tone !== '0';
+
+    const initialStyle = hasInitial && errors.initial ? styles.wrongPart : styles.correctPart;
+    const finalStyle = hasFinal && errors.final ? styles.wrongPart : styles.correctPart;
+    const toneStyle = hasTone && errors.tone ? styles.wrongPart : styles.correctPart;
+
+    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', '');
+    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) {
+        finalDisplay = parts.final;
+    }
+    finalDisplay = finalDisplay.replace(/[1-5]$/, '');
+
+
+    return (
+        <div style={styles.pinyinVisualizerContainer}>
+            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || '' }</span>
+            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
+            <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
+        </div>
+    );
+});
 
 // =================================================================================
-// ===== Component: 发音对比面板 (略) =================================================
+// ===== Component: 发音对比面板 (修正逻辑和美化) =======================================
 // =================================================================================
 
 const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
     const analysis = useMemo(() => {
-        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
-        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
-        if (correctPinyin.length !== userPinyin.length) { return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` }; }
+        // **修正 3：忽略标点符号，专注于汉字对比**
+        const cleanCorrectWord = correctWord.replace(/[.,。，！？!?]/g, '');
+        const cleanUserText = userText.replace(/[.,。，！？!?]/g, '');
+        
+        const correctPinyin = pinyinConverter(cleanCorrectWord, { toneType: 'num', type: 'array', removeNonHan: true });
+        const userPinyin = pinyinConverter(cleanUserText, { toneType: 'num', type: 'array', removeNonHan: true });
 
-        const results = correctPinyin.map((correctPy, index) => {
+        if (correctPinyin.length !== userPinyin.length) {
+            // 修正：不再严格判断长度，而是给出警告
+            console.warn(`Word length mismatch: Expected ${correctPinyin.length}, got ${userPinyin.length}`);
+        }
+        
+        const effectiveLength = Math.min(correctPinyin.length, userPinyin.length);
+        
+        const results = Array.from({ length: effectiveLength }).map((_, index) => {
+            const correctPy = correctPinyin[index];
             const userPy = userPinyin[index];
+            
+            // 如果用户发音超长，后面的结果可能为空，这里需处理，但核心是对比前 effectiveLength 个字
+            if (!correctPy || !userPy) return { char: cleanCorrectWord[index] || '?', pinyinMatch: false, user: { errors: { initial: true, final: true, tone: true } } };
+            
             const correctParts = parsePinyin(correctPy);
             const userParts = parsePinyin(userPy);
-            const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone, };
+            const errors = {
+                initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial),
+                final: correctParts.final !== userParts.final,
+                tone: correctParts.tone !== userParts.tone,
+            };
             const pinyinMatch = !errors.initial && !errors.final && !errors.tone;
-            return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts, errors: { initial: false, final: false, tone: false } }, user: { parts: userParts, errors: errors } };
+            return {
+                char: cleanCorrectWord[index],
+                pinyinMatch,
+                correct: { parts: correctParts, errors: { initial: false, final: false, tone: false } },
+                user: { parts: userParts, errors: errors }
+            };
         });
-        const isCorrect = results.every(r => r.pinyinMatch);
+
         const correctCount = results.filter(r => r.pinyinMatch).length;
-        const accuracy = (correctCount / results.length * 100).toFixed(0);
-        return { isCorrect, results, accuracy };
+        const accuracy = (correctCount / cleanCorrectWord.length * 100).toFixed(0);
+        const isPerfect = cleanCorrectWord.length === correctCount && cleanCorrectWord.length === cleanUserText.length;
+        
+        return { isCorrect: isPerfect, results, accuracy, cleanCorrectWord, cleanUserText, hasLengthMismatch: correctPinyin.length !== userPinyin.length };
     }, [correctWord, userText]);
 
     useEffect(() => {
@@ -212,9 +268,11 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
     return (
         <div style={styles.comparisonOverlay}>
             <div style={styles.comparisonPanel}>
-                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
-                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : '再接再厉！'}</div>
+                
+                {/* 美化头部：如果完全正确，使用更鼓舞人心的颜色 */}
+                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #16a34a, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
+                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🌟' : '💪'}</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '恭喜！发音完美' : '再接再厉'}</div>
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>准确率: {analysis.accuracy}%</div>
                 </div>
                 
@@ -225,31 +283,41 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
                 </div>
 
                 <div style={styles.errorDetailsContainer}>
-                    {analysis.error === 'LENGTH_MISMATCH' ? (
+                    {analysis.hasLengthMismatch && (
                         <div style={styles.lengthError}>
-                            <h3>{analysis.message}</h3>
-                            <p>标准答案：<strong>{correctWord}</strong></p>
-                            <p>你的朗读：<strong>{userText}</strong></p>
-                        </div>
-                    ) : (
-                        <div style={styles.comparisonGrid}>
-                            {analysis.results.map((result, index) => (
-                                <div key={index} style={styles.comparisonCell}>
-                                    <div style={styles.comparisonChar}>{result.char}</div>
-                                    {/* 这里需要 PinyinVisualizer 组件，但为了保持代码简洁，先注释 */}
-                                    <div style={styles.comparisonPinyinSide}> <span style={styles.pinyinLabel}>标准</span></div>
-                                    <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.6 : 1, transition: 'opacity 0.3s'}}><span style={styles.pinyinLabel}>你的发音</span></div>
-                                    {!result.pinyinMatch && (
-                                        <div style={styles.errorHint}>
-                                            {result.user.errors.initial && <span style={styles.hintTag}>声母错</span>}
-                                            {result.user.errors.final && <span style={styles.hintTag}>韵母错</span>}
-                                            {result.user.errors.tone && <span style={styles.hintTag}>声调错</span>}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                            <h3>字数不符！请注意标点符号或漏读</h3>
+                            <p>目标: <strong>{analysis.cleanCorrectWord.length} 字</strong> &bull; 你读: <strong>{analysis.cleanUserText.length} 字</strong></p>
                         </div>
                     )}
+                    
+                    <div style={styles.comparisonGrid}>
+                        {analysis.results.map((result, index) => (
+                            <div key={index} style={styles.comparisonCell}>
+                                <div style={styles.comparisonChar}>{result.char}</div>
+                                
+                                {/* 简化和美化拼音对比 */}
+                                <div style={styles.comparisonPinyinSide}>
+                                    {/* 标准拼音 (黑色) */}
+                                    <div style={{...styles.pinyinText, color: '#000000'}}>{pinyinConverter(result.char, { toneType: 'mark', type: 'string' })}</div>
+                                    <span style={styles.pinyinLabel}>标准</span>
+                                </div>
+                                
+                                <div style={styles.comparisonPinyinSide}>
+                                    {/* 你的发音 (红色/绿色) */}
+                                    <div style={{...styles.pinyinText, color: result.pinyinMatch ? '#16a34a' : '#dc2626'}}>{result.user.parts.pinyinMark || '?' }</div>
+                                     <span style={styles.pinyinLabel}>你的发音</span>
+                                </div>
+                                
+                                {!result.pinyinMatch && (
+                                    <div style={styles.errorHint}>
+                                        {result.user.errors.initial && <span style={styles.hintTag}>声母错</span>}
+                                        {result.user.errors.final && <span style={styles.hintTag}>韵母错</span>}
+                                        {result.user.errors.tone && <span style={styles.hintTag}>声调错</span>}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div style={styles.comparisonActions}>
@@ -314,7 +382,7 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
 });
 
 // =================================================================================
-// ===== Component: 设置面板 (略) =================================================
+// ===== Component: 设置面板 (移除笔顺设置) =========================================
 // =================================================================================
 const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
@@ -396,6 +464,7 @@ const PhraseCard = ({ flashcards = [] }) => {
           return () => {
              clearTimeout(ttsTimer);
              clearTimeout(_autoPlayTimer);
+             clearTimeout(_segmentTimer);
              if (_howlInstance?.playing()) _howlInstance.stop();
           };
       }
@@ -463,7 +532,8 @@ const PhraseCard = ({ flashcards = [] }) => {
           }; 
           
           recognition.onresult = (event) => { 
-              const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，]/g, ''); 
+              // 移除标点符号，防止字数误判
+              const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，！？!?]/g, ''); 
               if (transcript) { setRecognizedText(transcript); }
               if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
           }; 
@@ -484,7 +554,7 @@ const PhraseCard = ({ flashcards = [] }) => {
 
       }).catch(err => {
           console.error("Failed to get audio stream:", err);
-          // **修正 1：修复 catch 块的 ReferenceError 错误**
+          // 修正 1：确保 catch 块只使用 err 对象
           alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。错误信息: ' + (err.name || err.message));
           setIsListening(false);
       });
@@ -573,6 +643,7 @@ const PhraseCard = ({ flashcards = [] }) => {
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
                 <FaMicrophone size={24} color={isListening ? '#dc2626' : '#4a5568'} /> 
             </button>
+            {/* 修正：手动朗读时，使用分字朗读 */}
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); playSegmentedTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese); }} title="朗读中文"><FaVolumeUp size={24} /></button>
             
             {/* 笔顺按钮 - 现在在这个位置 */}
@@ -637,7 +708,7 @@ const styles = {
   // --- 右侧控制按钮 (小尺寸, 透明背景, 固定在右下方) ---
   rightControls: { position: 'fixed', bottom: '15%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, 
   rightIconButton: { 
-    background: 'rgba(255, 255, 255, 0.5)', // 半透明背景，更像浮动按钮
+    background: 'rgba(255, 255, 255, 0.5)', 
     border: 'none', 
     cursor: 'pointer', 
     display: 'flex', 
@@ -646,12 +717,12 @@ const styles = {
     width: '48px', 
     height: '48px', 
     borderRadius: '50%', 
-    boxShadow: '0 4px 10px rgba(0,0,0,0.15)', // 增加阴影，使其更像浮动按钮
+    boxShadow: '0 4px 10px rgba(0,0,0,0.15)', 
     transition: 'transform 0.2s',
     color: '#4a5568' 
   },
   
-  // --- 发音对比模态框样式 (不变) ---
+  // --- 发音对比模态框样式 (美化和修正) ---
   comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
   comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
   resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
