@@ -52,7 +52,7 @@ const LayoutBase = props => {
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
   
-  // 首页将由 LayoutIndex 完全接管，所以这里对首页不做任何特殊处理
+  // 首页将由 LayoutIndex 完全接管
   if (router.route === '/') {
     return <>{children}</>
   }
@@ -169,27 +169,14 @@ const LayoutIndex = props => {
   });
 
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-x-hidden`}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
         <Style/>
         
-        {/* --- 侧边栏 --- */}
         <AnimatePresence>
             {isSidebarOpen && (
                 <>
-                    <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setIsSidebarOpen(false)}
-                        className='fixed inset-0 bg-black/50 z-[99]'
-                    />
-                    <motion.div
-                        initial={{ x: '-100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '-100%' }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
-                    >
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className='fixed inset-0 bg-black/50 z-[99]' />
+                    <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'>
                         <div className='p-4 h-full'>
                             <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
                             <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
@@ -199,28 +186,19 @@ const LayoutIndex = props => {
             )}
         </AnimatePresence>
 
-        {/* --- 页面主体 --- */}
         <div className='relative flex-grow w-full h-full' {...sidebarSwipeHandlers}>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
-
-            {/* --- 滚动容器 --- */}
+            
             <div className='absolute inset-0 overflow-y-auto overscroll-behavior-y-contain'>
-                {/* 背景层 (固定) */}
                 <div className='absolute top-0 left-0 right-0 h-[45vh] z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
-
-                {/* 空白占位，将"抽屉"的起点推到英雄区下方 */}
                 <div className='h-[45vh]' />
-
-                {/* "抽屉"内容区 */}
+                
                 <div className='relative z-10 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'>
-                    {/* 英雄区内容现在是"抽屉"的一部分，会随之滚动 */}
                     <div className='p-4 -mt-[20vh]'>
-                         {/* 标题和描述 */}
                         <div className='text-white pb-4'>
                             <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                             <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                         </div>
-                        {/* [修复] 卡片布局 */}
                         <div className='grid grid-cols-3 grid-rows-2 gap-2 h-40'>
                             <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
                                 <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
@@ -234,7 +212,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* 分类导航 */}
                     <div className='sticky top-0 z-20 bg-white/80 dark:bg-black/70 backdrop-blur-lg'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
@@ -247,7 +224,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
 
-                    {/* [修复] 添加 overscroll-behavior-x: contain; 阻止浏览器侧滑手势 */}
                     <main {...contentSwipeHandlers} className="overflow-hidden overscroll-behavior-x-contain">
                         <AnimatePresence mode="wait">
                             <motion.div key={activeTab} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.2}}>
@@ -267,13 +243,9 @@ const LayoutIndex = props => {
   );
 };
 
-// =========================================================================
-// =============  ✅ 所有其他组件完整恢复如下  ✅ ===================
-// =========================================================================
-
 const LayoutPostList = props => {
   return (
-    <div id='post-outer-wrapper' className='px-5  md:px-0'>
+    <div id='post-outer-wrapper' className='px-5 md:px-0'>
       <CategoryBar {...props} />
       {siteConfig('POST_LIST_STYLE') === 'page' ? (
         <BlogPostListPage {...props} />
@@ -302,7 +274,7 @@ const LayoutSearch = props => {
   }, [currentSearch])
   return (
     <div currentSearch={currentSearch}>
-      <div id='post-outer-wrapper' className='px-5  md:px-0'>
+      <div id='post-outer-wrapper' className='px-5 md:px-0'>
         {!currentSearch ? (
           <SearchNav {...props} />
         ) : (
@@ -402,7 +374,7 @@ const LayoutSlug = props => {
 }
 
 const Layout404 = () => {
-  const { onLoading, fullWidth } useGlobal()
+  const { onLoading, fullWidth } = useGlobal()
   return (
     <main id='wrapper-outer' className={`flex-grow ${fullWidth ? '' : 'max-w-4xl'} w-screen mx-auto px-5`}>
       <div id='error-wrapper' className={'w-full mx-auto justify-center'}>
