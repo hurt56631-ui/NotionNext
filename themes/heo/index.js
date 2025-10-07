@@ -40,19 +40,25 @@ import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-// 为门户首页引入图标
-import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask } from 'react-icons/fa'
+// 新增：为门户首页引入更多图标
+import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
+import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 // 为动画引入 framer-motion
 import { AnimatePresence, motion } from 'framer-motion';
 
 /**
- * 基础布局 (已恢复到原始状态，不再影响其他页面)
+ * 基础布局 (恢复原始状态)
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
-
+  
+  // 首页将由 LayoutIndex 完全接管，所以这里对首页不做任何特殊处理
+  if (router.route === '/') {
+    return <>{children}</>
+  }
+  
   const headerSlot = (
     <header>
       <Header {...props} />
@@ -76,11 +82,6 @@ const LayoutBase = props => {
   useEffect(() => {
     loadWowJS()
   }, [])
-  
-  // 首页将由 LayoutIndex 完全接管，所以这里对首页不做特殊处理，以保证其他页面正常
-  if (router.route === '/') {
-    return <>{children}</>
-  }
 
   return (
     <div
@@ -105,336 +106,209 @@ const LayoutBase = props => {
   )
 }
 
+// 首页专用的简化 Header，只包含菜单按钮
+const HomePageHeader = ({ onMenuClick }) => {
+    return (
+        <header className='fixed top-0 left-0 z-50 p-4'>
+            <button onClick={onMenuClick} className='p-2 rounded-full bg-black/20 backdrop-blur-md hover:bg-black/30 text-white transition-colors'>
+                <MenuIcon size={24}/>
+            </button>
+        </header>
+    );
+};
+
+// 首页专用的底部导航栏
+const BottomNavBar = () => {
+    // 您可以根据需要修改这里的链接和图标
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页'},
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手'},
+        { href: '/community', icon: 'fas fa-users', label: '社区'},
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息'},
+        { href: '/profile', icon: 'fas fa-user', label: '我'},
+    ];
+    const router = useRouter();
+
+    return (
+        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+            {navItems.map(item => (
+                <SmartLink key={item.href} href={item.href} className='flex flex-col items-center justify-center w-1/5'>
+                    <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                    <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                </SmartLink>
+            ))}
+        </nav>
+    );
+};
+
+
 /**
- * 首页 - 全新抽屉式门户设计 (手势修复版)
+ * 首页 - 最终版：两层滚动、侧边栏、随机背景
  */
 const LayoutIndex = props => {
   const tabs = [
-    { name: '文章', icon: <FaRegNewspaper className='mr-2' /> },
-    { name: 'HSK', icon: <FaBook className='mr-2' /> },
-    { name: '口语', icon: <FaMicrophone className='mr-2' /> },
-    { name: '练习', icon: <FaFlask className='mr-2' /> }
+    { name: '文章', icon: <FaRegNewspaper size={28} /> },
+    { name: 'HSK', icon: <FaGraduationCap size={28} /> },
+    { name: '口语', icon: <FaMicrophone size={28} /> },
+    { name: '练习', icon: <FaFlask size={28} /> },
+    { name: '书籍', icon: <FaBook size={28} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // [手势修复] 采用您 Message 页面中验证过有效的配置
-  const handlers = useSwipeable({
+  // --- 随机背景图 ---
+  const [backgroundUrl, setBackgroundUrl] = useState('');
+  useEffect(() => {
+    const backgrounds = [
+        'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1434725039720-aaad6dd32dfe?auto=format&fit=crop&q=80&w=1942',
+    ];
+    setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
+  }, []);
+
+  // --- 手势处理 ---
+  const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
-      if (currentIndex < tabs.length - 1) {
-        setActiveTab(tabs[currentIndex + 1].name);
-      }
+      if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
     },
     onSwipedRight: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
-      if (currentIndex > 0) {
-        setActiveTab(tabs[currentIndex - 1].name);
-      }
+      if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
-    preventDefaultTouchmoveEvent: true, // 关键：阻止 iframe 吞噬事件
+    preventDefaultTouchmoveEvent: true,
     trackMouse: true,
-    delta: 30 // 提高灵敏度 (数值越小越灵敏)
+    delta: 30
   });
 
-  const renderContent = () => {
-    switch (activeTab) {
-        case '文章':
-          return (
-            <div className='p-4 bg-white dark:bg-gray-900'>
-              {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
-            </div>
-          );
-        case 'HSK':
-          return <iframe key="hsk" src="about:blank" title="HSK" style={{ width: '100%', height: 'calc(100vh - 100px)', border: 'none' }} />;
-        case '口语':
-          return <iframe key="kouyu" src="about:blank" title="口语" style={{ width: '100%', height: 'calc(100vh - 100px)', border: 'none' }} />;
-        case '练习':
-          return <iframe key="lianxi" src="about:blank" title="练习" style={{ width: '100%', height: 'calc(100vh - 100px)', border: 'none' }} />;
-        default:
-          return null;
-      }
-  };
+  const sidebarSwipeHandlers = useSwipeable({
+      onSwipedRight: () => setIsSidebarOpen(true),
+      trackMouse: true,
+      delta: 50
+  });
+
+  const renderContent = () => { /* ... */ }; // (已在 JSX 中内联)
 
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen flex flex-col`}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen fixed`}>
         <Style/>
-        <Header {...props}/>
-        <div 
-            className='flex-grow relative w-full overflow-y-auto bg-cover bg-center' 
-            style={{ backgroundImage: "url('https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=2070')" }}
-        >
-            <div className='relative z-0 flex flex-col justify-center items-center w-full h-[35vh] p-4 text-white text-center'>
-                <div className='absolute inset-0 bg-black/30'></div>
-                <h1 className='text-4xl md:text-5xl font-extrabold z-10' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
-                <p className='mt-2 text-lg z-10' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>价格 & Slogan</p>
-                <div className='flex space-x-4 mt-4 z-10'>
-                    <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaTiktok /><span className='font-semibold'>TikTok</span></a>
-                    <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaFacebook /><span className='font-semibold'>Facebook</span></a>
-                    <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaYoutube /><span className='font-semibold'>YouTube</span></a>
-                </div>
-            </div>
+        
+        {/* --- 侧边栏 --- */}
+        <AnimatePresence>
+            {isSidebarOpen && (
+                <>
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className='fixed inset-0 bg-black/50 z-[99]'
+                    />
+                    <motion.div
+                        initial={{ x: '-100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '-100%' }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
+                    >
+                        <div className='p-4 h-full'>
+                            <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                            <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+                            {/* 在这里放置您的设置项 */}
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
 
-            {/* "抽屉"内容区 */}
-            <div className='relative z-10 min-h-[65vh] bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl'>
-                <div className='sticky top-0 z-20 bg-white/70 dark:bg-black/50 backdrop-blur-lg rounded-t-2xl'>
-                    <div className='flex justify-center border-b border-gray-200 dark:border-gray-700'>
-                        {tabs.map(tab => (
-                        <button
-                            key={tab.name}
-                            onClick={() => setActiveTab(tab.name)}
-                            className={`flex items-center justify-center px-4 py-4 text-lg font-semibold transition-colors duration-300 focus:outline-none whitespace-nowrap
-                            ${activeTab === tab.name 
-                                ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' 
-                                : 'text-gray-500 dark:text-gray-400 hover:text-blue-500'
-                            }`}
-                        >
-                            {tab.icon} {tab.name}
-                        </button>
-                        ))}
+        {/* --- 页面主体 (手势区域) --- */}
+        <div {...sidebarSwipeHandlers} className='h-full w-full'>
+            <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
+
+            {/* --- 两层滚动容器 --- */}
+            <div className='relative h-full w-full'>
+                {/* 背景层 (固定) */}
+                <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
+
+                {/* 内容层 (可滚动) */}
+                <div className='absolute inset-0 z-10 overflow-y-auto'>
+                    
+                    {/* 1. 顶部英雄区 (占位，高度由内容决定) */}
+                    <div className='h-[45vh] pt-20 pb-8 px-4 flex flex-col justify-end text-white'>
+                        <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+                        <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
+                        
+                        <div className='mt-4 grid grid-cols-3 gap-4 h-32'>
+                            <a href="#" className='col-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaTiktok size={32}/></div>
+                            </a>
+                            <a href="#" className='col-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaFacebook size={32}/></div>
+                            </a>
+                            <div className='col-span-1 rounded-xl overflow-hidden bg-black'>
+                                <iframe 
+                                    width="100%" height="100%" 
+                                    src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" // 示例YouTube链接，请替换
+                                    title="YouTube video player" 
+                                    frameBorder="0" 
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                    allowFullScreen>
+                                </iframe>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. "抽屉"内容区 */}
+                    <div className='relative min-h-[55vh] bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'> {/* pb-16 为底部导航栏留出空间 */}
+                        <div className='sticky top-0 z-20 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
+                            <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
+                                {tabs.map(tab => (
+                                <button
+                                    key={tab.name}
+                                    onClick={() => setActiveTab(tab.name)}
+                                    className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none
+                                    ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400 hover:text-blue-500' }`}
+                                >
+                                    {tab.icon}
+                                    <span className='text-sm font-semibold mt-1'>{tab.name}</span>
+                                    <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                </button>
+                                ))}
+                            </div>
+                        </div>
+                        <main {...contentSwipeHandlers} className="overflow-hidden">
+                            <AnimatePresence mode="wait">
+                                <motion.div key={activeTab} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.2}}>
+                                    {/* --- 内容渲染 --- */}
+                                    {activeTab === '文章' && <div className='p-4 bg-white dark:bg-gray-900'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
+                                    {activeTab === 'HSK' && <iframe key="hsk" src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {activeTab === '口语' && <iframe key="kouyu" src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {activeTab === '练习' && <iframe key="lianxi" src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {activeTab === '书籍' && <iframe key="shuji" src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                </motion.div>
+                            </AnimatePresence>
+                        </main>
                     </div>
                 </div>
-
-                {/* 将手势绑定在稳定的父容器上 */}
-                <main {...handlers} className="overflow-hidden">
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={activeTab}
-                            initial={{ opacity: 0, x: 50 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -50 }}
-                            transition={{ duration: 0.25 }}
-                        >
-                            {renderContent()}
-                        </motion.div>
-                    </AnimatePresence>
-                </main>
             </div>
+            <BottomNavBar/>
         </div>
-        {/* <Footer/> */}
     </div>
   );
 };
 
 
-/**
- * 博客列表 (保持不变)
- */
-const LayoutPostList = props => {
-  return (
-    <div id='post-outer-wrapper' className='px-5  md:px-0'>
-      <CategoryBar {...props} />
-      {siteConfig('POST_LIST_STYLE') === 'page' ? (
-        <BlogPostListPage {...props} />
-      ) : (
-        <BlogPostListScroll {...props} />
-      )}
-    </div>
-  )
-}
-
-/**
- * 搜索 (保持不变)
- */
-const LayoutSearch = props => {
-  const { keyword } = props
-  const router = useRouter()
-  const currentSearch = keyword || router?.query?.s
-
-  useEffect(() => {
-    if (currentSearch) {
-      setTimeout(() => {
-        replaceSearchResult({
-          doms: document.getElementsByClassName('replace'),
-          search: currentSearch,
-          target: { element: 'span', className: 'text-red-500 border-b border-dashed' }
-        })
-      }, 100)
-    }
-  }, [currentSearch])
-  return (
-    <div currentSearch={currentSearch}>
-      <div id='post-outer-wrapper' className='px-5  md:px-0'>
-        {!currentSearch ? (
-          <SearchNav {...props} />
-        ) : (
-          <div id='posts-wrapper'>
-            {siteConfig('POST_LIST_STYLE') === 'page' ? (
-              <BlogPostListPage {...props} />
-            ) : (
-              <BlogPostListScroll {...props} />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/**
- * 归档 (保持不变)
- */
-const LayoutArchive = props => {
-  const { archivePosts } = props
-  return (
-    <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
-      <CategoryBar {...props} border={false} />
-      <div className='px-3'>
-        {Object.keys(archivePosts).map(archiveTitle => (
-          <BlogPostArchive
-            key={archiveTitle}
-            posts={archivePosts[archiveTitle]}
-            archiveTitle={archiveTitle}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * 文章详情 (保持不变)
- */
-const LayoutSlug = props => {
-  const { post, lock, validPassword } = props
-  const { locale, fullWidth } = useGlobal()
-  const [hasCode, setHasCode] = useState(false)
-
-  useEffect(() => {
-    const hasCode = document.querySelectorAll('[class^="language-"]').length > 0
-    setHasCode(hasCode)
-  }, [])
-
-  const commentEnable =
-    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') ||
-    siteConfig('COMMENT_VALINE_APP_ID') || siteConfig('COMMENT_GISCUS_REPO') ||
-    siteConfig('COMMENT_CUSDIS_APP_ID') || siteConfig('COMMENT_UTTERRANCES_REPO') ||
-    siteConfig('COMMENT_GITALK_CLIENT_ID') || siteConfig('COMMENT_WEBMENTION_ENABLE')
-
-  const router = useRouter()
-  useEffect(() => {
-    if (!post) {
-      setTimeout(() => {
-        if (isBrowser) {
-          const article = document.querySelector('#article-wrapper #notion-article')
-          if (!article) {
-            router.push('/404').then(() => console.warn('找不到页面', router.asPath))
-          }
-        }
-      }, siteConfig('POST_WAITING_TIME_FOR_404') * 1000)
-    }
-  }, [post, router])
-
-  return (
-    <>
-      <div
-        className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} ${hasCode ? 'xl:w-[73.15vw]' : ''}  bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4 `}>
-        {lock && <PostLock validPassword={validPassword} />}
-        {!lock && post && (
-          <div className='mx-auto md:w-full md:px-5'>
-            <article id='article-wrapper' itemScope itemType='https://schema.org/Movie'>
-              <section className='wow fadeInUp p-5 justify-center mx-auto' data-wow-delay='.2s'>
-                <ArticleExpirationNotice post={post} />
-                <AISummary aiSummary={post.aiSummary} />
-                <WWAds orientation='horizontal' className='w-full' />
-                {post && <NotionPage post={post} />}
-                <WWAds orientation='horizontal' className='w-full' />
-              </section>
-            </article>
-            {fullWidth ? null : (
-              <div className={`${commentEnable && post ? '' : 'hidden'}`}>
-                <hr className='my-4 border-dashed' />
-                <div className='py-2'><AdSlot /></div>
-                <div className='duration-200 overflow-x-auto px-5'>
-                  <div className='text-2xl dark:text-white'><i className='fas fa-comment mr-1' />{locale.COMMON.COMMENTS}</div>
-                  <Comment frontMatter={post} className='' />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      <FloatTocButton {...props} />
-    </>
-  )
-}
-
-/**
- * 404 (保持不变)
- */
-const Layout404 = () => {
-  const { onLoading, fullWidth } = useGlobal()
-  return (
-    <main id='wrapper-outer' className={`flex-grow ${fullWidth ? '' : 'max-w-4xl'} w-screen mx-auto px-5`}>
-      <div id='error-wrapper' className={'w-full mx-auto justify-center'}>
-        <Transition
-          show={!onLoading}
-          appear={true}
-          enter='transition ease-in-out duration-700 transform order-first'
-          enterFrom='opacity-0 translate-y-16'
-          enterTo='opacity-100'
-          leave='transition ease-in-out duration-300 transform'
-          leaveFrom='opacity-100 translate-y-0'
-          leaveTo='opacity-0 -translate-y-16'
-          unmount={false}>
-          <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
-            <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
-              <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
-              <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
-              <SmartLink href='/'><button className='bg-blue-500 py-2 px-4 text-white shadow rounded-lg hover:bg-blue-600 hover:shadow-md duration-200 transition-all'>回到主页</button></SmartLink>
-            </div>
-          </div>
-        </Transition>
-      </div>
-    </main>
-  )
-}
-
-/**
- * 分类列表 (保持不变)
- */
-const LayoutCategoryIndex = props => {
-  const { categoryOptions } = props
-  const { locale } = useGlobal()
-  return (
-    <div id='category-outer-wrapper' className='mt-8 px-5 md:px-0'>
-      <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{locale.COMMON.CATEGORY}</div>
-      <div id='category-list' className='duration-200 flex flex-wrap m-10 justify-center'>
-        {categoryOptions?.map(category => (
-          <SmartLink key={category.name} href={`/category/${category.name}`} passHref legacyBehavior>
-            <div className={'group mr-5 mb-5 flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-              <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{category.name}
-              <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{category.count}</div>
-            </div>
-          </SmartLink>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/**
- * 标签列表 (保持不变)
- */
-const LayoutTagIndex = props => {
-  const { tagOptions } = props
-  const { locale } = useGlobal()
-  return (
-    <div id='tag-outer-wrapper' className='px-5 mt-8 md:px-0'>
-      <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{locale.COMMON.TAGS}</div>
-      <div id='tag-list' className='duration-200 flex flex-wrap space-x-5 space-y-5 m-10 justify-center'>
-        {tagOptions.map(tag => (
-          <SmartLink key={tag.name} href={`/tag/${tag.name}`} passHref legacyBehavior>
-            <div className={'group flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-              <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{tag.name}
-              <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{tag.count}</div>
-            </div>
-          </SmartLink>
-        ))}
-      </div>
-    </div>
-  )
-}
+// (其他组件 LayoutPostList, LayoutSearch, etc. 保持不变)
+// ... (此处省略未修改的组件代码，请保留您文件中的原始代码)
+const LayoutPostList = props => { /* ... */ };
+const LayoutSearch = props => { /* ... */ };
+const LayoutArchive = props => { /* ... */ };
+const LayoutSlug = props => { /* ... */ };
+const Layout404 = () => { /* ... */ };
+const LayoutCategoryIndex = props => { /* ... */ };
+const LayoutTagIndex = props => { /* ... */ };
 
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
