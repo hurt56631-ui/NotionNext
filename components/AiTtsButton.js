@@ -1,128 +1,124 @@
-// /components/AiTtsButton.js - v23 修复版
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { TTS_ENGINE } from './AiChatAssistant'; // 从主组件导入引擎类型
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// 清理文本以进行语音合成的辅助函数
-const cleanTextForSpeech = (text) => {
-  if (!text) return '';
-  // 移除Markdown的加粗、标题、列表等格式
-  return text.replace(/\*\*/g, '').replace(/#{1,6}\s/g, '').replace(/[-*]\s/g, '');
-};
+// --- 【全新】的 AiTtsButton 组件 (v2 - 支持加载、播放动画和暂停) ---
+const AiTtsButton = ({ text, ttsSettings }) => {
+    const [playbackState, setPlaybackState] = useState('idle'); // 'idle', 'loading', 'playing', 'paused'
+    const audioRef = useRef(null);
+    const abortControllerRef = useRef(null);
 
-const AiTtsButton = ({ text, ttsSettings = {} }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const audioRef = useRef(null);
-  const utteranceRef = useRef(null);
-
-  // 组件卸载时执行清理操作
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        // 确保释放通过 createObjectURL 创建的URL
-        if (audioRef.current.src.startsWith('blob:')) {
-          URL.revokeObjectURL(audioRef.current.src);
-        }
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  // 语音合成的核心函数
-  const synthesizeSpeech = useCallback(async (textToSpeak) => {
+    // 从 settings 中解构 TTS 参数，并提供默认值
     const {
-      ttsEngine = TTS_ENGINE.THIRD_PARTY,
-      thirdPartyTtsVoice = 'zh-CN-XiaoxiaoMultilingualNeural', 
-      systemTtsVoiceURI = ''
-    } = ttsSettings;
-    
-    const cleanedText = cleanTextForSpeech(textToSpeak);
-    if (!cleanedText) return;
+        ttsVoice = 'zh-CN-XiaoxiaoMultilingualNeural',
+        ttsRate = 0,
+        ttsPitch = 0,
+    } = ttsSettings || {};
 
-    setIsLoading(true);
+    // 更强大的文本清理函数
+    const cleanTextForSpeech = (rawText) => {
+        if (!rawText) return '';
+        let cleaned = rawText;
+        cleaned = cleaned.replace(/!\[.*?\]\(.*?\)/g, ''); 
+        cleaned = cleaned.replace(/\[(.*?)\]\(.*?\)/g, '$1'); 
+        cleaned = cleaned.replace(/(\*\*|__|\*|_|~~|`)/g, ''); 
+        cleaned = cleaned.replace(/^(#+\s*|[\*\-]\s*)/gm, '');
+        cleaned = cleaned.replace(/【.*?】|\[.*?\]/g, '');
+        const pinyinRegex = /\b[a-zA-ZüÜ]+[1-5]\b\s*/g;
+        cleaned = cleaned.replace(pinyinRegex, '');
+        const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+        cleaned = cleaned.replace(emojiRegex, '');
+        return cleaned.trim();
+    };
 
-    // 在开始新的朗读前，先停止当前所有朗读
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (audioRef.current) audioRef.current.pause();
-
-    try {
-      // 使用系统内置TTS引擎
-      if (ttsEngine === TTS_ENGINE.SYSTEM && 'speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(cleanedText);
-        // 如果指定了声音，则尝试设置
-        if (systemTtsVoiceURI) {
-          const selectedVoice = window.speechSynthesis.getVoices().find(v => v.voiceURI === systemTtsVoiceURI);
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang; // 最好同时设置语言
-          }
-        }
-        utterance.onend = () => setIsLoading(false);
-        utterance.onerror = (e) => { 
-          console.error('系统TTS错误:', e); 
-          setIsLoading(false); 
+    useEffect(() => {
+        return () => {
+            if (abortControllerRef.current) abortControllerRef.current.abort();
+            if (audioRef.current) {
+                audioRef.current.pause();
+                if (audioRef.current.src?.startsWith('blob:')) {
+                    URL.revokeObjectURL(audioRef.current.src);
+                }
+            }
         };
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
-      } 
-      // 使用第三方TTS API
-      else {
-        // --- 核心修复点 ---
-        // 修正了URL中错误拼接的参数，使其与工作示例保持一致
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanedText)}&v=${thirdPartyTtsVoice}&r=-20`;
-        
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`API请求失败 (状态码: ${response.status})`);
-        }
-        
-        const audioBlob = await response.blob();
+    }, []);
 
-        // 释放上一个音频的Blob URL，防止内存泄漏
-        if (audioRef.current?.src && audioRef.current.src.startsWith('blob:')) {
-          URL.revokeObjectURL(audioRef.current.src);
+    const startPlayback = useCallback(async (textToSpeak) => {
+        if (playbackState === 'playing') {
+            audioRef.current?.pause();
+            return;
         }
-        
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        audioRef.current = audio;
-        
-        audio.onended = () => setIsLoading(false);
-        audio.onerror = (e) => { 
-          console.error('音频播放错误:', e); 
-          setIsLoading(false); 
-        };
-        // play()返回一个Promise，使用await可以更好地处理后续逻辑
-        await audio.play();
-      }
-    } catch (err) {
-      console.error('朗读失败:', err);
-      setIsLoading(false);
-    }
-  }, [ttsSettings]);
+        if (playbackState === 'paused') {
+            audioRef.current?.play();
+            return;
+        }
+        const cleanedText = cleanTextForSpeech(textToSpeak);
+        if (!cleanedText) return;
 
-  return (
-    <button
-      onClick={(e) => { 
-        e.stopPropagation(); // 阻止事件冒泡
-        synthesizeSpeech(text); 
-      }}
-      disabled={isLoading}
-      className={`p-2 rounded-full transition-colors ${isLoading ? 'text-gray-400 cursor-not-allowed' : 'hover:bg-black/10 dark:hover:bg-white/10'}`}
-      title="朗读"
-    >
-      {isLoading ? (
-        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-      ) : (
-        <i className="fas fa-volume-up"></i> // 确保你已引入Font Awesome的CSS
-      )}
-    </button>
-  );
+        setPlaybackState('loading');
+        abortControllerRef.current = new AbortController();
+
+        try {
+            const params = new URLSearchParams({ t: cleanedText, v: ttsVoice, r: `${ttsRate}%`, p: `${ttsPitch}%` });
+            const url = `https://t.leftsite.cn/tts?${params.toString()}`;
+            const response = await fetch(url, { signal: abortControllerRef.current.signal });
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API 请求失败: ${response.status} ${errorText}`);
+            }
+            const blob = await response.blob();
+            const audioUrl = URL.createObjectURL(blob);
+            if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
+            const audio = new Audio(audioUrl);
+            audioRef.current = audio;
+            audio.onplay = () => setPlaybackState('playing');
+            audio.onpause = () => { if (audio.currentTime < audio.duration) setPlaybackState('paused'); };
+            audio.onended = () => setPlaybackState('idle');
+            audio.onerror = (e) => { console.error('音频播放错误:', e); setPlaybackState('idle'); };
+            await audio.play();
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('语音合成失败:', err);
+                alert(`语音合成失败: ${err.message}`);
+            }
+            setPlaybackState('idle');
+        }
+    }, [ttsVoice, ttsRate, ttsPitch, playbackState]);
+
+    const AnimatedMusicIcon = ({ state }) => {
+        const barStyle = (animationDelay) => ({
+            animation: state === 'playing' ? `sound-wave 1.2s ease-in-out ${animationDelay} infinite alternate` : 'none',
+        });
+        return (
+            <div className="relative w-6 h-6 flex items-center justify-center">
+                <div className={`absolute transition-opacity duration-300 ${state === 'loading' ? 'opacity-100' : 'opacity-0'}`}>
+                    <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                </div>
+                <div className={`absolute transition-opacity duration-300 ${state !== 'loading' ? 'opacity-100' : 'opacity-0'}`}>
+                    {state === 'paused' ? (<i className="fas fa-play text-sm ml-0.5"></i>) : (
+                        <div className="flex items-end justify-center w-6 h-6 gap-0.5">
+                            <span className="w-1 h-2 bg-current rounded-full" style={barStyle('0s')}></span>
+                            <span className="w-1 h-4 bg-current rounded-full" style={barStyle('0.2s')}></span>
+                            <span className="w-1 h-5 bg-current rounded-full" style={barStyle('0.4s')}></span>
+                            <span className="w-1 h-3 bg-current rounded-full" style={barStyle('0.6s')}></span>
+                        </div>
+                    )}
+                </div>
+                <style jsx>{`
+                    @keyframes sound-wave { 0% { transform: scaleY(0.2); } 100% { transform: scaleY(1); } }
+                `}</style>
+            </div>
+        );
+    };
+
+    return (
+        <button
+            onClick={(e) => { e.stopPropagation(); startPlayback(text); }}
+            disabled={playbackState === 'loading'}
+            className="p-2 rounded-full transition-colors duration-200 transform active:scale-90 hover:bg-black/10 text-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
+            title={playbackState === 'playing' ? "暂停" : (playbackState === 'paused' ? "继续播放" : "朗读")}
+        >
+            <AnimatedMusicIcon state={playbackState} />
+        </button>
+    );
 };
 
 export default AiTtsButton;
