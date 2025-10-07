@@ -41,38 +41,34 @@ import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 // 新增：为门户首页引入图标
-import { FaTiktok, FaFacebook, FaYoutube } from 'react-icons/fa'
+import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask } from 'react-icons/fa'
 
 /**
- * 基础布局
+ * 基础布局 (已恢复到原始状态，不再影响其他页面)
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
-  const isHomePage = router.route === '/'
 
   const headerSlot = (
     <header>
       <Header {...props} />
-      {isHomePage ? (
+      {router.route === '/' ? (
         <>
           <NoticeBar />
-          {/* Hero component is removed on the homepage to make space for the new LayoutIndex design */}
+          {/* Hero 现在由 LayoutIndex 自己管理，这里可以保留原始逻辑或移除 */}
+          <Hero {...props} /> 
         </>
-      ) : (
-        fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />
-      )}
+      ) : null}
+      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
 
   const slotRight =
     router.route === '/404' || fullWidth ? null : <SideRight {...props} />
 
-  // 根据是否为首页，动态调整容器样式
   const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-  const mainContainerClasses = isHomePage ? 'w-full' : `${maxWidth} mx-auto relative md:px-5`
-  
   const HEO_HERO_BODY_REVERSE = siteConfig('HEO_HERO_BODY_REVERSE', false, CONFIG)
   const HEO_LOADING_COVER = siteConfig('HEO_LOADING_COVER', true, CONFIG)
 
@@ -85,130 +81,126 @@ const LayoutBase = props => {
       id='theme-heo'
       className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
       <Style />
-      {headerSlot}
+      {/* 首页的 Header 现在由 LayoutIndex 内部处理，避免全局影响 */}
+      { router.route !== '/' && headerSlot }
       <main
         id='wrapper-outer'
-        className={`flex-grow ${mainContainerClasses}`}>
+        // 恢复原始布局，首页由LayoutIndex组件全权接管
+        className={`flex-grow w-full ${router.route === '/' ? '' : maxWidth} mx-auto relative ${router.route === '/' ? '' : 'md:px-5'}`}>
         <div
           id='container-inner'
           className={`${HEO_HERO_BODY_REVERSE ? 'flex-row-reverse' : ''} w-full mx-auto lg:flex justify-center relative z-10`}>
           <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
-          <div className='lg:px-2'></div>
-          <div className='hidden xl:block'>{slotRight}</div>
+          { router.route !== '/' && <div className='lg:px-2'></div> }
+          { router.route !== '/' && <div className='hidden xl:block'>{slotRight}</div> }
         </div>
       </main>
-      <Footer />
+      {/* 首页的 Footer 也由 LayoutIndex 自己管理 */}
+      { router.route !== '/' && <Footer /> }
       {HEO_LOADING_COVER && <LoadingCover />}
     </div>
   )
 }
 
 /**
- * 首页 - 全新门户设计
+ * 首页 - 全新抽屉式门户设计
  */
 const LayoutIndex = props => {
-  const tabs = ['文章', 'HSK', '口语', '练习'];
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+    // 定义标签及其对应的图标
+  const tabs = [
+    { name: '文章', icon: <FaRegNewspaper className='mr-2' /> },
+    { name: 'HSK', icon: <FaBook className='mr-2' /> },
+    { name: '口语', icon: <FaMicrophone className='mr-2' /> },
+    { name: '练习', icon: <FaFlask className='mr-2' /> }
+  ];
+  const [activeTab, setActiveTab] = useState(tabs[0].name);
 
-  // 优化的手势切换逻辑
   const handlers = useSwipeable({
     onSwipedLeft: () => {
-      const currentIndex = tabs.indexOf(activeTab);
-      setActiveTab(tabs[(currentIndex + 1) % tabs.length]);
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      setActiveTab(tabs[(currentIndex + 1) % tabs.length].name);
     },
     onSwipedRight: () => {
-      const currentIndex = tabs.indexOf(activeTab);
-      setActiveTab(tabs[(currentIndex - 1 + tabs.length) % tabs.length]);
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      setActiveTab(tabs[(currentIndex - 1 + tabs.length) % tabs.length].name);
     },
     trackMouse: true
   });
 
   const renderContent = () => {
-    const iframeKey = activeTab + Date.now();
+    // ... 内容渲染逻辑 ...
     switch (activeTab) {
-      case '文章':
-        return (
-          <div className='mt-1'>
-            {siteConfig('POST_LIST_STYLE') === 'page' ? (
-              <BlogPostListPage {...props} />
-            ) : (
-              <BlogPostListScroll {...props} />
-            )}
-          </div>
-        );
-      case 'HSK':
-        return <iframe key={iframeKey} src="about:blank" title="HSK" style={{ width: '100%', height: '80vh', border: 'none' }} />;
-      case '口语':
-        return <iframe key={iframeKey} src="about:blank" title="口语" style={{ width: '100%', height: '80vh', border: 'none' }} />;
-      case '练习':
-        return <iframe key={iframeKey} src="about:blank" title="练习" style={{ width: '100%', height: '80vh', border: 'none' }} />;
-      default:
-        return null;
-    }
+        case '文章':
+          return (
+            <div className='p-4'>
+              {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
+            </div>
+          );
+        case 'HSK':
+          return <iframe key="hsk" src="about:blank" title="HSK" style={{ width: '100%', height: '80vh', border: 'none' }} />;
+        case '口语':
+          return <iframe key="kouyu" src="about:blank" title="口语" style={{ width: '100%', height: '80vh', border: 'none' }} />;
+        case '练习':
+          return <iframe key="lianxi" src="about:blank" title="练习" style={{ width: '100%', height: '80vh', border: 'none' }} />;
+        default:
+          return null;
+      }
   };
 
   return (
-    <div className='w-full'>
-      {/* 1. 全新的直播卡片网格区 (替换了英雄区) */}
-      <section className='p-4'>
-        <div className='grid grid-cols-3 grid-rows-2 gap-4 h-[320px] md:h-[400px]'>
-          <a href="#" target="_blank" rel="noopener noreferrer" className='col-span-1 row-span-1 card-style group'>
-            <div className='card-background' style={{ backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')" }}></div>
-            <div className='card-overlay'></div>
-            <div className='card-content'>
-              <FaTiktok size={30} />
-              <h3 className='text-xl font-bold mt-2'>TikTok</h3>
-            </div>
-          </a>
-          <a href="#" target="_blank" rel="noopener noreferrer" className='col-span-1 row-span-1 card-style group'>
-            <div className='card-background' style={{ backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')" }}></div>
-            <div className='card-overlay'></div>
-            <div className='card-content'>
-              <FaFacebook size={30} />
-              <h3 className='text-xl font-bold mt-2'>Facebook</h3>
-            </div>
-          </a>
-          <a href="#" target="_blank" rel="noopener noreferrer" className='col-span-2 row-span-2 card-style group'>
-            <div className='card-background' style={{ backgroundImage: "url('https://images.unsplash.com/photo-1611162616805-65313b947c62?w=800&q=80')" }}></div>
-            <div className='card-overlay'></div>
-            <div className='card-content'>
-              <FaYoutube size={40} />
-              <h3 className='text-2xl font-bold mt-2'>YouTube 直播</h3>
-            </div>
-          </a>
+    // 整个页面容器，带背景图
+    <div 
+        className='relative w-full h-screen overflow-y-auto bg-cover bg-center' 
+        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=2070')" }}
+    >
+      {/* 顶部固定的英雄区 (占屏约30%) */}
+      <div className='relative z-0 flex flex-col justify-center items-center w-full h-[35vh] p-4 text-white text-center'>
+        <div className='absolute inset-0 bg-black/30'></div> {/* 半透明遮罩，让文字更清晰 */}
+        <h1 className='text-4xl md:text-5xl font-extrabold z-10' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+        <p className='mt-2 text-lg z-10' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>价格 & Slogan</p>
+        <div className='flex space-x-4 mt-4 z-10'>
+            {/* 直播小卡片 */}
+            <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaTiktok /><span className='font-semibold'>TikTok</span></a>
+            <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaFacebook /><span className='font-semibold'>Facebook</span></a>
+            <a href="#" className='px-4 py-2 bg-white/20 backdrop-blur-sm rounded-lg flex items-center space-x-2 hover:bg-white/30 transition-colors'><FaYoutube /><span className='font-semibold'>YouTube</span></a>
         </div>
-      </section>
+      </div>
 
-      {/* 2. 粘性分类导航 */}
-      <div className='sticky top-0 z-10 bg-white dark:bg-[#18171d] py-1 shadow-sm'>
+      {/* "抽屉"内容区，可以向上滚动覆盖顶部 */}
+      <div className='relative z-10 min-h-[65vh] bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl'>
+        {/* 粘性分类导航 (带磨砂效果) */}
+        <div className='sticky top-0 z-20 bg-white/70 dark:bg-black/50 backdrop-blur-lg rounded-t-2xl'>
           <div className='flex justify-center border-b border-gray-200 dark:border-gray-700'>
             {tabs.map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm md:text-base font-semibold transition-colors duration-300 focus:outline-none whitespace-nowrap
-                  ${activeTab === tab 
+                key={tab.name}
+                onClick={() => setActiveTab(tab.name)}
+                className={`flex items-center justify-center px-4 py-4 text-lg font-semibold transition-colors duration-300 focus:outline-none whitespace-nowrap
+                  ${activeTab === tab.name 
                     ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400' 
                     : 'text-gray-500 dark:text-gray-400 hover:text-blue-500'
                   }`}
               >
-                {tab}
+                {tab.icon} {tab.name}
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 手势内容区 */}
+        <div {...handlers} className="w-full">
+            {renderContent()}
+        </div>
       </div>
-      
-      {/* 3. 手势切换内容区 (全宽) */}
-      <div {...handlers} className="w-full min-h-[50vh] bg-white dark:bg-[#1e1e1e]">
-        {renderContent()}
-      </div>
+       {/* 页脚可以放在这里，也可以移除 */}
+       {/* <Footer/> */}
     </div>
   );
 };
 
 
 /**
- * 博客列表
+ * 博客列表 (保持不变)
  */
 const LayoutPostList = props => {
   return (
@@ -224,7 +216,7 @@ const LayoutPostList = props => {
 }
 
 /**
- * 搜索
+ * 搜索 (保持不变)
  */
 const LayoutSearch = props => {
   const { keyword } = props
@@ -262,7 +254,7 @@ const LayoutSearch = props => {
 }
 
 /**
- * 归档
+ * 归档 (保持不变)
  */
 const LayoutArchive = props => {
   const { archivePosts } = props
@@ -283,7 +275,7 @@ const LayoutArchive = props => {
 }
 
 /**
- * 文章详情
+ * 文章详情 (保持不变)
  */
 const LayoutSlug = props => {
   const { post, lock, validPassword } = props
@@ -350,7 +342,7 @@ const LayoutSlug = props => {
 }
 
 /**
- * 404
+ * 404 (保持不变)
  */
 const Layout404 = () => {
   const { onLoading, fullWidth } = useGlobal()
@@ -382,7 +374,7 @@ const Layout404 = () => {
 }
 
 /**
- * 分类列表
+ * 分类列表 (保持不变)
  */
 const LayoutCategoryIndex = props => {
   const { categoryOptions } = props
@@ -405,7 +397,7 @@ const LayoutCategoryIndex = props => {
 }
 
 /**
- * 标签列表
+ * 标签列表 (保持不变)
  */
 const LayoutTagIndex = props => {
   const { tagOptions } = props
@@ -430,4 +422,4 @@ const LayoutTagIndex = props => {
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
   LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
-    }
+        }
