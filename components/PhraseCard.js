@@ -1,4 +1,4 @@
-// components/Tixing/CombinedPhraseCard.js (最终完整版 - 解决布局和语音识别问题)
+// components/Tixing/CombinedPhraseCard.js (最终修复和优化版)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -21,39 +21,19 @@ const sounds = {
   incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
 };
 let _howlInstance = null;
-let _currentAudioBlobUrl = null; 
-let _autoPlayTimer = null; 
 
-const stopAllAudio = () => {
-    Object.values(sounds).forEach(sound => sound.stop());
-    if (_howlInstance?.playing()) _howlInstance.stop();
-    clearTimeout(_autoPlayTimer);
-};
 const playTTS = (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
-    stopAllAudio();
+    if (_howlInstance?.playing()) _howlInstance.stop();
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
     _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: onEndCallback });
     _howlInstance.play();
 };
-const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
-    const characters = text.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g) || [];
-    let charIndex = 0;
-    let segmentTimer = null;
-    const playNext = () => {
-        if (charIndex >= characters.length) { if (onFinishCallback) onFinishCallback(); return; }
-        const char = characters[charIndex];
-        const rateValue = Math.round(rate / 2);
-        const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(char)}&v=${voice}&r=${rateValue}`;
-        if (_howlInstance?.playing()) _howlInstance.stop(); 
-        _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: () => { charIndex++; segmentTimer = setTimeout(playNext, 300); } });
-        _howlInstance.play();
-    };
-    stopAllAudio(); 
-    clearTimeout(segmentTimer);
-    playNext();
+const playSoundEffect = (type) => {
+    if (_howlInstance?.playing()) _howlInstance.stop();
+    if (sounds[type]) sounds[type].play();
 };
 const parsePinyin = (pinyinNum) => {
     if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
@@ -101,45 +81,74 @@ const usePhraseCardSettings = () => {
   return [settings, setSettings];
 };
 
-const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
+const PinyinVisualizer = React.memo(({ analysis }) => {
+    const { parts, errors } = analysis;
+    const initialStyle = parts.initial && errors.initial ? styles.wrongPart : styles.correctPart;
+    const finalStyle = parts.final && errors.final ? styles.wrongPart : styles.correctPart;
+    const toneStyle = parts.tone !== '0' && errors.tone ? styles.wrongPart : styles.correctPart;
+    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', '');
+    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; }
+    finalDisplay = finalDisplay.replace(/[1-5]$/, '');
+    return (
+        <div style={styles.pinyinVisualizerContainer}>
+            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || '' }</span>
+            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
+            <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
+        </div>
+    );
+});
+
+const PronunciationComparison = ({ correctWord, userText, onContinue, onClose }) => {
     const analysis = useMemo(() => {
-        const cleanCorrectWord = correctWord.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g)?.join('') || '';
-        const cleanUserText = userText.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g)?.join('') || '';
-        const correctPinyin = pinyinConverter(cleanCorrectWord, { toneType: 'num', type: 'array', removeNonHan: true });
-        const userPinyin = pinyinConverter(cleanUserText, { toneType: 'num', type: 'array', removeNonHan: true });
-        const effectiveLength = Math.min(correctPinyin.length, userPinyin.length);
-        const results = Array.from({ length: effectiveLength }).map((_, index) => {
-            const correctPy = correctPinyin[index]; const userPy = userPinyin[index];
-            if (!correctPy || !userPy) return { char: cleanCorrectWord[index] || '?', pinyinMatch: false, user: { errors: { initial: true, final: true, tone: true } } };
-            const correctParts = parsePinyin(correctPy); const userParts = parsePinyin(userPy);
-            const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone, };
+        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
+        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
+        if (correctPinyin.length !== userPinyin.length) {
+            return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` };
+        }
+        const results = correctPinyin.map((correctPy, index) => {
+            const userPy = userPinyin[index];
+            const correctParts = parsePinyin(correctPy);
+            const userParts = parsePinyin(userPy);
+            const errors = {
+                initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial),
+                final: correctParts.final !== userParts.final,
+                tone: correctParts.tone !== userParts.tone,
+            };
             const pinyinMatch = !errors.initial && !errors.final && !errors.tone;
-            return { char: cleanCorrectWord[index], pinyinMatch, correct: { parts: correctParts, errors: { initial: false, final: false, tone: false } }, user: { parts: userParts, errors: errors } };
+            return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts, errors: {} }, user: { parts: userParts, errors: errors } };
         });
-        const correctCount = results.filter(r => r.pinyinMatch).length;
-        const accuracy = (cleanCorrectWord.length > 0) ? (correctCount / cleanCorrectWord.length * 100).toFixed(0) : 0;
-        const isPerfect = cleanCorrectWord.length === correctCount && cleanCorrectWord.length === cleanUserText.length;
-        return { isCorrect: isPerfect, results, accuracy, cleanCorrectWord, cleanUserText, hasLengthMismatch: correctPinyin.length !== userPinyin.length };
+        const isCorrect = results.every(r => r.pinyinMatch);
+        const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0);
+        return { isCorrect, results, accuracy };
     }, [correctWord, userText]);
-    useEffect(() => { if (!analysis) return; const isSuccess = analysis.isCorrect && analysis.accuracy > 0; playSoundEffect(isSuccess ? 'correct' : 'incorrect'); }, [analysis]);
-    const playUserRecording = useCallback(() => { if (audioBlobUrl) { if (_howlInstance?.playing()) _howlInstance.stop(); _howlInstance = new Howl({ src: [audioBlobUrl], html5: true }); _howlInstance.play(); } }, [audioBlobUrl]);
-    const playStandard = useCallback((e) => { if (e && e.stopPropagation) e.stopPropagation(); playSegmentedTTS(analysis.cleanCorrectWord, 'zh-CN-XiaoyouNeural', 0); }, [analysis.cleanCorrectWord]);
+
+    useEffect(() => { if (analysis) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
+
     if (!analysis) return null;
+
     return (
         <div style={styles.comparisonOverlay}>
             <div style={styles.comparisonPanel}>
-                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #16a34a, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
-                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🌟' : '💪'}</div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '恭喜！发音完美' : '再接再厉'}</div>
+                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
+                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : '再接再厉！'}</div>
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>准确率: {analysis.accuracy}%</div>
                 </div>
-                <div style={styles.audioControls}>
-                    <button style={styles.audioButton} onClick={playStandard}><FaPlay size={16}/> 标准发音</button>
-                    {audioBlobUrl && <button style={styles.audioButton} onClick={playUserRecording}><FaPlay size={16}/> 你的录音</button>}
-                </div>
                 <div style={styles.errorDetailsContainer}>
-                    {analysis.hasLengthMismatch && (<div style={styles.lengthError}><h3>字数不符！</h3><p>目标: <strong>{analysis.cleanCorrectWord.length} 字</strong> &bull; 你读: <strong>{analysis.cleanUserText.length} 字</strong></p></div>)}
-                    <div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinSide}><div style={{...styles.pinyinText, color: '#000000'}}>{pinyinConverter(result.char, { toneType: 'mark', type: 'string' })}</div><span style={styles.pinyinLabel}>标准</span></div><div style={styles.comparisonPinyinSide}><div style={{...styles.pinyinText, color: result.pinyinMatch ? '#16a34a' : '#dc2626'}}>{result.user?.parts?.pinyinMark || '?' }</div><span style={styles.pinyinLabel}>你的发音</span></div>{!result.pinyinMatch && (<div style={styles.errorHint}>{result.user?.errors?.initial && <span style={styles.hintTag}>声母错</span>}{result.user?.errors?.final && <span style={styles.hintTag}>韵母错</span>}{result.user?.errors?.tone && <span style={styles.hintTag}>声调错</span>}</div>)}</div>))}</div>
+                    {analysis.error === 'LENGTH_MISMATCH' ? (
+                        <div style={styles.lengthError}><h3>{analysis.message}</h3></div>
+                    ) : (
+                        <div style={styles.comparisonGrid}>
+                            {analysis.results.map((result, index) => (
+                                <div key={index} style={styles.comparisonCell}>
+                                    <div style={styles.comparisonChar}>{result.char}</div>
+                                    <div style={styles.comparisonPinyinSide}><PinyinVisualizer analysis={result.correct} /><span style={styles.pinyinLabel}>标准</span></div>
+                                    <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.6 : 1}}><PinyinVisualizer analysis={result.user} /><span style={styles.pinyinLabel}>你的发音</span></div>
+                                    {!result.pinyinMatch && (<div style={styles.errorHint}>{result.user.errors.initial && <span style={styles.hintTag}>声母错</span>}{result.user.errors.final && <span style={styles.hintTag}>韵母错</span>}{result.user.errors.tone && <span style={styles.hintTag}>声调错</span>}</div>)}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 <div style={styles.comparisonActions}>
                     {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}
@@ -151,24 +160,12 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
 
 const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const optimizedSrc = useMemo(() => {
-      if (!src) return null;
-      let baseSrc = src;
-      if (!src.startsWith('http') && src.match(/^\d+\.jpe?g$/i)) { baseSrc = `/images/${src}`; }
-      return `${baseSrc}?quality=30`;
-  }, [src]);
-  useEffect(() => { 
-      setImageLoaded(false); 
-      if (!optimizedSrc) return;
-      const img = new Image();
-      img.onload = () => setImageLoaded(true);
-      img.onerror = () => { setImageLoaded(true); console.error(`Image failed to load: ${optimizedSrc}`); };
-      img.src = optimizedSrc;
-  }, [optimizedSrc]);
+  const optimizedSrc = useMemo(() => src ? `${src}?quality=30` : null, [src]);
+  useEffect(() => { setImageLoaded(false); }, [src]);
   return (
     <div style={styles.imageWrapper}>
-      {!imageLoaded && optimizedSrc && (<div style={styles.skeleton}><div style={styles.shimmer} /></div>)}
-      {optimizedSrc && (<img src={optimizedSrc} alt={alt} style={{...styles.cardImage, opacity: imageLoaded ? 1 : 0}} loading="lazy" decoding="async"/>)}
+      {!imageLoaded && (<div style={styles.skeleton}><div style={styles.shimmer} /></div>)}
+      <img src={optimizedSrc} alt={alt} onLoad={() => setImageLoaded(true)} style={{...styles.cardImage, opacity: imageLoaded ? 1 : 0}} loading="lazy" decoding="async"/>
     </div>
   );
 });
@@ -200,57 +197,33 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const [audioBlobUrl, setAudioBlobUrl] = useState(null);
   const [writerChar, setWriterChar] = useState(null); 
   
+  const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
-  const recognitionRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
   const currentCard = cards[currentIndex]; 
 
   const navigate = useCallback((direction) => { 
       lastDirection.current = direction; 
       setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
   }, [cards.length]);
-  
-  const resetAutoBrowseTimer = useCallback(() => { 
-      clearTimeout(autoBrowseTimerRef.current); 
-      if (settings.autoBrowse && !writerChar && !isListening) { 
-          autoBrowseTimerRef.current = setTimeout(() => navigate(1), 6000); 
-      } 
-  }, [settings.autoBrowse, writerChar, isListening, navigate]);
-  
-  const playBurmeseAfterChinese = useCallback(() => {
-        if (settings.autoPlayBurmese && currentCard?.burmese) {
-            _autoPlayTimer = setTimeout(() => {
-                playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
-            }, 300); 
-        }
-  }, [settings.autoPlayBurmese, currentCard, settings.voiceBurmese, settings.speechRateBurmese]);
-
 
   useEffect(() => {
-      stopAllAudio();
-      if (settings.autoPlayChinese && currentCard?.chinese) { 
-          const ttsTimer = setTimeout(() => {
-            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese);
-          }, 600);
-          return () => clearTimeout(ttsTimer);
-      }
-  }, [currentIndex, currentCard, settings.autoPlayChinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese]);
-
-  useEffect(() => {
-    resetAutoBrowseTimer();
-    return () => clearTimeout(autoBrowseTimerRef.current);
-  }, [currentIndex, resetAutoBrowseTimer]);
+      const autoPlayTimer = setTimeout(() => {
+          if (settings.autoPlayChinese && currentCard?.chinese) {
+              playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
+                  if (settings.autoPlayBurmese && currentCard?.burmese) {
+                      playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
+                  }
+              });
+          }
+      }, 600);
+      return () => clearTimeout(autoPlayTimer);
+  }, [currentIndex, currentCard, settings]);
   
   useEffect(() => {
-    return () => {
-        if (recognitionRef.current) { recognitionRef.current.stop(); recognitionRef.current = null; }
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') { mediaRecorderRef.current.stop(); }
-    }
+    return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } };
   }, []);
 
   const cardTransitions = useTransition(currentIndex, { 
@@ -262,68 +235,58 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
       onStart: () => playSoundEffect('switch'), 
   });
   
+  // 【核心修复】采用参考代码中的简化版语音识别逻辑
   const handleListen = useCallback((e) => { 
       e.stopPropagation(); 
-      stopAllAudio();
+      if (_howlInstance?.playing()) _howlInstance.stop();
+
       if (isListening) { 
-          if(recognitionRef.current) recognitionRef.current.stop();
+          recognitionRef.current?.stop();
           return; 
       } 
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
-      if (!SpeechRecognition) { alert('抱歉，您的浏览器不支持语音识别。'); return; } 
       
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          mediaRecorderRef.current = new MediaRecorder(stream);
-          audioChunksRef.current = [];
-          mediaRecorderRef.current.ondataavailable = event => { audioChunksRef.current.push(event.data); };
-          mediaRecorderRef.current.onstop = () => {
-              stream.getTracks().forEach(track => track.stop());
-              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-              if (_currentAudioBlobUrl) URL.revokeObjectURL(_currentAudioBlobUrl);
-              _currentAudioBlobUrl = URL.createObjectURL(audioBlob); 
-              setAudioBlobUrl(_currentAudioBlobUrl);
-          };
-          
-          recognitionRef.current = new SpeechRecognition(); 
-          recognitionRef.current.lang = 'zh-CN'; 
-          recognitionRef.current.interimResults = false; 
-          
-          recognitionRef.current.onstart = () => { setIsListening(true); setRecognizedText(''); setAudioBlobUrl(null); mediaRecorderRef.current.start(); }; 
-          recognitionRef.current.onresult = (event) => { 
-              const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，！？!?]/g, ''); 
-              if (transcript) setRecognizedText(transcript); 
-          }; 
-          
-          recognitionRef.current.onerror = (event) => { 
-              console.error('Speech Recognition Error:', event.error);
-              let errorMessage = '语音识别出错，请稍后再试。';
-              if (event.error === 'network') { errorMessage = '网络连接问题，无法连接到语音识别服务。'; } 
-              else if (event.error === 'no-speech') { errorMessage = '没有检测到语音，请大声一点再说一次。'; } 
-              else if (event.error === 'service-not-allowed' || event.error === 'not-allowed') { errorMessage = '无法使用麦克风，请检查浏览器权限。'; }
-              alert(errorMessage);
-          }; 
-          
-          recognitionRef.current.onend = () => { 
-              if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
-              recognitionRef.current = null;
-              setIsListening(false);
-          }; 
-          
-          recognitionRef.current.start(); 
-
-      }).catch(err => {
-          console.error("无法获取麦克风:", err);
-          alert('无法启动麦克风。请检查浏览器权限，并确保您的网站是通过 HTTPS 访问。');
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
+      if (!SpeechRecognition) { 
+          alert('抱歉，您的浏览器不支持语音识别。'); 
+          return; 
+      } 
+      
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN';
+      recognition.interimResults = false;
+      
+      recognition.onstart = () => {
+          setIsListening(true);
+          setRecognizedText('');
+      };
+      
+      recognition.onresult = (event) => {
+          const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，]/g, '');
+          if (transcript) {
+              setRecognizedText(transcript);
+          }
+      };
+      
+      recognition.onerror = (event) => {
+          console.error('Speech Recognition Error:', event.error);
+          alert(`语音识别出错: ${event.error}`);
+          setRecognizedText(''); // 清空识别文本以关闭对比窗口
+      };
+      
+      recognition.onend = () => {
           setIsListening(false);
-      });
+          recognitionRef.current = null;
+      };
+      
+      recognition.start();
+      recognitionRef.current = recognition;
   }, [isListening]);
 
-  const handleCloseComparison = useCallback(() => { setRecognizedText(''); if (_currentAudioBlobUrl) { URL.revokeObjectURL(_currentAudioBlobUrl); _currentAudioBlobUrl = null; setAudioBlobUrl(null); } }, []);
+  const handleCloseComparison = useCallback(() => { setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
   
   const phoneticDisplay = useMemo(() => currentCard?.burmesePhonetic?.replace(/\s*\(.*?\)\s*/g, ''), [currentCard]);
   
-
   return (
     <div style={styles.fullScreen}>
       {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />} 
@@ -337,19 +300,17 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
         return (
           <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
             <div style={styles.cardContainer}>
-              {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
               <div style={styles.contentBox}>
                   <div style={styles.languageSection} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                       <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
                       <div style={styles.textChinese}>{cardData.chinese}</div>
-                      <button style={styles.playButton}><FaVolumeUp size={22} /></button>
                   </div>
                   <div style={styles.languageSection} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
                       {phoneticDisplay && <div style={styles.burmesePhonetic}>{phoneticDisplay}</div>}
                       <div style={styles.textBurmese}>{cardData.burmese}</div>
-                      <button style={styles.playButton}><FaLanguage size={22} /></button>
                   </div>
               </div>
+              {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
             </div>
           </animated.div>
         );
@@ -358,8 +319,7 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
       {!!recognizedText && currentCard && (
           <PronunciationComparison 
               correctWord={currentCard.chinese} 
-              userText={recognizedText} 
-              audioBlobUrl={audioBlobUrl}
+              userText={recognizedText}
               onContinue={handleNavigateToNext} 
               onClose={handleCloseComparison} 
           />
@@ -367,12 +327,12 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
 
       {currentCard && (
           <div style={styles.rightControls} data-no-gesture="true">
-            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={24} /></button>
+            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={22} /></button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
-                <FaMicrophone size={24} color={isListening ? '#dc2626' : '#4a5568'} /> 
+                <FaMicrophone size={22} color={isListening ? '#dc2626' : '#4a5568'} /> 
             </button>
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
-                <FaPenFancy size={24} />
+                <FaPenFancy size={22} />
             </button>
           </div>
       )}
@@ -387,32 +347,33 @@ const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f8fafc' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
-    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', paddingRight: '90px', boxSizing: 'border-box', gap: '25px' },
-    imageWrapper: { width: '100%', maxWidth: '450px', height: '30vh', position: 'relative', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' },
+    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', paddingRight: '75px', boxSizing: 'border-box', gap: '20px' },
+    contentBox: { width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', order: 1 },
+    imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', order: 2, marginTop: '10px' },
     cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
     skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
     shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
-    contentBox: { width: '100%', maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '20px' },
-    languageSection: { background: 'white', borderRadius: '16px', padding: '20px', position: 'relative', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', transition: 'transform 0.2s', textAlign: 'center' },
+    languageSection: { background: 'white', borderRadius: '16px', padding: '20px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', textAlign: 'center' },
     pinyin: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px' },
     textChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', wordBreak: 'break-word' },
     burmesePhonetic: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px', fontFamily: 'sans-serif' },
-    textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word' },
-    playButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' },
-    rightControls: { position: 'fixed', top: '50%', transform: 'translateY(-50%)', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' },
-    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
+    rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
+    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
     comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
-    audioControls: { display: 'flex', justifyContent: 'space-around', padding: '15px 20px', borderBottom: '1px solid #e2e8f0' },
-    audioButton: { padding: '10px 15px', borderRadius: '10px', background: '#f0f4f8', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-    errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' },
+    errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1 },
     lengthError: { textAlign: 'center', color: '#b91c1c', padding: '10px 0' },
     comparisonGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center' },
     comparisonCell: { flex: '1 1 120px', padding: '12px', borderRadius: '12px', background: '#f8f9fa', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' },
     comparisonChar: { fontSize: '1.8rem', fontWeight: 'bold', color: '#1f2937' },
     comparisonPinyinSide: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' },
-    pinyinText: { fontSize: '1.2rem', fontWeight: 500 },
+    pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.6rem', height: '2.0rem' },
+    pinyinPart: { transition: 'color 0.3s', fontWeight: 500 },
+    toneNumber: { fontSize: '1.2rem', fontWeight: 'bold', marginLeft: '2px' },
+    correctPart: { color: '#16a34a' },
+    wrongPart: { color: '#dc2626' },
     pinyinLabel: { fontSize: '0.75rem', color: '#6b7280' },
     errorHint: { display: 'flex', gap: '5px', marginTop: '5px' },
     hintTag: { fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#fee2e2', color: '#b91c1c' },
