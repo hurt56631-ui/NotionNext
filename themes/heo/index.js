@@ -159,17 +159,17 @@ const LayoutIndex = props => {
     },
     preventDefaultTouchmoveEvent: true,
     trackMouse: true,
-    delta: 50 // 调整回50，避免过于灵敏导致和侧滑栏手势冲突
+    delta: 50
   });
 
   const sidebarSwipeHandlers = useSwipeable({
       onSwipedRight: () => setIsSidebarOpen(true),
       trackMouse: true,
-      delta: 80 // 侧滑栏需要更大的滑动距离才触发，避免误操作
+      delta: 80
   });
 
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-x-hidden`}>
         <Style/>
         
         {/* --- 侧边栏 --- */}
@@ -200,38 +200,41 @@ const LayoutIndex = props => {
         </AnimatePresence>
 
         {/* --- 页面主体 --- */}
-        <div className='relative flex-grow w-full h-full overflow-hidden' {...sidebarSwipeHandlers}>
+        <div className='relative flex-grow w-full h-full' {...sidebarSwipeHandlers}>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
             {/* --- 滚动容器 --- */}
-            {/* [修复] 添加 overscroll-behavior-y: contain; 阻止滚动穿透 */}
-            <div className='relative h-full w-full overflow-y-auto overscroll-behavior-y-contain'>
+            <div className='absolute inset-0 overflow-y-auto overscroll-behavior-y-contain'>
                 {/* 背景层 (固定) */}
                 <div className='absolute top-0 left-0 right-0 h-[45vh] z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
-                {/* 空白占位，将内容推到英雄区下方 */}
-                <div className='h-[45vh] flex flex-col justify-end p-4 text-white'>
-                    <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
-                    <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
-                </div>
+                {/* 空白占位，将"抽屉"的起点推到英雄区下方 */}
+                <div className='h-[45vh]' />
 
                 {/* "抽屉"内容区 */}
                 <div className='relative z-10 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'>
-                    {/* [修复] 卡片布局现在是"抽屉"的一部分，会随之滚动 */}
-                    <div className='p-4 -mt-16'>
-                        <div className='grid grid-cols-2 grid-rows-2 gap-4 h-40'>
-                            <a href="#" className='row-span-1 col-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
-                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
+                    {/* 英雄区内容现在是"抽屉"的一部分，会随之滚动 */}
+                    <div className='p-4 -mt-[20vh]'>
+                         {/* 标题和描述 */}
+                        <div className='text-white pb-4'>
+                            <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+                            <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
+                        </div>
+                        {/* [修复] 卡片布局 */}
+                        <div className='grid grid-cols-3 grid-rows-2 gap-2 h-40'>
+                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
                             </a>
-                            <a href="#" className='row-start-2 col-start-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
-                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center text-white'><FaFacebook size={32}/></div>
+                             <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaFacebook size={32}/></div>
                             </a>
-                            <div className='row-span-2 col-start-2 rounded-xl overflow-hidden bg-black'>
+                            <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
                                 <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                             </div>
                         </div>
                     </div>
                     
+                    {/* 分类导航 */}
                     <div className='sticky top-0 z-20 bg-white/80 dark:bg-black/70 backdrop-blur-lg'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
@@ -399,7 +402,7 @@ const LayoutSlug = props => {
 }
 
 const Layout404 = () => {
-  const { onLoading, fullWidth } = useGlobal()
+  const { onLoading, fullWidth } useGlobal()
   return (
     <main id='wrapper-outer' className={`flex-grow ${fullWidth ? '' : 'max-w-4xl'} w-screen mx-auto px-5`}>
       <div id='error-wrapper' className={'w-full mx-auto justify-center'}>
