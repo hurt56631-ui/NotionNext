@@ -1,16 +1,16 @@
-// /components/ChatInterface.js (终极调试版 - 集成详细日志)
+// /components/ChatInterface.js (最终完美版 - 完全统一使用 senderId 以匹配规则)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { db, rtDb } from "@/lib/firebase"; 
 import { ref as rtRef, onValue } from 'firebase/database';
-// ✅ 引入 runTransaction
+// ✅ 引入 runTransaction 以确保写入的原子性
 import { collection, query, orderBy, limit, onSnapshot, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc, increment, writeBatch, runTransaction } from "firebase/firestore";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Settings, X, Volume2, Pencil, Check, BookText, Search, Trash2, RotateCcw, ArrowDown, Image as ImageIcon, Trash, Mic } from "lucide-react";
 import { pinyin } from 'pinyin-pro';
 
-// ... (所有辅助组件和函数 GlobalScrollbarStyle, CircleTranslateIcon, PinyinText, TTS/AI 模块, formatLastSeen 保持不变) ...
-const GlobalScrollbarStyle = () => ( <style>{`...`}</style> );
+// ... (所有辅助组件和函数保持不变) ...
+const GlobalScrollbarStyle = () => ( <style>{` .thin-scrollbar::-webkit-scrollbar { width: 2px; height: 2px; } .thin-scrollbar::-webkit-scrollbar-track { background: transparent; } .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #e5e7eb; border-radius: 20px; } .thin-scrollbar:hover::-webkit-scrollbar-thumb { background-color: #9ca3af; } .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #9ca3af transparent; } `}</style> );
 const CircleTranslateIcon = ({ size = 6 }) => ( <div className={`w-${size} h-${size} bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-xs text-gray-600 font-bold shadow-sm border border-gray-300 transition-colors`}>译</div> );
 const PinyinText = ({ text, showPinyin }) => { if (!text || typeof text !== 'string') return text; if (showPinyin) { try { return pinyin(text, { type: 'array', toneType: 'none' }).join(' '); } catch (error) { console.error("Pinyin conversion failed:", error); return text; } } return text; };
 const ttsCache = new Map();
@@ -115,94 +115,55 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // ==================== 【集成详细日志的 sendMessage 函数】 ====================
   const sendMessage = async (textToSend) => {
-    console.group("🚀 [sendMessage] 开始执行");
-
     const content = (textToSend || input).trim();
-    
-    // --- 日志点 1: 检查所有前提条件 ---
-    console.log("1. 检查前提条件...");
-    console.log(`  - 消息内容 (content): "${content}"`);
-    console.log("  - 当前用户 (user):", user);
-    console.log("  - 对方用户 (peerUser):", peerUser);
-    console.log(`  - 聊天ID (chatId): "${chatId}"`);
-
     if (!content || !user?.uid || !peerUser?.id || !chatId) {
-      console.error("❌ [sendMessage] 失败：前提条件不满足！函数提前退出。");
-      console.groupEnd();
-      alert("发送失败：缺少关键信息（用户、聊天对象或内容）。");
+      console.error("SendMessage Aborted: Missing required data.");
       return;
     }
-    
-    console.log("✅ 1. 前提条件满足。");
     setSending(true);
 
     try {
       const chatDocRef = doc(db, "privateChats", chatId);
-      
-      // --- 日志点 2: 执行事务 ---
-      console.log("2. 准备执行 Firestore Transaction...");
-      
       await runTransaction(db, async (transaction) => {
-        console.log("  - [Transaction] 事务内部开始...");
         const chatDocSnap = await transaction.get(chatDocRef);
         const newMessageRef = doc(collection(chatDocRef, "messages"));
 
         if (!chatDocSnap.exists()) {
-          console.log("  - [Transaction] 聊天文档不存在，准备创建...");
-          const newChatData = {
+          transaction.set(chatDocRef, {
             members: [user.uid, peerUser.id],
             createdAt: serverTimestamp(),
             lastMessage: content,
             lastMessageAt: serverTimestamp(),
             [`unreadCounts.${peerUser.id}`]: 1,
             [`unreadCounts.${user.uid}`]: 0
-          };
-          console.log("    - [Transaction] 新聊天文档数据:", newChatData);
-          transaction.set(chatDocRef, newChatData);
+          });
         } else {
-          console.log("  - [Transaction] 聊天文档已存在，准备更新...");
-          const updateData = {
+          transaction.update(chatDocRef, {
             lastMessage: content,
             lastMessageAt: serverTimestamp(),
             [`unreadCounts.${peerUser.id}`]: increment(1),
             [`unreadCounts.${user.uid}`]: 0
-          };
-          console.log("    - [Transaction] 更新数据:", updateData);
-          transaction.update(chatDocRef, updateData);
+          });
         }
         
-        const newMessageData = {
+        transaction.set(newMessageRef, {
           text: content,
           senderId: user.uid,
           createdAt: serverTimestamp()
-        };
-        console.log("  - [Transaction] 准备创建新消息...");
-        console.log("    - [Transaction] 新消息数据:", newMessageData);
-        transaction.set(newMessageRef, newMessageData);
-        console.log("  - [Transaction] 事务内部操作定义完毕。");
+        });
       });
-
-      console.log("✅ 3. Firestore Transaction 执行成功！");
 
       setInput("");
       setMyTranslationResult(null);
 
     } catch (error) {
-      // --- 日志点 3: 捕获并详细记录错误 ---
-      console.error("❌ [sendMessage] 失败：在执行 Transaction 时捕获到错误！");
-      console.error("  - 错误代码 (error.code):", error.code);
-      console.error("  - 错误信息 (error.message):", error.message);
-      console.error("  - 完整错误对象 (error):", error);
-      alert(`发送失败，请检查浏览器控制台获取详细错误信息。\n错误: ${error.message}`);
+      console.error("SendMessage Transaction Error:", error);
+      alert(`发送失败，请重试: ${error.message}`);
     } finally {
       setSending(false);
-      console.log("🏁 [sendMessage] 执行完毕。");
-      console.groupEnd();
     }
   };
-  // =========================================================================
 
   const handleSpeechRecognition = () => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能。请尝试使用最新版的 Chrome 浏览器。"); return; } if (isListening) { recognitionRef.current?.stop(); return; } const recognition = new SpeechRecognition(); recognition.lang = cfg.speechLang; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setInput(''); }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.onerror = (event) => { console.error("语音识别错误:", event.error); setIsListening(false); setInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); setInput(transcript); if (event.results[0].isFinal && transcript.trim()) { sendMessage(transcript); } }; recognition.start(); };
   const handleScroll = () => { const el = mainScrollRef.current; if (el) { const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100; isAtBottomRef.current = atBottom; if (atBottom && unreadCount > 0) { setUnreadCount(0); } } };
