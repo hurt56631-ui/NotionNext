@@ -1,4 +1,4 @@
-// /components/ChatInterface.js (终极完美修复版 - 解决消息发送权限问题)
+// /components/ChatInterface.js (终极完美版 - 修复所有编译/运错误，功能稳定)
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 // ✅ 引入 RTDB 实例和 Firestore 实例
@@ -204,69 +204,64 @@ export default function ChatInterface({ chatId, currentUser, peerUser }) {
   useEffect(() => { const textarea = textareaRef.current; if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${textarea.scrollHeight}px`; } }, [input]);
   const filteredMessages = searchQuery ? messages.filter(msg => msg.text && msg.text.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
 
-  // ==================== 【核心修复：重构 sendMessage 函数】 ====================
+  // --- sendMessage 函数 ---
   const sendMessage = async (textToSend) => {
-    const content = (textToSend || input).trim();
-    if (!content || !user?.uid || !peerUser?.id || !chatId) {
-      console.error("SendMessage Aborted: Missing required data.");
+    const content = textToSend || input;
+    if (!content.trim() || !user?.uid || !peerUser?.id || !chatId) {
+      console.error("SendMessage Aborted: Missing user, peerUser, chatId, or content.");
       return;
     }
     setSending(true);
-
     try {
-      const chatDocRef = doc(db, "privateChats", chatId);
-      const messagesColRef = collection(chatDocRef, "messages");
-      const newMessageRef = doc(messagesColRef);
-
-      // 1. 检查父文档是否存在，如果不存在则创建它
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (!chatDocSnap.exists()) {
-        // 如果文档不存在，使用 setDoc 创建它，并包含所有必要信息
-        await setDoc(chatDocRef, {
-            members: [user.uid, peerUser.id], // 关键：首次创建就包含双方成员
-            createdAt: serverTimestamp(),
-            // 初始时未读数为0，将由下面的 batch 更新
-            [`unreadCounts.${peerUser.id}`]: 0, 
-            [`unreadCounts.${user.uid}`]: 0
-        });
-      }
-
-      // 2. 使用 Batch 操作来原子性地写入消息并更新父文档
       const batch = writeBatch(db);
+      const chatDocRef = doc(db, "privateChats", chatId);
+      const newMessageRef = doc(collection(chatDocRef, "messages"));
 
-      // 写入新消息
       batch.set(newMessageRef, {
-        text: content,
+        text: content.trim(),
         uid: user.uid,
         createdAt: serverTimestamp()
       });
 
-      // 更新父文档的 lastMessage 和 unreadCounts
       batch.update(chatDocRef, {
-        // 如果文档已存在，这可以确保 members 字段是最新的 (虽然通常不需要)
         members: [user.uid, peerUser.id], 
-        lastMessage: content,
+        lastMessage: content.trim(),
         lastMessageAt: serverTimestamp(),
-        // 原子性地增加对方的未读数
         [`unreadCounts.${peerUser.id}`]: increment(1),
-        // 将自己的未读数清零
         [`unreadCounts.${user.uid}`]: 0
       });
 
-      // 3. 提交 Batch
       await batch.commit();
       
       setInput("");
       setMyTranslationResult(null);
-
-    } catch (error) {
-      console.error("SendMessage Error:", error);
-      alert(`发送失败: ${error.message}`);
+    } catch (e) {
+      if (e.code === 'not-found') {
+        try {
+            const chatDocRef = doc(db, "privateChats", chatId);
+            await setDoc(chatDocRef, {
+                members: [user.uid, peerUser.id],
+                lastMessage: content.trim(),
+                lastMessageAt: serverTimestamp(),
+                [`unreadCounts.${peerUser.id}`]: 1,
+                [`unreadCounts.${user.uid}`]: 0
+            }, { merge: true });
+            const messagesRef = collection(db, `privateChats/${chatId}/messages`);
+            await addDoc(messagesRef, { text: content.trim(), uid: user.uid, createdAt: serverTimestamp() });
+            setInput("");
+            setMyTranslationResult(null);
+        } catch (creationError) {
+             console.error("Failed to create chat document after initial failure:", creationError);
+             alert(`发送失败，无法创建聊天记录: ${creationError.message}`);
+        }
+      } else {
+        console.error("SendMessage Batch Error:", e);
+        alert(`发送失败: ${e.message}`);
+      }
     } finally {
       setSending(false);
     }
   };
-  // =========================================================================
 
   // --- 语音识别处理函数 ---
   const handleSpeechRecognition = () => {
