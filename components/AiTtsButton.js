@@ -1,19 +1,18 @@
+// AiTtsButton.js (已应用修复方案的最终版本)
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// --- 【全新】的 AiTtsButton 组件 (v2 - 支持加载、播放动画和暂停) ---
 const AiTtsButton = ({ text, ttsSettings }) => {
     const [playbackState, setPlaybackState] = useState('idle'); // 'idle', 'loading', 'playing', 'paused'
     const audioRef = useRef(null);
     const abortControllerRef = useRef(null);
 
-    // 从 settings 中解构 TTS 参数，并提供默认值
     const {
         ttsVoice = 'zh-CN-XiaoxiaoMultilingualNeural',
         ttsRate = 0,
         ttsPitch = 0,
     } = ttsSettings || {};
 
-    // 更强大的文本清理函数
     const cleanTextForSpeech = (rawText) => {
         if (!rawText) return '';
         let cleaned = rawText;
@@ -57,13 +56,24 @@ const AiTtsButton = ({ text, ttsSettings }) => {
         abortControllerRef.current = new AbortController();
 
         try {
-            const params = new URLSearchParams({ t: cleanedText, v: ttsVoice, r: `${ttsRate}%`, p: `${ttsPitch}%` });
+            // ==================== 【核心修复点】 ====================
+            // 将语速(r)和音调(p)参数的值改为纯数字，去掉 "%"
+            const params = new URLSearchParams({ 
+                t: cleanedText, 
+                v: ttsVoice, 
+                r: ttsRate, 
+                p: ttsPitch 
+            });
+            // =======================================================
+
             const url = `https://t.leftsite.cn/tts?${params.toString()}`;
             const response = await fetch(url, { signal: abortControllerRef.current.signal });
+            
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`API 请求失败: ${response.status} ${errorText}`);
             }
+
             const blob = await response.blob();
             const audioUrl = URL.createObjectURL(blob);
             if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
