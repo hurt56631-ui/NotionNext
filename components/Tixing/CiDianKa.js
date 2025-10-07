@@ -411,11 +411,12 @@ const styles = {
   gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
   animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
   cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-around', padding: '60px 20px 20px' },
-  // **优化:** 调整 marginBottom，让内容整体下移
+  // 调整 marginBottom 让内容下移
   mainContent: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '40px', width: '100%', marginBottom: '20%' }, 
   header: { textAlign: 'center' },
   pinyin: { fontSize: '1.6rem', color: '#64748b', marginBottom: '8px' },
-  hanzi: { fontSize: '5.0rem', fontWeight: 900, color: '#000000' },
+  // **修改点 1:** 卡片主汉字大小：从 5.0rem 调整到 4.0rem
+  hanzi: { fontSize: '4.0rem', fontWeight: 900, color: '#000000' },
   listeningText: { position: 'absolute', bottom: '25%', color: '#3b82f6', fontSize: '1.2rem', fontWeight: 'bold' },
   
   // --- 详情与图片 ---
@@ -423,7 +424,6 @@ const styles = {
   meaningSection: { paddingBottom: '15px' },
   exampleSection: { borderTop: '1px solid #e2e8f0', paddingTop: '15px' },
   imageWrapper: { width: '90%', maxHeight: '30vh', position: 'relative' },
-  // **优化:** 移除 opacity 样式，交给 useTransition 处理
   cardImage: { maxWidth: '100%', maxHeight: '30vh', objectFit: 'contain', borderRadius: '12px', transition: 'opacity 0.5s ease-in-out' }, 
   skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', borderRadius: '12px', overflow: 'hidden' },
   shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
@@ -439,10 +439,10 @@ const styles = {
   errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' },
   lengthError: { textAlign: 'center', color: '#b91c1c', padding: '20px 0' },
   
-  // **优化:** 解决多字放不下的问题，使用 flex-wrap 实现流式布局
+  // 解决多字放不下的问题，使用 flex-wrap 实现流式布局
   comparisonGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'flex-start' },
   comparisonCell: { 
-      minWidth: '130px', // 确保每个字有足够的空间
+      minWidth: '130px', 
       padding: '12px', 
       borderRadius: '12px',
       background: '#f8f9fa',
@@ -452,12 +452,12 @@ const styles = {
       gap: '8px' 
   },
   
+  // **修改点 2:** 对比面板汉字大小：从 2.0rem 调整到 1.8rem
   comparisonChar: { fontSize: '1.8rem', fontWeight: 'bold', color: '#1f2937', textAlign: 'center' },
-  // **优化:** 增加间距
   comparisonPinyinSide: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }, 
   pinyinLabel: { fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 },
   pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.6rem', height: '2.0rem' },
-  pinyinPart: { transition: 'color 0.3s', fontWeight: 500, margin: '0 1px' }, // **优化:** 增加拼音部分间距
+  pinyinPart: { transition: 'color 0.3s', fontWeight: 500, margin: '0 1px' }, 
   toneNumber: { fontSize: '1.2rem', fontWeight: 'bold', marginLeft: '2px' },
   correctPart: { color: '#16a34a' },
   wrongPart: { color: '#dc2626' },
