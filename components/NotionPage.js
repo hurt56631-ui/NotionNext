@@ -17,6 +17,7 @@ const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { s
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
+const AiTtsButton = dynamic(() => import('@/components/AiTtsButton'), { ssr: false })
 
 
 // --- 2. 导入 react-notion-x 的原始组件 (保持不变) ---
@@ -50,6 +51,9 @@ const CustomCode = (props) => {
         }
         if (componentPath === '/components/HanziModal.js') {
           return <HanziModal {...parsedProps} />;
+        }
+        if (componentPath === '/components/AiTtsButton.js') {
+          return <AiTtsButton {...parsedProps} />;
         }
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
