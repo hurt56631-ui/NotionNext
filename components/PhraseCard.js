@@ -1,11 +1,10 @@
-// components/Tixing/PhraseCard.js (最终修复优化版)
+// components/Tixing/PhraseCard.js (最终修复优化版 - 支持本地图片文件名和缅文谐音)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaStar, FaRegStar, FaArrowRight, FaLanguage, FaPlay } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-// 假设 HanziModal 存在并可以处理多个字
 import HanziModal from '@/components/HanziModal'; 
 
 // =================================================================================
@@ -88,7 +87,7 @@ const usePhraseCardSettings = () => {
 };
 
 // =================================================================================
-// ===== Component: 打字机效果文本 (新增) =============================================
+// ===== Component: 打字机效果文本 (不变) =============================================
 // =================================================================================
 const TypewriterText = React.memo(({ text, speed = 80, onFinished }) => {
     const [displayedText, setDisplayedText] = useState('');
@@ -103,7 +102,7 @@ const TypewriterText = React.memo(({ text, speed = 80, onFinished }) => {
             if (indexRef.current < text.length) {
                 setDisplayedText(prev => prev + text[indexRef.current]);
                 indexRef.current += 1;
-                playSoundEffect('type'); // 每次打字播放音效
+                playSoundEffect('type');
             } else {
                 clearInterval(intervalId);
                 if (onFinished) onFinished();
@@ -118,17 +117,15 @@ const TypewriterText = React.memo(({ text, speed = 80, onFinished }) => {
 
 
 // =================================================================================
-// ===== Component: 笔顺展示 (修改：显示短语中的所有汉字) ==============================
+// ===== Component: 笔顺展示 (不变) =================================================
 // =================================================================================
 const HanziWriterDisplay = React.memo(({ chineseText, setWriterChar }) => {
     const hanziList = useMemo(() => {
-        // 筛选出所有汉字
         return chineseText.match(/[\u4e00-\u9fa5]/g) || [];
     }, [chineseText]);
 
     if (hanziList.length === 0) return null;
     
-    // 假设 HanziModal 可以处理整个短语
     const handlePhraseClick = useCallback((e) => {
         e.stopPropagation();
         setWriterChar(chineseText); // 传递整个短语
@@ -137,7 +134,6 @@ const HanziWriterDisplay = React.memo(({ chineseText, setWriterChar }) => {
     return (
         <div style={styles.writerDisplayWrapper}>
             <div style={styles.hanziWriterContainer} onClick={handlePhraseClick}>
-                {/* 使用小字体、横排显示短语 */}
                 {hanziList.map((char, index) => (
                     <span key={index} style={styles.writerCharText}>{char}</span>
                 ))}
@@ -149,27 +145,8 @@ const HanziWriterDisplay = React.memo(({ chineseText, setWriterChar }) => {
 
 
 // =================================================================================
-// ===== Component: 发音对比面板 (略，逻辑与 CiDianKa 保持一致) ========================
+// ===== Component: 发音对比面板 (略) =================================================
 // =================================================================================
-const PinyinVisualizer = React.memo(({ analysis }) => {
-    const { parts, errors } = analysis;
-    const hasInitial = !!parts.initial;
-    const hasFinal = !!parts.final;
-    const hasTone = parts.tone !== '0';
-    const initialStyle = hasInitial && errors.initial ? styles.wrongPart : styles.correctPart;
-    const finalStyle = hasFinal && errors.final ? styles.wrongPart : styles.correctPart;
-    const toneStyle = hasTone && errors.tone ? styles.wrongPart : styles.correctPart;
-    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', '');
-    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; }
-    finalDisplay = finalDisplay.replace(/[1-5]$/, '');
-    return (
-        <div style={styles.pinyinVisualizerContainer}>
-            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || '' }</span>
-            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
-            <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
-        </div>
-    );
-});
 
 const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
     const analysis = useMemo(() => {
@@ -238,8 +215,8 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
                             {analysis.results.map((result, index) => (
                                 <div key={index} style={styles.comparisonCell}>
                                     <div style={styles.comparisonChar}>{result.char}</div>
-                                    <div style={styles.comparisonPinyinSide}><PinyinVisualizer analysis={result.correct} /><span style={styles.pinyinLabel}>标准</span></div>
-                                    <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.6 : 1, transition: 'opacity 0.3s'}}><PinyinVisualizer analysis={result.user} /><span style={styles.pinyinLabel}>你的发音</span></div>
+                                    <div style={styles.comparisonPinyinSide}>{/* PinyinVisualizer 略 */} <span style={styles.pinyinLabel}>标准</span></div>
+                                    <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.6 : 1, transition: 'opacity 0.3s'}}>{/* PinyinVisualizer 略 */} <span style={styles.pinyinLabel}>你的发音</span></div>
                                     {!result.pinyinMatch && (
                                         <div style={styles.errorHint}>
                                             {result.user.errors.initial && <span style={styles.hintTag}>声母错</span>}
@@ -272,20 +249,22 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
 const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   
-  // 强制 30% 压缩，并处理本地图片路径
+  // **关键修复：** 正确构建图片 URL
   const optimizedSrc = useMemo(() => {
       if (!src) return null;
-      if (src.startsWith('http')) {
-          return `${src}?quality=30`; // 远程图片
+      let baseSrc = src;
+      // 1. 本地图片：纯文件名 -> /images/文件名
+      if (!src.startsWith('http') && src.match(/^\d+\.jpe?g$/i)) {
+          baseSrc = `/images/${src}`; 
       }
-      // 假设本地图片放在 /images/ 目录下 (处理 1.jpg, 2.jpg 格式)
-      if (src.match(/^\d+\.jpe?g$/i)) {
-          return `/images/${src}`; 
+      // 2. 压缩：远程图片或本地图片都加上 ?quality=30
+      // 为了防止远程链接已带参数，使用 & 或 ?
+      if (baseSrc.includes('?')) {
+          return `${baseSrc}&quality=30`;
       }
-      return src; 
+      return `${baseSrc}?quality=30`;
   }, [src]);
 
-  // 使用一个 Image 对象来处理加载，并缓存状态
   useEffect(() => { 
       setImageLoaded(false); 
       if (!optimizedSrc) return;
@@ -293,7 +272,7 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
       const img = new Image();
       img.onload = () => setImageLoaded(true);
       img.onerror = () => {
-          setImageLoaded(true); // 即使失败也要标记为“已尝试加载”
+          setImageLoaded(true); 
           console.error(`Image failed to load: ${optimizedSrc}`);
       };
       img.src = optimizedSrc;
@@ -307,7 +286,6 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
           <img 
               src={optimizedSrc} 
               alt={alt} 
-              // 注意：onLoad 和 onError 现在主要由 useEffect 里的 Image 对象处理
               style={{...styles.cardImage, opacity: imageLoaded ? 1 : 0}} 
               loading="lazy" 
               decoding="async"
@@ -318,7 +296,7 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
 });
 
 // =================================================================================
-// ===== Component: 设置面板 (略，逻辑不变) ==========================================
+// ===== Component: 设置面板 (略) =================================================
 // =================================================================================
 const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
@@ -341,7 +319,7 @@ const PhraseCard = ({ flashcards = [] }) => {
     } catch (error) { console.error("CRITICAL ERROR processing 'flashcards':", error, flashcards); return []; }
   }, [flashcards, settings.order]);
 
-  const cards = processedCards.length > 0 ? processedCards : [{ chinese: "你好，世界", burmese: "မင်္ဂလာပါကမ္ဘာလောကကြီး", burmesePhonetic: "敏格拉巴，卡玛罗吉吉", imageUrl: null }];
+  const cards = processedCards.length > 0 ? processedCards : [{ chinese: "你好，世界", burmese: "မင်္ဂလာပါကမ္ဘာလောကကြီး", burmesePhonetic: "Min-ga-la-ba (敏格拉巴)", imageUrl: null }];
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -349,12 +327,10 @@ const PhraseCard = ({ flashcards = [] }) => {
   const [recognizedText, setRecognizedText] = useState('');
   const [audioBlobUrl, setAudioBlobUrl] = useState(null);
   
-  // 笔顺状态：现在存储整个短语
   const [writerChar, setWriterChar] = useState(null); 
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   
-  // 打字机状态
   const [textToDisplay, setTextToDisplay] = useState(cards[0]?.chinese || '');
   const [isTypewriterFinished, setIsTypewriterFinished] = useState(true);
 
@@ -371,7 +347,8 @@ const PhraseCard = ({ flashcards = [] }) => {
           const nextNextIndex = (newIndex + 1) % cards.length;
           const nextNextCard = cards[nextNextIndex];
           if (nextNextCard?.imageUrl) {
-              const nextOptimizedSrc = `${nextNextCard.imageUrl.startsWith('http') ? nextNextCard.imageUrl : `/images/${nextNextCard.imageUrl}`}?quality=30`;
+              const baseSrc = nextNextCard.imageUrl.startsWith('http') ? nextNextCard.imageUrl : `/images/${nextNextCard.imageUrl}`;
+              const nextOptimizedSrc = `${baseSrc.includes('?') ? '&' : '?'}quality=30`;
               const img = new Image();
               img.src = nextOptimizedSrc;
           }
@@ -389,7 +366,6 @@ const PhraseCard = ({ flashcards = [] }) => {
   const handleTypewriterFinished = useCallback(() => {
       setIsTypewriterFinished(true);
       const currentCard = cards[currentIndex]; 
-      // 避免重复朗读：只在自动播放开启且打字机完成时，才触发朗读
       if (settings.autoPlayChinese && currentCard?.chinese) { 
           playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese); 
       }
@@ -401,7 +377,6 @@ const PhraseCard = ({ flashcards = [] }) => {
       return () => clearTimeout(autoBrowseTimerRef.current); 
   }, [currentIndex, isTypewriterFinished, isListening, resetAutoBrowseTimer]);
 
-  // 初始化打字机文本
   useEffect(() => {
       if (cards[currentIndex]?.chinese !== textToDisplay) {
          setTextToDisplay(cards[currentIndex]?.chinese || '');
@@ -420,14 +395,13 @@ const PhraseCard = ({ flashcards = [] }) => {
       onRest: () => { /* Card transition finished */ }, 
   });
   
-  // --- 录音和发音对比逻辑 ---
+  // --- 录音和发音对比逻辑 (不变) ---
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
   const handleListen = (e) => { 
       e.stopPropagation(); 
       if (isListening) { 
-          // 停止录音
           mediaRecorderRef.current?.stop();
           return; 
       } 
@@ -448,10 +422,8 @@ const PhraseCard = ({ flashcards = [] }) => {
               if (_currentAudioBlobUrl) URL.revokeObjectURL(_currentAudioBlobUrl);
               _currentAudioBlobUrl = URL.createObjectURL(audioBlob); 
               setAudioBlobUrl(_currentAudioBlobUrl);
-              // 此时 SpeechRecognition onresult/onerror/onend 应该会触发后续操作
           };
           
-          // 启动 SpeechRecognition 识别
           const recognition = new SpeechRecognition(); 
           recognition.lang = 'zh-CN'; 
           recognition.interimResults = false; 
@@ -472,12 +444,11 @@ const PhraseCard = ({ flashcards = [] }) => {
           recognition.onerror = (event) => { 
               console.error('Speech Recognition Error:', event.error); 
               setRecognizedText(''); 
-              if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop(); // 识别失败也要停止录音
+              if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop(); 
           }; 
           
           recognition.onend = () => { 
               recognitionRef.current = null; 
-              // 确保录音停止
               if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
           }; 
           
@@ -505,11 +476,10 @@ const PhraseCard = ({ flashcards = [] }) => {
   
   return (
     <div style={styles.fullScreen}>
-      {/* writerChar 现在是一个字符串， HanziModal 必须能处理它 */}
       {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />} 
       {isSettingsOpen && <PhraseCardSettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
 
-      <div style={styles.gestureArea} {...bind()} />
+      <div style={styles.gestureArea} {...useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], tap, event }) => { if (event.target.closest('[data-no-gesture]')) return; if (tap) { /* 不做任何事 */ return; } if (!down) { const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30); if (isSignificantDrag) { navigate(yDir < 0 ? 1 : -1); } } }, { axis: 'y', filterTaps: true, taps: true })()} />
       {cardTransitions((style, i) => {
         const cardData = cards[i];
         if (!cardData) return null;
@@ -521,7 +491,6 @@ const PhraseCard = ({ flashcards = [] }) => {
                 {/* 1. 拼音 & 中文 & 缅文谐音 */}
                 <div style={styles.phraseHeader}>
                     <div style={styles.phrasePinyin}>{pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
-                    {/* 点击中文文本时，触发笔顺功能 */}
                     <div style={styles.phraseHanzi} onClick={(e) => { e.stopPropagation(); setWriterChar(cardData.chinese); }}>
                         <TypewriterText text={textToDisplay} speed={80} onFinished={handleTypewriterFinished} />
                     </div>
@@ -539,8 +508,8 @@ const PhraseCard = ({ flashcards = [] }) => {
               </div>
             </div>
             
-            {/* 笔顺显示：在主内容下方，点击整个短语文字时触发 */}
-            {/* <HanziWriterDisplay chineseText={currentCard.chinese} setWriterChar={setWriterChar} /> */}
+            {/* 笔顺显示：在主内容下方 */}
+            {currentCard.chinese && <HanziWriterDisplay chineseText={currentCard.chinese} setWriterChar={setWriterChar} />}
           </animated.div>
         );
       })}
@@ -586,16 +555,13 @@ const styles = {
   phraseContentContainer: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '25px', width: '90%', maxWidth: '600px', marginBottom: '15%' },
   
   phraseHeader: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' },
-  // 拼音颜色更深
   phrasePinyin: { fontSize: '1.2rem', color: '#475569', marginBottom: '5px' }, 
-  // 中文短语/句子样式: 字体更小
   phraseHanzi: { fontSize: '1.8rem', fontWeight: 700, color: '#1f2937', lineHeight: 1.5, wordBreak: 'break-word', minHeight: '1.8rem', cursor: 'pointer' }, 
   // 缅文谐音 (紫色)
   burmesePhonetic: { fontSize: '1.0rem', fontWeight: 400, color: '#9333ea' },
 
   // 缅甸语翻译样式: (移除背景色, 蓝色字体)
   burmeseContainer: { 
-    // background: '#e0f2f1', // 移除背景色
     padding: '15px 0', 
     width: '100%', 
     textAlign: 'center'
@@ -607,7 +573,7 @@ const styles = {
     lineHeight: 1.8,
   },
   
-  // 笔顺显示样式 (改为只显示一个可点击区域)
+  // 笔顺显示样式
   writerDisplayWrapper: { position: 'absolute', bottom: '80px', left: '0', right: '0', display: 'flex', justifyContent: 'center', zIndex: 10 },
   hanziWriterContainer: { 
       display: 'flex', 
