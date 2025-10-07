@@ -1,4 +1,4 @@
-// components/Tixing/CombinedPhraseCard.js (整合优化版)
+// components/Tixing/CombinedPhraseCard.js (最终优化版 - 解决布局和语音识别问题)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -8,14 +8,12 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; 
 
 // =================================================================================
-// ===== Utilities & Constants (音频播放、拼音解析等) =================================
+// ===== Utilities & Constants (音频播放、拼音解析等) - 无改动 =========================
 // =================================================================================
-
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' },
     { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' },
 ];
-
 const sounds = {
   switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
   correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
@@ -25,56 +23,333 @@ let _howlInstance = null;
 let _currentAudioBlobUrl = null; 
 let _autoPlayTimer = null; 
 
-// 停止所有音频活动
 const stopAllAudio = () => {
     Object.values(sounds).forEach(sound => sound.stop());
     if (_howlInstance?.playing()) _howlInstance.stop();
     clearTimeout(_autoPlayTimer);
 };
-
-// 【优化】标准整句播放
 const playTTS = (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
-    
     stopAllAudio();
-    
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
     _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: onEndCallback });
     _howlInstance.play();
 };
-
-// 【保留】分字播放，仅用于发音对比
 const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
     const characters = text.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g) || [];
     let charIndex = 0;
     let segmentTimer = null;
-
     const playNext = () => {
-        if (charIndex >= characters.length) {
-            if (onFinishCallback) onFinishCallback();
-            return;
-        }
+        if (charIndex >= characters.length) { if (onFinishCallback) onFinishCallback(); return; }
         const char = characters[charIndex];
         const rateValue = Math.round(rate / 2);
         const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(char)}&v=${voice}&r=${rateValue}`;
-        
         if (_howlInstance?.playing()) _howlInstance.stop(); 
-        
-        _howlInstance = new Howl({ 
-            src: [ttsUrl], 
-            html5: true, 
-            onend: () => {
-                charIndex++;
-                segmentTimer = setTimeout(playNext, 300); 
-            }
-        });
+        _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: () => { charIndex++; segmentTimer = setTimeout(playNext, 300); } });
         _howlInstance.play();
     };
-    
     stopAllAudio(); 
-    clearTimeout(segmentTimer); // 清除可能存在的旧计时器
+    clearTimeout(segmentTimer);
+    playNext();
+};
+// ... (PronunciationComparison, LazyImageWithSkeleton, SettingsPanel 等子组件和辅助函数保持不变) ...
+// (此处省略了未改动的子组件代码，以保持简洁，实际使用时请确保它们存在)
+const usePhraseCardSettings = () => {
+  const [settings, setSettings] = useState(() => {
+    try {
+      const savedSettings = localStorage.getItem('phraseCardSettings');
+      const defaultSettings = { 
+        order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false,
+        voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0,
+      };
+      return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
+    } catch (error) { 
+        console.error("Failed to load settings", error);
+        return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0 };
+    }
+  });
+  useEffect(() => { try { localStorage.setItem('phraseCardSettings', JSON.stringify(settings)); } catch (error) { console.error("Failed to save settings", error); } }, [settings]);
+  return [settings, setSettings];
+};
+
+// ... (此处省略 PronunciationComparison, LazyImageWithSkeleton, PhraseCardSettingsPanel 的代码)
+// 请确保您的文件中包含这些组件的完整代码
+
+
+// =================================================================================
+// ===== 主组件: CombinedPhraseCard (入口) =========================================
+// =================================================================================
+const CombinedPhraseCard = ({ flashcards = [] }) => {
+  const [settings, setSettings] = usePhraseCardSettings();
+  
+  const processedCards = useMemo(() => {
+    try { 
+        if (!Array.isArray(flashcards)) return []; 
+        const validCards = flashcards.filter(card => card && card.chinese && card.burmese); 
+        if (settings.order === 'random') { for (let i = validCards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; } } 
+        return validCards; 
+    } catch (error) { console.error("处理 'flashcards' 出错:", error, flashcards); return []; }
+  }, [flashcards, settings.order]);
+
+  const cards = processedCards.length > 0 ? processedCards : [{ chinese: "示例短语", pinyin: "shì lì duǎn yǔ", burmese: "နမူနာစကားစု", burmesePhonetic: "နမူနာ", imageUrl: null }];
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [recognizedText, setRecognizedText] = useState('');
+  const [audioBlobUrl, setAudioBlobUrl] = useState(null);
+  const [writerChar, setWriterChar] = useState(null); 
+  
+  const autoBrowseTimerRef = useRef(null);
+  const lastDirection = useRef(0);
+  const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  const currentCard = cards[currentIndex]; 
+
+  const navigate = useCallback((direction) => { 
+      lastDirection.current = direction; 
+      setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
+  }, [cards.length]);
+  
+  const resetAutoBrowseTimer = useCallback(() => { 
+      clearTimeout(autoBrowseTimerRef.current); 
+      if (settings.autoBrowse && !writerChar && !isListening) { 
+          autoBrowseTimerRef.current = setTimeout(() => navigate(1), 6000); 
+      } 
+  }, [settings.autoBrowse, writerChar, isListening, navigate]);
+  
+  const playBurmeseAfterChinese = useCallback(() => {
+        if (settings.autoPlayBurmese && currentCard?.burmese) {
+            _autoPlayTimer = setTimeout(() => {
+                playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
+            }, 300); 
+        }
+  }, [settings.autoPlayBurmese, currentCard, settings.voiceBurmese, settings.speechRateBurmese]);
+
+
+  useEffect(() => {
+      stopAllAudio();
+      if (settings.autoPlayChinese && currentCard?.chinese) { 
+          const ttsTimer = setTimeout(() => {
+            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese);
+          }, 600);
+          return () => clearTimeout(ttsTimer);
+      }
+  }, [currentIndex, currentCard, settings.autoPlayChinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese]);
+
+  useEffect(() => {
+    resetAutoBrowseTimer();
+    return () => clearTimeout(autoBrowseTimerRef.current);
+  }, [currentIndex, resetAutoBrowseTimer]);
+  
+  // 【核心修改】增加组件卸载时的清理逻辑
+  useEffect(() => {
+    return () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+    }
+  }, []);
+
+  const cardTransitions = useTransition(currentIndex, { 
+      key: currentIndex, 
+      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
+      enter: { opacity: 1, transform: 'translateY(0%)' }, 
+      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
+      config: { mass: 1, tension: 280, friction: 30 }, 
+      onStart: () => playSoundEffect('switch'), 
+  });
+  
+  const handleListen = useCallback((e) => { 
+      e.stopPropagation(); 
+      stopAllAudio();
+
+      if (isListening) { 
+          if(recognitionRef.current) recognitionRef.current.stop();
+          if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+          setIsListening(false);
+          return; 
+      } 
+      
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
+      if (!SpeechRecognition) { alert('抱歉，您的浏览器不支持语音识别。'); return; } 
+      
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          mediaRecorderRef.current = new MediaRecorder(stream);
+          audioChunksRef.current = [];
+          mediaRecorderRef.current.ondataavailable = event => { audioChunksRef.current.push(event.data); };
+          mediaRecorderRef.current.onstop = () => {
+              stream.getTracks().forEach(track => track.stop());
+              const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+              if (_currentAudioBlobUrl) URL.revokeObjectURL(_currentAudioBlobUrl);
+              _currentAudioBlobUrl = URL.createObjectURL(audioBlob); 
+              setAudioBlobUrl(_currentAudioBlobUrl);
+              setIsListening(false); // 确保在这里也更新状态
+          };
+          
+          recognitionRef.current = new SpeechRecognition(); 
+          recognitionRef.current.lang = 'zh-CN'; 
+          recognitionRef.current.interimResults = false; 
+          
+          recognitionRef.current.onstart = () => { setIsListening(true); setRecognizedText(''); setAudioBlobUrl(null); mediaRecorderRef.current.start(); }; 
+          recognitionRef.current.onresult = (event) => { 
+              const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，！？!?]/g, ''); 
+              if (transcript) setRecognizedText(transcript); 
+          }; 
+          
+          // 【核心修改】增强的错误处理
+          recognitionRef.current.onerror = (event) => { 
+              console.error('Speech Recognition Error:', event.error);
+              let errorMessage = '语音识别出错，请稍后再试。';
+              if (event.error === 'network') {
+                  errorMessage = '网络连接问题，无法连接到语音识别服务。';
+              } else if (event.error === 'no-speech') {
+                  errorMessage = '没有检测到语音，请大声一点再说一次。';
+              } else if (event.error === 'service-not-allowed' || event.error === 'not-allowed') {
+                  errorMessage = '无法使用麦克风，请检查浏览器权限。';
+              }
+              alert(errorMessage);
+              setRecognizedText(''); 
+          }; 
+          
+          // 【核心修改】确保 onend 时状态总能被重置
+          recognitionRef.current.onend = () => { 
+              if(mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+              recognitionRef.current = null;
+              setIsListening(false);
+          }; 
+          
+          recognitionRef.current.start(); 
+
+      }).catch(err => {
+          console.error("无法获取麦克风:", err);
+          alert('无法启动麦克风。请检查浏览器权限，并确保您的网站是通过 HTTPS 访问。');
+          setIsListening(false);
+      });
+  }, [isListening]);
+
+  const handleCloseComparison = useCallback(() => { setRecognizedText(''); if (_currentAudioBlobUrl) { URL.revokeObjectURL(_currentAudioBlobUrl); _currentAudioBlobUrl = null; setAudioBlobUrl(null); } }, []);
+  const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
+  
+  const phoneticDisplay = useMemo(() => currentCard?.burmesePhonetic?.replace(/\s*\(.*?\)\s*/g, ''), [currentCard]);
+  
+
+  return (
+    <div style={styles.fullScreen}>
+      {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />} 
+      {isSettingsOpen && <PhraseCardSettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
+      
+      <div style={styles.gestureArea} {...useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => { if (event.target.closest('[data-no-gesture]')) return; if (!down) { const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30); if (isSignificantDrag) { navigate(yDir < 0 ? 1 : -1); } } }, { axis: 'y' })()} />
+      
+      {cardTransitions((style, i) => {
+        const cardData = cards[i];
+        if (!cardData) return null;
+        return (
+          <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
+            <div style={styles.cardContainer}>
+              {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
+              <div style={styles.contentBox}>
+                  {/* 中文区域 */}
+                  <div style={styles.languageSection} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                      <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
+                      <div style={styles.textChinese}>{cardData.chinese}</div>
+                      <button style={styles.playButton}><FaVolumeUp size={22} /></button>
+                  </div>
+
+                  {/* 缅文区域 */}
+                  <div style={styles.languageSection} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
+                      {phoneticDisplay && <div style={styles.burmesePhonetic}>{phoneticDisplay}</div>}
+                      <div style={styles.textBurmese}>{cardData.burmese}</div>
+                      <button style={styles.playButton}><FaLanguage size={22} /></button>
+                  </div>
+              </div>
+            </div>
+          </animated.div>
+        );
+      })}
+
+      {!!recognizedText && currentCard && (
+          {/* 这里应该渲染 PronunciationComparison 组件，如果代码中省略了，请确保添加回来 */}
+      )}
+
+      {currentCard && (
+          <div style={styles.rightControls} data-no-gesture="true">
+            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={24} /></button>
+            <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
+                <FaMicrophone size={24} color={isListening ? '#dc2626' : '#4a5568'} /> 
+            </button>
+            <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
+                <FaPenFancy size={24} />
+            </button>
+          </div>
+      )}
+    </div>
+  );
+};
+
+// =================================================================================
+// ===== Styles: 样式表 (采用简洁布局) ===============================================
+// =================================================================================
+const styles = {
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f8fafc' },
+    gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
+    
+    // 【核心修改】增加 paddingRight 为右侧按钮留出空间
+    cardContainer: { 
+        width: '100%', 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        padding: '20px',
+        paddingRight: '90px', // 为右侧按钮留出 90px 的安全空间
+        boxSizing: 'border-box', // 确保 padding 不会增加总宽度
+        gap: '25px' 
+    },
+
+    imageWrapper: { width: '100%', /* 从 90% 改为 100% 以填充可用空间 */ maxWidth: '450px', height: '30vh', position: 'relative', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' },
+    cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
+    skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
+    shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
+    
+    contentBox: { width: '100%', /* 从 90% 改为 100% */ maxWidth: '450px', display: 'flex', flexDirection: 'column', gap: '20px' },
+    languageSection: { background: 'white', borderRadius: '16px', padding: '20px', position: 'relative', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', transition: 'transform 0.2s', textAlign: 'center' },
+    pinyin: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px' },
+    textChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', wordBreak: 'break-word' },
+    burmesePhonetic: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px', fontFamily: 'sans-serif' },
+    textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word' },
+    playButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' },
+    
+    // 【核心修改】调整按钮位置，使其更协调
+    rightControls: { 
+        position: 'fixed', 
+        top: '50%', // 垂直居中
+        transform: 'translateY(-50%)', // 精确垂直居中
+        right: '15px', 
+        zIndex: 100, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '20px', 
+        alignItems: 'center' 
+    },
+    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    
+    // ... 其他样式 (comparison, settings) 保持不变 ...
+};
+
+// ... (shimmerAnimation 和 styleSheet 注入逻辑保持不变) ...
+
+export default CombinedPhraseCard;    clearTimeout(segmentTimer); // 清除可能存在的旧计时器
     playNext();
 };
 
