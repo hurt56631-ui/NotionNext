@@ -7,7 +7,6 @@ import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaRandom, FaSortA
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-
 // =================================================================================
 // ===== Utilities: 音频播放, 拼音解析 (建议拆分到 utils.js) =========================
 // =================================================================================
@@ -42,22 +41,37 @@ const playSoundEffect = (type) => {
     if (sounds[type]) sounds[type].play();
 };
 
+// 修正后的拼音解析逻辑：更精准地分离声母、韵母、声调
 const parsePinyin = (pinyinNum) => {
-    if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '' };
-    const tone = pinyinNum.slice(-1);
-    const pinyinMark = pinyinConverter(pinyinNum, { toneType: 'symbol' });
-    const pinyinPlain = pinyinNum.substring(0, pinyinNum.length - 1);
+    if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
+    const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let pinyinPlain = rawPinyin.replace(/[1-5]$/, '');
+    const toneMatch = rawPinyin.match(/[1-5]$/);
+    const tone = toneMatch ? toneMatch[0] : '0';
+    const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' });
+
+    // 声母列表 (包括 y/w)
     const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w'];
     let initial = '';
     let final = pinyinPlain;
+    
+    // 寻找声母
     for (const init of initials) {
         if (pinyinPlain.startsWith(init)) {
             initial = init;
             final = pinyinPlain.slice(init.length);
+            // 处理 y/w 导致的韵母变化，例如 'ya' -> 'ia', 'wu' -> 'u'
+            if (initial === 'y' && final.startsWith('i')) final = final.slice(1);
+            if (initial === 'w' && final.startsWith('u')) final = final.slice(1);
             break;
         }
     }
-    return { initial, final, tone, pinyinMark };
+    
+    // 特殊处理 'er' 和只有韵母的情况
+    if (pinyinPlain === 'er') { initial = ''; final = 'er'; }
+    if (initial === '' && initials.some(i => pinyinPlain.startsWith(i))) { initial = pinyinPlain; final = ''; } // 兜底，防止完全失败
+
+    return { initial, final, tone, pinyinMark, rawPinyin };
 };
 
 
@@ -87,17 +101,32 @@ const useCardSettings = () => {
 // =================================================================================
 const PinyinVisualizer = React.memo(({ analysis }) => {
     const { parts, errors } = analysis;
-    const initialStyle = errors.initial ? styles.wrongPart : styles.correctPart;
-    const finalStyle = errors.final ? styles.wrongPart : styles.correctPart;
-    const toneStyle = errors.tone ? styles.wrongPart : styles.correctPart;
-
-    // 找到带声调的字母
-    let finalWithToneMark = parts.pinyinMark.replace(parts.initial, '');
     
+    // 确保有值，否则不渲染颜色
+    const hasInitial = !!parts.initial;
+    const hasFinal = !!parts.final;
+    const hasTone = parts.tone !== '0';
+
+    // 根据错误状态决定样式，如果没有对应的部分，则不渲染错误色
+    const initialStyle = hasInitial && errors.initial ? styles.wrongPart : styles.correctPart;
+    const finalStyle = hasFinal && errors.final ? styles.wrongPart : styles.correctPart;
+    const toneStyle = hasTone && errors.tone ? styles.wrongPart : styles.correctPart;
+
+    // 找到带声调的字母 (使用 pinyin-pro 的声调符号版本)
+    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', '');
+    // 如果是无声调的纯拼音，直接显示 final
+    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) {
+        finalDisplay = parts.final;
+    }
+    
+    // 分离出声调数字，以避免在韵母中显示多余的数字
+    finalDisplay = finalDisplay.replace(/[1-5]$/, '');
+
+
     return (
         <div style={styles.pinyinVisualizerContainer}>
-            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ' ' }</span>
-            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalWithToneMark}</span>
+            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || '' }</span>
+            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
             <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
         </div>
     );
@@ -108,40 +137,51 @@ const PinyinVisualizer = React.memo(({ analysis }) => {
 // =================================================================================
 const PronunciationComparison = ({ correctWord, userText, onContinue, onClose }) => {
     const analysis = useMemo(() => {
-        if (!userText) return null;
-        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array' });
-        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array' });
+        // 使用 pinyin-pro 将汉字转为带数字声调的拼音数组
+        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
+        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
 
+        // 1. 字数不匹配检测
         if (correctPinyin.length !== userPinyin.length) {
             return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` };
         }
 
+        // 2. 逐字对比
         const results = correctPinyin.map((correctPy, index) => {
             const userPy = userPinyin[index];
+            
+            // 使用修正后的 parsePinyin 分离声母、韵母、声调
             const correctParts = parsePinyin(correctPy);
             const userParts = parsePinyin(userPy);
+            
+            // 细致的错误对比
             const errors = {
-                initial: correctParts.initial !== userParts.initial,
+                // 如果声母都是空，则不报错；否则对比是否一致
+                initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial),
                 final: correctParts.final !== userParts.final,
                 tone: correctParts.tone !== userParts.tone,
             };
             const pinyinMatch = !errors.initial && !errors.final && !errors.tone;
+            
             return {
                 char: correctWord[index],
                 pinyinMatch,
-                correct: { parts: correctParts, errors: { initial: false, final: false, tone: false } },
+                correct: { parts: correctParts, errors: { initial: false, final: false, tone: false } }, // 标准答案永远没错误
                 user: { parts: userParts, errors: errors }
             };
         });
 
         const isCorrect = results.every(r => r.pinyinMatch);
-        const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0);
+        const correctCount = results.filter(r => r.pinyinMatch).length;
+        const accuracy = (correctCount / results.length * 100).toFixed(0);
         return { isCorrect, results, accuracy };
     }, [correctWord, userText]);
 
     useEffect(() => {
         if (!analysis) return;
-        playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect');
+        // 只有当有结果且准确率不是 0% 时才播放成功音
+        const isSuccess = analysis.isCorrect && analysis.accuracy > 0;
+        playSoundEffect(isSuccess ? 'correct' : 'incorrect');
     }, [analysis]);
 
     if (!analysis) return null;
@@ -152,7 +192,7 @@ const PronunciationComparison = ({ correctWord, userText, onContinue, onClose })
                 <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
                     <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div>
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : '再接再厉！'}</div>
-                    {!analysis.isCorrect && <div style={{ fontSize: '1rem', marginTop: '8px' }}>准确率: {analysis.accuracy}%</div>}
+                    <div style={{ fontSize: '1rem', marginTop: '8px' }}>准确率: {analysis.accuracy}%</div>
                 </div>
 
                 <div style={styles.errorDetailsContainer}>
@@ -163,19 +203,32 @@ const PronunciationComparison = ({ correctWord, userText, onContinue, onClose })
                             <p>你的朗读：<strong>{userText}</strong></p>
                         </div>
                     ) : (
-                        analysis.results.map((result, index) => (
-                            <div key={index} style={styles.comparisonRow}>
-                                <div style={styles.comparisonChar}>{result.char}</div>
-                                <div style={styles.comparisonPinyinSide}>
-                                    <PinyinVisualizer analysis={result.correct} />
-                                    <span style={styles.pinyinLabel}>标准</span>
+                        <div style={styles.comparisonGrid}>
+                            {analysis.results.map((result, index) => (
+                                <div key={index} style={styles.comparisonCell}>
+                                    <div style={styles.comparisonChar}>{result.char}</div>
+                                    
+                                    <div style={styles.comparisonPinyinSide}>
+                                        <PinyinVisualizer analysis={result.correct} />
+                                        <span style={styles.pinyinLabel}>标准</span>
+                                    </div>
+                                    
+                                    <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.6 : 1, transition: 'opacity 0.3s'}}>
+                                        <PinyinVisualizer analysis={result.user} />
+                                         <span style={styles.pinyinLabel}>你的发音</span>
+                                    </div>
+                                    
+                                    {/* 错误的简短提示 */}
+                                    {!result.pinyinMatch && (
+                                        <div style={styles.errorHint}>
+                                            {result.user.errors.initial && <span style={styles.hintTag}>声母错</span>}
+                                            {result.user.errors.final && <span style={styles.hintTag}>韵母错</span>}
+                                            {result.user.errors.tone && <span style={styles.hintTag}>声调错</span>}
+                                        </div>
+                                    )}
                                 </div>
-                                <div style={{...styles.comparisonPinyinSide, opacity: result.pinyinMatch ? 0.5 : 1}}>
-                                    <PinyinVisualizer analysis={result.user} />
-                                     <span style={styles.pinyinLabel}>你的发音</span>
-                                </div>
-                            </div>
-                        ))
+                            ))}
+                        </div>
                     )}
                 </div>
 
@@ -201,13 +254,44 @@ const PinyinSeparatedText = React.memo(({ text }) => {
     return ( <div style={{ lineHeight: 1.4 }}> <div style={{ fontSize: '1.0rem', color: '#64748b', marginBottom: '4px' }}>{pinyinData.pinyin}</div> <div style={{ fontSize: '1.2rem', color: '#1f2937' }}>{pinyinData.hanzi}</div> </div> );
 });
 
+// 加入图片画质参数
 const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
+  // **图片画质压缩优化：** 假设图片服务支持 quality 参数
+  const optimizedSrc = useMemo(() => src ? `${src}?quality=70` : null, [src]);
+
   useEffect(() => { setImageLoaded(false); }, [src]);
+  
+  // 使用 useTransition 实现图片渐显
+  const transition = useTransition(imageLoaded, {
+    from: { opacity: 0 },
+    enter: { opacity: 1 },
+    config: { duration: 500 } // 渐显动画时长 0.5s
+  });
+
   return (
     <div style={styles.imageWrapper}>
       {!imageLoaded && (<div style={styles.skeleton}><div style={styles.shimmer} /></div>)}
-      <img src={src} alt={alt} onLoad={() => setImageLoaded(true)} style={{...styles.cardImage, opacity: imageLoaded ? 1 : 0}} loading="lazy" decoding="async"/>
+      {transition((style, item) => item ? (
+        <animated.img 
+            src={optimizedSrc} 
+            alt={alt} 
+            onLoad={() => setImageLoaded(true)} 
+            style={{...styles.cardImage, ...style}} 
+            loading="lazy" 
+            decoding="async"
+        />
+      ) : (
+          // 确保在加载前也渲染，以便触发 onload
+          <img 
+              src={optimizedSrc} 
+              alt={alt} 
+              onLoad={() => setImageLoaded(true)} 
+              style={{ display: 'none' }} 
+              loading="lazy" 
+              decoding="async"
+          />
+      ))}
     </div>
   );
 });
@@ -291,6 +375,7 @@ const CiDianKa = ({ flashcards = [], user = null, isFavorite = false, onToggleFa
                   <div style={styles.pinyin}>{cardData.pinyin}</div>
                   <div style={styles.hanzi}>{cardData.word}</div>
                 </div>
+                {/* 仅在未显示详情时显示图片 */}
                 {!isRevealed && cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.word} />}
                 {detailsTransitions((detailsStyle, item) => item && ( <animated.div style={{...detailsStyle, ...styles.detailsContainer}}> <div style={{ flex: 1 }}> <div style={styles.meaningSection}> <PinyinSeparatedText text={cardData.meaning} /> </div> {cardData.example && ( <div style={styles.exampleSection}> <PinyinSeparatedText text={cardData.example} /> </div> )} </div> </animated.div> ))}
               </div>
@@ -326,18 +411,20 @@ const styles = {
   gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
   animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
   cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-around', padding: '60px 20px 20px' },
-  mainContent: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '40px', width: '100%', marginBottom: '15%' }, // 增大了间距
+  // **优化:** 调整 marginBottom，让内容整体下移
+  mainContent: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '40px', width: '100%', marginBottom: '20%' }, 
   header: { textAlign: 'center' },
   pinyin: { fontSize: '1.6rem', color: '#64748b', marginBottom: '8px' },
   hanzi: { fontSize: '5.0rem', fontWeight: 900, color: '#000000' },
-  listeningText: { position: 'absolute', bottom: '15%', color: '#3b82f6', fontSize: '1.2rem', fontWeight: 'bold' },
+  listeningText: { position: 'absolute', bottom: '25%', color: '#3b82f6', fontSize: '1.2rem', fontWeight: 'bold' },
   
   // --- 详情与图片 ---
   detailsContainer: { background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(8px)', padding: '20px', borderRadius: '24px', width: '90%', maxWidth: '600px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' },
   meaningSection: { paddingBottom: '15px' },
   exampleSection: { borderTop: '1px solid #e2e8f0', paddingTop: '15px' },
   imageWrapper: { width: '90%', maxHeight: '30vh', position: 'relative' },
-  cardImage: { maxWidth: '100%', maxHeight: '30vh', objectFit: 'contain', borderRadius: '12px', transition: 'opacity 0.5s ease-in-out' },
+  // **优化:** 移除 opacity 样式，交给 useTransition 处理
+  cardImage: { maxWidth: '100%', maxHeight: '30vh', objectFit: 'contain', borderRadius: '12px', transition: 'opacity 0.5s ease-in-out' }, 
   skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', borderRadius: '12px', overflow: 'hidden' },
   shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
   
@@ -351,15 +438,32 @@ const styles = {
   resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
   errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' },
   lengthError: { textAlign: 'center', color: '#b91c1c', padding: '20px 0' },
-  comparisonRow: { display: 'grid', gridTemplateColumns: '50px 1fr 1fr', alignItems: 'center', gap: '10px', background: '#f8f9fa', padding: '12px', borderRadius: '12px' },
-  comparisonChar: { fontSize: '2.0rem', fontWeight: 'bold', color: '#1f2937', textAlign: 'center' },
-  comparisonPinyinSide: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' },
+  
+  // **优化:** 解决多字放不下的问题，使用 flex-wrap 实现流式布局
+  comparisonGrid: { display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'flex-start' },
+  comparisonCell: { 
+      minWidth: '130px', // 确保每个字有足够的空间
+      padding: '12px', 
+      borderRadius: '12px',
+      background: '#f8f9fa',
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      gap: '8px' 
+  },
+  
+  comparisonChar: { fontSize: '1.8rem', fontWeight: 'bold', color: '#1f2937', textAlign: 'center' },
+  // **优化:** 增加间距
+  comparisonPinyinSide: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }, 
   pinyinLabel: { fontSize: '0.75rem', color: '#6b7280', fontWeight: 500 },
-  pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.8rem' },
-  pinyinPart: { transition: 'color 0.3s', fontWeight: 500 },
+  pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.6rem', height: '2.0rem' },
+  pinyinPart: { transition: 'color 0.3s', fontWeight: 500, margin: '0 1px' }, // **优化:** 增加拼音部分间距
   toneNumber: { fontSize: '1.2rem', fontWeight: 'bold', marginLeft: '2px' },
   correctPart: { color: '#16a34a' },
   wrongPart: { color: '#dc2626' },
+  errorHint: { display: 'flex', gap: '5px', marginTop: '5px' },
+  hintTag: { fontSize: '0.65rem', padding: '2px 6px', borderRadius: '8px', background: '#fee2e2', color: '#b91c1c' },
+  
   comparisonActions: { padding: '20px', borderTop: '1px solid #e2e8f0' },
   actionButton: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
   continueButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
