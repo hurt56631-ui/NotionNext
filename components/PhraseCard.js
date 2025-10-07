@@ -1,4 +1,4 @@
-// components/Tixing/PhraseCard.js (最终稳定版 - 解决所有已知问题)
+// components/Tixing/PhraseCard.js (最终稳定版 - 修复所有界面/逻辑/样式问题)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -8,7 +8,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; 
 
 // =================================================================================
-// ===== Utilities & Constants (略) ===============================================
+// ===== Utilities & Constants =====================================================
 // =================================================================================
 
 const TTS_VOICES = [
@@ -23,19 +23,18 @@ const sounds = {
 };
 let _howlInstance = null;
 let _currentAudioBlobUrl = null; 
-let _autoPlayTimer = null; // 新增一个计时器用于管理自动播放
+let _autoPlayTimer = null; 
+let _segmentTimer = null; // 新增分字朗读计时器
 
 // **修正：确保 playTTS 在播放前停止所有其他声音**
 const playTTS = (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
     
-    // 停止音效
     Object.values(sounds).forEach(sound => sound.stop());
-    // 停止上一个 TTS
     if (_howlInstance?.playing()) _howlInstance.stop();
-    // 清除自动播放计时器
     clearTimeout(_autoPlayTimer);
+    clearTimeout(_segmentTimer);
     
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
@@ -43,8 +42,48 @@ const playTTS = (text, voice, rate, onEndCallback, e) => {
     _howlInstance.play();
 };
 
+// **新增：分字朗读函数**
+const playSegmentedTTS = (text, voice, rate, onFinishCallback) => {
+    // 移除所有标点符号，将句子分成单个汉字
+    const characters = text.replace(/[.,。，！？!?]/g, '').match(/[\u4e00-\u9fa5]/g) || [];
+    let charIndex = 0;
+
+    const playNext = () => {
+        if (charIndex >= characters.length) {
+            if (onFinishCallback) onFinishCallback();
+            return;
+        }
+
+        const char = characters[charIndex];
+        // 停止当前播放
+        if (_howlInstance?.playing()) _howlInstance.stop();
+
+        const rateValue = Math.round(rate / 2);
+        const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(char)}&v=${voice}&r=${rateValue}`;
+        
+        _howlInstance = new Howl({ 
+            src: [ttsUrl], 
+            html5: true, 
+            onend: () => {
+                charIndex++;
+                // 每个字之间间隔 300ms
+                _segmentTimer = setTimeout(playNext, 300); 
+            }
+        });
+        _howlInstance.play();
+    };
+    
+    // 启动前先停止所有
+    if (_howlInstance?.playing()) _howlInstance.stop();
+    Object.values(sounds).forEach(sound => sound.stop());
+    clearTimeout(_autoPlayTimer);
+    clearTimeout(_segmentTimer);
+    
+    playNext();
+};
+
+
 const playSoundEffect = (type) => {
-    // 停止 TTS，避免语音识别冲突
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (sounds[type]) sounds[type].play();
 };
@@ -94,12 +133,40 @@ const usePhraseCardSettings = () => {
   return [settings, setSettings];
 };
 
+
 // =================================================================================
-// ===== Component: 发音对比面板 (修正样式和内容) =======================================
+// ===== Component: 笔顺展示 (修复 ReferenceError) ====================================
+// =================================================================================
+const HanziWriterDisplay = React.memo(({ chineseText, setWriterChar }) => {
+    const hanziList = useMemo(() => {
+        return chineseText.match(/[\u4e00-\u9fa5]/g) || [];
+    }, [chineseText]);
+
+    if (hanziList.length === 0) return null;
+    
+    const handlePhraseClick = useCallback((e) => {
+        e.stopPropagation();
+        setWriterChar(chineseText); // 传递整个短语
+    }, [chineseText, setWriterChar]);
+
+    return (
+        <div style={styles.writerDisplayWrapper}>
+            <div style={styles.hanziWriterContainer} onClick={handlePhraseClick}>
+                {hanziList.map((char, index) => (
+                    <span key={index} style={styles.writerCharText}>{char}</span>
+                ))}
+                <FaPenFancy size={14} color="#4299e1" style={{ marginLeft: '8px' }}/>
+            </div>
+        </div>
+    );
+});
+
+
+// =================================================================================
+// ===== Component: 发音对比面板 (略) =================================================
 // =================================================================================
 
 const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
-    // ... [ analysis 逻辑不变 ]
     const analysis = useMemo(() => {
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
@@ -133,8 +200,10 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
         }
     }, [audioBlobUrl]);
     
+    // **修正：播放标准音时使用分字朗读**
     const playStandard = useCallback((e) => {
-        playTTS(correctWord, 'zh-CN-XiaoyouNeural', 0, null, e);
+        if (e && e.stopPropagation) e.stopPropagation();
+        playSegmentedTTS(correctWord, 'zh-CN-XiaoyouNeural', 0);
     }, [correctWord]);
     
 
@@ -322,15 +391,15 @@ const PhraseCard = ({ flashcards = [] }) => {
       if (settings.autoPlayChinese && currentCard?.chinese) { 
           // 朗读中文，并在 onEndCallback 中触发缅文播放
           const ttsTimer = setTimeout(() => {
-            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese);
+            playSegmentedTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese);
           }, 600);
           return () => {
              clearTimeout(ttsTimer);
              clearTimeout(_autoPlayTimer);
+             if (_howlInstance?.playing()) _howlInstance.stop();
           };
       }
       resetAutoBrowseTimer();
-      // 在卡片切换时停止所有朗读，避免新的卡片自动播放和旧的卡片朗读冲突
       if (_howlInstance?.playing()) _howlInstance.stop();
   }, [currentIndex, currentCard, settings.autoPlayChinese, settings.voiceChinese, settings.speechRateChinese, resetAutoBrowseTimer, playBurmeseAfterChinese]);
 
@@ -354,6 +423,9 @@ const PhraseCard = ({ flashcards = [] }) => {
       // **重要修复：停止所有正在播放的音频**
       if (_howlInstance?.playing()) _howlInstance.stop();
       Object.values(sounds).forEach(sound => sound.stop());
+      clearTimeout(_autoPlayTimer);
+      clearTimeout(_segmentTimer);
+
 
       if (isListening) { 
           mediaRecorderRef.current?.stop();
@@ -413,7 +485,7 @@ const PhraseCard = ({ flashcards = [] }) => {
       }).catch(err => {
           console.error("Failed to get audio stream:", err);
           // **修正 1：修复 catch 块的 ReferenceError 错误**
-          alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。');
+          alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。错误信息: ' + (err.name || err.message));
           setIsListening(false);
       });
   };
@@ -456,7 +528,6 @@ const PhraseCard = ({ flashcards = [] }) => {
                 {/* 1. 拼音 & 中文 */}
                 <div style={styles.phraseHeader}>
                     {/* 拼音 (黑色, 字体大, 间距大) */}
-                    {/* 移除 join('\u00A0\u00A0')，使用 letterSpacing 加大间距 */}
                     <div style={styles.phrasePinyin}>{pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
                     
                     {/* 中文 (黑色) - 点击时触发笔顺 */}
@@ -502,7 +573,7 @@ const PhraseCard = ({ flashcards = [] }) => {
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
                 <FaMicrophone size={24} color={isListening ? '#dc2626' : '#4a5568'} /> 
             </button>
-            <button style={styles.rightIconButton} onClick={(e) => playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)} title="朗读中文"><FaVolumeUp size={24} /></button>
+            <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); playSegmentedTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese); }} title="朗读中文"><FaVolumeUp size={24} /></button>
             
             {/* 笔顺按钮 - 现在在这个位置 */}
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
@@ -539,7 +610,7 @@ const styles = {
   phrasePinyin: { fontSize: '1.4rem', color: '#000000', marginBottom: '5px', letterSpacing: '2px', fontWeight: 500, textShadow: '0 0 1px rgba(0,0,0,0.1)' }, // 增加 letterSpacing 和投影
   // 中文单词 (黑色, 加投影)
   phraseHanzi: { fontSize: '2.4rem', fontWeight: 700, color: '#000000', lineHeight: 1.5, wordBreak: 'break-word', cursor: 'pointer', maxWidth: '100%', padding: '0 10px', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }, 
-  // 缅文谐音 (显眼颜色, 加粗, 加投影)
+  // 缅文谐音 (洋红色, 加粗, 加投影)
   burmesePhonetic: { fontSize: '1.5rem', fontWeight: 'bold', color: '#FF00FF', padding: '0 10px', marginTop: '10px', textShadow: '0 1px 2px rgba(255,0,255,0.3)' },
 
   // 缅甸语翻译 (黑色, 加投影)
