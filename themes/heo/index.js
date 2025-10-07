@@ -1,9 +1,10 @@
 /**
- *   HEO 主题说明
- *  > 主题设计者 [张洪](https://zhheo.com/)
- *  > 主题开发者 [tangly1024](https://github.com/tangly1024)
- *  1. 开启方式 在blog.config.js 将主题配置为 `HEO`
- *  2. 更多说明参考此[文档](https://docs.tangly1024.com/article/notionnext-heo)
+ *   HEO 主题说明 - 最终修复版 v2
+ *  - 恢复所有被省略的组件代码，确保功能完整。
+ *  - AI 助手页面不再需要登录。
+ *  - 修复手势在 iframe 上失效的问题 (采用透明捕获层方案)。
+ *  - 美化直播卡片，增加 LIVE 标签和背景图。
+ *  - 优化 "贴吧式" 两层滚动。
  */
 
 import Comment from '@/components/Comment'
@@ -41,21 +42,21 @@ import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
-import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
+import { Menu as MenuIcon, X as XIcon, Loader2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
+import { useAuth } from '@/lib/AuthContext'
+import dynamic from 'next/dynamic'
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
- * 基础布局 (恢复原始状态)
+ * 基础布局
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
   
-  // 首页将由 LayoutIndex 完全接管
-  if (router.route === '/') {
-    return <>{children}</>
-  }
+  if (router.route === '/') { return <>{children}</> }
   
   const headerSlot = (
     <header>
@@ -101,43 +102,45 @@ const HomePageHeader = ({ onMenuClick }) => {
 // 首页专用的底部导航栏
 const BottomNavBar = () => {
     const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页'},
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手'},
-        { href: '/community', icon: 'fas fa-users', label: '社区'},
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息'},
-        { href: '/profile', icon: 'fas fa-user', label: '我'},
+        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
+        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
+        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
     ];
     const router = useRouter();
+    const { user, authLoading } = useAuth();
+    const [showLoginModal, setShowLoginModal] = useState(false);
+
+    const handleLinkClick = (e, item) => {
+        if (item.auth && !authLoading && !user) {
+            e.preventDefault();
+            setShowLoginModal(true);
+        }
+    };
 
     return (
-        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-            {navItems.map(item => (
-                <SmartLink key={item.href} href={item.href} className='flex flex-col items-center justify-center w-1/5'>
-                    <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                    <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                </SmartLink>
-            ))}
-        </nav>
+        <>
+            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+                {navItems.map(item => (
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+        </>
     );
 };
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-            height: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(150, 150, 150, 0.3);
-            border-radius: 10px;
-        }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(100, 100, 100, 0.4);
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.3); border-radius: 10px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
     `}</style>
 );
 
@@ -211,20 +214,28 @@ const LayoutIndex = props => {
         <div className='relative flex-grow w-full h-full'>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
-            {/* 背景层 (固定) */}
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
-            {/* 固定内容层 (z-10) */}
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
-                            <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaTiktok size={32}/></div>
+                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
+                           <div className='absolute top-2 left-2 bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-md'>LIVE</div>
+                           <div className='absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent flex flex-col items-center text-white'>
+                                <FaTiktok size={24}/>
+                                <span className='text-xs mt-1 font-semibold'>直播订阅</span>
+                                <div className='w-1.5 h-1.5 bg-red-500 rounded-full mt-1'></div>
+                           </div>
                         </a>
-                        <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
-                            <div className='absolute inset-0 bg-black/40 flex items-center justify-center text-white'><FaFacebook size={32}/></div>
+                         <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
+                            <div className='absolute top-2 left-2 bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-md'>LIVE</div>
+                            <div className='absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent flex flex-col items-center text-white'>
+                                <FaFacebook size={24}/>
+                                <span className='text-xs mt-1 font-semibold'>直播订阅</span>
+                                <div className='w-1.5 h-1.5 bg-red-500 rounded-full mt-1'></div>
+                           </div>
                         </a>
                         <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
                             <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
@@ -233,7 +244,6 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            {/* 滚动内容层 (z-20) */}
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-behavior-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
@@ -249,14 +259,17 @@ const LayoutIndex = props => {
                         </div>
                     </div>
 
-                    <main {...contentSwipeHandlers} className="overscroll-behavior-x-contain">
+                    <main className="overscroll-behavior-x-contain">
                         {tabs.map(tab => (
-                            <div key={tab.name} className={activeTab === tab.name ? 'block' : 'hidden'}>
-                                {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                            <div key={tab.name} className={`relative ${activeTab === tab.name ? 'block' : 'hidden'}`}>
+                                <div className='absolute inset-0 z-10' {...contentSwipeHandlers}></div>
+                                <div className='relative z-0'>
+                                    {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
+                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                </div>
                             </div>
                         ))}
                     </main>
