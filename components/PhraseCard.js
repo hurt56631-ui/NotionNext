@@ -1,4 +1,4 @@
-// components/Tixing/PhraseCard.js (最终稳定版 - 修复所有界面/逻辑/样式问题)
+// components/Tixing/PhraseCard.js (最终稳定版 - 解决所有已知问题)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -23,15 +23,20 @@ const sounds = {
 };
 let _howlInstance = null;
 let _currentAudioBlobUrl = null; 
+let _autoPlayTimer = null; // 新增一个计时器用于管理自动播放
 
 // **修正：确保 playTTS 在播放前停止所有其他声音**
 const playTTS = (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
+    
     // 停止音效
     Object.values(sounds).forEach(sound => sound.stop());
     // 停止上一个 TTS
     if (_howlInstance?.playing()) _howlInstance.stop();
+    // 清除自动播放计时器
+    clearTimeout(_autoPlayTimer);
+    
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
     _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: onEndCallback });
@@ -89,12 +94,12 @@ const usePhraseCardSettings = () => {
   return [settings, setSettings];
 };
 
-
 // =================================================================================
-// ===== Component: 发音对比面板 (略) =================================================
+// ===== Component: 发音对比面板 (修正样式和内容) =======================================
 // =================================================================================
 
 const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContinue, onClose }) => {
+    // ... [ analysis 逻辑不变 ]
     const analysis = useMemo(() => {
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
@@ -144,6 +149,7 @@ const PronunciationComparison = ({ correctWord, userText, audioBlobUrl, onContin
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>准确率: {analysis.accuracy}%</div>
                 </div>
                 
+                {/* 播放按钮居中对齐 */}
                 <div style={styles.audioControls}>
                     <button style={styles.audioButton} onClick={playStandard}><FaPlay size={16}/> 标准发音</button>
                     {audioBlobUrl && <button style={styles.audioButton} onClick={playUserRecording}><FaPlay size={16}/> 你的录音</button>}
@@ -304,7 +310,7 @@ const PhraseCard = ({ flashcards = [] }) => {
   const playBurmeseAfterChinese = useCallback(() => {
         if (settings.autoPlayBurmese && currentCard?.burmese) {
             // 延迟一小段时间以确保中文播放完毕
-            setTimeout(() => {
+            _autoPlayTimer = setTimeout(() => {
                 playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
             }, 300); 
         }
@@ -318,9 +324,14 @@ const PhraseCard = ({ flashcards = [] }) => {
           const ttsTimer = setTimeout(() => {
             playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, playBurmeseAfterChinese);
           }, 600);
-          return () => clearTimeout(ttsTimer);
+          return () => {
+             clearTimeout(ttsTimer);
+             clearTimeout(_autoPlayTimer);
+          };
       }
       resetAutoBrowseTimer();
+      // 在卡片切换时停止所有朗读，避免新的卡片自动播放和旧的卡片朗读冲突
+      if (_howlInstance?.playing()) _howlInstance.stop();
   }, [currentIndex, currentCard, settings.autoPlayChinese, settings.voiceChinese, settings.speechRateChinese, resetAutoBrowseTimer, playBurmeseAfterChinese]);
 
 
@@ -340,7 +351,7 @@ const PhraseCard = ({ flashcards = [] }) => {
 
   const handleListen = (e) => { 
       e.stopPropagation(); 
-      // 停止所有正在播放的音频，为麦克风让路
+      // **重要修复：停止所有正在播放的音频**
       if (_howlInstance?.playing()) _howlInstance.stop();
       Object.values(sounds).forEach(sound => sound.stop());
 
@@ -401,7 +412,8 @@ const PhraseCard = ({ flashcards = [] }) => {
 
       }).catch(err => {
           console.error("Failed to get audio stream:", err);
-          alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。错误信息: ' + (err.name || err.message));
+          // **修正 1：修复 catch 块的 ReferenceError 错误**
+          alert('无法启动麦克风。请检查浏览器权限设置，并确保您的网站是通过 HTTPS 访问。');
           setIsListening(false);
       });
   };
@@ -444,7 +456,8 @@ const PhraseCard = ({ flashcards = [] }) => {
                 {/* 1. 拼音 & 中文 */}
                 <div style={styles.phraseHeader}>
                     {/* 拼音 (黑色, 字体大, 间距大) */}
-                    <div style={styles.phrasePinyin}>{pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' }).split(' ').join('\u00A0\u00A0')}</div>
+                    {/* 移除 join('\u00A0\u00A0')，使用 letterSpacing 加大间距 */}
+                    <div style={styles.phrasePinyin}>{pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
                     
                     {/* 中文 (黑色) - 点击时触发笔顺 */}
                     <div style={styles.phraseHanzi} onClick={(e) => { e.stopPropagation(); setWriterChar(cardData.chinese); }}>
@@ -464,6 +477,9 @@ const PhraseCard = ({ flashcards = [] }) => {
                 {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
               </div>
             </div>
+            
+            {/* 笔顺显示：在主内容下方 */}
+            {currentCard?.chinese && <HanziWriterDisplay chineseText={currentCard.chinese} setWriterChar={setWriterChar} />}
           </animated.div>
         );
       })}
@@ -482,19 +498,19 @@ const PhraseCard = ({ flashcards = [] }) => {
 
       {currentCard && (
           <div style={styles.rightControls} data-no-gesture="true">
-            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={24} color="#4a5568"/></button>
+            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={24} /></button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
                 <FaMicrophone size={24} color={isListening ? '#dc2626' : '#4a5568'} /> 
             </button>
-            <button style={styles.rightIconButton} onClick={(e) => playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)} title="朗读中文"><FaVolumeUp size={24} color="#000000"/></button>
+            <button style={styles.rightIconButton} onClick={(e) => playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)} title="朗读中文"><FaVolumeUp size={24} /></button>
             
             {/* 笔顺按钮 - 现在在这个位置 */}
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
-                <FaPenFancy size={24} color="#4a5568"/>
+                <FaPenFancy size={24} />
             </button>
             
             <button style={styles.rightIconButton} onClick={(e) => playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)} title="朗读缅甸语">
-                <FaLanguage size={24} color="#4299e1"/>
+                <FaLanguage size={24} />
             </button>
           </div>
       )}
@@ -514,19 +530,19 @@ const styles = {
   cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-around', padding: '60px 20px 20px' },
   
   // --- PhraseCard 核心内容样式 ---
-  // **图片偏左:** 将 mainContent 宽度设为 75%，并偏移
-  mainContent: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '25px', width: '75%', maxWidth: '600px', marginBottom: '15%', marginRight: '20%' }, // 偏移到左边
+  // 图片和文字完全居中
+  mainContent: { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '15px', width: '90%', maxWidth: '600px', marginBottom: '0%' }, // 减小 gap，让文字紧凑
   
-  phraseHeader: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' },
+  phraseHeader: { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '5px' },
   
   // 拼音 (黑色, 字体大, 间距大)
-  phrasePinyin: { fontSize: '1.4rem', color: '#000000', marginBottom: '5px', letterSpacing: '4px' }, 
-  // 中文单词 (黑色)
-  phraseHanzi: { fontSize: '2.4rem', fontWeight: 700, color: '#000000', lineHeight: 1.5, wordBreak: 'break-word', cursor: 'pointer', maxWidth: '100%', padding: '0 10px' }, 
-  // 缅文谐音 (洋红色, 加粗)
-  burmesePhonetic: { fontSize: '1.5rem', fontWeight: 'bold', color: '#FF00FF', padding: '0 10px', marginTop: '10px' },
+  phrasePinyin: { fontSize: '1.4rem', color: '#000000', marginBottom: '5px', letterSpacing: '2px', fontWeight: 500, textShadow: '0 0 1px rgba(0,0,0,0.1)' }, // 增加 letterSpacing 和投影
+  // 中文单词 (黑色, 加投影)
+  phraseHanzi: { fontSize: '2.4rem', fontWeight: 700, color: '#000000', lineHeight: 1.5, wordBreak: 'break-word', cursor: 'pointer', maxWidth: '100%', padding: '0 10px', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }, 
+  // 缅文谐音 (显眼颜色, 加粗, 加投影)
+  burmesePhonetic: { fontSize: '1.5rem', fontWeight: 'bold', color: '#FF00FF', padding: '0 10px', marginTop: '10px', textShadow: '0 1px 2px rgba(255,0,255,0.3)' },
 
-  // 缅甸语翻译 (黑色，无背景色)
+  // 缅甸语翻译 (黑色, 加投影)
   burmeseContainer: { 
     padding: '15px 0', 
     width: '100%', 
@@ -537,30 +553,31 @@ const styles = {
     fontWeight: 500,
     color: '#000000', 
     lineHeight: 1.8,
-    padding: '0 10px'
+    padding: '0 10px',
+    textShadow: '0 1px 2px rgba(0,0,0,0.2)'
   },
   
-  // --- 图片样式 (略) ---
-  imageWrapper: { width: '100%', maxHeight: '30vh', position: 'relative', marginTop: '20px', borderRadius: '12px', overflow: 'hidden' },
+  // --- 图片样式 (居中) ---
+  imageWrapper: { width: '90%', maxHeight: '30vh', position: 'relative', marginTop: '20px', borderRadius: '12px', overflow: 'hidden' },
   cardImage: { maxWidth: '100%', maxHeight: '30vh', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out', display: 'block' }, 
   skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', borderRadius: '12px', overflow: 'hidden' },
   shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
   
-  // --- 右侧控制按钮 (小尺寸, 透明背景) ---
-  rightControls: { position: 'fixed', bottom: '15%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, // 缩小 gap
+  // --- 右侧控制按钮 (小尺寸, 透明背景, 固定在右下方) ---
+  rightControls: { position: 'fixed', bottom: '15%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, 
   rightIconButton: { 
-    background: 'rgba(255, 255, 255, 0.0)', // 透明背景
+    background: 'rgba(255, 255, 255, 0.5)', // 半透明背景，更像浮动按钮
     border: 'none', 
     cursor: 'pointer', 
     display: 'flex', 
     alignItems: 'center', 
     justifyContent: 'center', 
-    width: '48px', // 减小按钮尺寸
+    width: '48px', 
     height: '48px', 
     borderRadius: '50%', 
-    boxShadow: '0 2px 5px rgba(0,0,0,0.1)', // 稍微减小阴影
+    boxShadow: '0 4px 10px rgba(0,0,0,0.15)', // 增加阴影，使其更像浮动按钮
     transition: 'transform 0.2s',
-    color: '#4a5568' // 确保图标颜色可见
+    color: '#4a5568' 
   },
   
   // --- 发音对比模态框样式 (不变) ---
