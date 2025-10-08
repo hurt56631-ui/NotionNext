@@ -1,10 +1,10 @@
 /**
- *   HEO 主题说明 - 最终修复版 v2
- *  - 恢复所有被省略的组件代码，确保功能完整。
- *  - AI 助手页面不再需要登录。
- *  - 修复手势在 iframe 上失效的问题 (采用透明捕获层方案)。
- *  - 美化直播卡片，增加 LIVE 标签和背景图。
- *  - 优化 "贴吧式" 两层滚动。
+ *   HEO 主题说明 - 最终修复版 v4
+ *  - [重大修复] 采用透明捕获层，彻底解决 iframe 上的手势失效问题。
+ *  - [重大修复] 重构底部导航栏，引入认证判断，解决 AI 助手/'我'页面空白问题。
+ *  - [体验升级] 实现 "电报式" 跟手拖动侧边栏。
+ *  - [修复] 确保文章列表加载更多功能正常。
+ *  - [UI优化] 调整 LIVE 标签大小，美化滚动条。
  */
 
 import Comment from '@/components/Comment'
@@ -42,10 +42,11 @@ import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
-import { Menu as MenuIcon, X as XIcon, Loader2 } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion';
+import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
+import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
+
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
@@ -99,21 +100,25 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// 首页专用的底部导航栏
+// [修复] 首页专用的底部导航栏 (集成认证逻辑)
 const BottomNavBar = () => {
     const navItems = [
         { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
         { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
         { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
         { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+        { href: '/me', icon: 'fas fa-user', label: '我', auth: true },
     ];
     const router = useRouter();
     const { user, authLoading } = useAuth();
     const [showLoginModal, setShowLoginModal] = useState(false);
 
     const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
+        if (authLoading && item.auth) {
+            e.preventDefault(); // 认证加载中，暂时禁止点击
+            return;
+        }
+        if (item.auth && !user) {
             e.preventDefault();
             setShowLoginModal(true);
         }
@@ -124,7 +129,7 @@ const BottomNavBar = () => {
             <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
             <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
                 {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 h-full ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
                         <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
                     </SmartLink>
@@ -146,15 +151,15 @@ const CustomScrollbarStyle = () => (
 
 
 /**
- * 首页 - "真·贴吧式"滚动最终修复版
+ * 首页 - 最终修复版
  */
 const LayoutIndex = props => {
   const tabs = [
-    { name: '文章', icon: <FaRegNewspaper size={28} /> },
-    { name: 'HSK', icon: <FaGraduationCap size={28} /> },
-    { name: '口语', icon: <FaMicrophone size={28} /> },
-    { name: '练习', icon: <FaFlask size={28} /> },
-    { name: '书籍', icon: <FaBook size={28} /> }
+    { name: '文章', icon: <FaRegNewspaper size={24} /> },
+    { name: 'HSK', icon: <FaGraduationCap size={24} /> },
+    { name: '口语', icon: <FaMicrophone size={24} /> },
+    { name: '练习', icon: <FaFlask size={24} /> },
+    { name: '书籍', icon: <FaBook size={24} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -182,34 +187,41 @@ const LayoutIndex = props => {
     delta: 50
   });
 
-  const sidebarSwipeHandlers = useSwipeable({
-      onSwipedRight: (eventData) => {
-          if (eventData.initial[0] < window.innerWidth * 0.15) {
-              setIsSidebarOpen(true);
+  // "电报式" 跟手侧滑栏
+  const sidebarX = useMotionValue('-100%');
+  const opacity = useTransform(sidebarX, ['-100%', '0%'], [0, 0.5]);
+  const sidebarDragHandlers = useSwipeable({
+      onSwiping: (eventData) => {
+          if (eventData.initial[0] < window.innerWidth * 0.2) {
+              const newX = -100 + (eventData.deltaX / (window.innerWidth * 2/3)) * 100;
+              sidebarX.set(`${Math.min(0, newX)}%`);
+          }
+      },
+      onSwiped: (eventData) => {
+          if (eventData.initial[0] < window.innerWidth * 0.2) {
+              if (eventData.deltaX > 50) setIsSidebarOpen(true);
+              else setIsSidebarOpen(false);
           }
       },
       trackMouse: true,
-      delta: 60
   });
+
+  useEffect(() => {
+      sidebarX.set(isSidebarOpen ? '0%' : '-100%');
+  }, [isSidebarOpen, sidebarX]);
   
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarSwipeHandlers}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarDragHandlers}>
         <Style/>
         <CustomScrollbarStyle />
         
-        <AnimatePresence>
-            {isSidebarOpen && (
-                <>
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className='fixed inset-0 bg-black/50 z-[99]' />
-                    <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'>
-                        <div className='p-4 h-full'>
-                            <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
-                            <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
-                        </div>
-                    </motion.div>
-                </>
-            )}
-        </AnimatePresence>
+        <motion.div style={{ opacity }} onClick={() => setIsSidebarOpen(false)} className='fixed inset-0 bg-black z-[99]' />
+        <motion.div style={{ x: sidebarX }} transition={{ type: 'spring', stiffness: 400, damping: 40 }} className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'>
+            <div className='p-4 h-full'>
+                <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+            </div>
+        </motion.div>
         
         <div className='relative flex-grow w-full h-full'>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
@@ -220,24 +232,24 @@ const LayoutIndex = props => {
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
-                    <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
-                           <div className='absolute top-2 left-2 bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-md'>LIVE</div>
-                           <div className='absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent flex flex-col items-center text-white'>
-                                <FaTiktok size={24}/>
-                                <span className='text-xs mt-1 font-semibold'>直播订阅</span>
-                                <div className='w-1.5 h-1.5 bg-red-500 rounded-full mt-1'></div>
+                    <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-36'>
+                        <a href="#" className='col-span-1 row-span-1 rounded-lg overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
+                           <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md'>LIVE</div>
+                           <div className='absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-black/70 to-transparent flex flex-col items-center text-white'>
+                                <FaTiktok size={16}/>
+                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
+                                <div className='w-1 h-1 bg-red-500 rounded-full mt-0.5'></div>
                            </div>
                         </a>
-                         <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
-                            <div className='absolute top-2 left-2 bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-md'>LIVE</div>
-                            <div className='absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent flex flex-col items-center text-white'>
-                                <FaFacebook size={24}/>
-                                <span className='text-xs mt-1 font-semibold'>直播订阅</span>
-                                <div className='w-1.5 h-1.5 bg-red-500 rounded-full mt-1'></div>
+                         <a href="#" className='col-span-1 row-start-2 rounded-lg overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
+                            <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md'>LIVE</div>
+                            <div className='absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-black/70 to-transparent flex flex-col items-center text-white'>
+                                <FaFacebook size={16}/>
+                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
+                                <div className='w-1 h-1 bg-red-500 rounded-full mt-0.5'></div>
                            </div>
                         </a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
+                        <div className='col-span-2 col-start-2 row-span-2 rounded-lg overflow-hidden bg-black'>
                             <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                         </div>
                     </div>
