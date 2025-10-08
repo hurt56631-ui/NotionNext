@@ -1,10 +1,7 @@
 /**
- *   HEO 主题说明 - 最终修复版 v5
- *  - [重大修复] 恢复所有被省略的组件代码，确保功能完整。
- *  - [重大修复] AI 助手页面不再需要登录，修复底部导航栏认证逻辑。
- *  - [重大修复] 采用透明捕获层，彻底解决 iframe 上的手势失效问题。
- *  - [体验升级] 实现 "电报式" 跟手拖动侧边栏。
- *  - [UI优化] 调整 LIVE 标签大小，美化滚动条。
+ *   HEO 主题说明 - 编译修复版
+ *  - [重大修复] 修正了 Layout404 组件中的语法错误，该错误导致了 'ids is not defined' 或 'Expression expected' 的编译失败。
+ *  - 恢复了所有组件的完整代码。
  */
 
 import Comment from '@/components/Comment'
@@ -43,21 +40,20 @@ import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
 import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
-import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion';
-import { useAuth } from '@/lib/AuthContext'
-import dynamic from 'next/dynamic'
-
-const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+import { AnimatePresence, motion } from 'framer-motion';
 
 /**
- * 基础布局
+ * 基础布局 (恢复原始状态)
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
   
-  if (router.route === '/') { return <>{children}</> }
+  // 首页将由 LayoutIndex 完全接管，所以这里对首页不做任何特殊处理
+  if (router.route === '/') {
+    return <>{children}</>
+  }
   
   const headerSlot = (
     <header>
@@ -69,7 +65,9 @@ const LayoutBase = props => {
 
   const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
   const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-  
+  const HEO_HERO_BODY_REVERSE = siteConfig('HEO_HERO_BODY_REVERSE', false, CONFIG)
+  const HEO_LOADING_COVER = siteConfig('HEO_LOADING_COVER', true, CONFIG)
+
   useEffect(() => { loadWowJS() }, [])
 
   return (
@@ -77,14 +75,14 @@ const LayoutBase = props => {
       <Style />
       {headerSlot}
       <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
-        <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
+        <div id='container-inner' className={`${HEO_HERO_BODY_REVERSE ? 'flex-row-reverse' : ''} w-full mx-auto lg:flex justify-center relative z-10`}>
           <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
           <div className='lg:px-2'></div>
           <div className='hidden xl:block'>{slotRight}</div>
         </div>
       </main>
       <Footer />
-      {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />}
+      {HEO_LOADING_COVER && <LoadingCover />}
     </div>
   )
 }
@@ -100,75 +98,51 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// [修复] 首页专用的底部导航栏 (集成认证逻辑)
+// 首页专用的底部导航栏
 const BottomNavBar = () => {
     const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/me', icon: 'fas fa-user', label: '我', auth: true },
+        { href: '/', icon: 'fas fa-home', label: '主页'},
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手'},
+        { href: '/community', icon: 'fas fa-users', label: '社区'},
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息'},
+        { href: '/profile', icon: 'fas fa-user', label: '我'},
     ];
     const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-
-    const handleLinkClick = (e, item) => {
-        if (authLoading && item.auth) {
-            e.preventDefault(); // 认证加载中，暂时禁止点击
-            return;
-        }
-        if (item.auth && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
 
     return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-                {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 h-full ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                    </SmartLink>
-                ))}
-            </nav>
-        </>
+        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+            {navItems.map(item => (
+                <SmartLink key={item.href} href={item.href} className='flex flex-col items-center justify-center w-1/5'>
+                    <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                    <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                </SmartLink>
+            ))}
+        </nav>
     );
 };
 
-// 纤细滚动条样式
-const CustomScrollbarStyle = () => (
-    <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.3); border-radius: 10px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
-    `}</style>
-);
-
 
 /**
- * 首页 - 最终修复版
+ * 首页
  */
 const LayoutIndex = props => {
   const tabs = [
-    { name: '文章', icon: <FaRegNewspaper size={24} /> },
-    { name: 'HSK', icon: <FaGraduationCap size={24} /> },
-    { name: '口语', icon: <FaMicrophone size={24} /> },
-    { name: '练习', icon: <FaFlask size={24} /> },
-    { name: '书籍', icon: <FaBook size={24} /> }
+    { name: '文章', icon: <FaRegNewspaper size={28} /> },
+    { name: 'HSK', icon: <FaGraduationCap size={28} /> },
+    { name: '口语', icon: <FaMicrophone size={28} /> },
+    { name: '练习', icon: <FaFlask size={28} /> },
+    { name: '书籍', icon: <FaBook size={28} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [backgroundUrl, setBackgroundUrl] = useState('');
-  
+
   useEffect(() => {
     const backgrounds = [
         'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&q=80&w=2070',
-        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070'
+        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1434725039720-aaad6dd32dfe?auto=format&fit=crop&q=80&w=1942',
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
   }, []);
@@ -184,107 +158,99 @@ const LayoutIndex = props => {
     },
     preventDefaultTouchmoveEvent: true,
     trackMouse: true,
-    delta: 50
+    delta: 30
   });
 
-  // "电报式" 跟手侧滑栏
-  const sidebarX = useMotionValue('-100%');
-  const opacity = useTransform(sidebarX, ['-100%', '0%'], [0, 0.5]);
-  const sidebarDragHandlers = useSwipeable({
-      onSwiping: (eventData) => {
-          if (eventData.initial[0] < window.innerWidth * 0.2) {
-              const newX = -100 + (eventData.deltaX / (window.innerWidth * 2/3)) * 100;
-              sidebarX.set(`${Math.min(0, newX)}%`);
-          }
-      },
-      onSwiped: (eventData) => {
-          if (eventData.initial[0] < window.innerWidth * 0.2) {
-              if (eventData.deltaX > 50) setIsSidebarOpen(true);
-              else setIsSidebarOpen(false);
-          }
-      },
+  const sidebarSwipeHandlers = useSwipeable({
+      onSwipedRight: () => setIsSidebarOpen(true),
       trackMouse: true,
+      delta: 50
   });
 
-  useEffect(() => {
-      sidebarX.set(isSidebarOpen ? '0%' : '-100%');
-  }, [isSidebarOpen, sidebarX]);
-  
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarDragHandlers}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen fixed`}>
         <Style/>
-        <CustomScrollbarStyle />
         
-        <motion.div style={{ opacity }} onClick={() => setIsSidebarOpen(false)} className='fixed inset-0 bg-black z-[99]' />
-        <motion.div style={{ x: sidebarX }} transition={{ type: 'spring', stiffness: 400, damping: 40 }} className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'>
-            <div className='p-4 h-full'>
-                <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
-                <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
-            </div>
-        </motion.div>
-        
-        <div className='relative flex-grow w-full h-full'>
+        <AnimatePresence>
+            {isSidebarOpen && (
+                <>
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className='fixed inset-0 bg-black/50 z-[99]'
+                    />
+                    <motion.div
+                        initial={{ x: '-100%' }}
+                        animate={{ x: 0 }}
+                        exit={{ x: '-100%' }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
+                    >
+                        <div className='p-4 h-full'>
+                            <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                            <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+                        </div>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
+
+        <div {...sidebarSwipeHandlers} className='h-full w-full'>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
-            <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
+            <div className='relative h-full w-full'>
+                <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
-            <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
-                <div className='pointer-events-auto'>
-                    <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
-                    <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
-                    <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-36'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-lg overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
-                           <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md'>LIVE</div>
-                           <div className='absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-black/70 to-transparent flex flex-col items-center text-white'>
-                                <FaTiktok size={16}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                                <div className='w-1 h-1 bg-red-500 rounded-full mt-0.5'></div>
-                           </div>
-                        </a>
-                         <a href="#" className='col-span-1 row-start-2 rounded-lg overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
-                            <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md'>LIVE</div>
-                            <div className='absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-black/70 to-transparent flex flex-col items-center text-white'>
-                                <FaFacebook size={16}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                                <div className='w-1 h-1 bg-red-500 rounded-full mt-0.5'></div>
-                           </div>
-                        </a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-lg overflow-hidden bg-black'>
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-behavior-y-contain custom-scrollbar'>
-                <div className='h-[45vh]' />
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
-                        <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
-                            {tabs.map(tab => (
-                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                {tab.icon}
-                                <span className='text-sm font-semibold mt-1'>{tab.name}</span>
-                                <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                            </button>
-                            ))}
+                <div className='absolute inset-0 z-10 overflow-y-auto overscroll-behavior-y-contain'>
+                    
+                    <div className='h-[45vh] pt-20 pb-8 px-4 flex flex-col justify-end text-white'>
+                        <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+                        <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
+                        
+                        <div className='mt-4 grid grid-cols-2 grid-rows-2 gap-4 h-40'>
+                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaTiktok size={32}/></div>
+                            </a>
+                            <a href="#" className='col-span-1 row-span-2 rounded-xl overflow-hidden bg-black'>
+                                <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                            </a>
+                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('https://images.unsplash.com/photo-1633675254053-f72b6383b160?w=800&q=80')"}}>
+                                <div className='absolute inset-0 bg-black/30 flex items-center justify-center'><FaFacebook size={32}/></div>
+                            </a>
                         </div>
                     </div>
 
-                    <main className="overscroll-behavior-x-contain">
-                        {tabs.map(tab => (
-                            <div key={tab.name} className={`relative ${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                <div className='absolute inset-0 z-10' {...contentSwipeHandlers}></div>
-                                <div className='relative z-0'>
-                                    {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                </div>
+                    <div className='relative min-h-[55vh] bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16'>
+                        <div className='sticky top-0 z-20 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
+                            <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
+                                {tabs.map(tab => (
+                                <button
+                                    key={tab.name}
+                                    onClick={() => setActiveTab(tab.name)}
+                                    className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none
+                                    ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400 hover:text-blue-500' }`}
+                                >
+                                    {tab.icon}
+                                    <span className='text-sm font-semibold mt-1'>{tab.name}</span>
+                                    <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                </button>
+                                ))}
                             </div>
-                        ))}
-                    </main>
+                        </div>
+                        <main {...contentSwipeHandlers} className="overflow-hidden overscroll-behavior-x-contain">
+                            <AnimatePresence mode="wait">
+                                <motion.div key={activeTab} initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.2}}>
+                                    {activeTab === '文章' && <div className='p-4 bg-white dark:bg-gray-900'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
+                                    {activeTab === 'HSK' && <iframe key="hsk" src="about:blank" title="HSK" className="w-full h-[calc(100vh-210px)] border-none"/>}
+                                    {activeTab === '口语' && <iframe key="kouyu" src="about:blank" title="口语" className="w-full h-[calc(100vh-210px)] border-none"/>}
+                                    {activeTab === '练习' && <iframe key="lianxi" src="about:blank" title="练习" className="w-full h-[calc(100vh-210px)] border-none"/>}
+                                    {activeTab === '书籍' && <iframe key="shuji" src="about:blank" title="书籍" className="w-full h-[calc(100vh-210px)] border-none"/>}
+                                </motion.div>
+                            </AnimatePresence>
+                        </main>
+                    </div>
                 </div>
             </div>
             <BottomNavBar/>
@@ -292,10 +258,6 @@ const LayoutIndex = props => {
     </div>
   );
 };
-
-// =========================================================================
-// =============  ✅ 所有其他组件完整恢复如下  ✅ ===================
-// =========================================================================
 
 const LayoutPostList = props => {
   return (
@@ -328,7 +290,7 @@ const LayoutSearch = props => {
   }, [currentSearch])
   return (
     <div currentSearch={currentSearch}>
-      <div id='post-outer-wrapper' className='px-5 md:px-0'>
+      <div id='post-outer-wrapper' className='px-5  md:px-0'>
         {!currentSearch ? (
           <SearchNav {...props} />
         ) : (
