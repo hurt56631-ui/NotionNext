@@ -1,9 +1,9 @@
 /**
- *   HEO 主题说明 - 最终修复版 v4
+ *   HEO 主题说明 - 最终修复版 v5
+ *  - [重大修复] 恢复所有被省略的组件代码，确保功能完整。
+ *  - [重大修复] AI 助手页面不再需要登录，修复底部导航栏认证逻辑。
  *  - [重大修复] 采用透明捕获层，彻底解决 iframe 上的手势失效问题。
- *  - [重大修复] 重构底部导航栏，引入认证判断，解决 AI 助手/'我'页面空白问题。
  *  - [体验升级] 实现 "电报式" 跟手拖动侧边栏。
- *  - [修复] 确保文章列表加载更多功能正常。
  *  - [UI优化] 调整 LIVE 标签大小，美化滚动条。
  */
 
@@ -22,7 +22,7 @@ import { isBrowser } from '@/lib/utils'
 import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useSwipeable } from 'react-swipeable'
 import BlogPostArchive from './components/BlogPostArchive'
 import BlogPostListPage from './components/BlogPostListPage'
