@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：所有组件整合进一个文件
+// themes/heo/index.js  <-- 最终修复版：保持原始导出结构，更新内部实现
 
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -11,7 +11,7 @@ import WWAds from '@/components/WWAds'
 import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
 import { loadWowJS } from '@/lib/plugins/wow'
-import { isBrowser } from '@/lib/utils'
+import { isBrowser, getListByPage } from '@/lib/utils' // 确保 getListByPage 被导入
 import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
@@ -42,10 +42,10 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 
 
 // ##################################################################
-// # region 所有子组件都整合到这里，不再需要 themes/heo/components/ 文件夹 #
+// # region 内部子组件定义区域                                       #
 // ##################################################################
 
-// 组件: BlogPostCard.js
+// 内部组件: BlogPostCard
 const BlogPostCard = ({ post }) => {
   return (
     <Link href={`${siteConfig('SUB_PATH', '')}/${post.slug}`}>
@@ -68,7 +68,7 @@ const BlogPostCard = ({ post }) => {
   )
 }
 
-// 组件: BlogPostListEmpty.js
+// 内部组件: BlogPostListEmpty
 const BlogPostListEmpty = ({ currentSearch }) => {
   const { locale } = useGlobal()
   return (
@@ -82,7 +82,7 @@ const BlogPostListEmpty = ({ currentSearch }) => {
   )
 }
 
-// 组件: Paginator.js
+// 内部组件: Paginator
 const Paginator = ({ page, postCount }) => {
   const { NOTION_CONFIG } = useGlobal()
   const router = useRouter()
@@ -125,7 +125,7 @@ const Paginator = ({ page, postCount }) => {
   )
 }
 
-// 组件: BlogPostListPage.js
+// 内部组件: BlogPostListPage
 const BlogPostListPage = ({ page, posts, postCount }) => {
   if (!posts || posts.length === 0) {
     return <BlogPostListEmpty />;
@@ -143,25 +143,33 @@ const BlogPostListPage = ({ page, posts, postCount }) => {
   )
 }
 
-// 组件: BlogPostListScroll.js
-const BlogPostListScroll = ({ posts = [], postCount }) => {
+// 内部组件: BlogPostListScroll
+const BlogPostListScroll = ({ posts = [], postCount, currentSearch }) => {
   const [page, setPage] = useState(1)
   const { NOTION_CONFIG } = useGlobal()
   const POSTS_PER_PAGE = siteConfig('POSTS_PER_PAGE', 12, NOTION_CONFIG)
-  const totalPage = Math.ceil(postCount / POSTS_PER_PAGE)
-  const showNext = page < totalPage
   
-  const filteredPosts = posts.slice(0, page * POSTS_PER_PAGE)
+  const postsToShow = getListByPage(posts, page, POSTS_PER_PAGE)
+
+  let hasMore = false
+  if (posts) {
+    const totalCount = posts.length
+    hasMore = page * POSTS_PER_PAGE < totalCount
+  }
+  
   const targetRef = useRef(null)
   const { locale } = useGlobal()
+
+  const handleGetMore = () => {
+    if (!hasMore) return
+    setPage(page + 1)
+  }
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && showNext) {
-          setTimeout(() => {
-            setPage(prevPage => prevPage + 1)
-          }, 100)
+        if (entries[0].isIntersecting && hasMore) {
+          handleGetMore()
         }
       },
       { threshold: 0.1 }
@@ -175,27 +183,27 @@ const BlogPostListScroll = ({ posts = [], postCount }) => {
         observer.unobserve(currentTarget)
       }
     }
-  }, [page, showNext])
+  }, [page, hasMore])
+
+  if (!postsToShow || postsToShow.length === 0) {
+    return <BlogPostListEmpty currentSearch={currentSearch} />
+  }
 
   return (
      <div id="posts-wrapper" className="w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           {filteredPosts.map(post => (
+           {postsToShow.map(post => (
                 <BlogPostCard key={post.id} post={post} />
             ))}
         </div>
-        <div ref={targetRef} className="w-full my-6 py-4 text-center text-gray-500 dark:text-gray-400">
-            {showNext ? (
-              <span>{locale.COMMON.MORE}</span>
-            ) : (
-              postCount > 0 && totalPage > 1 && <Paginator page={page} postCount={postCount} />
-            )}
+        <div ref={targetRef} className="w-full my-6 py-4 text-center cursor-pointer text-gray-500 dark:text-gray-400" onClick={handleGetMore}>
+            {hasMore ? locale.COMMON.MORE : locale.COMMON.NO_MORE}
         </div>
     </div>
   )
 }
 
-// 组件: BlogPostArchive.js
+// 内部组件: BlogPostArchive
 const BlogPostArchive = ({ posts = [], archiveTitle }) => {
   return (
     <div className="mb-10">
@@ -218,7 +226,7 @@ const BlogPostArchive = ({ posts = [], archiveTitle }) => {
   )
 }
 
-// 组件: CategoryBar.js
+// 内部组件: CategoryBar
 const CategoryBar = ({ categories, category, postCount }) => {
   const router = useRouter()
   return (
@@ -242,10 +250,9 @@ const CategoryBar = ({ categories, category, postCount }) => {
   )
 }
 
-// 组件: FloatTocButton.js
+// 内部组件: FloatTocButton
 const FloatTocButton = ({ toc }) => {
   const [showToc, setShowToc] = useState(false);
-
   useEffect(() => {
     setShowToc(toc && toc.length > 0);
   }, [toc]);
@@ -268,7 +275,7 @@ const FloatTocButton = ({ toc }) => {
   );
 }
 
-// 组件: Footer.js
+// 内部组件: Footer
 const Footer = () => {
   const d = new Date()
   const currentYear = d.getFullYear()
@@ -286,24 +293,24 @@ const Footer = () => {
   )
 }
 
-// 组件: Header.js (这是一个简化的占位符，您应该使用您项目中的实际 Header 组件)
+// 内部组件: Header (简化占位符)
 const Header = (props) => {
-    // 您项目中的 Header 实现会更复杂，这里仅作占位以避免报错
-    return <header className='h-16'></header>;
+    return <header className='h-16 bg-white dark:bg-gray-900 shadow-md sticky top-0 z-40'></header>;
 }
 
-// 组件: Hero.js (占位符)
+// 内部组件: Hero (占位符)
 const Hero = (props) => {
     return <div className='w-full h-96 bg-gray-200 dark:bg-gray-800'></div>;
 }
 
-// 组件: NoticeBar.js (占位符)
+// 内部组件: NoticeBar (占位符)
 const NoticeBar = () => {
-    return <div className='w-full p-2 bg-blue-100 text-center text-blue-800 text-sm'>通知内容</div>;
+    const { locale } = useGlobal();
+    return <div className='w-full p-2 bg-blue-100 text-center text-blue-800 text-sm'>{locale?.COMMON?.NOTICE || '通知内容'}</div>;
 }
 
-// 组件: PostHeader.js
-const PostHeader = ({ post, nav, isDarkMode }) => {
+// 内部组件: PostHeader
+const PostHeader = ({ post }) => {
   if (!post) return <></>;
 
   return (
@@ -314,22 +321,22 @@ const PostHeader = ({ post, nav, isDarkMode }) => {
   );
 }
 
-// 组件: PostLock.js
+// 内部组件: PostLock
 const PostLock = ({ validPassword }) => {
     const { locale } = useGlobal();
     if (validPassword) return <></>;
-    return <div>{locale.COMMON.ARTICLE_LOCK_TIPS}</div>;
+    return <div className="p-8 text-center">{locale.COMMON.ARTICLE_LOCK_TIPS}</div>;
 }
 
-// 组件: SearchNav.js
+// 内部组件: SearchNav
 const SearchNav = (props) => {
     const { posts } = props;
-    return <div>{posts?.length} posts found.</div>;
+    return <div className="p-4">{posts?.length || 0} posts found.</div>;
 }
 
-// 组件: SideRight.js (占位符)
+// 内部组件: SideRight (占位符)
 const SideRight = (props) => {
-    return <aside className='w-72'></aside>;
+    return <aside className='w-72 hidden xl:block ml-4'></aside>;
 }
 
 // #endregion
@@ -371,7 +378,7 @@ const LayoutBase = props => {
         <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
           <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
           <div className='lg:px-2'></div>
-          <div className='hidden xl:block'>{slotRight}</div>
+          {slotRight}
         </div>
       </main>
       <Footer />
