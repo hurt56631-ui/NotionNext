@@ -48,9 +48,11 @@ import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
 import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
-import { useAuth } from '@/lib/AuthContext'
-import dynamic from 'next/dynamic'
-const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+
+// 【修正】: 已删除之前错误引入的 useAuth 和 dynamic AuthModal
+// import { useAuth } from '@/lib/AuthContext'
+// import dynamic from 'next/dynamic'
+// const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
  * 基础布局
@@ -103,40 +105,8 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// 首页专用的底部导航栏
-const BottomNavBar = () => {
-    const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
-    ];
-    const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-
-    const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
-
-    return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-                {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                    </SmartLink>
-                ))}
-            </nav>
-        </>
-    );
-};
+// 【关键修正】: 彻底删除之前错误添加的 BottomNavBar 组件定义
+// const BottomNavBar = () => { ... } // <= 整块已删除
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
@@ -332,8 +302,10 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            <BottomNavBar/>
         </div>
+        
+        {/* 【关键修正】: 在此渲染正确的 Footer 组件，而不是之前错误的 BottomNavBar */}
+        <Footer />
     </div>
   );
 };
@@ -489,7 +461,7 @@ const Layout404 = () => {
           leaveTo='opacity-0 -translate-y-16'
           unmount={false}>
           <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
+            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/203/03/03/6401a7906aa4a.gif'}></LazyImage>
             <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
               <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
               <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
