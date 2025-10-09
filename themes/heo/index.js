@@ -48,9 +48,10 @@ import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
 import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
-import { useAuth } from '@/lib/AuthContext'
-import dynamic from 'next/dynamic'
-const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+// 【修正】：由于 Footer.js 才是正确的，不再需要引入 useAuth 和 AuthModal
+// import { useAuth } from '@/lib/AuthContext'
+// import dynamic from 'next/dynamic'
+// const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
  * 基础布局
@@ -103,40 +104,8 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// 首页专用的底部导航栏
-const BottomNavBar = () => {
-    const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
-    ];
-    const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-
-    const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
-
-    return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-                {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                    </SmartLink>
-                ))}
-            </nav>
-        </>
-    );
-};
+// 【关键修正 1】: 彻底删除之前错误添加的 BottomNavBar 组件
+// const BottomNavBar = () => { ... } // <= 整块删除
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
@@ -178,7 +147,6 @@ const LayoutIndex = props => {
   }, []);
   
   // --- 手势处理逻辑 ---
-
   // 1. 内容区域左右滑动切换 Tab
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
@@ -189,10 +157,8 @@ const LayoutIndex = props => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
-    // 【关键修复 1】当侧边栏打开或拖动时，禁用此手势，避免冲突
     disabled: isSidebarOpen || isDragging,
     onSwiping: (e) => {
-      // 只在水平滑动时阻止默认事件，允许垂直滚动
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
         e.event.preventDefault();
       }
@@ -205,47 +171,34 @@ const LayoutIndex = props => {
   // 2. 作用于整个页面的侧边栏手势
   const sidebarSwipeHandlers = useSwipeable({
       onSwiping: (e) => {
-        const sidebarWidth = sidebarRef.current?.offsetWidth || 280; // 假设宽度
-        
-        // 场景一：侧边栏关闭时，从左侧边缘（< 40px）向右拖动，触发打开
+        const sidebarWidth = sidebarRef.current?.offsetWidth || 280;
         if (!isSidebarOpen && e.initial[0] < 40 && e.deltaX > 0) {
             setIsDragging(true);
-            // 实时更新拖动距离，但不超过侧边栏宽度
             setDragX(Math.min(e.deltaX, sidebarWidth));
         } 
-        // 场景二：侧边栏打开时，向左拖动，触发关闭
         else if (isSidebarOpen && e.deltaX < 0) {
             setIsDragging(true);
-            // 实时更新拖动距离，但不超过侧边栏宽度（负方向）
             setDragX(Math.max(e.deltaX, -sidebarWidth));
         }
       },
       onSwiped: (e) => {
-        if (!isDragging) return; // 如果不是在拖动状态，则忽略
-
+        if (!isDragging) return;
         const sidebarWidth = sidebarRef.current?.offsetWidth || 280;
-        
-        // 判断是打开还是关闭侧边栏
         const shouldOpen = !isSidebarOpen && e.deltaX > sidebarWidth / 3;
         const shouldClose = isSidebarOpen && e.deltaX < -sidebarWidth / 3;
-
         if (shouldOpen) {
             setIsSidebarOpen(true);
         } else if (shouldClose) {
             setIsSidebarOpen(false);
         }
-        
-        // 手势结束，重置拖动状态，让 Framer Motion 的 animate 属性接管
         setIsDragging(false);
         setDragX(0);
       },
       trackMouse: true,
-      // 拖动侧边栏时，阻止页面滚动
       preventDefaultTouchmoveEvent: isDragging
   });
   
   return (
-    // 【样式修复】添加 overflow-x-hidden 来防止页面左右晃动
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden overflow-x-hidden`} {...sidebarSwipeHandlers}>
         <Style/>
         <CustomScrollbarStyle />
@@ -269,15 +222,12 @@ const LayoutIndex = props => {
         <motion.div
             ref={sidebarRef}
             className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
-            // animate 属性定义了最终的“目标”位置
             animate={{ x: isSidebarOpen ? 0 : '-100%' }}
-            // 【体验优化】拖动时，用 style 属性实时覆盖 animate，实现“跟手”效果
             style={{ 
                 x: isDragging 
                     ? (isSidebarOpen ? `calc(0% + ${dragX}px)` : `calc(-100% + ${dragX}px)`) 
                     : undefined 
             }}
-            // 拖动时无动画，松手后执行弹簧动画
             transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
         >
             <div className='p-4 h-full'>
@@ -319,7 +269,8 @@ const LayoutIndex = props => {
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
+                {/* 【关键修正 2】: 调整底部内边距(padding-bottom)为 pb-20 (5rem), 为 Footer.js 中的 h-20 导航栏留出足够空间 */}
+                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-20 min-h-[calc(55vh+1px)]'>
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
@@ -332,7 +283,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* 将内容切换手势绑定到这个 main 元素上 */}
                     <main className="overscroll-x-contain" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
@@ -348,7 +298,7 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            <BottomNavBar/>
+            {/* 【关键修正 3】: 删除此处对 <BottomNavBar/> 的调用，让全局的 <Footer/> 组件来处理 */}
         </div>
     </div>
   );
