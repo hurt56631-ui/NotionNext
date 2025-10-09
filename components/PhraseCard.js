@@ -301,11 +301,11 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
           <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
             <div style={styles.cardContainer}>
               <div style={styles.contentBox}>
-                  <div style={styles.languageSection} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                  <div style={styles.chineseSection} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                       <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
                       <div style={styles.textChinese}>{cardData.chinese}</div>
                   </div>
-                  <div style={styles.languageSection} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
+                  <div style={styles.burmeseSection} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
                       {phoneticDisplay && <div style={styles.burmesePhonetic}>{phoneticDisplay}</div>}
                       <div style={styles.textBurmese}>{cardData.burmese}</div>
                   </div>
@@ -327,12 +327,12 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
 
       {currentCard && (
           <div style={styles.rightControls} data-no-gesture="true">
-            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={22} /></button>
+            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
-                <FaMicrophone size={22} color={isListening ? '#dc2626' : '#4a5568'} /> 
+                <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} /> 
             </button>
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
-                <FaPenFancy size={22} />
+                <FaPenFancy size={20} />
             </button>
           </div>
       )}
@@ -348,18 +348,22 @@ const styles = {
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', paddingRight: '75px', boxSizing: 'border-box', gap: '20px' },
-    contentBox: { width: '100%', display: 'flex', flexDirection: 'column', gap: '20px', order: 1 },
+    // MODIFIED: Merged two cards into one content box
+    contentBox: { width: '100%', background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', textAlign: 'center', order: 1 },
+    chineseSection: { cursor: 'pointer', marginBottom: '25px' }, // Added for spacing
+    burmeseSection: { cursor: 'pointer' },
     imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', order: 2, marginTop: '10px' },
     cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
     skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
     shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
-    languageSection: { background: 'white', borderRadius: '16px', padding: '20px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', textAlign: 'center' },
     pinyin: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px' },
     textChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', wordBreak: 'break-word' },
-    burmesePhonetic: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px', fontFamily: 'sans-serif' },
+    // MODIFIED: Changed color to light blue
+    burmesePhonetic: { fontSize: '1.2rem', color: '#60a5fa', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
     rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
-    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    // MODIFIED: Made buttons smaller
+    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
     comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
