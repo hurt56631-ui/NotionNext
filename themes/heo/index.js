@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版 v8：为所有分类面板添加了内容
+// themes/heo/index.js  <-- 最终修复版 v9：新增侧边栏并修复底部遮挡
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -47,7 +47,12 @@ import {
     BookOpen,
     Phone,
     MessageSquare,
-    Users
+    Users,
+    Settings,
+    LifeBuoy,
+    Moon,
+    Sun,
+    UserCircle
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -60,6 +65,63 @@ import BooksContentBlock from '@/components/BooksContentBlock'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
+
+
+// =========================================================================
+// ====================== ✅ 新增：首页侧边栏组件 ✅ ========================
+// =========================================================================
+const HomeSidebar = ({ isOpen, onClose }) => {
+  const { isDarkMode, toggleDarkMode } = useGlobal();
+
+  const sidebarLinks = [
+    { icon: <Settings size={20} />, text: '通用设置', href: '/settings' },
+    { icon: <LifeBuoy size={20} />, text: '帮助中心', href: '/help' },
+  ];
+
+  return (
+    <>
+      {/* 遮罩层 */}
+      <div
+        className={`fixed inset-0 bg-black/50 z-30 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      {/* 侧边栏内容 */}
+      <div
+        className={`fixed inset-y-0 left-0 w-72 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <div className="flex flex-col h-full">
+            {/* 顶部用户信息 */}
+            <div className="p-6 flex items-center gap-4 border-b dark:border-gray-700">
+                <UserCircle size={48} className="text-gray-500" />
+                <div>
+                    <p className="font-semibold text-lg text-gray-800 dark:text-gray-100">访客</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">欢迎来到本站</p>
+                </div>
+            </div>
+            {/* 导航链接 */}
+            <nav className="flex-grow p-4 space-y-2">
+                {sidebarLinks.map((link, index) => (
+                    <SmartLink key={index} href={link.href} className="flex items-center gap-4 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 transition-colors">
+                        {link.icon}
+                        <span className="font-medium">{link.text}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+            {/* 底部操作 */}
+            <div className="p-4 border-t dark:border-gray-700">
+                <button
+                    onClick={toggleDarkMode}
+                    className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 transition-colors"
+                >
+                    {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                    <span className="font-medium">{isDarkMode ? '切换到日间模式' : '切换到夜间模式'}</span>
+                </button>
+            </div>
+        </div>
+      </div>
+    </>
+  );
+};
 
 
 /**
@@ -180,9 +242,11 @@ const LayoutIndex = props => {
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
-
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
+  
+  // ✅ 新增：侧边栏状态
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const backgrounds = [
@@ -192,24 +256,16 @@ const LayoutIndex = props => {
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
     const observer = new IntersectionObserver(
-        ([entry]) => {
-            setIsCategoryBarSticky(!entry.isIntersecting);
-        },
+        ([entry]) => setIsCategoryBarSticky(!entry.isIntersecting),
         { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
     );
 
     const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-        observer.observe(currentSentinel);
-    }
-
-    return () => {
-        if (currentSentinel) {
-            observer.unobserve(currentSentinel);
-        }
-    };
+    if (currentSentinel) observer.observe(currentSentinel);
+    return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
   }, []);
 
+  // 用于内容区左右切换 Tab
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -220,14 +276,22 @@ const LayoutIndex = props => {
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
     onSwiping: (e) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-          e.event.preventDefault();
-      }
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.event.preventDefault();
     },
     disabled: !isCategoryBarSticky,
     preventDefaultTouchmoveEvent: false,
     trackMouse: true,
     delta: 40
+  });
+
+  // ✅ 新增：用于全局拖拽打开/关闭侧边栏
+  const mainSwipeHandlers = useSwipeable({
+    onSwipedRight: () => setIsSidebarOpen(true),
+    onSwipedLeft: () => {
+        if (isSidebarOpen) setIsSidebarOpen(false);
+    },
+    trackMouse: true,
+    delta: 60 // 需要拖拽更长的距离才触发，防止误触
   });
 
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
@@ -236,11 +300,24 @@ const LayoutIndex = props => {
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
+        
+        {/* ✅ 新增：侧边栏组件实例 */}
+        <HomeSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-        <div className='relative flex-grow w-full h-full'>
+        {/* ✅ 新增：将主滑动事件绑定到这个容器上 */}
+        <div {...mainSwipeHandlers} className='relative flex-grow w-full h-full'>
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
+            {/* ✅ 新增：汉堡菜单按钮 */}
+            <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors"
+                aria-label="打开菜单"
+            >
+                <i className="fas fa-bars text-xl"></i>
+            </button>
+            
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
@@ -256,7 +333,8 @@ const LayoutIndex = props => {
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
 
-                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
+                {/* ✅ 修复：将 pb-16 改为 pb-24，为底部导航栏留出更多空间 */}
+                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
 
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
@@ -271,7 +349,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* ✅ 使用新的内容组件替换所有选项卡内容 */}
                     <main {...contentSwipeHandlers} className="min-h-[70vh]">
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
