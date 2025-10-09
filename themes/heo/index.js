@@ -11,7 +11,7 @@ import WWAds from '@/components/WWAds'
 import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
 import { loadWowJS } from '@/lib/plugins/wow'
-import { isBrowser, getListByPage } from '@/lib/utils' // 确保 getListByPage 被导入
+import { isBrowser, getListByPage, formatDate } from '@/lib/utils'
 import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
