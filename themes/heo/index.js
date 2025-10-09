@@ -134,7 +134,7 @@ const LayoutIndex = props => {
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [backgroundUrl, setBackgroundUrl] useState('');
+  const [backgroundUrl, setBackgroundUrl] = useState('');
 
   // --- 跟手侧边栏状态 ---
   const [isDragging, setIsDragging] = useState(false);
