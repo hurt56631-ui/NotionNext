@@ -1,13 +1,10 @@
 /**
- *   HEO 主题说明 - 最终修复版 v2
- *  - 恢复所有被省略的组件代码，确保功能完整。
- *  - AI 助手页面不再需要登录。
- *  - [修复] 优化手势滑动逻辑，以兼容 iframe 和垂直滚动。
- *  - 美化直播卡片，增加 LIVE 标签和背景图。
- *  - 优化 "贴吧式" 两层滚动。
- *  - [移除] 左侧边栏及其相关代码。
- *  - [优化] 优化直播卡片 LIVE 标签和分类面板图标大小。
- *  - [新增] 添加高端美化版的汉缅词典，并尝试在站内 iframe 显示结果，同时提供备用方案。
+ *   HEO 主题说明 - 高端美化最终版 v3
+ *  - 字典功能升级：集成语音识别，支持多语言切换并自动查询。
+ *  - 移除站内翻译结果显示，改为新标签页打开，确保功能稳定。
+ *  - 首页布局优化：在字典和分类栏之间增加快捷操作按钮区，提升设计感和实用性。
+ *  - 分类栏图标升级：使用 lucide-react 替换旧图标，并优化按钮样式，使其更小巧精致。
+ *  - 整体视觉提升：调整间距、背景和交互效果，打造高端大气的用户体验。
  */
 
 import Comment from '@/components/Comment'
@@ -44,60 +41,23 @@ import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
-import { Menu as MenuIcon, X as XIcon, ExternalLink } from 'lucide-react'
-import { AnimatePresence, motion } from 'framer-motion';
+import { FaTiktok, FaFacebook } from 'react-icons/fa'
+import { 
+    Newspaper, 
+    GraduationCap, 
+    Smile, 
+    ClipboardCheck, 
+    BookOpen, 
+    Phone, 
+    MessageSquare, 
+    Users 
+} from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 
 // 动态导入新的翻译卡片和认证模态框
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
-
-
-/**
- * 翻译结果显示组件
- * - 尝试在 iframe 中加载结果。
- * - 提供一个可靠的备用链接，以防 iframe 加载被目标网站阻止。
- */
-const TranslationDisplay = ({ url }) => {
-  if (!url) {
-    return (
-      <div className="mt-4 p-6 rounded-xl bg-gray-50 dark:bg-gray-800/50 text-center text-gray-500 dark:text-gray-400 border border-dashed dark:border-gray-700/50">
-        <p className="text-sm">翻译结果将在此处显示</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 rounded-xl bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 shadow-inner overflow-hidden">
-      <div className="p-3 bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 flex justify-between items-center text-xs">
-        <p className="text-gray-600 dark:text-gray-300">
-          正在尝试加载: <span className="font-mono truncate">{url.length > 50 ? `${url.substring(0, 50)}...` : url}</span>
-        </p>
-        <a 
-          href={url} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="flex items-center px-3 py-1 bg-white dark:bg-gray-700 text-blue-500 dark:text-blue-400 font-semibold rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors duration-200"
-        >
-          在新标签中打开
-          <ExternalLink size={14} className="ml-1.5" />
-        </a>
-      </div>
-      <p className="text-xs text-center p-2 bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300">
-        提示：如果下方区域长时间空白，说明目标网站阻止了站内显示，请使用上方按钮打开。
-      </p>
-      <iframe
-        key={url} // 使用 key 属性确保 URL 变化时 iframe 会重新加载
-        src={url}
-        title="Glosbe Translation"
-        className="w-full h-96 border-none"
-        sandbox="allow-scripts allow-same-origin" // 增加 sandbox 提高安全性，但可能影响某些网站功能
-      />
-    </div>
-  );
-}
 
 
 /**
@@ -185,34 +145,53 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
+// 新增的快捷操作按钮组件
+const ActionButtons = () => {
+  const actions = [
+    { icon: <Phone size={20} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER' },
+    { icon: <MessageSquare size={20} />, text: '在线客服', href: '#' },
+    { icon: <Users size={20} />, text: '加入社群', href: '#' },
+  ];
+
+  return (
+    <div className="grid grid-cols-3 gap-3 my-5 px-4">
+      {actions.map((action, index) => (
+        <a key={index} href={action.href} className="flex flex-col items-center justify-center p-3 bg-gray-100 dark:bg-gray-800/80 rounded-lg shadow-sm hover:bg-gray-200 dark:hover:bg-gray-700/80 transition-all duration-300 transform hover:scale-105">
+          <div className="text-blue-500 dark:text-blue-400 mb-1">{action.icon}</div>
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{action.text}</span>
+        </a>
+      ))}
+    </div>
+  );
+};
+
+
 /**
- * 首页 - "真·贴吧式"滚动最终修复版
+ * 首页 - 高端美化最终版
  */
 const LayoutIndex = props => {
+  // 分类栏图标和文字已全面升级
   const tabs = [
-    { name: '文章', icon: <FaRegNewspaper size={24} /> },
-    { name: 'HSK', icon: <FaGraduationCap size={24} /> },
-    { name: '口语', icon: <FaMicrophone size={24} /> },
-    { name: '练习', icon: <FaFlask size={24} /> },
-    { name: '书籍', icon: <FaBook size={24} /> }
+    { name: '文章', icon: <Newspaper size={22} /> },
+    { name: 'HSK', icon: <GraduationCap size={22} /> },
+    { name: '口语', icon: <Smile size={22} /> },
+    { name: '练习', icon: <ClipboardCheck size={22} /> },
+    { name: '书籍', icon: <BookOpen size={22} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState(''); 
-  const [translationUrl, setTranslationUrl] = useState('');
-
-  const handleTranslationSearch = (url) => {
-    setTranslationUrl(url);
-  };
-
+  
   useEffect(() => {
+    // 精选的高质量背景图
     const backgrounds = [
+        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
   }, []);
   
-  // --- 手势处理逻辑 (优化版) ---
+  // 手势处理逻辑
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -233,7 +212,7 @@ const LayoutIndex = props => {
   });
 
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
         
@@ -241,6 +220,7 @@ const LayoutIndex = props => {
             <header className='fixed top-0 left-0 z-50 p-4'></header>
 
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
+            <div className='absolute inset-0 bg-black/20'></div> {/* 增加一层蒙版使文字更清晰 */}
 
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
@@ -270,19 +250,21 @@ const LayoutIndex = props => {
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
+                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
+                    {/* 词典和快捷操作区 */}
                     <div className='p-4 pt-6'>
-                        <GlosbeSearchCard onSearch={handleTranslationSearch} />
-                        <TranslationDisplay url={translationUrl} />
+                        <GlosbeSearchCard />
+                        <ActionButtons />
                     </div>
 
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg'>
-                        <div className='flex justify-around border-b border-t border-gray-200 dark:border-gray-700'>
+                    {/* 升级后的分类栏 */}
+                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                        <div className='flex justify-around'>
                             {tabs.map(tab => (
-                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
                                 {tab.icon}
-                                <span className='text-sm font-semibold mt-1'>{tab.name}</span>
-                                <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+                                <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
                             </button>
                             ))}
                         </div>
@@ -293,7 +275,7 @@ const LayoutIndex = props => {
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
                                     {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-280px)] border-none" />}
+                                    {tab.name === 'HSK' && <iframe src="/hsk" title="HSK" className="w-full h-[calc(100vh-280px)] border-none" />}
                                     {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-280px)] border-none" />}
                                     {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-280px)] border-none" />}
                                     {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-280px)] border-none" />}
