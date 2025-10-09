@@ -1,48 +1,35 @@
-import { siteConfig } from '@/lib/config'
-import { useGlobal } from '@/lib/global'
-import CONFIG from '../config'
+// themes/heo/components/BlogPostListPage.js
+
 import BlogPostCard from './BlogPostCard'
-import BlogPostListEmpty from './BlogPostListEmpty'
-import PaginationNumber from './PaginationNumber'
+import { Paginator } from './Paginator' // 确保 Paginator 被正确导入
+import BlogPostListEmpty from './BlogPostListEmpty' // 确保空状态组件被导入
 
 /**
- * 文章列表分页表格
+ * 博客列表分页 (新版)
  * @param page 当前页
- * @param posts 所有文章
- * @param tags 所有标签
+ * @param posts 当前页的文章
+ * @param postCount 文章总数
  * @returns {JSX.Element}
  * @constructor
  */
-const BlogPostListPage = ({ page = 1, posts = [], postCount, siteInfo }) => {
-  const { NOTION_CONFIG } = useGlobal()
-  const POSTS_PER_PAGE = siteConfig('POSTS_PER_PAGE', 12, NOTION_CONFIG)
-  const totalPage = Math.ceil(postCount / POSTS_PER_PAGE)
-  const showPagination = postCount >= POSTS_PER_PAGE
-  const POST_TWO_COLS = siteConfig('HEO_HOME_POST_TWO_COLS', true, CONFIG)
-  if (!posts || posts.length === 0 || page > totalPage) {
-    return <BlogPostListEmpty />
-  } else {
-    return (
-      <div id='container' className='w-full'>
-        {/* 文章列表 */}
-        <div
-          className={`${POST_TWO_COLS && '2xl:grid 2xl:grid-cols-2'} grid-cols-1 gap-5`}>
-          {posts?.map(post => (
-            <BlogPostCard
-              index={posts.indexOf(post)}
-              key={post.id}
-              post={post}
-              siteInfo={siteInfo}
-            />
-          ))}
-        </div>
-
-        {showPagination && (
-          <PaginationNumber page={page} totalPage={totalPage} />
-        )}
-      </div>
-    )
+const BlogPostListPage = ({ page, posts, postCount }) => {
+  if (!posts || posts.length === 0) {
+    return <BlogPostListEmpty />;
   }
+  
+  return (
+    <div className="w-full">
+        {/* 文章卡片网格布局 */}
+        <div id="posts-wrapper" className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {posts?.map(post => (
+                <BlogPostCard key={post.id} post={post} />
+            ))}
+        </div>
+        
+        {/* 分页器 */}
+        <Paginator page={page} postCount={postCount} />
+    </div>
+  )
 }
 
 export default BlogPostListPage
