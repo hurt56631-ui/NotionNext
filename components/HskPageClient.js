@@ -1,4 +1,4 @@
-// components/HskPageClient.js  <-- 全新亮色列表式设计
+// components/HskPageClient.js  <-- 全新亮色列表式设计 (已修复)
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,11 +23,11 @@ const screenVariants = {
 
 // --- HSK 页面主组件 (全新亮色设计) ---
 const HskMobilePage = () => {
-  const [currentView, setCurrentView] = useState('levels'); 
+  const [currentView, setCurrentView] = useState('levels');
   const [selectedLevel, setSelectedLevel] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [direction, setDirection] = useState(1); 
+  const [direction, setDirection] = useState(1);
 
   const handleSelectLevel = (level) => { setDirection(1); setSelectedLevel(level); setCurrentView('lessons'); };
   const handleSelectLesson = (lesson) => { setDirection(1); setSelectedLesson(lesson); setCurrentView('categories'); };
@@ -49,7 +49,8 @@ const HskMobilePage = () => {
   };
 
   return (
-    <div className="h-full w-full bg-gray-50 text-gray-800 font-sans flex flex-col overflow-hidden">
+    // ✅ 唯一的修改在这里：将 h-full 改为 h-screen
+    <div className="h-screen w-full bg-gray-50 text-gray-800 font-sans flex flex-col overflow-hidden">
       <header className="flex-shrink-0 h-14 px-4 flex items-center bg-white/80 backdrop-blur-lg border-b border-gray-200 z-20 sticky top-0">
         <div className="w-10">
           <AnimatePresence>
@@ -63,10 +64,10 @@ const HskMobilePage = () => {
         <h1 className="flex-grow text-center text-lg font-semibold truncate px-2">{getTitle()}</h1>
         <div className="w-10"></div>
       </header>
-      
+
       <main className="flex-grow relative overflow-y-auto">
         <AnimatePresence initial={false} custom={direction}>
-          
+
           {/* 视图一：HSK 等级列表 */}
           {currentView === 'levels' && (
             <motion.div key="levels" custom={direction} variants={screenVariants} initial="enter" animate="center" exit="exit" className="absolute inset-0 overflow-y-auto">
@@ -120,7 +121,7 @@ const HskMobilePage = () => {
               </div>
             </motion.div>
           )}
-          
+
           {/* 视图四：具体内容 (占位) */}
           {currentView === 'content' && selectedCategory && selectedLevel && selectedLesson && (
             <motion.div key="content" custom={direction} variants={screenVariants} initial="enter" animate="center" exit="exit" className="absolute inset-0 p-6 text-center">
