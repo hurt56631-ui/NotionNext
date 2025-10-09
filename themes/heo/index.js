@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版 v7：基于您的原始文件结构进行升级
+// themes/heo/index.js  <-- 最终修复版 v8：为所有分类面板添加了内容
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -52,8 +52,15 @@ import {
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 
+// ✅ 导入我们所有新创建的内容块组件
+import HskContentBlock from '@/components/HskPageClient'
+import SpeakingContentBlock from '@/components/SpeakingContentBlock'
+import PracticeContentBlock from '@/components/PracticeContentBlock'
+import BooksContentBlock from '@/components/BooksContentBlock'
+
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
+
 
 /**
  * 基础布局 (保持不变)
@@ -184,13 +191,10 @@ const LayoutIndex = props => {
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    // [手势修复] 设置 IntersectionObserver
     const observer = new IntersectionObserver(
         ([entry]) => {
-            // 当哨兵元素离开视口顶部时，!entry.isIntersecting 将为 true
             setIsCategoryBarSticky(!entry.isIntersecting);
         },
-        // rootMargin: '-1px 0px 0px 0px' 意味着当哨兵元素的顶部边缘越过视口顶部1像素时，触发回调
         { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
     );
 
@@ -220,29 +224,13 @@ const LayoutIndex = props => {
           e.event.preventDefault();
       }
     },
-    // [手势修复] 仅在分类栏吸顶时激活手势
     disabled: !isCategoryBarSticky,
     preventDefaultTouchmoveEvent: false,
     trackMouse: true,
     delta: 40
   });
 
-  // ===== ✅ 新增代码开始：筛选文章并准备 props =====
-  const { posts } = props;
-
-  // 根据分类名称筛选文章，如果 posts 不存在则返回空数组
-  const speakingPosts = posts?.filter(post => post.category === '口语') || [];
-  const exercisePosts = posts?.filter(post => post.category === '练习') || [];
-  const bookPosts = posts?.filter(post => post.category === '书籍') || [];
-
-  // 为每个分类的文章列表创建独立的 props
-  const speakingProps = { ...props, posts: speakingPosts };
-  const exerciseProps = { ...props, posts: exercisePosts };
-  const bookProps = { ...props, posts: bookPosts };
-
-  // 根据配置，确定要渲染的文章列表组件（分页或滚动加载）
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
-  // ===== ✅ 新增代码结束 =====
 
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
@@ -266,7 +254,6 @@ const LayoutIndex = props => {
             </div>
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                {/* [手势修复] 哨兵元素，高度为 45vh，与顶部内容区高度一致 */}
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
 
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
@@ -283,47 +270,21 @@ const LayoutIndex = props => {
                             ))}
                         </div>
                     </div>
-
-                    {/* ===== ✅ 修改代码开始：动态渲染选项卡内容 ===== */}
+                    
+                    {/* ✅ 使用新的内容组件替换所有选项卡内容 */}
                     <main {...contentSwipeHandlers} className="min-h-[70vh]">
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                <div>
-                                    {tab.name === '文章' && <div className='p-4'><PostListComponent {...props} /></div>}
-
-                                    {tab.name === 'HSK' && <iframe src="/hsk" title="HSK" className="w-full h-[calc(100vh-280px)] border-none" />}
-
-                                    {tab.name === '口语' && (
-                                        <div className="p-4">
-                                            {speakingPosts.length > 0
-                                                ? <PostListComponent {...speakingProps} />
-                                                : <div className="text-center text-gray-500 py-8">此分类下暂无内容</div>
-                                            }
-                                        </div>
-                                    )}
-
-                                    {tab.name === '练习' && (
-                                        <div className="p-4">
-                                            {exercisePosts.length > 0
-                                                ? <PostListComponent {...exerciseProps} />
-                                                : <div className="text-center text-gray-500 py-8">此分类下暂无内容</div>
-                                            }
-                                        </div>
-                                    )}
-
-                                    {tab.name === '书籍' && (
-                                        <div className="p-4">
-                                        {bookPosts.length > 0
-                                                ? <PostListComponent {...bookProps} />
-                                                : <div className="text-center text-gray-500 py-8">此分类下暂无内容</div>
-                                            }
-                                        </div>
-                                    )}
+                                <div className='p-4'>
+                                    {tab.name === '文章' && <PostListComponent {...props} />}
+                                    {tab.name === 'HSK' && <HskContentBlock />}
+                                    {tab.name === '口语' && <SpeakingContentBlock />}
+                                    {tab.name === '练习' && <PracticeContentBlock />}
+                                    {tab.name === '书籍' && <BooksContentBlock />}
                                 </div>
                             </div>
                         ))}
                     </main>
-                    {/* ===== ✅ 修改代码结束 ===== */}
                 </div>
             </div>
             <BottomNavBar />
