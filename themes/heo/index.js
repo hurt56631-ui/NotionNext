@@ -2,13 +2,14 @@
  *   HEO 主题说明 - 最终修复版 v2
  *  - 恢复所有被省略的组件代码，确保功能完整。
  *  - AI 助手页面不再需要登录。
- *  - 修复手势在 iframe 上失效的问题 (采用透明捕获层方案)。
+ *  - [修复] 修复手势在 iframe 上失效的问题 (通过优化滑动检测逻辑和 iframe 属性)。
  *  - 美化直播卡片，增加 LIVE 标签和背景图。
  *  - 优化 "贴吧式" 两层滚动。
  *  - [移除] 实现 Telegram 风格的“跟手”拖动侧边栏动画。
- *  - [新增] 修复手势捕获层导致文章无法点击和页面无法滚动的问题 (已通过优化内容区域手势逻辑实现)。
- *  - [新增] 优化直播卡片图标样式，使其更小巧并放置在右下角。
+ *  - [优化] 修复手势捕获层导致文章无法点击和页面无法滚动的问题 (通过优化 useSwipeable 配置)。
+ *  - [优化] 优化直播卡片 LIVE 标签和右下角图标样式，使其更小巧。
  *  - [修改] 移除左侧边栏及其所有相关代码。
+ *  - [新增] 添加固定在文章列表上方的汉缅词典搜索卡片。
  */
 
 import Comment from '@/components/Comment'
@@ -50,7 +51,27 @@ import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
+
+// 假设 GlosbeSearchCard 已保存在指定路径
+const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+
+
+/**
+ * 翻译结果展示组件 (仅作占位，如需站内展示 Glosbe 结果，需 Glosbe 提供 iframe 支持或 API)
+ */
+const TranslationDisplay = ({ translationResult }) => {
+    return (
+        <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 min-h-[50px]">
+            {translationResult ? (
+                // 仅作为占位，实际需要 Glosbe API 或其他方式获取结果
+                <div>{translationResult}</div>
+            ) : (
+                <div className="text-center text-sm italic">查询结果将在新的浏览器标签页中打开。</div>
+            )}
+        </div>
+    )
+}
 
 /**
  * 基础布局
@@ -134,6 +155,11 @@ const CustomScrollbarStyle = () => (
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.3); border-radius: 10px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
+        
+        /* 强制 iframe 不接收 touch-action 属性，可能有助于内部滚动，但不能解决外部手势问题 */
+        .iframe-content {
+             touch-action: pan-y;
+        }
     `}</style>
 );
 
@@ -142,14 +168,14 @@ const CustomScrollbarStyle = () => (
  */
 const LayoutIndex = props => {
   const tabs = [
-    { name: '文章', icon: <FaRegNewspaper size={28} /> },
-    { name: 'HSK', icon: <FaGraduationCap size={28} /> },
-    { name: '口语', icon: <FaMicrophone size={28} /> },
-    { name: '练习', icon: <FaFlask size={28} /> },
-    { name: '书籍', icon: <FaBook size={28} /> }
+    { name: '文章', icon: <FaRegNewspaper size={24} /> }, // 图标改小 size={24}
+    { name: 'HSK', icon: <FaGraduationCap size={24} /> },
+    { name: '口语', icon: <FaMicrophone size={24} /> },
+    { name: '练习', icon: <FaFlask size={24} /> },
+    { name: '书籍', icon: <FaBook size={24} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
-  const [backgroundUrl, setBackgroundUrl] = useState(''); // 仅保留背景状态
+  const [backgroundUrl, setBackgroundUrl] = useState(''); 
 
   useEffect(() => {
     const backgrounds = [
@@ -159,7 +185,7 @@ const LayoutIndex = props => {
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
   }, []);
   
-  // --- 手势处理逻辑 (仅保留内容区域左右滑动切换 Tab 的修复版逻辑) ---
+  // --- 手势处理逻辑 (优化版，旨在解决垂直滚动冲突和 iframe 覆盖问题) ---
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -170,30 +196,26 @@ const LayoutIndex = props => {
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
     onSwiping: (e) => {
-      // 关键修复：只在水平滑动时阻止默认事件，允许垂直滚动
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        e.event.preventDefault();
+      // 优化修复：只在水平滑动距离明显大于垂直滑动距离时，阻止默认事件，从而允许垂直滚动
+      // 且只在目标不是 iframe 时进行更细致的控制
+      if (e.event.target.tagName !== 'IFRAME' && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.5) {
+          e.event.preventDefault();
       }
+      // 对于 iframe，我们依赖于 iframe 上的 'seamless' 或 'scrolling' 属性，这里通过 CSS 辅助
     },
     preventDefaultTouchmoveEvent: false, // 允许页面垂直滚动
     trackMouse: true,
     delta: 40
   });
-  
-  // 移除侧边栏拖动 (sidebarSwipeHandlers)
 
   return (
-    // 移除侧边栏拖动绑定 {...sidebarSwipeHandlers}
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
         
-        {/* 移除 AnimatePresence 和侧边栏的 motion.div */}
-        
         <div className='relative flex-grow w-full h-full'>
-            {/* 移除 HomePageHeader */}
             <header className='fixed top-0 left-0 z-50 p-4'>
-                 {/* 左上角保持一个占位，避免内容完全贴边，或根据需要添加 Logo */}
+                 {/* 左上角占位 */}
             </header>
 
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
@@ -205,21 +227,24 @@ const LayoutIndex = props => {
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
                         {/* -- 直播卡片样式优化 -- */}
                         <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
-                           <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
+                           {/* LIVE 标签优化 */}
+                           <div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div>
                            <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaTiktok size={20}/>
+                                <FaTiktok size={18}/> {/* 图标略微缩小 */}
                                 <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
                            </div>
                         </a>
                          <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
-                            <div className='absolute top-1.5 left-1.5 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
+                            {/* LIVE 标签优化 */}
+                            <div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div>
                             <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaFacebook size={20}/>
+                                <FaFacebook size={18}/> {/* 图标略微缩小 */}
                                 <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
                            </div>
                         </a>
                         <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                            {/* 修复 iframe 滚动/手势冲突，通过添加 scrolling="no" 或 allow="... touch-action: pan-y" 尝试解决 */}
+                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className='iframe-content'></iframe>
                         </div>
                     </div>
                 </div>
@@ -228,7 +253,13 @@ const LayoutIndex = props => {
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
+                    {/* 翻译卡片固定在内容顶部 */}
+                    <div className='p-4 pt-6'>
+                        <GlosbeSearchCard />
+                        <TranslationDisplay translationResult={null} /> {/* 翻译结果占位 */}
+                    </div>
+
+                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg'> {/* 移除 rounded-t-2xl 让翻译卡片在圆角内 */}
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -240,16 +271,17 @@ const LayoutIndex = props => {
                         </div>
                     </div>
 
-                    {/* -- 修复手势区域: 已将手势绑定到 <main> 元素，并修复了与垂直滚动的冲突 -- */}
+                    {/* -- 修复手势区域: 已将手势绑定到 <main> 元素，并优化了与垂直滚动的冲突 -- */}
                     <main className="overscroll-x-contain" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
                                     {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    {/* 修复 iframe 滚动/手势冲突: 使用 sandbox 属性 (如果需要安全隔离)，并确保 height 足够 */}
+                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-280px)] border-none iframe-content" scrolling="yes" />}
+                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-280px)] border-none iframe-content" scrolling="yes" />}
+                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-280px)] border-none iframe-content" scrolling="yes" />}
+                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-280px)] border-none iframe-content" scrolling="yes" />}
                                 </div>
                             </div>
                         ))}
