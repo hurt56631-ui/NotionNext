@@ -35,7 +35,7 @@ import {
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { formatDate } from '@/lib/utils/formatDate'
+//import { formatDate } from '@/lib/utils/formatDate'
 
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
