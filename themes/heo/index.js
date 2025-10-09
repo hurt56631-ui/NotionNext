@@ -17,6 +17,7 @@ import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import AiAssistantV56_Test from '@/components/AiAssistantV56_Test';
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
 import BlogPostArchive from './components/BlogPostArchive'
@@ -345,7 +346,7 @@ const LayoutIndex = props => {
                                         {tab.name === 'HSK' && <HskContentBlock />}
                                         {tab.name === '口语' && <SpeakingContentBlock />}
                                         {/* ✅ 在“练习”Tab下集成语音测试组件 */}
-                                        {tab.name === '练习' && <> <PracticeContentBlock /> <SpeechRecognitionTester /> </>}
+                                        {tab.name === '练习' && <AiAssistantV56_Test />}
                                         {tab.name === '书籍' && <BooksContentBlock />}
                                     </div>
                                 </div>
