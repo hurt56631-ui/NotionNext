@@ -48,10 +48,9 @@ import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
 import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
-// 【修正】：由于 Footer.js 才是正确的，不再需要引入 useAuth 和 AuthModal
-// import { useAuth } from '@/lib/AuthContext'
-// import dynamic from 'next/dynamic'
-// const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+import { useAuth } from '@/lib/AuthContext'
+import dynamic from 'next/dynamic'
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
  * 基础布局
@@ -104,8 +103,40 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// 【关键修正 1】: 彻底删除之前错误添加的 BottomNavBar 组件
-// const BottomNavBar = () => { ... } // <= 整块删除
+// 首页专用的底部导航栏
+const BottomNavBar = () => {
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
+        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
+        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+    ];
+    const router = useRouter();
+    const { user, authLoading } = useAuth();
+    const [showLoginModal, setShowLoginModal] = useState(false);
+
+    const handleLinkClick = (e, item) => {
+        if (item.auth && !authLoading && !user) {
+            e.preventDefault();
+            setShowLoginModal(true);
+        }
+    };
+
+    return (
+        <>
+            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+                {navItems.map(item => (
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+        </>
+    );
+};
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
@@ -116,7 +147,6 @@ const CustomScrollbarStyle = () => (
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
     `}</style>
 );
-
 
 /**
  * 首页 - "真·贴吧式"滚动最终修复版
@@ -147,7 +177,6 @@ const LayoutIndex = props => {
   }, []);
   
   // --- 手势处理逻辑 ---
-  // 1. 内容区域左右滑动切换 Tab
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -168,7 +197,6 @@ const LayoutIndex = props => {
     delta: 40
   });
 
-  // 2. 作用于整个页面的侧边栏手势
   const sidebarSwipeHandlers = useSwipeable({
       onSwiping: (e) => {
         const sidebarWidth = sidebarRef.current?.offsetWidth || 280;
@@ -197,6 +225,12 @@ const LayoutIndex = props => {
       trackMouse: true,
       preventDefaultTouchmoveEvent: isDragging
   });
+
+  const handleCloseSidebar = (e) => {
+      // ✅ 关键修复 #2: 阻止事件冒泡，防止外层div的useSwipeable手势被误触发，导致无法关闭
+      e.stopPropagation();
+      setIsSidebarOpen(false);
+  };
   
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden overflow-x-hidden`} {...sidebarSwipeHandlers}>
@@ -207,14 +241,12 @@ const LayoutIndex = props => {
             {(isSidebarOpen || isDragging) && (
                 <motion.div
                     initial={{ opacity: 0 }}
-                    animate={{ 
-                        opacity: isSidebarOpen ? 1 : Math.max(0, (dragX / (sidebarRef.current?.offsetWidth || 280))),
-                        backgroundColor: `rgba(0,0,0,${isSidebarOpen ? 0.5 : Math.max(0, (dragX / (sidebarRef.current?.offsetWidth || 280)) * 0.5)})`
-                    }}
+                    animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    onClick={() => setIsSidebarOpen(false)} 
-                    className='fixed inset-0 z-[99]' 
+                    // ✅ 关键修复 #2: 应用修复后的关闭事件处理器
+                    onClick={handleCloseSidebar} 
+                    className='fixed inset-0 bg-black/50 z-[99]' 
                 />
             )}
         </AnimatePresence>
@@ -222,16 +254,19 @@ const LayoutIndex = props => {
         <motion.div
             ref={sidebarRef}
             className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
+            // ✅ 关键修复 #1: 明确设置初始状态为关闭，解决页面加载时自动展开的bug
+            initial={{ x: '-100%' }}
             animate={{ x: isSidebarOpen ? 0 : '-100%' }}
             style={{ 
                 x: isDragging 
-                    ? (isSidebarOpen ? `calc(0% + ${dragX}px)` : `calc(-100% + ${dragX}px)`) 
+                    ? (isSidebarOpen ? `max(calc(0% + ${dragX}px), -100%)` : `calc(-100% + ${dragX}px)`)
                     : undefined 
             }}
             transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
         >
             <div className='p-4 h-full'>
-                <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                {/* ✅ 关键修复 #2: 同样应用修复后的关闭事件处理器 */}
+                <button onClick={handleCloseSidebar} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
                 <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
             </div>
         </motion.div>
@@ -269,7 +304,6 @@ const LayoutIndex = props => {
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
-                {/* 【关键修正 2】: 调整底部内边距(padding-bottom)为 pb-20 (5rem), 为 Footer.js 中的 h-20 导航栏留出足够空间 */}
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-20 min-h-[calc(55vh+1px)]'>
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
@@ -298,7 +332,7 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            {/* 【关键修正 3】: 删除此处对 <BottomNavBar/> 的调用，让全局的 <Footer/> 组件来处理 */}
+            <BottomNavBar/>
         </div>
     </div>
   );
@@ -330,13 +364,11 @@ const LayoutSearch = props => {
   useEffect(() => {
     if (currentSearch) {
       setTimeout(() => {
-        if (isBrowser) {
-          replaceSearchResult({
-            doms: document.getElementsByClassName('replace'),
-            search: currentSearch,
-            target: { element: 'span', className: 'text-red-500 border-b border-dashed' }
-          })
-        }
+        replaceSearchResult({
+          doms: document.getElementsByClassName('replace'),
+          search: currentSearch,
+          target: { element: 'span', className: 'text-red-500 border-b border-dashed' }
+        })
       }, 100)
     }
   }, [currentSearch])
