@@ -148,6 +148,7 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
+
 /**
  * 首页 - "真·贴吧式"滚动最终修复版
  */
@@ -167,9 +168,6 @@ const LayoutIndex = props => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragX, setDragX] = useState(0);
   const sidebarRef = useRef(null);
-  
-  // 优化：增加一个变量来控制侧边栏的实际x位移，以便在拖动时覆盖 animate 属性
-  const sidebarX = isSidebarOpen ? 0 : -280; // 假设侧边栏最大宽度为280px左右，用于动画结束时的回弹参考，实际由 style 控制
 
   useEffect(() => {
     const backgrounds = [
@@ -180,7 +178,8 @@ const LayoutIndex = props => {
   }, []);
   
   // --- 手势处理逻辑 ---
-  // 内容区域左右滑动切换 Tab (已修复滚动冲突)
+
+  // 1. 内容区域左右滑动切换 Tab
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -190,79 +189,74 @@ const LayoutIndex = props => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
+    // 【关键修复 1】当侧边栏打开或拖动时，禁用此手势，避免冲突
+    disabled: isSidebarOpen || isDragging,
     onSwiping: (e) => {
-      // 关键修复：只在水平滑动时阻止默认事件，允许垂直滚动，避免页面晃动/滚动被劫持
+      // 只在水平滑动时阻止默认事件，允许垂直滚动
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
         e.event.preventDefault();
       }
     },
-    preventDefaultTouchmoveEvent: false, // 允许页面垂直滚动（但 onSwiping 会阻止浏览器默认行为）
+    preventDefaultTouchmoveEvent: false,
     trackMouse: true,
     delta: 40
   });
 
-  // 侧边栏拖动 (Telegram 风格)
+  // 2. 作用于整个页面的侧边栏手势
   const sidebarSwipeHandlers = useSwipeable({
       onSwiping: (e) => {
-        // 从屏幕左侧 25% 范围内向右拖动时触发侧边栏打开手势
-        if (e.initial[0] < window.innerWidth * 0.25 && e.deltaX > 0 && !isSidebarOpen) {
-          setIsDragging(true);
-          const sidebarWidth = sidebarRef.current ? sidebarRef.current.offsetWidth : 280; // 默认值
-          // 限制最大拖动距离为侧边栏的宽度
-          setDragX(Math.min(e.deltaX, sidebarWidth));
-        } else if (isSidebarOpen) {
-             // 侧边栏打开时，允许向左拖动关闭
-             const sidebarWidth = sidebarRef.current ? sidebarRef.current.offsetWidth : 280;
-             const currentDragX = e.deltaX - (window.innerWidth * 0.25); // 相对起始点（已开侧边栏）的拖动
-             // 拖动关闭：从左侧边缘拖动，deltaX为正，我们希望关闭时x变小
-             setDragX(e.deltaX);
-             // 阻止默认滚动，但这里主要靠 onSwiped 来判断
-             e.event.preventDefault();
+        const sidebarWidth = sidebarRef.current?.offsetWidth || 280; // 假设宽度
+        
+        // 场景一：侧边栏关闭时，从左侧边缘（< 40px）向右拖动，触发打开
+        if (!isSidebarOpen && e.initial[0] < 40 && e.deltaX > 0) {
+            setIsDragging(true);
+            // 实时更新拖动距离，但不超过侧边栏宽度
+            setDragX(Math.min(e.deltaX, sidebarWidth));
+        } 
+        // 场景二：侧边栏打开时，向左拖动，触发关闭
+        else if (isSidebarOpen && e.deltaX < 0) {
+            setIsDragging(true);
+            // 实时更新拖动距离，但不超过侧边栏宽度（负方向）
+            setDragX(Math.max(e.deltaX, -sidebarWidth));
         }
       },
       onSwiped: (e) => {
-        if (isDragging) {
-            const sidebarWidth = sidebarRef.current ? sidebarRef.current.offsetWidth : 280;
-            if (isSidebarOpen) {
-                // 正在打开状态，向左滑动超过一半则关闭
-                if (e.deltaX < -sidebarWidth / 3) {
-                    setIsSidebarOpen(false);
-                } else {
-                    // 没达到关闭条件，则弹回打开状态（通过重置 dragX 触发 motion 动画到 0）
-                }
-            } else {
-                // 正在关闭状态（从左侧边缘触发）
-                // 如果向右拖动超过侧边栏宽度的 1/3，则打开
-                if (e.deltaX > sidebarWidth / 3) {
-                    setIsSidebarOpen(true);
-                }
-            }
+        if (!isDragging) return; // 如果不是在拖动状态，则忽略
+
+        const sidebarWidth = sidebarRef.current?.offsetWidth || 280;
+        
+        // 判断是打开还是关闭侧边栏
+        const shouldOpen = !isSidebarOpen && e.deltaX > sidebarWidth / 3;
+        const shouldClose = isSidebarOpen && e.deltaX < -sidebarWidth / 3;
+
+        if (shouldOpen) {
+            setIsSidebarOpen(true);
+        } else if (shouldClose) {
+            setIsSidebarOpen(false);
         }
+        
+        // 手势结束，重置拖动状态，让 Framer Motion 的 animate 属性接管
         setIsDragging(false);
-        setDragX(0); // 重置拖动位移，让 motion 动画接管
+        setDragX(0);
       },
       trackMouse: true,
-      // 确保在拖动侧边栏时不影响页面垂直滚动
-      preventDefaultTouchmoveEvent: true, 
-      delta: 10 // 增加灵敏度判断
+      // 拖动侧边栏时，阻止页面滚动
+      preventDefaultTouchmoveEvent: isDragging
   });
   
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarSwipeHandlers}>
+    // 【样式修复】添加 overflow-x-hidden 来防止页面左右晃动
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden overflow-x-hidden`} {...sidebarSwipeHandlers}>
         <Style/>
         <CustomScrollbarStyle />
         
-        {/* 蒙版层：点击或拖动关闭侧边栏 */}
         <AnimatePresence>
             {(isSidebarOpen || isDragging) && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ 
-                        opacity: 1,
-                        // 拖动时根据拖动距离调整蒙版透明度，关闭时为 0.5
-                        backgroundColor: isDragging
-                            ? `rgba(0,0,0,${Math.min((dragX / (sidebarRef.current?.offsetWidth || 1)) * 0.5, 0.5)})`
-                            : 'rgba(0,0,0,0.5)'
+                        opacity: isSidebarOpen ? 1 : Math.max(0, (dragX / (sidebarRef.current?.offsetWidth || 280))),
+                        backgroundColor: `rgba(0,0,0,${isSidebarOpen ? 0.5 : Math.max(0, (dragX / (sidebarRef.current?.offsetWidth || 280)) * 0.5)})`
                     }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
@@ -272,37 +266,36 @@ const LayoutIndex = props => {
             )}
         </AnimatePresence>
             
-        {/* 侧边栏 */}
         <motion.div
             ref={sidebarRef}
             className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
-            // 初始/最终动画状态（由 isSidebarOpen 控制）
-            animate={{ x: isSidebarOpen ? 0 : -280 }} // 使用一个固定值作为结束点，具体取决于侧边栏的实际宽度
-            // 拖动时，位置由 style 实时控制，覆盖 animate
-            style={{ x: isDragging ? dragX : undefined }} 
-            // 拖动时无动画，松手后执行弹簧动画到 isSidebarOpen 定义的位置
+            // animate 属性定义了最终的“目标”位置
+            animate={{ x: isSidebarOpen ? 0 : '-100%' }}
+            // 【体验优化】拖动时，用 style 属性实时覆盖 animate，实现“跟手”效果
+            style={{ 
+                x: isDragging 
+                    ? (isSidebarOpen ? `calc(0% + ${dragX}px)` : `calc(-100% + ${dragX}px)`) 
+                    : undefined 
+            }}
+            // 拖动时无动画，松手后执行弹簧动画
             transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
         >
             <div className='p-4 h-full'>
                 <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
                 <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
-                {/* 在这里添加侧边栏的其他内容 */}
             </div>
         </motion.div>
         
-        {/* 主内容区域 */}
         <div className='relative flex-grow w-full h-full'>
             <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
-            {/* 顶部信息区（固定高度） */}
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        {/* -- 直播卡片样式优化 -- */}
                         <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
                            <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
                            <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
@@ -324,12 +317,9 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            {/* 可滚动内容区域 */}
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                <div className='h-[45vh]' /> {/* 留出顶部信息区高度 */}
+                <div className='h-[45vh]' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
-                    
-                    {/* 选项卡（Sticky） */}
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
                             {tabs.map(tab => (
@@ -341,15 +331,13 @@ const LayoutIndex = props => {
                             ))}
                         </div>
                     </div>
-
-                    {/* -- 修复手势区域：绑定到 <main> 元素上 -- */}
-                    {/* 我们将手势绑定到这个主内容区域，但需要确保它不影响整个页面的滚动 */}
+                    
+                    {/* 将内容切换手势绑定到这个 main 元素上 */}
                     <main className="overscroll-x-contain" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
                                     {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                    {/* iframe 视为不可滚动的外部内容，但如果其本身有滚动，则内容 Tab 切换手势不应被阻止 */}
                                     {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
                                     {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
                                     {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
