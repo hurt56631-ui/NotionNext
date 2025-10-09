@@ -5,7 +5,7 @@ import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaLanguage, FaPlay } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-import HanziModal from '@/components/HanziModal'; 
+import HanziModal from '@/components/HanziModal';
 
 // =================================================================================
 // ===== Utilities & Constants =====================================================
@@ -55,7 +55,7 @@ const parsePinyin = (pinyinNum) => {
         }
     }
     if (pinyinPlain === 'er') { initial = ''; final = 'er'; }
-    if (initial === '' && initials.some(i => pinyinPlain.startsWith(i))) { initial = pinyinPlain; final = ''; } 
+    if (initial === '' && initials.some(i => pinyinPlain.startsWith(i))) { initial = pinyinPlain; final = ''; }
     return { initial, final, tone, pinyinMark, rawPinyin };
 };
 
@@ -67,12 +67,12 @@ const usePhraseCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
       const savedSettings = localStorage.getItem('phraseCardSettings');
-      const defaultSettings = { 
+      const defaultSettings = {
         order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false,
         voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0,
       };
       return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
-    } catch (error) { 
+    } catch (error) {
         console.error("Failed to load settings", error);
         return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0 };
     }
@@ -181,13 +181,13 @@ const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) 
 // =================================================================================
 const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [settings, setSettings] = usePhraseCardSettings();
-  
+
   const processedCards = useMemo(() => {
-    try { 
-        if (!Array.isArray(flashcards)) return []; 
-        const validCards = flashcards.filter(card => card && card.chinese && card.burmese); 
-        if (settings.order === 'random') { for (let i = validCards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; } } 
-        return validCards; 
+    try {
+        if (!Array.isArray(flashcards)) return [];
+        const validCards = flashcards.filter(card => card && card.chinese && card.burmese);
+        if (settings.order === 'random') { for (let i = validCards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; } }
+        return validCards;
     } catch (error) { console.error("处理 'flashcards' 出错:", error, flashcards); return []; }
   }, [flashcards, settings.order]);
 
@@ -197,15 +197,15 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const [writerChar, setWriterChar] = useState(null); 
-  
+  const [writerChar, setWriterChar] = useState(null);
+
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
-  const currentCard = cards[currentIndex]; 
+  const currentCard = cards[currentIndex];
 
-  const navigate = useCallback((direction) => { 
-      lastDirection.current = direction; 
+  const navigate = useCallback((direction) => {
+      lastDirection.current = direction;
       setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
   }, [cards.length]);
 
@@ -221,79 +221,78 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
       }, 600);
       return () => clearTimeout(autoPlayTimer);
   }, [currentIndex, currentCard, settings]);
-  
+
   useEffect(() => {
     return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } };
   }, []);
 
-  const cardTransitions = useTransition(currentIndex, { 
-      key: currentIndex, 
-      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
-      enter: { opacity: 1, transform: 'translateY(0%)' }, 
-      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
-      config: { mass: 1, tension: 280, friction: 30 }, 
-      onStart: () => playSoundEffect('switch'), 
+  const cardTransitions = useTransition(currentIndex, {
+      key: currentIndex,
+      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` },
+      enter: { opacity: 1, transform: 'translateY(0%)' },
+      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
+      config: { mass: 1, tension: 280, friction: 30 },
+      onStart: () => playSoundEffect('switch'),
   });
-  
-  // 【核心修复】采用参考代码中的简化版语音识别逻辑
-  const handleListen = useCallback((e) => { 
-      e.stopPropagation(); 
+
+  const handleListen = useCallback((e) => {
+      e.stopPropagation();
       if (_howlInstance?.playing()) _howlInstance.stop();
 
-      if (isListening) { 
+      if (isListening) {
           recognitionRef.current?.stop();
-          return; 
-      } 
-      
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
-      if (!SpeechRecognition) { 
-          alert('抱歉，您的浏览器不支持语音识别。'); 
-          return; 
-      } 
-      
+          return;
+      }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+          alert('抱歉，您的浏览器不支持语音识别。');
+          return;
+      }
+
       const recognition = new SpeechRecognition();
       recognition.lang = 'zh-CN';
       recognition.interimResults = false;
-      
+
       recognition.onstart = () => {
           setIsListening(true);
           setRecognizedText('');
       };
-      
+
       recognition.onresult = (event) => {
           const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，]/g, '');
           if (transcript) {
               setRecognizedText(transcript);
           }
       };
-      
+
       recognition.onerror = (event) => {
           console.error('Speech Recognition Error:', event.error);
           alert(`语音识别出错: ${event.error}`);
-          setRecognizedText(''); // 清空识别文本以关闭对比窗口
+          setRecognizedText('');
       };
-      
+
       recognition.onend = () => {
           setIsListening(false);
           recognitionRef.current = null;
       };
-      
+
       recognition.start();
       recognitionRef.current = recognition;
   }, [isListening]);
 
   const handleCloseComparison = useCallback(() => { setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
-  
+
   const phoneticDisplay = useMemo(() => currentCard?.burmesePhonetic?.replace(/\s*\(.*?\)\s*/g, ''), [currentCard]);
-  
+
   return (
     <div style={styles.fullScreen}>
-      {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />} 
+      {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
       {isSettingsOpen && <PhraseCardSettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
-      
+
       <div style={styles.gestureArea} {...useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => { if (event.target.closest('[data-no-gesture]')) return; if (!down) { const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30); if (isSignificantDrag) { navigate(yDir < 0 ? 1 : -1); } } }, { axis: 'y' })()} />
-      
+
       {cardTransitions((style, i) => {
         const cardData = cards[i];
         if (!cardData) return null;
@@ -301,11 +300,11 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
           <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
             <div style={styles.cardContainer}>
               <div style={styles.contentBox}>
-                  <div style={styles.chineseSection} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                  <div onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                       <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
                       <div style={styles.textChinese}>{cardData.chinese}</div>
                   </div>
-                  <div style={styles.burmeseSection} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
+                  <div style={{ marginTop: '40px' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
                       {phoneticDisplay && <div style={styles.burmesePhonetic}>{phoneticDisplay}</div>}
                       <div style={styles.textBurmese}>{cardData.burmese}</div>
                   </div>
@@ -317,19 +316,19 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
       })}
 
       {!!recognizedText && currentCard && (
-          <PronunciationComparison 
-              correctWord={currentCard.chinese} 
+          <PronunciationComparison
+              correctWord={currentCard.chinese}
               userText={recognizedText}
-              onContinue={handleNavigateToNext} 
-              onClose={handleCloseComparison} 
+              onContinue={handleNavigateToNext}
+              onClose={handleCloseComparison}
           />
       )}
 
       {currentCard && (
           <div style={styles.rightControls} data-no-gesture="true">
             <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
-            <button style={styles.rightIconButton} onClick={handleListen} title="发音练习"> 
-                <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} /> 
+            <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
+                <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} />
             </button>
             <button style={styles.rightIconButton} onClick={(e) => { e.stopPropagation(); setWriterChar(currentCard.chinese); }} title="笔顺">
                 <FaPenFancy size={20} />
@@ -347,22 +346,21 @@ const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f8fafc' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
-    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', paddingRight: '75px', boxSizing: 'border-box', gap: '20px' },
-    // MODIFIED: Merged two cards into one content box
-    contentBox: { width: '100%', background: 'white', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.08)', textAlign: 'center', order: 1 },
-    chineseSection: { cursor: 'pointer', marginBottom: '25px' }, // Added for spacing
-    burmeseSection: { cursor: 'pointer' },
-    imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', order: 2, marginTop: '10px' },
+    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', gap: '20px' },
+    // MODIFIED: Removed paddingRight for absolute centering
+    contentBox: { width: '100%', textAlign: 'center', order: 1, boxSizing: 'border-box', cursor: 'pointer' },
+    // MODIFIED: Removed paddingRight and added maskImage for blurred edges
+    imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', order: 2, marginTop: '20px', boxSizing: 'border-box', maskImage: 'radial-gradient(circle, black 80%, transparent 100%)' },
     cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
     skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
     shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
-    pinyin: { fontSize: '1.2rem', color: '#64748b', marginBottom: '8px' },
+    // MODIFIED: Darkened pinyin color
+    pinyin: { fontSize: '1.2rem', color: '#475569', marginBottom: '8px' },
     textChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', wordBreak: 'break-word' },
-    // MODIFIED: Changed color to light blue
-    burmesePhonetic: { fontSize: '1.2rem', color: '#60a5fa', marginBottom: '8px', fontFamily: 'sans-serif' },
+    // MODIFIED: Changed color to purple
+    burmesePhonetic: { fontSize: '1.2rem', color: '#8b5cf6', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
     rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
-    // MODIFIED: Made buttons smaller
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
     comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
