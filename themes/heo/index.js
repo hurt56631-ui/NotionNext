@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版 v5：基于您的原始文件结构进行升级
+// themes/heo/index.js  <-- 最终修复版 v6：基于您的原始文件结构进行升级和修复
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -18,12 +18,14 @@ import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
 import { useEffect, useState, useRef } from 'react'
 import { useSwipeable } from 'react-swipeable'
+
+// 依赖于您项目中的 themes/heo/components/ 文件夹
 import BlogPostArchive from './components/BlogPostArchive'
 import BlogPostListPage from './components/BlogPostListPage'
 import BlogPostListScroll from './components/BlogPostListScroll'
 import CategoryBar from './components/CategoryBar'
 import FloatTocButton from './components/FloatTocButton'
-import Footer from './components/Footer' // 保持 Footer 的导入
+import Footer from './components/Footer'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import { NoticeBar } from './components/NoticeBar'
@@ -31,11 +33,12 @@ import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
 import SearchNav from './components/SearchNav'
 import SideRight from './components/SideRight'
+
 import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-import { FaTiktok, FaFacebook } from 'react-icons/fa' // 移除未使用的 FaYoutube
+import { FaTiktok, FaFacebook } from 'react-icons/fa'
 import { 
     Newspaper, 
     GraduationCap, 
@@ -50,7 +53,6 @@ import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
-// 将 GlosbeSearchCard 的导入也改为全局导入，与 AuthModal 保持一致
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 
 
@@ -73,7 +75,7 @@ const LayoutBase = props => {
   )
 
   const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
-  const maxWidth = fullWidth ? 'max-w-[96rem]' : 'max-w-[86rem]' // 稍微调整以匹配您旧代码
+  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
   
   useEffect(() => { loadWowJS() }, [])
 
@@ -93,6 +95,41 @@ const LayoutBase = props => {
     </div>
   )
 }
+
+// 首页专用的底部导航栏 (从您的旧代码中恢复)
+const BottomNavBar = () => {
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
+        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
+        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+    ];
+    const router = useRouter();
+    const { user, authLoading } = useAuth();
+    const [showLoginModal, setShowLoginModal] = useState(false);
+
+    const handleLinkClick = (e, item) => {
+        if (item.auth && !authLoading && !user) {
+            e.preventDefault();
+            setShowLoginModal(true);
+        }
+    };
+
+    return (
+        <>
+            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+                {navItems.map(item => (
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+        </>
+    );
+};
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
@@ -122,6 +159,7 @@ const ActionButtons = () => {
     </div>
   );
 };
+
 
 /**
  * 首页 - 最终修复版 (基于您的原始文件结构)
@@ -195,7 +233,8 @@ const LayoutIndex = props => {
         <CustomScrollbarStyle />
         
         <div className='relative flex-grow w-full h-full'>
-            <header className='fixed top-0 left-0 z-50 p-4'></header>
+            {/* [FINAL FIX] 移除顶部 Header，避免显示白色横条 */}
+            {/* <header className='fixed top-0 left-0 z-50 p-4'></header> */}
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
@@ -228,7 +267,8 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main {...contentSwipeHandlers}>
+                    {/* [FINAL FIX] 为 main 元素添加最小高度，确保内容不足时也能滚动 */}
+                    <main {...contentSwipeHandlers} className="min-h-[70vh]">
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
@@ -243,8 +283,8 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            {/* 恢复您旧代码中的 Footer 组件，而不是 BottomNavBar */}
-            <Footer />
+            {/* [FINAL FIX] 恢复使用独立的 BottomNavBar，而不是全局 Footer */}
+            <BottomNavBar />
         </div>
     </div>
   );
