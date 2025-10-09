@@ -1,13 +1,16 @@
 /**
- *   HEO 主题说明 - 最终修复版 v2
- *  - 恢复所有被省略的组件代码，确保功能完整。
- *  - AI 助手页面不再需要登录。
- *  - 修复手势在 iframe 上失效的问题 (采用透明捕获层方案)。
- *  - 美化直播卡片，增加 LIVE 标签和背景图。
- *  - 优化 "贴吧式" 两层滚动。
- *  - [新增] 实现 Telegram 风格的“跟手”拖动侧边栏动画。
- *  - [新增] 修复手势捕获层导致文章无法点击和页面无法滚动的问题。
- *  - [新增] 优化直播卡片图标样式，使其更小巧并放置在右下角。
+ *   HEO 主题说明 - 最终修复版 v3
+ *  - 【已处理】恢复所有被省略的组件代码，确保功能完整。
+ *  - 【已处理】AI 助手页面不再需要登录。
+ *  - 【已处理】修复手势在 iframe 上失效的问题 (采用透明捕获层方案)。
+ *  - 【已处理】美化直播卡片，增加 LIVE 标签和背景图。
+ *  - 【已处理】优化 "贴吧式" 两层滚动。
+ *  - 【已处理】[移除] 实现 Telegram 风格的“跟手”拖动侧边栏动画，根据要求移除侧边栏功能。
+ *  - 【已处理】[新增] 修复手势捕获层导致文章无法点击和页面无法滚动的问题。
+ *  - 【已处理】[新增] 优化直播卡片图标样式，使其更小巧并放置在右下角。
+ *  - 【核心修改】根据用户要求，侧边栏功能被彻底移除。
+ *  - 【核心修改】根据用户要求，首页的底部导航栏被移除，统一使用全局的 Footer 组件，确保了 UI 和逻辑的一致性。
+ *  - 【核心修改】根据用户要求，实现了仅当分类 Tab 栏滚动到顶部并固定后，才允许左右手势滑动切换分类的功能。
  */
 
 import Comment from '@/components/Comment'
@@ -91,52 +94,6 @@ const LayoutBase = props => {
   )
 }
 
-// 首页专用的简化 Header
-const HomePageHeader = ({ onMenuClick }) => {
-    return (
-        <header className='fixed top-0 left-0 z-50 p-4'>
-            <button onClick={onMenuClick} className='p-2 rounded-full bg-black/20 backdrop-blur-md hover:bg-black/30 text-white transition-colors'>
-                <MenuIcon size={24}/>
-            </button>
-        </header>
-    );
-};
-
-// 首页专用的底部导航栏
-const BottomNavBar = () => {
-    const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
-    ];
-    const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-
-    const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
-
-    return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-                {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                    </SmartLink>
-                ))}
-            </nav>
-        </>
-    );
-};
-
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
@@ -149,6 +106,9 @@ const CustomScrollbarStyle = () => (
 
 /**
  * 首页 - "真·贴吧式"滚动最终修复版
+ * [MODIFIED] 移除了侧边栏功能
+ * [MODIFIED] 移除了独立的底部导航，统一使用全局 Footer
+ * [MODIFIED] 实现了仅当分类栏吸顶后才可手势切换的功能
  */
 const LayoutIndex = props => {
   const tabs = [
@@ -159,13 +119,11 @@ const LayoutIndex = props => {
     { name: '书籍', icon: <FaBook size={28} /> }
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [backgroundUrl, setBackgroundUrl] = useState('');
-
-  // --- 跟手侧边栏状态 ---
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragX, setDragX] = useState(0);
-  const sidebarRef = useRef(null);
+  
+  // --- ✅ 新增：用于检测 Tab 栏是否吸顶的状态 ---
+  const [isTabBarSticky, setIsTabBarSticky] = useState(false);
+  const sentinelRef = useRef(null); // 观察哨兵元素的 ref
 
   useEffect(() => {
     const backgrounds = [
@@ -175,8 +133,33 @@ const LayoutIndex = props => {
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
   }, []);
   
+  // --- ✅ 新增：设置 IntersectionObserver 来监测 Tab 栏的吸顶状态 ---
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            // 当哨兵元素离开视口时，意味着 Tab 栏已经滚动到顶部并固定，此时 isIntersecting 为 false
+            setIsTabBarSticky(!entry.isIntersecting);
+        },
+        { 
+            root: null, // 相对于视口
+            threshold: 0, // 只要一离开视口就触发
+            rootMargin: '0px 0px -100% 0px' // 仅当元素完全滚动到视口顶部之外时触发
+        }
+    );
+
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+        observer.observe(currentSentinel);
+    }
+
+    return () => {
+        if (currentSentinel) {
+            observer.unobserve(currentSentinel);
+        }
+    };
+  }, []);
+
   // --- 手势处理逻辑 ---
-  // 内容区域左右滑动切换 Tab (已修复滚动冲突)
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -187,89 +170,25 @@ const LayoutIndex = props => {
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
     onSwiping: (e) => {
-      // 关键修复：只在水平滑动时阻止默认事件，允许垂直滚动
+      // 只在水平滑动时阻止默认事件，允许垂直滚动
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
         e.event.preventDefault();
       }
     },
-    preventDefaultTouchmoveEvent: false, // 允许页面垂直滚动
+    // ✅ 核心修改：仅在 Tab 栏吸顶时才启用手势
+    disabled: !isTabBarSticky,
+    preventDefaultTouchmoveEvent: false, 
     trackMouse: true,
     delta: 40
   });
-
-  // 侧边栏拖动 (Telegram 风格)
-  const sidebarSwipeHandlers = useSwipeable({
-      onSwiping: (e) => {
-        // 从屏幕左侧 25% 范围内向右拖动时触发
-        if (e.initial[0] < window.innerWidth * 0.25 && e.deltaX > 0 && !isSidebarOpen) {
-          setIsDragging(true);
-          const sidebarWidth = sidebarRef.current ? sidebarRef.current.offsetWidth : 0;
-          // 限制最大拖动距离
-          setDragX(Math.min(e.deltaX, sidebarWidth));
-        }
-      },
-      onSwiped: (e) => {
-        if (isDragging) {
-            const sidebarWidth = sidebarRef.current ? sidebarRef.current.offsetWidth : 0;
-            // 如果拖动超过侧边栏宽度的 1/3，则打开
-            if (e.deltaX > sidebarWidth / 3) {
-                setIsSidebarOpen(true);
-            }
-        }
-        setIsDragging(false);
-        setDragX(0);
-      },
-      onSwipedLeft: () => {
-        // 在侧边栏打开时，向左滑动可关闭
-        if (isSidebarOpen) {
-            setIsSidebarOpen(false);
-        }
-      },
-      trackMouse: true
-  });
   
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`} {...sidebarSwipeHandlers}>
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
         
-        <AnimatePresence>
-            {(isSidebarOpen || isDragging) && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ 
-                        opacity: 1,
-                        // 根据拖动距离实时改变背景透明度
-                        backgroundColor: isDragging
-                            ? `rgba(0,0,0,${Math.min((dragX / (sidebarRef.current?.offsetWidth || 1)) * 0.5, 0.5)})`
-                            : 'rgba(0,0,0,0.5)'
-                    }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={() => setIsSidebarOpen(false)} 
-                    className='fixed inset-0 z-[99]' 
-                />
-            )}
-        </AnimatePresence>
-            
-        <motion.div
-            ref={sidebarRef}
-            className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
-            // 最终状态由 isSidebarOpen 决定
-            animate={{ x: isSidebarOpen ? 0 : '-100%' }}
-            // 拖动时，位置由 style 实时控制
-            style={{ x: isDragging ? `calc(-100% + ${dragX}px)` : undefined }}
-            // 拖动时无动画，松手后执行弹簧动画
-            transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
-        >
-            <div className='p-4 h-full'>
-                <button onClick={() => setIsSidebarOpen(false)} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
-                <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
-            </div>
-        </motion.div>
-        
         <div className='relative flex-grow w-full h-full'>
-            <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
+            {/* [REMOVED] 侧边栏相关的 Header 已被移除 */}
 
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
@@ -278,7 +197,6 @@ const LayoutIndex = props => {
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        {/* -- 直播卡片样式优化 -- */}
                         <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
                            <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
                            <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
@@ -301,7 +219,9 @@ const LayoutIndex = props => {
             </div>
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                <div className='h-[45vh]' />
+                {/* ✅ 将哨兵元素放在滚动容器的顶部，当它滚出视口时，Tab 栏就吸顶了 */}
+                <div ref={sentinelRef} className='h-[45vh]' />
+                
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
                         <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
@@ -315,11 +235,9 @@ const LayoutIndex = props => {
                         </div>
                     </div>
 
-                    {/* -- 修复手势区域 -- */}
                     <main className="overscroll-x-contain" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                {/* 移除了阻挡点击的遮罩层，手势已绑定到父级 <main> 元素 */}
                                 <div>
                                     {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
                                     {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
@@ -332,7 +250,9 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            <BottomNavBar/>
+            
+            {/* ✅ 使用全局的 Footer 组件，它内部的逻辑会判断是否在首页并显示底部导航 */}
+            <Footer />
         </div>
     </div>
   );
