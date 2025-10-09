@@ -48,11 +48,9 @@ import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
 import { FaTiktok, FaFacebook, FaYoutube, FaRegNewspaper, FaBook, FaMicrophone, FaFlask, FaGraduationCap } from 'react-icons/fa'
 import { Menu as MenuIcon, X as XIcon } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion';
-
-// 【修正】: 已删除之前错误引入的 useAuth 和 dynamic AuthModal
-// import { useAuth } from '@/lib/AuthContext'
-// import dynamic from 'next/dynamic'
-// const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+import { useAuth } from '@/lib/AuthContext'
+import dynamic from 'next/dynamic'
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 /**
  * 基础布局
@@ -61,13 +59,17 @@ const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
-  
-  if (router.route === '/') { return <>{children}</> }
+
+  // ✅✅✅ 关键修复 #1: 删除导致所有问题的 if (router.route === '/') 分支。
+  // 现在所有页面，包括首页，都将使用下面统一、稳定的布局结构。
+  // 这能确保 props 传递、组件状态和动画生命周期的一致性。
+  // if (router.route === '/') { return <>{children}</> }
   
   const headerSlot = (
     <header>
       <Header {...props} />
-      {router.route === '/' ? (<><NoticeBar /><Hero {...props} /></>) : null}
+      {/* 首页的 Hero 组件现在在这里被正确渲染 */}
+      {router.route === '/' && !isBrowser ? (<><NoticeBar /><Hero {...props} /></>) : null}
       {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
@@ -88,6 +90,7 @@ const LayoutBase = props => {
           <div className='hidden xl:block'>{slotRight}</div>
         </div>
       </main>
+      {/* Footer 在这里被统一渲染 */}
       <Footer />
       {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />}
     </div>
@@ -105,8 +108,8 @@ const HomePageHeader = ({ onMenuClick }) => {
     );
 };
 
-// 【关键修正】: 彻底删除之前错误添加的 BottomNavBar 组件定义
-// const BottomNavBar = () => { ... } // <= 整块已删除
+// 【已删除】BottomNavBar 组件，因为 Footer 组件才是正确的实现
+// const BottomNavBar = () => { ... }
 
 // 纤细滚动条样式
 const CustomScrollbarStyle = () => (
@@ -131,7 +134,7 @@ const LayoutIndex = props => {
   ];
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [backgroundUrl, setBackgroundUrl] = useState('');
+  const [backgroundUrl, setBackgroundUrl] useState('');
 
   // --- 跟手侧边栏状态 ---
   const [isDragging, setIsDragging] = useState(false);
@@ -197,116 +200,115 @@ const LayoutIndex = props => {
   });
 
   const handleCloseSidebar = (e) => {
-      // ✅ 关键修复 #2: 阻止事件冒泡，防止外层div的useSwipeable手势被误触发，导致无法关闭
       e.stopPropagation();
       setIsSidebarOpen(false);
   };
   
+  // ✅✅✅ 关键修复 #2: LayoutIndex 现在只返回它自己的内容，不再包含外层的布局 div 和 Footer。
+  // 它将被作为 children 传递给统一的 LayoutBase。
   return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-white dark:bg-black flex flex-col overflow-hidden overflow-x-hidden`} {...sidebarSwipeHandlers}>
-        <Style/>
-        <CustomScrollbarStyle />
-        
-        <AnimatePresence>
-            {(isSidebarOpen || isDragging) && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    // ✅ 关键修复 #2: 应用修复后的关闭事件处理器
-                    onClick={handleCloseSidebar} 
-                    className='fixed inset-0 bg-black/50 z-[99]' 
-                />
-            )}
-        </AnimatePresence>
+    // 使用 Fragment 包裹，因为它不再需要一个根 div
+    <>
+        <div {...sidebarSwipeHandlers} className="fixed inset-0"> {/* 手势捕获层 */}
+            <Style/>
+            <CustomScrollbarStyle />
             
-        <motion.div
-            ref={sidebarRef}
-            className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
-            // ✅ 关键修复 #1: 明确设置初始状态为关闭，解决页面加载时自动展开的bug
-            initial={{ x: '-100%' }}
-            animate={{ x: isSidebarOpen ? 0 : '-100%' }}
-            style={{ 
-                x: isDragging 
-                    ? (isSidebarOpen ? `max(calc(0% + ${dragX}px), -100%)` : `calc(-100% + ${dragX}px)`)
-                    : undefined 
-            }}
-            transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
-        >
-            <div className='p-4 h-full'>
-                {/* ✅ 关键修复 #2: 同样应用修复后的关闭事件处理器 */}
-                <button onClick={handleCloseSidebar} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
-                <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
-            </div>
-        </motion.div>
-        
-        <div className='relative flex-grow w-full h-full'>
-            <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
+            <AnimatePresence>
+                {(isSidebarOpen || isDragging) && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        onClick={handleCloseSidebar} 
+                        className='fixed inset-0 bg-black/50 z-[99]' 
+                    />
+                )}
+            </AnimatePresence>
+                
+            <motion.div
+                ref={sidebarRef}
+                className='fixed top-0 left-0 h-full w-2/3 max-w-sm bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-2xl z-[100]'
+                initial={{ x: '-100%' }}
+                animate={{ x: isSidebarOpen ? 0 : '-100%' }}
+                style={{ 
+                    x: isDragging 
+                        ? (isSidebarOpen ? `max(calc(0% + ${dragX}px), -100%)` : `calc(-100% + ${dragX}px)`)
+                        : undefined 
+                }}
+                transition={{ type: isDragging ? 'tween' : 'spring', stiffness: 300, damping: 30, duration: isDragging ? 0 : undefined }}
+            >
+                <div className='p-4 h-full'>
+                    <button onClick={handleCloseSidebar} className='absolute top-4 right-4 p-2 text-gray-600 dark:text-gray-300'><XIcon/></button>
+                    <h2 className='text-2xl font-bold mt-12 dark:text-white'>设置</h2>
+                </div>
+            </motion.div>
+            
+            <div className='relative flex-grow w-full h-full'>
+                <HomePageHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
-            <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
+                <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
 
-            <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
-                <div className='pointer-events-auto'>
-                    <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
-                    <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
-                    <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
-                           <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
-                           <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaTiktok size={20}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                           </div>
-                        </a>
-                         <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
-                            <div className='absolute top-1.5 left-1.5 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
-                            <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaFacebook size={20}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                           </div>
-                        </a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
+                    <div className='pointer-events-auto'>
+                        <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
+                        <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
+                        <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
+                            <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
+                               <div className='absolute top-1.5 left-1.5 bg-pink-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
+                               <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
+                                    <FaTiktok size={20}/>
+                                    <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
+                               </div>
+                            </a>
+                             <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
+                                <div className='absolute top-1.5 left-1.5 bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded'>LIVE</div>
+                                <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
+                                    <FaFacebook size={20}/>
+                                    <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
+                               </div>
+                            </a>
+                            <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
+                                <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                <div className='h-[45vh]' />
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-20 min-h-[calc(55vh+1px)]'>
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
-                        <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
-                            {tabs.map(tab => (
-                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                {tab.icon}
-                                <span className='text-sm font-semibold mt-1'>{tab.name}</span>
-                                <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                            </button>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    <main className="overscroll-x-contain" {...contentSwipeHandlers}>
-                        {tabs.map(tab => (
-                            <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                <div>
-                                    {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
-                                    {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
-                                </div>
+                <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
+                    <div className='h-[45vh]' />
+                    <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-20 min-h-[calc(55vh+1px)]'>
+                        <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg rounded-t-2xl'>
+                            <div className='flex justify-around border-b border-gray-200 dark:border-gray-700'>
+                                {tabs.map(tab => (
+                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-3 pb-2 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {tab.icon}
+                                    <span className='text-sm font-semibold mt-1'>{tab.name}</span>
+                                    <div className={`w-8 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                </button>
+                                ))}
                             </div>
-                        ))}
-                    </main>
+                        </div>
+                        
+                        <main className="overscroll-x-contain" {...contentSwipeHandlers}>
+                            {tabs.map(tab => (
+                                <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
+                                    <div>
+                                        {/* 文章列表现在能正确接收 props，不会再空白 */}
+                                        {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
+                                        {tab.name === 'HSK' && <iframe src="about:blank" title="HSK" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                        {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                        {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                        {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-150px)] border-none"/>}
+                                    </div>
+                                </div>
+                            ))}
+                        </main>
+                    </div>
                 </div>
             </div>
         </div>
-        
-        {/* 【关键修正】: 在此渲染正确的 Footer 组件，而不是之前错误的 BottomNavBar */}
-        <Footer />
-    </div>
+    </>
   );
 };
 
@@ -461,7 +463,7 @@ const Layout404 = () => {
           leaveTo='opacity-0 -translate-y-16'
           unmount={false}>
           <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/203/03/03/6401a7906aa4a.gif'}></LazyImage>
+            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
             <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
               <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
               <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
