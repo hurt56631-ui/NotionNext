@@ -1,10 +1,10 @@
 /**
- *   HEO 主题说明 - 高端美化最终版 v3
+ *   HEO 主题说明 - 手势终极修复 & 高端美化 v4
+ *  - [终极修复] 新增基于滚动位置的状态感知机制。左右滑动切换分类的手势，仅在分类栏滚动到顶部并固定后才会被激活，完美解决所有手势冲突问题。
  *  - 字典功能升级：集成语音识别，支持多语言切换并自动查询。
  *  - 移除站内翻译结果显示，改为新标签页打开，确保功能稳定。
  *  - 首页布局优化：在字典和分类栏之间增加快捷操作按钮区，提升设计感和实用性。
  *  - 分类栏图标升级：使用 lucide-react 替换旧图标，并优化按钮样式，使其更小巧精致。
- *  - 整体视觉提升：调整间距、背景和交互效果，打造高端大气的用户体验。
  */
 
 import Comment from '@/components/Comment'
@@ -55,7 +55,6 @@ import {
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 
-// 动态导入新的翻译卡片和认证模态框
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
@@ -145,14 +144,13 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
-// 新增的快捷操作按钮组件
+// 快捷操作按钮组件
 const ActionButtons = () => {
   const actions = [
     { icon: <Phone size={20} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER' },
     { icon: <MessageSquare size={20} />, text: '在线客服', href: '#' },
     { icon: <Users size={20} />, text: '加入社群', href: '#' },
   ];
-
   return (
     <div className="grid grid-cols-3 gap-3 my-5 px-4">
       {actions.map((action, index) => (
@@ -167,10 +165,9 @@ const ActionButtons = () => {
 
 
 /**
- * 首页 - 高端美化最终版
+ * 首页 - 手势终极修复 & 高端美化版
  */
 const LayoutIndex = props => {
-  // 分类栏图标和文字已全面升级
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
     { name: 'HSK', icon: <GraduationCap size={22} /> },
@@ -181,28 +178,62 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState(''); 
   
+  // [手势修复] 新增状态和 Ref
+  const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const categoryBarRef = useRef(null);
+
   useEffect(() => {
-    // 精选的高质量背景图
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80&w=2070',
-        'https://images.unsplash.com/photo-1506748686214-e9df14d4d9d0?auto=format&fit=crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
+
+    // [手势修复] 添加滚动监听
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const categoryBar = categoryBarRef.current;
+      if (categoryBar) {
+        const top = categoryBar.getBoundingClientRect().top;
+        // 使用一个小的容差（例如1px）来判断是否到达顶部
+        const isStuck = top <= 1; 
+        // 仅在状态改变时更新，避免不必要的重渲染
+        setIsCategoryBarSticky(prevState => {
+          if (prevState !== isStuck) {
+            return isStuck;
+          }
+          return prevState;
+        });
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+    };
   }, []);
   
-  // 手势处理逻辑
+  // [手势修复] useSwipeable 的核心逻辑现在是条件性的
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
+      // 只有当分类栏固定在顶部时才执行
+      if (!isCategoryBarSticky) return; 
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
     },
     onSwipedRight: () => {
+      // 只有当分类栏固定在顶部时才执行
+      if (!isCategoryBarSticky) return;
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
     onSwiping: (e) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.5) {
+      // 只有当分类栏固定且是水平滑动时，才阻止默认的垂直滚动
+      if (!isCategoryBarSticky) return; 
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
           e.event.preventDefault();
       }
     },
@@ -218,47 +249,29 @@ const LayoutIndex = props => {
         
         <div className='relative flex-grow w-full h-full'>
             <header className='fixed top-0 left-0 z-50 p-4'></header>
-
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
-            <div className='absolute inset-0 bg-black/20'></div> {/* 增加一层蒙版使文字更清晰 */}
+            <div className='absolute inset-0 bg-black/20'></div>
 
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{textShadow: '2px 2px 8px rgba(0,0,0,0.7)'}}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{textShadow: '1px 1px 4px rgba(0,0,0,0.7)'}}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}>
-                           <div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div>
-                           <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaTiktok size={18}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                           </div>
-                        </a>
-                         <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}>
-                            <div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div>
-                            <div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'>
-                                <FaFacebook size={18}/>
-                                <span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span>
-                           </div>
-                        </a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'>
-                            <iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-                        </div>
+                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/tiktok.jpg')"}}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
+                        <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{backgroundImage: "url('/img/facebook.jpg')"}}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
+                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
                     </div>
                 </div>
             </div>
 
-            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
+            {/* [手势修复] 将 Ref 附加到主滚动容器 */}
+            <div ref={scrollContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[45vh]' />
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
-                    {/* 词典和快捷操作区 */}
-                    <div className='p-4 pt-6'>
-                        <GlosbeSearchCard />
-                        <ActionButtons />
-                    </div>
-
-                    {/* 升级后的分类栏 */}
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                    <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
+                    
+                    {/* [手势修复] 将 Ref 附加到分类栏 */}
+                    <div ref={categoryBarRef} className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -270,7 +283,8 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main className="overscroll-x-contain" {...contentSwipeHandlers}>
+                    {/* [手势修复] 将手势处理器附加到内容区域 */}
+                    <main {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
