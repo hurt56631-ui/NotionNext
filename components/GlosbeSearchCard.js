@@ -1,4 +1,4 @@
-// /components/GlosbeSearchCard.js
+// /components/GlosbeSearchCard.js  <-- 最终修复版
 
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeftRight, Search, Mic, Globe } from 'lucide-react'
@@ -22,12 +22,13 @@ const GlosbeSearchCard = () => {
   const [word, setWord] = useState('');
   const [searchDirection, setSearchDirection] = useState('my2zh');
   const [isListening, setIsListening] = useState(false);
+  // ✅ 默认识别语言现在会根据翻译方向动态变化
   const [recognitionLang, setRecognitionLang] = useState('my-MM');
   const [showLangMenu, setShowLangMenu] = useState(false);
   const recognitionRef = useRef(null);
   const langMenuRef = useRef(null);
 
-  // 初始化语音识别引擎
+  // 初始化语音识别引擎 (保持不变)
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -45,14 +46,12 @@ const GlosbeSearchCard = () => {
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         setWord(transcript);
-        // 语音识别成功后，自动触发搜索
         handleSearch(transcript);
       };
 
       recognitionRef.current = recognition;
     }
 
-    // 点击菜单外部关闭菜单
     const handleClickOutside = (event) => {
       if (langMenuRef.current && !langMenuRef.current.contains(event.target)) {
         setShowLangMenu(false);
@@ -65,13 +64,23 @@ const GlosbeSearchCard = () => {
 
   }, []);
 
+  // ✅ 新增：监听翻译方向的变化，并自动切换默认的语音识别语言
+  useEffect(() => {
+    if (searchDirection === 'my2zh') {
+      setRecognitionLang('my-MM');
+    } else {
+      setRecognitionLang('zh-CN');
+    }
+  }, [searchDirection]);
+
+
   // 切换翻译方向
   const toggleDirection = () => {
     setSearchDirection(prev => (prev === 'my2zh' ? 'zh2my' : 'my2zh'));
     setWord('');
   };
 
-  // 处理搜索，现在接收一个可选参数
+  // 处理搜索 (保持不变)
   const handleSearch = (textToSearch = word) => {
     const trimmedWord = textToSearch.trim();
     if (trimmedWord) {
@@ -82,7 +91,7 @@ const GlosbeSearchCard = () => {
     }
   };
 
-  // 启动语音识别
+  // 启动语音识别 (保持不变)
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       recognitionRef.current.lang = recognitionLang;
@@ -111,7 +120,6 @@ const GlosbeSearchCard = () => {
           placeholder={isListening ? '正在聆听...' : placeholderText}
           className="w-full pl-12 pr-4 py-3 text-lg text-gray-800 dark:text-gray-200 bg-white/50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 shadow-sm"
         />
-        {/* 语音识别按钮 */}
         <button
           onClick={startListening}
           className={`p-3 rounded-lg transition-all duration-300 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 hover:text-white'}`}
