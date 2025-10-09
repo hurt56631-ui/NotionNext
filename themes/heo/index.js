@@ -1,74 +1,134 @@
-// themes/heo/index.js  <-- 最终修复版 v10：彻底重构 LayoutIndex
+// themes/heo/index.js  <-- 最终修复版 v11：基于您的成功版本进行精准升级
 
-import Comment from '@/components/Comment';
-import { AdSlot } from '@/components/GoogleAdsense';
-import { HashTag } from '@/components/HeroIcons';
-import LazyImage from '@/components/LazyImage';
-import LoadingCover from '@/components/LoadingCover';
-import replaceSearchResult from '@/components/Mark';
-import NotionPage from '@/components/NotionPage';
-import WWAds from '@/components/WWAds';
-import { siteConfig } from '@/lib/config';
-import { useGlobal } from '@/lib/global';
-import { loadWowJS } from '@/lib/plugins/wow';
-import { isBrowser } from '@/lib/utils';
-import { Transition } from '@headlessui/react';
-import SmartLink from '@/components/SmartLink';
-import { useRouter } from 'next/router';
-import { useEffect, useState, useRef } from 'react';
-import { useSwipeable } from 'react-swipeable';
-import BlogPostArchive from './components/BlogPostArchive';
-import BlogPostListPage from './components/BlogPostListPage';
-import BlogPostListScroll from './components/BlogPostListScroll';
-import CategoryBar from './components/CategoryBar';
-import FloatTocButton from './components/FloatTocButton';
-import Footer from './components/Footer';
-import Header from './components/Header';
-import Hero from './components/Hero';
-import { NoticeBar } from './components/NoticeBar';
-import PostHeader from './components/PostHeader';
-import { PostLock } from './components/PostLock';
-import SearchNav from './components/SearchNav';
-import SideRight from './components/SideRight';
-import CONFIG from './config';
-import { Style } from './style';
-import AISummary from '@/components/AISummary';
-import ArticleExpirationNotice from '@/components/ArticleExpirationNotice';
-import { FaTiktok, FaFacebook } from 'react-icons/fa';
+// 保持您原始文件的所有 import 语句不变
+import Comment from '@/components/Comment'
+import { AdSlot } from '@/components/GoogleAdsense'
+import { HashTag } from '@/components/HeroIcons'
+import LazyImage from '@/components/LazyImage'
+import LoadingCover from '@/components/LoadingCover'
+import replaceSearchResult from '@/components/Mark'
+import NotionPage from '@/components/NotionPage'
+import WWAds from '@/components/WWAds'
+import { siteConfig } from '@/lib/config'
+import { useGlobal } from '@/lib/global'
+import { loadWowJS } from '@/lib/plugins/wow'
+import { isBrowser } from '@/lib/utils'
+import { Transition } from '@headlessui/react'
+import SmartLink from '@/components/SmartLink'
+import { useRouter } from 'next/router'
+import { useEffect, useState, useRef } from 'react'
+import { useSwipeable } from 'react-swipeable'
+
+// 依赖于您项目中的 themes/heo/components/ 文件夹
+import BlogPostArchive from './components/BlogPostArchive'
+import BlogPostListPage from './components/BlogPostListPage'
+import BlogPostListScroll from './components/BlogPostListScroll'
+import CategoryBar from './components/CategoryBar'
+import FloatTocButton from './components/FloatTocButton'
+import Footer from './components/Footer'
+import Header from './components/Header'
+import Hero from './components/Hero'
+import { NoticeBar } from './components/NoticeBar'
+import PostHeader from './components/PostHeader'
+import { PostLock } from './components/PostLock'
+import SearchNav from './components/SearchNav'
+import SideRight from './components/SideRight'
+
+import CONFIG from './config'
+import { Style } from './style'
+import AISummary from '@/components/AISummary'
+import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
+import { FaTiktok, FaFacebook } from 'react-icons/fa'
 import { 
-    Newspaper, GraduationCap, Smile, ClipboardCheck, BookOpen,
-    Phone, MessageSquare, Users 
-} from 'lucide-react';
-import { useAuth } from '@/lib/AuthContext';
-import dynamic from 'next/dynamic';
+    Newspaper, 
+    GraduationCap, 
+    Smile, 
+    ClipboardCheck, 
+    BookOpen,
+    Phone,
+    MessageSquare,
+    Users
+} from 'lucide-react'
+import { useAuth } from '@/lib/AuthContext'
+import dynamic from 'next/dynamic'
 
-const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false });
-const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false });
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
+const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 
 
 /**
  * 基础布局 (保持不变)
  */
 const LayoutBase = props => {
-  const { children, slotTop, className } = props;
-  const { fullWidth, isDarkMode } = useGlobal();
-  const router = useRouter();
-  if (router.route === '/') { return <>{children}</>; }
-  const headerSlot = ( <header> <Header {...props} /> {router.route === '/' ? (<><NoticeBar /><Hero {...props} /></>) : null} {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />} </header> );
-  const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />;
-  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]';
-  useEffect(() => { loadWowJS(); }, []);
-  return ( <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}> <Style /> {headerSlot} <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}> <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'> <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div> <div className='lg:px-2'></div> <div className='hidden xl:block'>{slotRight}</div> </div> </main> <Footer /> {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />} </div> );
-};
+  const { children, slotTop, className } = props
+  const { fullWidth, isDarkMode } = useGlobal()
+  const router = useRouter()
+  
+  if (router.route === '/') { return <>{children}</> }
+  
+  const headerSlot = (
+    <header>
+      <Header {...props} />
+      {router.route === '/' ? (<><NoticeBar /><Hero {...props} /></>) : null}
+      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+    </header>
+  )
 
-// 首页专用的底部导航栏
+  const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
+  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
+  
+  useEffect(() => { loadWowJS() }, [])
+
+  return (
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
+      <Style />
+      {headerSlot}
+      <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
+        <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
+          <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
+          <div className='lg:px-2'></div>
+          <div className='hidden xl:block'>{slotRight}</div>
+        </div>
+      </main>
+      <Footer />
+      {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />}
+    </div>
+  )
+}
+
+// 首页专用的底部导航栏 (从您的旧代码中恢复)
 const BottomNavBar = () => {
-    const navItems = [ { href: '/', icon: 'fas fa-home', label: '主页', auth: false }, { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false }, { href: '/community', icon: 'fas fa-users', label: '社区', auth: true }, { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true }, { href: '/profile', icon: 'fas fa-user', label: '我', auth: true }, ];
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
+        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
+        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+    ];
     const router = useRouter();
     const { user, authLoading } = useAuth();
     const [showLoginModal, setShowLoginModal] = useState(false);
-    const handleLinkClick = (e, item) => { if (item.auth && !authLoading && !user) { e.preventDefault(); setShowLoginModal(true); } };
-    return ( <> <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} /> <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'> {navItems.map(item => ( <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}> <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i> <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span> </SmartLink> ))} </nav> </> );
+
+    const handleLinkClick = (e, item) => {
+        if (item.auth && !authLoading && !user) {
+            e.preventDefault();
+            setShowLoginModal(true);
+        }
+    };
+
+    return (
+        <>
+            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+                {navItems.map(item => (
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+        </>
+    );
 };
 
 // 纤细滚动条样式
@@ -85,57 +145,90 @@ const CustomScrollbarStyle = () => (
 
 // 快捷操作按钮组件
 const ActionButtons = () => {
-    const actions = [ { icon: <Phone size={20} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER' }, { icon: <MessageSquare size={20} />, text: '在线客服', href: '#' }, { icon: <Users size={20} />, text: '加入社群', href: '#' }, ];
-    return ( <div className="grid grid-cols-3 gap-3 my-5 px-4"> {actions.map((action, index) => ( <a key={index} href={action.href} className="flex flex-col items-center justify-center p-3 bg-gray-100 dark:bg-gray-800/80 rounded-lg shadow-sm hover:bg-gray-200 dark:hover:bg-gray-700/80 transition-all duration-300 transform hover:scale-105"> <div className="text-blue-500 dark:text-blue-400 mb-1">{action.icon}</div> <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{action.text}</span> </a> ))} </div> );
+  const actions = [
+    { icon: <Phone size={20} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER' },
+    { icon: <MessageSquare size={20} />, text: '在线客服', href: '#' },
+    { icon: <Users size={20} />, text: '加入社群', href: '#' },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-3 my-5 px-4">
+      {actions.map((action, index) => (
+        <a key={index} href={action.href} className="flex flex-col items-center justify-center p-3 bg-gray-100 dark:bg-gray-800/80 rounded-lg shadow-sm hover:bg-gray-200 dark:hover:bg-gray-700/80 transition-all duration-300 transform hover:scale-105">
+          <div className="text-blue-500 dark:text-blue-400 mb-1">{action.icon}</div>
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{action.text}</span>
+        </a>
+      ))}
+    </div>
+  );
 };
 
 
 /**
- * 首页 - 最终修复重构版
+ * 首页 - 最终修复版 (基于您的原始文件结构)
  */
 const LayoutIndex = props => {
   const tabs = [
-    { name: '文章', content: <div className='p-4'><BlogPostListPage {...props} /></div> },
-    { name: 'HSK', content: <iframe src="/hsk" title="HSK" className="w-full h-full border-none" /> },
-    { name: '口语', content: <div className="p-8 text-center text-gray-500">口语内容待添加</div> },
-    { name: '练习', content: <div className="p-8 text-center text-gray-500">练习内容待添加</div> },
-    { name: '书籍', content: <div className="p-8 text-center text-gray-500">书籍内容待添加</div> }
+    { name: '文章', icon: <Newspaper size={22} /> },
+    { name: 'HSK', icon: <GraduationCap size={22} /> },
+    { name: '口语', icon: <Smile size={22} /> },
+    { name: '练习', icon: <ClipboardCheck size={22} /> },
+    { name: '书籍', icon: <BookOpen size={22} /> }
   ];
-  const tabIcons = {
-      '文章': <Newspaper size={22} />, 'HSK': <GraduationCap size={22} />, 
-      '口语': <Smile size={22} />, '练习': <ClipboardCheck size={22} />, '书籍': <BookOpen size={22} />
-  };
-
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState(''); 
+  
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null); 
-  const mainContentRef = useRef(null);
+  const mainContentRef = useRef(null); // [iframe 修复] 新增 Ref
 
   useEffect(() => {
-    const backgrounds = [ 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80&w=2070', 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070' ];
+    const backgrounds = [
+        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2070'
+    ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    const observer = new IntersectionObserver( ([entry]) => { setIsCategoryBarSticky(!entry.isIntersecting); }, { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' } );
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) observer.observe(currentSentinel);
-    return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
-  }, []);
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            setIsCategoryBarSticky(!entry.isIntersecting);
+        },
+        { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
+    );
 
-  const handleSwiped = (isLeft) => {
-    const currentIndex = tabs.findIndex(t => t.name === activeTab);
-    if (isLeft && currentIndex < tabs.length - 1) {
-      setActiveTab(tabs[currentIndex + 1].name);
-    } else if (!isLeft && currentIndex > 0) {
-      setActiveTab(tabs[currentIndex - 1].name);
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+        observer.observe(currentSentinel);
     }
-  };
+
+    return () => {
+        if (currentSentinel) {
+            observer.unobserve(currentSentinel);
+        }
+    };
+  }, []);
   
   const contentSwipeHandlers = useSwipeable({
-    onSwipedLeft: () => { if (isCategoryBarSticky) handleSwiped(true); },
-    onSwipedRight: () => { if (isCategoryBarSticky) handleSwiped(false); },
-    onSwiping: () => { if (isCategoryBarSticky && mainContentRef.current) mainContentRef.current.classList.add('iframes-no-events'); },
-    onSwiped: () => { if (mainContentRef.current) mainContentRef.current.classList.remove('iframes-no-events'); },
+    onSwipedLeft: () => {
+      if (!isCategoryBarSticky) return; 
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
+    },
+    onSwipedRight: () => {
+      if (!isCategoryBarSticky) return;
+      const currentIndex = tabs.findIndex(t => t.name === activeTab);
+      if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
+    },
+    // [iframe 修复] onSwiping 和 onSwiped 控制 pointer-events
+    onSwiping: () => {
+        if (isCategoryBarSticky && mainContentRef.current) {
+            mainContentRef.current.classList.add('iframes-no-events');
+        }
+    },
+    onSwiped: () => {
+        if (mainContentRef.current) {
+            mainContentRef.current.classList.remove('iframes-no-events');
+        }
+    },
     preventDefaultTouchmoveEvent: false,
     trackMouse: true,
     delta: 40
@@ -172,7 +265,7 @@ const LayoutIndex = props => {
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                {tabIcons[tab.name]}
+                                {tab.icon}
                                 <span className='text-xs font-semibold mt-1'>{tab.name}</span>
                                 <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
                             </button>
@@ -180,12 +273,16 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main {...contentSwipeHandlers} ref={mainContentRef}>
+                    {/* [iframe 修复] 将手势和 Ref 附加到 main 元素 */}
+                    <main {...contentSwipeHandlers} ref={mainContentRef} className="min-h-[70vh]">
                         {tabs.map(tab => (
-                            <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'} w-full h-full`}>
-                                {/* [FINAL FIX] 强制每个内容面板都有最小高度，确保可滚动 */}
-                                <div className='min-h-[calc(100vh-20rem)] w-full h-full'>
-                                    {tab.content}
+                            <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
+                                <div className="min-h-[inherit]"> {/* 确保子元素也撑满最小高度 */}
+                                    {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
+                                    {tab.name === 'HSK' && <iframe src="/hsk" title="HSK" className="w-full h-[calc(100vh-280px)] border-none" />}
+                                    {tab.name === '口语' && <div className="p-8 text-center text-gray-500">口语内容待添加</div>}
+                                    {tab.name === '练习' && <div className="p-8 text-center text-gray-500">练习内容待添加</div>}
+                                    {tab.name === '书籍' && <div className="p-8 text-center text-gray-500">书籍内容待添加</div>}
                                 </div>
                             </div>
                         ))}
@@ -198,7 +295,11 @@ const LayoutIndex = props => {
   );
 };
 
-// ... 保持您原始文件中的其他 LayoutXXX 组件不变 ...
+
+// =========================================================================
+// =============  ✅ 所有其他组件恢复为您的原始结构 ✅ ===================
+// =========================================================================
+
 const LayoutPostList = props => { return ( <div id='post-outer-wrapper' className='px-5  md:px-0'> <CategoryBar {...props} /> {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />} </div> ); };
 const LayoutSearch = props => { const { keyword } = props; const router = useRouter(); const currentSearch = keyword || router?.query?.s; useEffect(() => { if (currentSearch) { setTimeout(() => { replaceSearchResult({ doms: document.getElementsByClassName('replace'), search: currentSearch, target: { element: 'span', className: 'text-red-500 border-b border-dashed' } }) }, 100) } }, [currentSearch]); return ( <div currentSearch={currentSearch}> <div id='post-outer-wrapper' className='px-5 md:px-0'> {!currentSearch ? <SearchNav {...props} /> : <div id='posts-wrapper'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>} </div> </div> ); };
 const LayoutArchive = props => { const { archivePosts } = props; return ( <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'> <CategoryBar {...props} border={false} /> <div className='px-3'> {Object.keys(archivePosts).map(archiveTitle => ( <BlogPostArchive key={archiveTitle} posts={archivePosts[archiveTitle]} archiveTitle={archiveTitle} /> ))} </div> </div> ); };
