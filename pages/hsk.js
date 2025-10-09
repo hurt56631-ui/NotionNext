@@ -1,13 +1,11 @@
-// pages/hsk.js
+// pages/hsk.js  <-- 已移除 next-seo 依赖的最终版本
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { NextSeo } from 'next-seo'; // 假设您项目中已配置 next-seo
+// import { NextSeo } from 'next-seo';  <-- 移除这一行
 import { ArrowLeft, ChevronRight, BookText, Mic, PenTool, ListChecks, Brain } from 'lucide-react';
 
 // --- 数据中心 ---
-// 所有内容都在这里定义，方便您未来扩展
-// 我为您挑选了高质量的 Unsplash 背景图
 const hskData = [
   {
     level: 1,
@@ -46,7 +44,6 @@ const hskData = [
       { slug: 'mock-test', title: '模拟考试', icon: <Brain />, description: '全真模拟HSK三级考试' }
     ]
   },
-  // 您可以在此继续添加 HSK 4, 5, 6 的数据...
 ];
 
 // --- 动画效果定义 ---
@@ -69,13 +66,11 @@ const screenVariants = {
 
 // --- HSK 页面主组件 ---
 const HskMobilePage = () => {
-  // 状态管理：当前视图，选中的等级和分类，以及动画方向
-  const [currentView, setCurrentView] = useState('levels'); // 'levels', 'categories', 'content'
+  const [currentView, setCurrentView] = useState('levels'); 
   const [selectedLevel, setSelectedLevel] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [direction, setDirection] = useState(1); // 1 for forward, -1 for backward
+  const [direction, setDirection] = useState(1); 
 
-  // --- 导航函数 ---
   const handleSelectLevel = (level) => {
     setDirection(1);
     setSelectedLevel(level);
@@ -97,7 +92,6 @@ const HskMobilePage = () => {
     }
   };
 
-  // --- 动态标题 ---
   const getTitle = () => {
     if (currentView === 'levels') return 'HSK 学习中心';
     if (currentView === 'categories') return `HSK ${selectedLevel?.level} - ${selectedLevel?.title}`;
@@ -107,17 +101,17 @@ const HskMobilePage = () => {
 
   return (
     <>
-      <NextSeo
-        title="HSK 移动学习中心"
-        description="专为手机设计的沉浸式 HSK 分级学习系统，提供从词汇到语法的全方位练习。"
-      />
-      {/* 整体容器，h-screen w-screen 确保全屏 */}
+      {/* 
+        <NextSeo
+          title="HSK 移动学习中心"
+          description="专为手机设计的沉浸式 HSK 分级学习系统，提供从词汇到语法的全方位练习。"
+        /> 
+        移除这一段
+      */}
       <div className="h-screen w-screen bg-black text-white font-sans flex flex-col overflow-hidden">
         
-        {/* 顶部导航栏，使用毛玻璃效果 */}
         <header className="flex-shrink-0 h-16 px-4 flex items-center bg-black/50 backdrop-blur-md border-b border-white/10 z-20">
           <div className="w-10">
-            {/* 返回按钮的进出动画 */}
             <AnimatePresence>
               {currentView !== 'levels' && (
                 <motion.button
@@ -133,14 +127,12 @@ const HskMobilePage = () => {
             </AnimatePresence>
           </div>
           <h1 className="flex-grow text-center text-lg font-bold">{getTitle()}</h1>
-          <div className="w-10"></div> {/* 占位，使标题居中 */}
+          <div className="w-10"></div>
         </header>
 
-        {/* 主内容区域，所有动画切换都在这里 */}
         <main className="flex-grow relative">
           <AnimatePresence initial={false} custom={direction}>
             
-            {/* 视图一：HSK 等级选择 */}
             {currentView === 'levels' && (
               <motion.div
                 key="levels"
@@ -169,7 +161,6 @@ const HskMobilePage = () => {
               </motion.div>
             )}
 
-            {/* 视图二：分类选择 */}
             {currentView === 'categories' && selectedLevel && (
               <motion.div
                 key="categories"
@@ -202,7 +193,6 @@ const HskMobilePage = () => {
               </motion.div>
             )}
 
-            {/* 视图三：具体内容 (这是您需要填充真实内容的占位符) */}
             {currentView === 'content' && selectedCategory && selectedLevel && (
               <motion.div
                 key="content"
