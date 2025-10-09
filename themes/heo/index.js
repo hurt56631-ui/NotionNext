@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版 v6：基于您的原始文件结构进行升级和修复
+// themes/heo/index.js  <-- 终极融合版 v7：融合所有优点，基于原始结构
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -96,7 +96,7 @@ const LayoutBase = props => {
   )
 }
 
-// 首页专用的底部导航栏 (从您的旧代码中恢复)
+// 首页专用的底部导航栏
 const BottomNavBar = () => {
     const navItems = [
         { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
@@ -162,7 +162,7 @@ const ActionButtons = () => {
 
 
 /**
- * 首页 - 最终修复版 (基于您的原始文件结构)
+ * 首页 - 终极融合版
  */
 const LayoutIndex = props => {
   const tabs = [
@@ -175,9 +175,9 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState(''); 
   
+  // [手势修复] 采用 IntersectionObserver 方案
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
-  const scrollContainerRef = useRef(null);
-  const categoryBarRef = useRef(null);
+  const sentinelRef = useRef(null); 
 
   useEffect(() => {
     const backgrounds = [
@@ -186,42 +186,44 @@ const LayoutIndex = props => {
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
+    // [手势修复] 设置 IntersectionObserver
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            // 当哨兵元素离开视口顶部时，!entry.isIntersecting 将为 true
+            setIsCategoryBarSticky(!entry.isIntersecting);
+        },
+        // rootMargin: '-1px 0px 0px 0px' 意味着当哨兵元素的顶部边缘越过视口顶部1像素时，触发回调
+        { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
+    );
 
-    const handleScroll = () => {
-      const categoryBar = categoryBarRef.current;
-      if (categoryBar) {
-        const top = categoryBar.getBoundingClientRect().top;
-        const isStuck = top <= 1; 
-        setIsCategoryBarSticky(prevState => {
-          if (prevState !== isStuck) return isStuck;
-          return prevState;
-        });
-      }
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+        observer.observe(currentSentinel);
+    }
+
+    return () => {
+        if (currentSentinel) {
+            observer.unobserve(currentSentinel);
+        }
     };
-
-    scrollContainer.addEventListener('scroll', handleScroll);
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
   
   const contentSwipeHandlers = useSwipeable({
     onSwipedLeft: () => {
-      if (!isCategoryBarSticky) return; 
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
     },
     onSwipedRight: () => {
-      if (!isCategoryBarSticky) return;
       const currentIndex = tabs.findIndex(t => t.name === activeTab);
       if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
     },
     onSwiping: (e) => {
-      if (!isCategoryBarSticky) return; 
       if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
           e.event.preventDefault();
       }
     },
+    // [手势修复] 仅在分类栏吸顶时激活手势
+    disabled: !isCategoryBarSticky, 
     preventDefaultTouchmoveEvent: false,
     trackMouse: true,
     delta: 40
@@ -233,8 +235,6 @@ const LayoutIndex = props => {
         <CustomScrollbarStyle />
         
         <div className='relative flex-grow w-full h-full'>
-            {/* [FINAL FIX] 移除顶部 Header，避免显示白色横条 */}
-            {/* <header className='fixed top-0 left-0 z-50 p-4'></header> */}
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
@@ -250,12 +250,14 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            <div ref={scrollContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                <div className='h-[45vh]' />
+            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
+                {/* [手势修复] 哨兵元素，高度为 45vh，与顶部内容区高度一致 */}
+                <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
+                
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-16 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
                     
-                    <div ref={categoryBarRef} className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -267,23 +269,21 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* [FINAL FIX] 为 main 元素添加最小高度，确保内容不足时也能滚动 */}
                     <main {...contentSwipeHandlers} className="min-h-[70vh]">
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div>
                                     {tab.name === '文章' && <div className='p-4'>{siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}</div>}
                                     {tab.name === 'HSK' && <iframe src="/hsk" title="HSK" className="w-full h-[calc(100vh-280px)] border-none" />}
-                                    {tab.name === '口语' && <iframe src="about:blank" title="口语" className="w-full h-[calc(100vh-280px)] border-none" />}
-                                    {tab.name === '练习' && <iframe src="about:blank" title="练习" className="w-full h-[calc(100vh-280px)] border-none" />}
-                                    {tab.name === '书籍' && <iframe src="about:blank" title="书籍" className="w-full h-[calc(100vh-280px)] border-none" />}
+                                    {tab.name === '口语' && <div className="p-4 text-center text-gray-500">口语内容待添加</div>}
+                                    {tab.name === '练习' && <div className="p-4 text-center text-gray-500">练习内容待添加</div>}
+                                    {tab.name === '书籍' && <div className="p-4 text-center text-gray-500">书籍内容待添加</div>}
                                 </div>
                             </div>
                         ))}
                     </main>
                 </div>
             </div>
-            {/* [FINAL FIX] 恢复使用独立的 BottomNavBar，而不是全局 Footer */}
             <BottomNavBar />
         </div>
     </div>
