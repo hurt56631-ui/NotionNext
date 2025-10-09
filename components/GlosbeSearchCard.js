@@ -1,4 +1,4 @@
-// /components/GlosbeSearchCard.js  <-- 最终修复版
+// /components/GlosbeSearchCard.js  <-- 最终修复版：语音识别后不再自动发送
 
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeftRight, Search, Mic, Globe } from 'lucide-react'
@@ -9,26 +9,27 @@ const recognitionLanguages = [
   { code: 'my-MM', name: 'မြန်မာ' },
   { code: 'zh-CN', name: '中文' },
   { code: 'en-US', name: 'English' },
+  // 您可以按需在这里添加更多语言，例如越南语
+  { code: 'vi-VN', name: 'Tiếng Việt' },
 ];
 
 /**
  * Glosbe 词典搜索卡片 - 语音增强版
  * - 支持缅中双向互译
  * - 集成浏览器原生语音识别功能，支持多语言切换
- * - 语音识别后自动查询
+ * - ✅ 语音识别后不再自动查询，而是将结果填入输入框，由用户确认
  * - 结果在新标签页打开，确保可靠性
  */
 const GlosbeSearchCard = () => {
   const [word, setWord] = useState('');
   const [searchDirection, setSearchDirection] = useState('my2zh');
   const [isListening, setIsListening] = useState(false);
-  // ✅ 默认识别语言现在会根据翻译方向动态变化
   const [recognitionLang, setRecognitionLang] = useState('my-MM');
   const [showLangMenu, setShowLangMenu] = useState(false);
   const recognitionRef = useRef(null);
   const langMenuRef = useRef(null);
 
-  // 初始化语音识别引擎 (保持不变)
+  // 初始化语音识别引擎
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -43,10 +44,11 @@ const GlosbeSearchCard = () => {
         setIsListening(false);
       };
       
+      // ✅ 核心修改：语音识别结束后，只更新输入框内容，不再自动提交搜索
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         setWord(transcript);
-        handleSearch(transcript);
+        // handleSearch(transcript); // <-- 已注释掉此行，不再自动发送
       };
 
       recognitionRef.current = recognition;
@@ -64,7 +66,7 @@ const GlosbeSearchCard = () => {
 
   }, []);
 
-  // ✅ 新增：监听翻译方向的变化，并自动切换默认的语音识别语言
+  // 监听翻译方向的变化，并自动切换默认的语音识别语言
   useEffect(() => {
     if (searchDirection === 'my2zh') {
       setRecognitionLang('my-MM');
@@ -80,7 +82,7 @@ const GlosbeSearchCard = () => {
     setWord('');
   };
 
-  // 处理搜索 (保持不变)
+  // 处理搜索 (此函数本身不变，但现在只由用户手动触发)
   const handleSearch = (textToSearch = word) => {
     const trimmedWord = textToSearch.trim();
     if (trimmedWord) {
@@ -91,7 +93,7 @@ const GlosbeSearchCard = () => {
     }
   };
 
-  // 启动语音识别 (保持不变)
+  // 启动语音识别
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       recognitionRef.current.lang = recognitionLang;
