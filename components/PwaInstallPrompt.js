@@ -32,7 +32,7 @@ const PwaInstallPrompt = ({ show, onInstall, onDismiss }) => {
             className="relative w-11/12 max-w-sm overflow-hidden rounded-2xl bg-white/50 dark:bg-black/50 shadow-2xl backdrop-blur-2xl ring-1 ring-black/10"
             // 添加内联样式来实现背景图
             style={{ 
-              backgroundImage: "url('/images/your-background.jpg')", // <-- 在这里替换成你的背景图路径
+              backgroundImage: "url('/img/tiktok.jpg')", // <-- 在这里替换成你的背景图路径
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}
