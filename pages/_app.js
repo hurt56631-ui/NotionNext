@@ -9,14 +9,14 @@ import useAdjustStyle from '@/hooks/useAdjustStyle'
 import { GlobalContextProvider } from '@/lib/global'
 import { getBaseLayoutByTheme } from '@/themes/theme'
 import { useRouter } from 'next/router'
-import { useCallback, useMemo } from 'react'
+// ✅ 导入 useEffect
+import { useCallback, useMemo, useEffect } from 'react'
 import { getQueryParam } from '../lib/utils'
 
 import BLOG from '@/blog.config'
 import ExternalPlugins from '@/components/ExternalPlugins'
 import SEO from '@/components/SEO'
 
-// ✅ 核心修改：导入所有需要的 Provider
 import { AuthProvider } from '@/lib/AuthContext';
 import { UnreadCountProvider } from '@/lib/UnreadCountContext'; 
 
@@ -52,12 +52,26 @@ const AppInner = ({ Component, pageProps }) => {
   )
 }
 
-// ✅ 核心修复：重构 MyApp 以正确嵌套 Provider
 const MyApp = ({ Component, pageProps }) => {
+
+  // ✅ 新增：注册Service Worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js').then(
+          function (registration) {
+            console.log('Service Worker registration successful with scope: ', registration.scope)
+          },
+          function (err) {
+            console.log('Service Worker registration failed: ', err)
+          }
+        )
+      })
+    }
+  }, [])
+  
   return (
-    // 1. 最外层是 AuthProvider，它不依赖其他 Context
     <AuthProvider>
-      {/* 2. 内层是 UnreadCountProvider，它可能会间接依赖 AuthProvider (通过 useAuth) */}
       <UnreadCountProvider>
         <AppInner Component={Component} pageProps={pageProps} />
       </UnreadCountProvider>
