@@ -173,41 +173,6 @@ const LayoutBase = props => {
   )
 }
 
-// 首页专用的底部导航栏 (保持不变)
-const BottomNavBar = () => {
-    const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
-    ];
-    const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-
-    const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
-
-    return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
-                {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
-                    </SmartLink>
-                ))}
-            </nav>
-        </>
-    );
-};
-
 // 纤细滚动条样式 (保持不变)
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
@@ -231,7 +196,7 @@ const ActionButtons = () => {
     { icon: <Info size={24} />, text: '关于我们', href: '#', color: 'from-gray-500 to-slate-500' },
   ];
   return (
-    <div className="grid grid-cols-2 gap-4 my-6 px-4">
+    <div className="grid grid-cols-3 gap-4 my-6 px-4">
       {actions.map((action, index) => (
         <a key={index} href={action.href} className={`flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1`}>
           <div className="mb-2">{action.icon}</div>
@@ -415,7 +380,8 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            <BottomNavBar />
+            {/* ✅ 关键修复：使用全局的 Footer 组件来显示底部导航，确保逻辑统一 */}
+            <Footer />
         </div>
     </div>
   );
