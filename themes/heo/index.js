@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：包含PWA安装弹窗、修复所有布局问题
+// themes/heo/index.js  <-- 最终修复版：PWA弹窗逻辑注入正确位置 & 修复所有布局问题
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -70,44 +70,16 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 
 // =================================================================================
-// ========================= PWA 安装相关组件和逻辑 ============================
-// =================================================================================
-
-/**
- * PWA 安装提示横幅组件
- */
-const PwaInstallBanner = ({ deferredPrompt, onInstall, onDismiss }) => {
-    if (!deferredPrompt) return null;
-
-    return (
-        <div id="install-banner" className="install-banner visible">
-            <div className="install-banner-content">
-                <img src={siteConfig('AVATAR')} alt="网站Logo" className="install-banner-logo" />
-                <div className="install-banner-text">
-                    <p><strong>添加到主屏幕</strong></p>
-                    <p>获得最佳离线体验！</p>
-                </div>
-                <button id="install-btn" className="install-banner-button" onClick={onInstall}>安装</button>
-                <button id="dismiss-btn" className="install-banner-close" onClick={onDismiss}>&times;</button>
-            </div>
-        </div>
-    );
-};
-
-// =================================================================================
 // ====================== ✅ 高级拖拽侧边栏组件 ✅ ========================
 // =================================================================================
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
   const sidebarWidth = 288;
-
   const sidebarLinks = [
     { icon: <Settings size={20} />, text: '通用设置', href: '/settings' },
     { icon: <LifeBuoy size={20} />, text: '帮助中心', href: '/help' },
   ];
-
   const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-in-out';
-
   return (
     <>
       <div
@@ -150,7 +122,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
-
 /**
  * 基础布局 (已正确修复)
  */
@@ -158,21 +129,16 @@ const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
-
   if (router.route === '/') { return <>{children}</> }
-
   const headerSlot = (
     <header>
       <Header {...props} />
       {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
-
   const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
   const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-
   useEffect(() => { loadWowJS() }, [])
-
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
       <Style />
@@ -212,14 +178,12 @@ const BottomNavBar = () => {
     const router = useRouter();
     const { user, authLoading } = useAuth();
     const [showLoginModal, setShowLoginModal] = useState(false);
-
     const handleLinkClick = (e, item) => {
         if (item.auth && !authLoading && !user) {
             e.preventDefault();
             setShowLoginModal(true);
         }
     };
-
     return (
         <>
             <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
@@ -257,7 +221,6 @@ const ActionButtons = () => {
   );
 };
 
-
 /**
  * 首页 - 终极融合版
  */
@@ -273,7 +236,6 @@ const LayoutIndex = props => {
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
-  
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
@@ -287,12 +249,10 @@ const LayoutIndex = props => {
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
-
     const observer = new IntersectionObserver(
         ([entry]) => setIsCategoryBarSticky(!entry.isIntersecting),
         { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
     );
-
     const currentSentinel = sentinelRef.current;
     if (currentSentinel) observer.observe(currentSentinel);
     return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
@@ -304,25 +264,18 @@ const LayoutIndex = props => {
     currentSidebarX.current = sidebarX;
     setIsDragging(true);
   };
-
   const handleTouchMove = (e) => {
     if (!isDragging || touchStartX.current === null) return;
     const deltaX = e.touches[0].clientX - touchStartX.current;
     let newX = Math.max(-sidebarWidth, Math.min(currentSidebarX.current + deltaX, 0));
     setSidebarX(newX);
   };
-
   const handleTouchEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
     touchStartX.current = null;
-    if (sidebarX < -sidebarWidth / 2) {
-        closeSidebar();
-    } else {
-        openSidebar();
-    }
+    if (sidebarX < -sidebarWidth / 2) { closeSidebar(); } else { openSidebar(); }
   };
-
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -337,36 +290,21 @@ const LayoutIndex = props => {
       trackMouse: true,
       delta: 50
   });
-
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
-
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
-        
         <HomeSidebar isOpen={isSidebarOpen} onClose={closeSidebar} sidebarX={sidebarX} isDragging={isDragging} />
-
-        <div
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className='relative flex-grow w-full h-full'
-        >
+        <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className='relative flex-grow w-full h-full'>
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
-
-            <button
-                onClick={openSidebar}
-                className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors"
-                aria-label="打开菜单"
-            >
+            <button onClick={openSidebar} className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors" aria-label="打开菜单">
                 <i className="fas fa-bars text-xl"></i>
             </button>
-            
             <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
@@ -378,12 +316,10 @@ const LayoutIndex = props => {
                     </div>
                 </div>
             </div>
-
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
-
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
@@ -395,7 +331,6 @@ const LayoutIndex = props => {
                             ))}
                         </div>
                     </div>
-                    
                     <main className="min-h-[70vh]" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
@@ -411,61 +346,191 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            
             <BottomNavBar />
         </div>
     </div>
   );
 };
 
+/**
+ * [这是旧的、被废弃的根组件，现已用下面的新结构替代]
+ */
+// const OriginalThemeHeo = props => { ... };
 
 /**
- * 根组件，负责主题初始化和PWA逻辑
+ * 所有其他页面布局组件
  */
+const LayoutPostList = props => (
+    <div id='post-outer-wrapper' className='px-5  md:px-0'>
+      <CategoryBar {...props} />
+      {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
+    </div>
+);
+const LayoutSearch = props => {
+  const { keyword } = props
+  const router = useRouter()
+  const currentSearch = keyword || router?.query?.s
+  useEffect(() => {
+    if (currentSearch) {
+      setTimeout(() => {
+        replaceSearchResult({
+          doms: document.getElementsByClassName('replace'),
+          search: currentSearch,
+          target: { element: 'span', className: 'text-red-500 border-b border-dashed' }
+        })
+      }, 100)
+    }
+  }, [currentSearch])
+  return (
+    <div currentSearch={currentSearch}>
+      <div id='post-outer-wrapper' className='px-5 md:px-0'>
+        {!currentSearch ? <SearchNav {...props} /> : <div id='posts-wrapper'><BlogPostListPage {...props} /></div>}
+      </div>
+    </div>
+  )
+}
+const LayoutArchive = props => (
+    <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
+      <CategoryBar {...props} border={false} />
+      <div className='px-3'>
+        {Object.keys(props.archivePosts).map(archiveTitle => (
+          <BlogPostArchive key={archiveTitle} posts={props.archivePosts[archiveTitle]} archiveTitle={archiveTitle} />
+        ))}
+      </div>
+    </div>
+);
+const LayoutSlug = props => {
+  const { post, lock, validPassword } = props
+  const { locale, fullWidth } = useGlobal()
+  const commentEnable = siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL')
+  const router = useRouter()
+  useEffect(() => {
+    if (!post) { setTimeout(() => { if (isBrowser) { const article = document.querySelector('#article-wrapper #notion-article'); if (!article) router.push('/404') } }, 5000) }
+  }, [post, router])
+  return (
+    <>
+      <div className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4`}>
+        {lock && <PostLock validPassword={validPassword} />}
+        {!lock && post && (
+          <div className='mx-auto md:w-full md:px-5'>
+            <article id='article-wrapper' itemScope itemType='https://schema.org/Movie'>
+              <section className='wow fadeInUp p-5 justify-center mx-auto' data-wow-delay='.2s'>
+                <ArticleExpirationNotice post={post} />
+                <AISummary aiSummary={post.aiSummary} />
+                <WWAds orientation='horizontal' className='w-full' />
+                {post && <NotionPage post={post} />}
+                <WWAds orientation='horizontal' className='w-full' />
+              </section>
+            </article>
+            {!fullWidth && commentEnable && post && (<>
+                <hr className='my-4 border-dashed' />
+                <div className='py-2'><AdSlot /></div>
+                <div className='duration-200 overflow-x-auto px-5'>
+                  <div className='text-2xl dark:text-white'><i className='fas fa-comment mr-1' />{locale.COMMON.COMMENTS}</div>
+                  <Comment frontMatter={post} className='' />
+                </div>
+            </>)}
+          </div>
+        )}
+      </div>
+      <FloatTocButton {...props} />
+    </>
+  )
+}
+const Layout404 = () => (
+    <main id='wrapper-outer' className={'w-full mx-auto justify-center'}>
+        <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
+            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
+            <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
+                <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
+                <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
+                <SmartLink href='/'><button className='bg-blue-500 py-2 px-4 text-white shadow rounded-lg hover:bg-blue-600 hover:shadow-md duration-200 transition-all'>回到主页</button></SmartLink>
+            </div>
+        </div>
+    </main>
+);
+const LayoutCategoryIndex = props => (
+    <div id='category-outer-wrapper' className='mt-8 px-5 md:px-0'>
+        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.CATEGORY}</div>
+        <div id='category-list' className='duration-200 flex flex-wrap m-10 justify-center'>
+            {props.categoryOptions?.map(category => (
+                <SmartLink key={category.name} href={`/category/${category.name}`} passHref legacyBehavior>
+                    <div className={'group mr-5 mb-5 flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
+                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{category.name}
+                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{category.count}</div>
+                    </div>
+                </SmartLink>
+            ))}
+        </div>
+    </div>
+);
+const LayoutTagIndex = props => (
+    <div id='tag-outer-wrapper' className='px-5 mt-8 md:px-0'>
+        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.TAGS}</div>
+        <div id='tag-list' className='duration-200 flex flex-wrap space-x-5 space-y-5 m-10 justify-center'>
+            {props.tagOptions.map(tag => (
+                <SmartLink key={tag.name} href={`/tag/${tag.name}`} passHref legacyBehavior>
+                    <div className={'group flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
+                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{tag.name}
+                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{tag.count}</div>
+                    </div>
+                </SmartLink>
+            ))}
+        </div>
+    </div>
+);
+
+// =========================================================================
+// =================  [最终修复] 根组件，集成PWA逻辑 ===================
+// =========================================================================
 const ThemeHeo = props => {
+    const router = useRouter();
+    const { post } = props;
+
+    // PWA 安装状态
     const [deferredPrompt, setDeferredPrompt] = useState(null);
     const [showPwaBanner, setShowPwaBanner] = useState(false);
 
+    // PWA 安装逻辑 useEffect
     useEffect(() => {
-        // PWA 安装逻辑
+        console.log("PWA: useEffect is running"); // 调试日志
         const handleBeforeInstallPrompt = (e) => {
-            console.log('PWA: beforeinstallprompt 事件触发');
+            console.log('PWA: beforeinstallprompt event fired');
             e.preventDefault();
             setDeferredPrompt(e);
-            // 检查用户是否已经关闭过提示
             if (!localStorage.getItem('pwaInstallDismissed')) {
-                console.log('PWA: 准备显示安装横幅');
+                console.log('PWA: Show banner');
                 setShowPwaBanner(true);
             } else {
-                console.log('PWA: 用户已关闭过提示，本次不显示');
+                console.log('PWA: Banner dismissed previously');
             }
         };
 
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-        // Service Worker 注册
+        // 注册 Service Worker
         if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
             navigator.serviceWorker.register('/sw.js').then(registration => {
-                console.log('PWA: Service Worker 注册成功，范围：', registration.scope);
+                console.log('PWA: Service Worker registered scope:', registration.scope);
             }).catch(error => {
-                console.error('PWA: Service Worker 注册失败：', error);
+                console.error('PWA: Service Worker registration failed:', error);
             });
         }
         
         return () => {
+            console.log("PWA: Cleanup useEffect");
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         };
     }, []);
 
     const handleInstallClick = () => {
         if (deferredPrompt) {
-            console.log('PWA: 用户点击安装');
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then((choiceResult) => {
                 if (choiceResult.outcome === 'accepted') {
-                    console.log('PWA: 用户接受了安装提示');
+                    console.log('PWA: User accepted the install prompt');
                 } else {
-                    console.log('PWA: 用户拒绝了安装提示');
+                    console.log('PWA: User dismissed the install prompt');
                 }
                 setShowPwaBanner(false);
                 setDeferredPrompt(null);
@@ -474,44 +539,12 @@ const ThemeHeo = props => {
     };
     
     const handleDismissClick = () => {
-        console.log('PWA: 用户关闭了横幅');
         localStorage.setItem('pwaInstallDismissed', 'true');
         setShowPwaBanner(false);
+        console.log('PWA: User dismissed the banner');
     };
 
-    return (
-        <>
-            <Layout {...props} />
-            {showPwaBanner && <PwaInstallBanner deferredPrompt={deferredPrompt} onInstall={handleInstallClick} onDismiss={handleDismissClick} />}
-        </>
-    );
-};
-
-
-// =========================================================================
-// =================  原始组件导出结构（Layout & 根组件）=====================
-// =========================================================================
-
-// 将原始的 ThemeHeo 重命名为 Layout，因为它现在只负责布局
-const Layout = props => {
-    // 原始 ThemeHeo 的内容现在在这里
-    const { siteInfo, Gtag, Umami, Plausible, Ackee } = props;
-    const customCss = siteConfig('CUSTOM_CSS');
-    const customExternalJS = siteConfig('CUSTOM_EXTERNAL_JS');
-
-    useEffect(() => {
-        if (isBrowser) {
-            if (siteConfig('ANALYTICS_ACKEE_TRACKER')) Ackee();
-            if (siteConfig('ANALYTICS_UMAMI_SCRIPT')) Umami();
-            if (siteConfig('ANALYTICS_PLAUSIBLE_SCRIPT')) Plausible();
-            if (siteConfig('ANALYTICS_GOOGLE_ID')) Gtag();
-            loadExternalResource(customExternalJS, 'js');
-            initZoom();
-        }
-    }, []);
-
-    const router = useRouter();
-    const { post } = props;
+    // 根据路由选择布局
     let layout;
     if (router.route === '/') {
         layout = <LayoutIndex {...props} />;
@@ -530,163 +563,29 @@ const Layout = props => {
     } else {
         layout = <LayoutPostList {...props} />;
     }
-
+    
     return (
         <LayoutBase {...props}>
             {layout}
+            {showPwaBanner && (
+                <div id="install-banner" className="install-banner visible">
+                    <div className="install-banner-content">
+                        <img src={siteConfig('AVATAR')} alt="网站Logo" className="install-banner-logo" />
+                        <div className="install-banner-text">
+                            <p><strong>添加到主屏幕</strong></p>
+                            <p>获得最佳离线体验！</p>
+                        </div>
+                        <button id="install-btn" className="install-banner-button" onClick={handleInstallClick}>安装</button>
+                        <button id="dismiss-btn" className="install-banner-close" onClick={handleDismissClick}>&times;</button>
+                    </div>
+                </div>
+            )}
         </LayoutBase>
     );
 };
 
 
-// 原始的组件结构
-const LayoutPostList = props => (
-    <div id='post-outer-wrapper' className='px-5 md:px-0'>
-        <CategoryBar {...props} />
-        {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
-    </div>
-);
-
-const LayoutSearch = props => {
-  const { keyword } = props
-  const router = useRouter()
-  const currentSearch = keyword || router?.query?.s
-
-  useEffect(() => {
-    if (currentSearch) {
-      setTimeout(() => {
-        replaceSearchResult({
-          doms: document.getElementsByClassName('replace'),
-          search: currentSearch,
-          target: { element: 'span', className: 'text-red-500 border-b border-dashed' }
-        })
-      }, 100)
-    }
-  }, [currentSearch])
-  return (
-    <div currentSearch={currentSearch}>
-      <div id='post-outer-wrapper' className='px-5 md:px-0'>
-        {!currentSearch ? <SearchNav {...props} />
-        : <div id='posts-wrapper'>
-            {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
-          </div>
-        }
-      </div>
-    </div>
-  )
-}
-
-const LayoutArchive = props => (
-    <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
-        <CategoryBar {...props} border={false} />
-        <div className='px-3'>
-            {Object.keys(props.archivePosts).map(archiveTitle => (
-                <BlogPostArchive key={archiveTitle} posts={props.archivePosts[archiveTitle]} archiveTitle={archiveTitle} />
-            ))}
-        </div>
-    </div>
-);
-
-const LayoutSlug = props => {
-  const { post, lock, validPassword } = props
-  const { locale, fullWidth } = useGlobal()
-
-  const commentEnable = siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') || siteConfig('COMMENT_GISCUS_REPO')
-
-  const router = useRouter()
-  useEffect(() => {
-    if (!post) {
-      setTimeout(() => {
-        if (isBrowser) {
-          const article = document.querySelector('#article-wrapper #notion-article')
-          if (!article) router.push('/404')
-        }
-      }, siteConfig('POST_WAITING_TIME_FOR_404') * 1000)
-    }
-  }, [post, router])
-
-  return (
-    <>
-      <div className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4`}>
-        {lock && <PostLock validPassword={validPassword} />}
-        {!lock && post && (
-          <div className='mx-auto md:w-full md:px-5'>
-            <article id='article-wrapper' itemScope itemType='https://schema.org/Movie'>
-              <section className='wow fadeInUp p-5 justify-center mx-auto' data-wow-delay='.2s'>
-                <ArticleExpirationNotice post={post} />
-                <AISummary aiSummary={post.aiSummary} />
-                <WWAds orientation='horizontal' className='w-full' />
-                {post && <NotionPage post={post} />}
-                <WWAds orientation='horizontal' className='w-full' />
-              </section>
-            </article>
-            {!fullWidth && commentEnable && post && (
-              <>
-                <hr className='my-4 border-dashed' />
-                <div className='py-2'><AdSlot /></div>
-                <div className='duration-200 overflow-x-auto px-5'>
-                  <div className='text-2xl dark:text-white'><i className='fas fa-comment mr-1' />{locale.COMMON.COMMENTS}</div>
-                  <Comment frontMatter={post} className='' />
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      <FloatTocButton {...props} />
-    </>
-  )
-}
-
-const Layout404 = () => (
-    <main id='wrapper-outer' className={'w-full mx-auto justify-center'}>
-        <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
-            <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
-                <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
-                <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
-                <SmartLink href='/'><button className='bg-blue-500 py-2 px-4 text-white shadow rounded-lg hover:bg-blue-600 hover:shadow-md duration-200 transition-all'>回到主页</button></SmartLink>
-            </div>
-        </div>
-    </main>
-);
-
-const LayoutCategoryIndex = props => (
-    <div id='category-outer-wrapper' className='mt-8 px-5 md:px-0'>
-        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.CATEGORY}</div>
-        <div id='category-list' className='duration-200 flex flex-wrap m-10 justify-center'>
-            {props.categoryOptions?.map(category => (
-                <SmartLink key={category.name} href={`/category/${category.name}`} passHref legacyBehavior>
-                    <div className={'group mr-5 mb-5 flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{category.name}
-                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{category.count}</div>
-                    </div>
-                </SmartLink>
-            ))}
-        </div>
-    </div>
-);
-
-const LayoutTagIndex = props => (
-    <div id='tag-outer-wrapper' className='px-5 mt-8 md:px-0'>
-        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.TAGS}</div>
-        <div id='tag-list' className='duration-200 flex flex-wrap space-x-5 space-y-5 m-10 justify-center'>
-            {props.tagOptions.map(tag => (
-                <SmartLink key={tag.name} href={`/tag/${tag.name}`} passHref legacyBehavior>
-                    <div className={'group flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{tag.name}
-                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{tag.count}</div>
-                    </div>
-                </SmartLink>
-            ))}
-        </div>
-    </div>
-);
-
-// 最终导出根组件 ThemeHeo
-export default ThemeHeo;
-
-// 原始文件的聚合导出结构（如果其他地方需要）
+// 聚合导出
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
   LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
