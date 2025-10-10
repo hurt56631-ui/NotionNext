@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 缩小主页顶部区域
+// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 精确移除页面顶部空白区域
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -134,10 +134,10 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
 
 
 /**
- * 基础布局 (保持不变)
+ * 基础布局 ([修改] 移除非文章页的顶部空白)
  */
 const LayoutBase = props => {
-  const { children, slotTop, className } = props
+  const { children, slotTop, className, post } = props // <-- [修改] 解构出 post 属性
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
 
@@ -146,8 +146,8 @@ const LayoutBase = props => {
   const headerSlot = (
     <header>
       <Header {...props} />
-      {router.route === '/' ? (<><NoticeBar /><Hero {...props} /></>) : null}
-      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+      {/* [修改] 只有在文章页 (props.post 存在) 且非全宽时才渲染 PostHeader */}
+      {post && !fullWidth ? <PostHeader {...props} isDarkMode={isDarkMode} /> : null}
     </header>
   )
 
@@ -335,8 +335,7 @@ const LayoutIndex = props => {
                 <i className="fas fa-bars text-xl"></i>
             </button>
             
-            {/* [修改] 将顶部英雄区高度从 45vh 调整为 25vh */}
-            <div className='absolute top-0 left-0 right-0 h-[25vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
+            <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.7)' }}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
@@ -349,10 +348,8 @@ const LayoutIndex = props => {
             </div>
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                {/* [修改] 将滚动占位符高度从 45vh 调整为 25vh */}
-                <div ref={sentinelRef} className='h-[25vh] flex-shrink-0' />
-                {/* [修改] 调整内容区最小高度以匹配新的布局 */}
-                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(75vh+1px)]'>
+                <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
+                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
 
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
