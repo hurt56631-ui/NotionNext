@@ -1,4 +1,4 @@
-// /pages/_app.js (最终架构修复版)
+// /pages/_app.js (最终集成PWA自定义弹窗版)
 
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
@@ -9,16 +9,19 @@ import useAdjustStyle from '@/hooks/useAdjustStyle'
 import { GlobalContextProvider } from '@/lib/global'
 import { getBaseLayoutByTheme } from '@/themes/theme'
 import { useRouter } from 'next/router'
-// ✅ 导入 useEffect
-import { useCallback, useMemo, useEffect } from 'react'
+import { useCallback, useMemo, useEffect } from 'react' // 确保 useEffect 在这里
 import { getQueryParam } from '../lib/utils'
 
 import BLOG from '@/blog.config'
 import ExternalPlugins from '@/components/ExternalPlugins'
 import SEO from '@/components/SEO'
 
-import { AuthProvider } from '@/lib/AuthContext';
-import { UnreadCountProvider } from '@/lib/UnreadCountContext'; 
+import { AuthProvider } from '@/lib/AuthContext'
+import { UnreadCountProvider } from '@/lib/UnreadCountContext'
+
+// ✅ 1. 导入自定义PWA弹窗组件和Hook
+import PwaInstallPrompt from '@/components/PwaInstallPrompt'
+import { usePWAInstall } from '@/hooks/usePWAInstall'
 
 // AppInner 组件保持不变
 const AppInner = ({ Component, pageProps }) => {
@@ -52,9 +55,12 @@ const AppInner = ({ Component, pageProps }) => {
   )
 }
 
+// 最终的 MyApp 组件
 const MyApp = ({ Component, pageProps }) => {
+  // ✅ 2. 使用自定义Hook来获取PWA弹窗的状态和处理函数
+  const { showInstallPrompt, handleInstallClick, handleDismissClick } = usePWAInstall()
 
-  // ✅ 新增：注册Service Worker
+  // 注册Service Worker的逻辑 (保持不变)
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
@@ -73,7 +79,16 @@ const MyApp = ({ Component, pageProps }) => {
   return (
     <AuthProvider>
       <UnreadCountProvider>
+        {/* 核心UI */}
         <AppInner Component={Component} pageProps={pageProps} />
+        
+        {/* ✅ 3. 在这里渲染自定义PWA安装弹窗 */}
+        {/* 它会根据 showInstallPrompt 的状态自动显示或隐藏 */}
+        <PwaInstallPrompt
+          show={showInstallPrompt}
+          onInstall={handleInstallClick}
+          onDismiss={handleDismissClick}
+        />
       </UnreadCountProvider>
     </AuthProvider>
   )
