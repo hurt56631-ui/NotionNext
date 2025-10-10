@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 精确移除页面顶部空白
+// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 移除主页Footer & 恢复顶部空白修复
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -134,7 +134,7 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
 
 
 /**
- * 基础布局 (保持不变)
+ * 基础布局 (已正确修复)
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
@@ -146,7 +146,7 @@ const LayoutBase = props => {
   const headerSlot = (
     <header>
       <Header {...props} />
-      {/* [关键修复] 恢复了旧代码的正确逻辑, PostHeader (白色区域) 现在只会在文章页显示 */}
+      {/* [正确逻辑] PostHeader (白色区域) 只会在文章页(props.post存在时)显示 */}
       {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
@@ -182,6 +182,44 @@ const CustomScrollbarStyle = () => (
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
     `}</style>
 );
+
+
+// =================================================================================
+// ====================== [修复] 重新定义主页专用的底部导航栏 ========================
+// =================================================================================
+const BottomNavBar = () => {
+    const navItems = [
+        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
+        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
+        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
+        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
+        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+    ];
+    const router = useRouter();
+    const { user, authLoading } = useAuth();
+    const [showLoginModal, setShowLoginModal] = useState(false);
+
+    const handleLinkClick = (e, item) => {
+        if (item.auth && !authLoading && !user) {
+            e.preventDefault();
+            setShowLoginModal(true);
+        }
+    };
+
+    return (
+        <>
+            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+                {navItems.map(item => (
+                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                    </SmartLink>
+                ))}
+            </nav>
+        </>
+    );
+};
 
 // =================================================================================
 // ====================== ✅ 重写：快捷操作按钮组件 ✅ ========================
@@ -380,8 +418,9 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            {/* ✅ 关键修复：使用全局的 Footer 组件来显示底部导航，确保逻辑统一 */}
-            <Footer />
+            
+            {/* [关键修复] 在主页末尾调用主页专用的 BottomNavBar，而不是全局的 Footer */}
+            <BottomNavBar />
         </div>
     </div>
   );
