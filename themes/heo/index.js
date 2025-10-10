@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：PWA弹窗逻辑注入正确位置 & 修复所有布局问题
+// themes/heo/index.js  <-- 最终修复版：修复构建错误 & PWA弹窗 & 所有布局问题
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -133,7 +133,7 @@ const LayoutBase = props => {
   const headerSlot = (
     <header>
       <Header {...props} />
-      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+      {fullWidth || !props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
   const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
@@ -242,7 +242,6 @@ const LayoutIndex = props => {
   const [isDragging, setIsDragging] = useState(false);
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
-
   useEffect(() => {
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
@@ -257,7 +256,6 @@ const LayoutIndex = props => {
     if (currentSentinel) observer.observe(currentSentinel);
     return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
   }, []);
-
   const handleTouchStart = (e) => {
     if ((!isSidebarOpen && e.touches[0].clientX > 50)) return;
     touchStartX.current = e.touches[0].clientX;
@@ -293,7 +291,6 @@ const LayoutIndex = props => {
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
-
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
@@ -351,11 +348,6 @@ const LayoutIndex = props => {
     </div>
   );
 };
-
-/**
- * [这是旧的、被废弃的根组件，现已用下面的新结构替代]
- */
-// const OriginalThemeHeo = props => { ... };
 
 /**
  * 所有其他页面布局组件
@@ -449,36 +441,42 @@ const Layout404 = () => (
         </div>
     </main>
 );
-const LayoutCategoryIndex = props => (
+const LayoutCategoryIndex = props => {
+  const { locale, categoryOptions } = props
+  return (
     <div id='category-outer-wrapper' className='mt-8 px-5 md:px-0'>
-        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.CATEGORY}</div>
-        <div id='category-list' className='duration-200 flex flex-wrap m-10 justify-center'>
-            {props.categoryOptions?.map(category => (
-                <SmartLink key={category.name} href={`/category/${category.name}`} passHref legacyBehavior>
-                    <div className={'group mr-5 mb-5 flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{category.name}
-                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{category.count}</div>
-                    </div>
-                </SmartLink>
-            ))}
-        </div>
+      <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{locale.COMMON.CATEGORY}</div>
+      <div id='category-list' className='duration-200 flex flex-wrap m-10 justify-center'>
+        {categoryOptions?.map(category => (
+          <SmartLink key={category.name} href={`/category/${category.name}`} passHref legacyBehavior>
+            <div className={'group mr-5 mb-5 flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
+              <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{category.name}
+              <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{category.count}</div>
+            </div>
+          </SmartLink>
+        ))}
+      </div>
     </div>
-);
-const LayoutTagIndex = props => (
+  )
+}
+const LayoutTagIndex = props => {
+  const { locale, tagOptions } = props
+  return (
     <div id='tag-outer-wrapper' className='px-5 mt-8 md:px-0'>
-        <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{props.locale.COMMON.TAGS}</div>
-        <div id='tag-list' className='duration-200 flex flex-wrap space-x-5 space-y-5 m-10 justify-center'>
-            {props.tagOptions.map(tag => (
-                <SmartLink key={tag.name} href={`/tag/${tag.name}`} passHref legacyBehavior>
-                    <div className={'group flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
-                        <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{tag.name}
-                        <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{tag.count}</div>
-                    </div>
-                </SmartLink>
-            ))}
-        </div>
+      <div className='text-4xl font-extrabold dark:text-gray-200 mb-5'>{locale.COMMON.TAGS}</div>
+      <div id='tag-list' className='duration-200 flex flex-wrap space-x-5 space-y-5 m-10 justify-center'>
+        {tagOptions.map(tag => (
+          <SmartLink key={tag.name} href={`/tag/${tag.name}`} passHref legacyBehavior>
+            <div className={'group flex flex-nowrap items-center border bg-white text-2xl rounded-xl dark:hover:text-white px-4 cursor-pointer py-3 hover:text-white hover:bg-indigo-600 transition-all hover:scale-110 duration-150'}>
+              <HashTag className={'w-5 h-5 stroke-gray-500 stroke-2'} />{tag.name}
+              <div className='bg-[#f1f3f8] ml-1 px-2 rounded-lg group-hover:text-indigo-600 '>{tag.count}</div>
+            </div>
+          </SmartLink>
+        ))}
+      </div>
     </div>
-);
+  )
+}
 
 // =========================================================================
 // =================  [最终修复] 根组件，集成PWA逻辑 ===================
@@ -499,8 +497,11 @@ const ThemeHeo = props => {
             e.preventDefault();
             setDeferredPrompt(e);
             if (!localStorage.getItem('pwaInstallDismissed')) {
-                console.log('PWA: Show banner');
-                setShowPwaBanner(true);
+                // 设置一个延迟，比如2秒后显示
+                setTimeout(() => {
+                    console.log('PWA: Show banner after delay');
+                    setShowPwaBanner(true);
+                }, 2000);
             } else {
                 console.log('PWA: Banner dismissed previously');
             }
@@ -510,10 +511,12 @@ const ThemeHeo = props => {
 
         // 注册 Service Worker
         if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-            navigator.serviceWorker.register('/sw.js').then(registration => {
-                console.log('PWA: Service Worker registered scope:', registration.scope);
-            }).catch(error => {
-                console.error('PWA: Service Worker registration failed:', error);
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('PWA: Service Worker registered scope:', registration.scope);
+                }).catch(error => {
+                    console.error('PWA: Service Worker registration failed:', error);
+                });
             });
         }
         
@@ -564,9 +567,12 @@ const ThemeHeo = props => {
         layout = <LayoutPostList {...props} />;
     }
     
+    // [关键修复] PWA安装横幅现在放在 LayoutBase 之外，确保它能覆盖所有页面
     return (
-        <LayoutBase {...props}>
-            {layout}
+        <>
+            <LayoutBase {...props}>
+                {layout}
+            </LayoutBase>
             {showPwaBanner && (
                 <div id="install-banner" className="install-banner visible">
                     <div className="install-banner-content">
@@ -580,13 +586,14 @@ const ThemeHeo = props => {
                     </div>
                 </div>
             )}
-        </LayoutBase>
+        </>
     );
 };
 
 
-// 聚合导出
+// 最终聚合导出
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
-  LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
+  LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG,
+  ThemeHeo as default
 }
