@@ -1,4 +1,4 @@
-// /components/GlosbeSearchCard.js <-- 最终美化增强版
+// /components/GlosbeSearchCard.js <-- 最终修复版：语音识别后自动发送
 
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeftRight, Search, Mic, Globe, X } from 'lucide-react';
@@ -23,7 +23,7 @@ const recognitionLanguages = [
  * - 沉浸式设计: 采用现代渐变、辉光背景和精致动画，提供高端视觉体验。
  * - 智能与灵活并存: 切换翻译方向时，会自动设定最佳的语音识别语言，同时保留手动切换的地球图标，满足特殊使用场景。
  * - 增强的交互反馈: 所有按钮和输入框都有流畅的过渡动画和明确的状态指示。
- * - 核心逻辑优化: 语音识别后，文本会填入输入框等待用户确认，避免误操作。
+ * - 核心逻辑: 语音识别后立即自动发送查询，操作更快捷。
  * - 结果在新标签页打开，确保搜索的稳定性和可靠性。
  */
 const GlosbeSearchCard = () => {
@@ -35,6 +35,22 @@ const GlosbeSearchCard = () => {
 
   const recognitionRef = useRef(null);
   const langMenuRef = useRef(null); // 用于处理语言菜单的外部点击
+
+  // --- 事件处理函数 ---
+
+  // 执行搜索
+  // 这个函数现在可以被useEffect中的语音识别回调直接调用
+  const handleSearch = (textToSearch) => {
+    // 如果没有提供搜索文本，则使用state中的`word`
+    const effectiveWord = textToSearch || word;
+    const trimmedWord = effectiveWord.trim();
+    if (trimmedWord) {
+      const glosbeUrl = searchDirection === 'my2zh'
+        ? `https://glosbe.com/my/zh/${encodeURIComponent(trimmedWord)}`
+        : `https://glosbe.com/zh/my/${encodeURIComponent(trimmedWord)}`;
+      window.open(glosbeUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   // --- 语音识别引擎初始化 ---
   useEffect(() => {
@@ -53,10 +69,11 @@ const GlosbeSearchCard = () => {
         setIsListening(false);
       };
 
-      // 核心逻辑: 识别结束后，更新输入框内容，不自动提交
+      // ✅ 核心逻辑修改: 识别结束后，立即自动执行搜索
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        setWord(transcript); // 将识别结果填入输入框
+        setWord(transcript);      // 步骤1: 将识别结果填入输入框，让用户看到识别内容
+        handleSearch(transcript); // 步骤2: 立即使用该结果执行搜索，无需等待用户确认
       };
 
       recognitionRef.current = recognition;
@@ -74,37 +91,25 @@ const GlosbeSearchCard = () => {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDirection]); // 依赖项中加入searchDirection确保handleSearch函数能获取到最新的翻译方向
 
   // --- 智能默认语言: 监听翻译方向，自动切换语音识别语言 ---
   useEffect(() => {
-    // 这是对您疑问的核心解答：我们根据翻译方向自动切换默认语言
     const newLang = searchDirection === 'my2zh' ? 'my-MM' : 'zh-CN';
     setRecognitionLang(newLang);
-    // 如果语音识别实例存在，则更新其语言属性
     if (recognitionRef.current) {
       recognitionRef.current.lang = newLang;
     }
   }, [searchDirection]);
 
 
-  // --- 事件处理函数 ---
+  // --- 其他事件处理函数 ---
 
   // 切换翻译方向
   const toggleDirection = () => {
     setSearchDirection(prev => (prev === 'my2zh' ? 'zh2my' : 'my2zh'));
     setWord(''); // 切换后清空输入框
-  };
-
-  // 执行搜索 (手动触发)
-  const handleSearch = (textToSearch = word) => {
-    const trimmedWord = textToSearch.trim();
-    if (trimmedWord) {
-      const glosbeUrl = searchDirection === 'my2zh'
-        ? `https://glosbe.com/my/zh/${encodeURIComponent(trimmedWord)}`
-        : `https://glosbe.com/zh/my/${encodeURIComponent(trimmedWord)}`;
-      window.open(glosbeUrl, '_blank', 'noopener,noreferrer');
-    }
   };
 
   // 启动或停止语音识别
