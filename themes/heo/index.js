@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 精确移除页面顶部空白区域
+// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 精确移除页面顶部空白
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -134,10 +134,11 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
 
 
 /**
- * 基础布局 ([修改] 移除非文章页的顶部空白)
+ * 基础布局 ([最终修复] 移除非文章页的顶部空白)
  */
 const LayoutBase = props => {
-  const { children, slotTop, className, post } = props // <-- [修改] 解构出 post 属性
+  // [修复] 从 props 中解构出 post，用于判断是否为文章页
+  const { children, slotTop, className, post } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
 
@@ -146,7 +147,9 @@ const LayoutBase = props => {
   const headerSlot = (
     <header>
       <Header {...props} />
-      {/* [修改] 只有在文章页 (props.post 存在) 且非全宽时才渲染 PostHeader */}
+      {/* [修复] 这是移除白色区域的核心。
+          现在 PostHeader (白色区域) 只会在 props.post 存在 (即文章页) 
+          且不是全宽模式的情况下渲染。在其他列表页面，它将不会被渲染。 */}
       {post && !fullWidth ? <PostHeader {...props} isDarkMode={isDarkMode} /> : null}
     </header>
   )
@@ -223,7 +226,7 @@ const LayoutIndex = props => {
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
-  
+
   // ===== ✅ 高级拖拽侧边栏 State 和 Refs =====
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
