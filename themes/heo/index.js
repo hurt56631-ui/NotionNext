@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版 v9：新增侧边栏并修复底部遮挡
+// themes/heo/index.js  <-- 最终修复版：实现高级拖拽侧边栏 & 升级快捷按钮
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -16,8 +16,7 @@ import { isBrowser } from '@/lib/utils'
 import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
-import { useEffect, useState, useRef } from 'react'
-import { useSwipeable } from 'react-swipeable'
+import { useEffect, useState, useRef, useCallback } from 'react' // ✅ 导入 useCallback
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
 import BlogPostArchive from './components/BlogPostArchive'
@@ -42,7 +41,6 @@ import { FaTiktok, FaFacebook } from 'react-icons/fa'
 import {
     Newspaper,
     GraduationCap,
-    Smile,
     ClipboardCheck,
     BookOpen,
     Phone,
@@ -52,7 +50,11 @@ import {
     LifeBuoy,
     Moon,
     Sun,
-    UserCircle
+    UserCircle,
+    Mic, // ✅ 导入新的“口语”图标
+    BookUser, // ✅ 导入新的快捷按钮图标
+    Video, // ✅ 导入新的快捷按钮图标
+    Info // ✅ 导入新的快捷按钮图标
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -67,27 +69,33 @@ const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false }
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 
 
-// =========================================================================
-// ====================== ✅ 新增：首页侧边栏组件 ✅ ========================
-// =========================================================================
-const HomeSidebar = ({ isOpen, onClose }) => {
+// =================================================================================
+// ====================== ✅ 重写：高级拖拽侧边栏组件 ✅ ========================
+// =================================================================================
+const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
+  const sidebarWidth = 288; // 侧边栏宽度 (w-72)
 
   const sidebarLinks = [
     { icon: <Settings size={20} />, text: '通用设置', href: '/settings' },
     { icon: <LifeBuoy size={20} />, text: '帮助中心', href: '/help' },
   ];
 
+  // 在拖拽时禁用CSS过渡动画，以确保平滑跟随；松手后启用动画，实现吸附效果
+  const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-in-out';
+
   return (
     <>
-      {/* 遮罩层 */}
+      {/* 遮罩层 (实现拖拽时透明度渐变) */}
       <div
-        className={`fixed inset-0 bg-black/50 z-30 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 bg-black z-30 transition-opacity duration-300 ${isOpen ? 'opacity-50' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
+        style={{ opacity: isOpen ? 0.5 : (sidebarX + sidebarWidth) / sidebarWidth * 0.5 }}
       />
       {/* 侧边栏内容 */}
       <div
-        className={`fixed inset-y-0 left-0 w-72 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed inset-y-0 left-0 w-72 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-2xl z-40 transform ${transitionClass}`}
+        style={{ transform: `translateX(${sidebarX}px)` }} // ✅ 核心：通过transform实时更新位置
       >
         <div className="flex flex-col h-full">
             {/* 顶部用户信息 */}
@@ -209,19 +217,24 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
-// 快捷操作按钮组件 (保持不变)
+// =================================================================================
+// ====================== ✅ 重写：快捷操作按钮组件 ✅ ========================
+// =================================================================================
 const ActionButtons = () => {
   const actions = [
-    { icon: <Phone size={20} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER' },
-    { icon: <MessageSquare size={20} />, text: '在线客服', href: '#' },
-    { icon: <Users size={20} />, text: '加入社群', href: '#' },
+    { icon: <Phone size={24} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER', color: 'from-blue-500 to-sky-500' },
+    { icon: <MessageSquare size={24} />, text: '在线客服', href: '#', color: 'from-green-500 to-emerald-500' },
+    { icon: <Users size={24} />, text: '加入社群', href: '#', color: 'from-purple-500 to-indigo-500' },
+    { icon: <BookUser size={24} />, text: '预约课程', href: '#', color: 'from-orange-500 to-amber-500' },
+    { icon: <Video size={24} />, text: '视频教程', href: '#', color: 'from-red-500 to-rose-500' },
+    { icon: <Info size={24} />, text: '关于我们', href: '#', color: 'from-gray-500 to-slate-500' },
   ];
   return (
-    <div className="grid grid-cols-3 gap-3 my-5 px-4">
+    <div className="grid grid-cols-3 gap-4 my-6 px-4">
       {actions.map((action, index) => (
-        <a key={index} href={action.href} className="flex flex-col items-center justify-center p-3 bg-gray-100 dark:bg-gray-800/80 rounded-lg shadow-sm hover:bg-gray-200 dark:hover:bg-gray-700/80 transition-all duration-300 transform hover:scale-105">
-          <div className="text-blue-500 dark:text-blue-400 mb-1">{action.icon}</div>
-          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{action.text}</span>
+        <a key={index} href={action.href} className={`flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1`}>
+          <div className="mb-2">{action.icon}</div>
+          <span className="text-sm font-semibold">{action.text}</span>
         </a>
       ))}
     </div>
@@ -230,13 +243,14 @@ const ActionButtons = () => {
 
 
 /**
- * 首页 - 终极融合版 (已修改)
+ * 首页 - 终极融合版 (已重写)
  */
 const LayoutIndex = props => {
+  // ✅ 修改：更换口语图标
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
     { name: 'HSK', icon: <GraduationCap size={22} /> },
-    { name: '口语', icon: <Smile size={22} /> },
+    { name: '口语', icon: <Mic size={22} /> },
     { name: '练习', icon: <ClipboardCheck size={22} /> },
     { name: '书籍', icon: <BookOpen size={22} /> }
   ];
@@ -245,12 +259,17 @@ const LayoutIndex = props => {
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
   
-  // ✅ 新增：侧边栏状态
+  // ===== ✅ 高级拖拽侧边栏 State 和 Refs =====
+  const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarX, setSidebarX] = useState(-sidebarWidth);
+  const [isDragging, setIsDragging] = useState(false);
+  const touchStartX = useRef(null);
+  const currentSidebarX = useRef(-sidebarWidth);
 
   useEffect(() => {
     const backgrounds = [
-        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit=crop&q=80&w=2070',
+        'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit=crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
@@ -265,34 +284,43 @@ const LayoutIndex = props => {
     return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
   }, []);
 
-  // 用于内容区左右切换 Tab
-  const contentSwipeHandlers = useSwipeable({
-    onSwipedLeft: () => {
-      const currentIndex = tabs.findIndex(t => t.name === activeTab);
-      if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
-    },
-    onSwipedRight: () => {
-      const currentIndex = tabs.findIndex(t => t.name === activeTab);
-      if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
-    },
-    onSwiping: (e) => {
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) e.event.preventDefault();
-    },
-    disabled: !isCategoryBarSticky,
-    preventDefaultTouchmoveEvent: false,
-    trackMouse: true,
-    delta: 40
-  });
+  // ===== ✅ 高级拖拽侧边栏事件处理函数 =====
+  const handleTouchStart = (e) => {
+    const startX = e.touches[0].clientX;
+    // 边缘检测：只在屏幕最左侧 50px 内（手势拉出）或侧边栏已打开时（手势关闭）才启动拖拽
+    if ((!isSidebarOpen && startX > 50)) return;
 
-  // ✅ 新增：用于全局拖拽打开/关闭侧边栏
-  const mainSwipeHandlers = useSwipeable({
-    onSwipedRight: () => setIsSidebarOpen(true),
-    onSwipedLeft: () => {
-        if (isSidebarOpen) setIsSidebarOpen(false);
-    },
-    trackMouse: true,
-    delta: 60 // 需要拖拽更长的距离才触发，防止误触
-  });
+    touchStartX.current = startX;
+    currentSidebarX.current = sidebarX;
+    setIsDragging(true); // 开始拖拽，禁用CSS动画
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || touchStartX.current === null) return;
+    const currentX = e.touches[0].clientX;
+    const deltaX = currentX - touchStartX.current;
+
+    let newX = currentSidebarX.current + deltaX;
+    newX = Math.max(-sidebarWidth, Math.min(newX, 0)); // 限制拖拽范围在 [-sidebarWidth, 0] 之间
+    setSidebarX(newX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging || touchStartX.current === null) return;
+    setIsDragging(false); // 结束拖拽，启用CSS动画
+    touchStartX.current = null;
+
+    // 根据最后的位置决定是打开还是关闭
+    if (sidebarX < -sidebarWidth / 2) { // 如果拉出不足一半，则收回
+        closeSidebar();
+    } else { // 否则，完全打开
+        openSidebar();
+    }
+  };
+
+  // 控制侧边栏打开/关闭的函数
+  const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
+  const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
 
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
@@ -301,17 +329,22 @@ const LayoutIndex = props => {
         <Style/>
         <CustomScrollbarStyle />
         
-        {/* ✅ 新增：侧边栏组件实例 */}
-        <HomeSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        {/* ✅ 将新的 Props 传递给侧边栏组件 */}
+        <HomeSidebar isOpen={isSidebarOpen} onClose={closeSidebar} sidebarX={sidebarX} isDragging={isDragging} />
 
-        {/* ✅ 新增：将主滑动事件绑定到这个容器上 */}
-        <div {...mainSwipeHandlers} className='relative flex-grow w-full h-full'>
+        {/* ✅ 将拖拽事件绑定到主内容容器上 */}
+        <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className='relative flex-grow w-full h-full'
+        >
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
-            {/* ✅ 新增：汉堡菜单按钮 */}
+            {/* ✅ 汉堡菜单按钮现在调用 openSidebar */}
             <button
-                onClick={() => setIsSidebarOpen(true)}
+                onClick={openSidebar}
                 className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors"
                 aria-label="打开菜单"
             >
@@ -332,8 +365,6 @@ const LayoutIndex = props => {
 
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
-
-                {/* ✅ 修复：将 pb-16 改为 pb-24，为底部导航栏留出更多空间 */}
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
 
@@ -349,7 +380,7 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main {...contentSwipeHandlers} className="min-h-[70vh]">
+                    <main className="min-h-[70vh]">
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'>
