@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：实现高级拖拽侧边栏 & 升级快捷按钮
+// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -16,7 +16,8 @@ import { isBrowser } from '@/lib/utils'
 import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
-import { useEffect, useState, useRef, useCallback } from 'react' // ✅ 导入 useCallback
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { useSwipeable } from 'react-swipeable' // ✅ 重新导入 useSwipeable
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
 import BlogPostArchive from './components/BlogPostArchive'
@@ -51,10 +52,10 @@ import {
     Moon,
     Sun,
     UserCircle,
-    Mic, // ✅ 导入新的“口语”图标
-    BookUser, // ✅ 导入新的快捷按钮图标
-    Video, // ✅ 导入新的快捷按钮图标
-    Info // ✅ 导入新的快捷按钮图标
+    Mic,
+    BookUser,
+    Video,
+    Info
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -230,7 +231,7 @@ const ActionButtons = () => {
     { icon: <Info size={24} />, text: '关于我们', href: '#', color: 'from-gray-500 to-slate-500' },
   ];
   return (
-    <div className="grid grid-cols-3 gap-4 my-6 px-4">
+    <div className="grid grid-cols-2 gap-4 my-6 px-4">
       {actions.map((action, index) => (
         <a key={index} href={action.href} className={`flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1`}>
           <div className="mb-2">{action.icon}</div>
@@ -246,7 +247,6 @@ const ActionButtons = () => {
  * 首页 - 终极融合版 (已重写)
  */
 const LayoutIndex = props => {
-  // ✅ 修改：更换口语图标
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
     { name: 'HSK', icon: <GraduationCap size={22} /> },
@@ -270,7 +270,7 @@ const LayoutIndex = props => {
   useEffect(() => {
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
-        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit=crop&q=80&w=2070'
+        'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
@@ -318,6 +318,27 @@ const LayoutIndex = props => {
     }
   };
 
+  // ===== ✅ 恢复分类切换手势处理器 =====
+  const contentSwipeHandlers = useSwipeable({
+      onSwipedLeft: () => {
+          const currentIndex = tabs.findIndex(t => t.name === activeTab);
+          if (currentIndex < tabs.length - 1) {
+              setActiveTab(tabs[currentIndex + 1].name);
+          }
+      },
+      onSwipedRight: () => {
+          const currentIndex = tabs.findIndex(t => t.name === activeTab);
+          if (currentIndex > 0) {
+              setActiveTab(tabs[currentIndex - 1].name);
+          }
+      },
+      // 关键修复：当分类栏未吸顶或正在拖动侧边栏时，禁用此滑动
+      disabled: !isCategoryBarSticky || isDragging,
+      preventDefaultTouchmoveEvent: true,
+      trackMouse: true,
+      delta: 50
+  });
+
   // 控制侧边栏打开/关闭的函数
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
@@ -329,10 +350,9 @@ const LayoutIndex = props => {
         <Style/>
         <CustomScrollbarStyle />
         
-        {/* ✅ 将新的 Props 传递给侧边栏组件 */}
         <HomeSidebar isOpen={isSidebarOpen} onClose={closeSidebar} sidebarX={sidebarX} isDragging={isDragging} />
 
-        {/* ✅ 将拖拽事件绑定到主内容容器上 */}
+        {/* 将拖拽事件绑定到主内容容器上 */}
         <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -342,7 +362,6 @@ const LayoutIndex = props => {
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
-            {/* ✅ 汉堡菜单按钮现在调用 openSidebar */}
             <button
                 onClick={openSidebar}
                 className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors"
@@ -380,7 +399,8 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main className="min-h-[70vh]">
+                    {/* ✅ 将分类滑动手势绑定到 main 元素上 */}
+                    <main className="min-h-[70vh]" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'>
