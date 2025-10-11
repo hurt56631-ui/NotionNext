@@ -1,97 +1,187 @@
-// components/BooksContentBlock.js (结合版)
 
-import { ChevronRight } from 'lucide-react';
-import Image from 'next/image';
+// components/BooksContentBlock.js
 
-// --- 模拟数据 (保持不变，使用带封面的数据) ---
+import { useState } from 'react';
+import { ChevronRight, BookOpen, Library } from 'lucide-react';
+
+// --- 模拟数据 ---
 const booksData = [
   {
-    category: 'HSK 标准教程',
+    category: '推荐综合教材',
+    description: '系统化学习汉语的标准教材系列',
+    color: 'bg-emerald-500',
+    icon: <Library />,
     items: [
-      { id: 'hsk-1', title: 'HSK 1', author: '姜丽萍 主编', imageUrl: '/images/hsk1.png' },
-      { id: 'hsk-2', title: 'HSK 2', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/51552z0a1TL._AC_UF1000,1000_QL80_.jpg' },
-      { id: 'hsk-3', title: 'HSK 3', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/81Lflq8-yNL._AC_UF1000,1000_QL80_.jpg' },
-      { id: 'hsk-4a', title: 'HSK 4上', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/516a73K-3pL.jpg' },
-      { id: 'hsk-4b', title: 'HSK 4下', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/51-PMLo7wKL.jpg' },
-      { id: 'hsk-5a', title: 'HSK 5上', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/51y2eY-JdKL.jpg' },
+      { 
+        id: 1, 
+        title: '《HSK 标准教程》系列', 
+        author: '姜丽萍 主编',
+        imageUrl: '/images/hsk.png',
+        readUrl: 'https://www.amazon.cn/dp/B00KL2M3F0'
+      },
+      { 
+        id: 2, 
+        title: '《博雅汉语》系列', 
+        author: '李晓琪 主编',
+        imageUrl: 'https://img1.doubanio.com/view/subject/l/public/s33983228.jpg',
+        readUrl: 'https://book.douban.com/subject/35226757/'
+      },
+      { 
+        id: 3, 
+        title: '《新实用汉语课本》系列', 
+        author: '刘珣 主编',
+        imageUrl: 'https://m.media-amazon.com/images/I/5135Y6F6BFL.jpg',
+        readUrl: 'https://www.blcup.com/PInfo/index/12554' 
+      },
+      {
+        id: 4,
+        title: '《发展汉语》系列',
+        author: '国家汉办 规划',
+        imageUrl: 'https://img1.doubanio.com/view/subject/l/public/s29509658.jpg',
+        readUrl: 'https://book.douban.com/subject/26897232/',
+      },
+      {
+        id: 5,
+        title: '《成功之路》系列',
+        author: '张莉 主编',
+        imageUrl: 'https://img9.doubanio.com/view/subject/l/public/s3491416.jpg',
+        readUrl: 'https://book.douban.com/subject/3482705/',
+      }
     ]
   },
   {
-    category: '推荐中文读物',
+    category: '分级读物',
+    description: '通过阅读有趣的故事来巩固和扩展词汇',
+    color: 'bg-violet-500',
+    icon: <BookOpen />,
     items: [
-      { id: 'reader-1', title: '活着', author: '余华', imageUrl: 'https://img1.doubanio.com/view/subject/s/public/s34044208.jpg' },
-      { id: 'reader-2', title: '三体', author: '刘慈欣', imageUrl: 'https://img9.doubanio.com/view/subject/s/public/s25633164.jpg' },
-      { id: 'reader-3', title: '围城', author: '钱钟书', imageUrl: 'https://img2.doubanio.com/view/subject/s/public/s29433392.jpg' },
-      { id: 'reader-4', title: '平凡的世界', author: '路遥', imageUrl: 'https://img9.doubanio.com/view/subject/s/public/s33629095.jpg' },
-      { id: 'reader-5', title: '白鹿原', author: '陈忠实', imageUrl: 'https://img9.doubanio.com/view/subject/s/public/s29467645.jpg' },
+      { 
+        id: 1, 
+        title: '汉语风 - 中文分级读物系列', 
+        author: '刘月华 等',
+        imageUrl: 'https://img2.doubanio.com/view/subject/l/public/s27221293.jpg',
+        readUrl: 'https://book.douban.com/subject/26372076/'
+      },
+      { 
+        id: 2, 
+        title: '中文天天读系列', 
+        author: '刘月华 等',
+        imageUrl: 'https://m.media-amazon.com/images/I/51-j82rVq2L.jpg',
+        readUrl: 'https://www.blcup.com/PInfo/index/8405'
+      },
+      { 
+        id: 3, 
+        title: '汉语阶梯阅读', 
+        author: '各类作者',
+        imageUrl: 'https://img9.doubanio.com/view/subject/l/public/s4657984.jpg',
+        readUrl: 'https://book.douban.com/subject/5392812/'
+      },
+      {
+        id: 4,
+        title: '国际中文学习词汇速记速练',
+        author: '吴晓露 等',
+        imageUrl: 'https://img9.doubanio.com/view/subject/l/public/s34503716.jpg',
+        readUrl: 'https://book.douban.com/subject/36183313/',
+      }
     ]
   },
   {
-    category: '儿童启蒙读物',
+    category: '专项技能与教师用书',
+    description: '针对听说读写及教学法的专业书籍',
+    color: 'bg-sky-500',
+    icon: <Library />,
     items: [
-        { id: 'child-1', title: '窗边的小豆豆', author: '黑柳彻子', imageUrl: 'https://img9.doubanio.com/view/subject/s/public/s33923565.jpg' },
-        { id: 'child-2', title: '猜猜我有多爱你', author: '山姆·麦克布雷尼', imageUrl: 'https://img1.doubanio.com/view/subject/s/public/s1598207.jpg' },
-        { id: 'child-3', title: '小王子', author: '安托万·德·圣-埃克苏佩里', imageUrl: 'https://img3.doubanio.com/view/subject/s/public/s1020482.jpg' },
-        { id: 'child-4', title: '活了100万次的猫', author: '佐野洋子', imageUrl: 'https://img9.doubanio.com/view/subject/s/public/s1333304.jpg' }
-    ]
+        {
+            id: 1,
+            title: '《国际汉语教师证书》面试指南',
+            author: '刘珣 主编',
+            imageUrl: 'https://img1.doubanio.com/view/subject/l/public/s29671657.jpg',
+            readUrl: 'https://book.douban.com/subject/27618919/',
+        },
+        {
+            id: 2,
+            title: '外国人学汉字',
+            author: '陈作宏',
+            imageUrl: 'https://img9.doubanio.com/view/subject/l/public/s2792874.jpg',
+            readUrl: 'https://book.douban.com/subject/2381206/',
+        },
+        {
+            id: 3,
+            title: '国际汉语教学案例与分析',
+            author: '朱勇',
+            imageUrl: 'https://img2.doubanio.com/view/subject/l/public/s4408013.jpg',
+            readUrl: 'https://book.douban.com/subject/4845421/',
+        }
+    ],
   }
 ];
 
-const BooksContentBlock = () => {
-  return (
-    // {/ V 整体容器，使用了图一的背景图片来营造氛围 /}
-    <div
-      className="p-4 rounded-lg bg-cover bg-center"
-      style={{ backgroundImage: "url('/images/shujiabeijing.png')" }}
+const BookItem = ({ item }) => (
+    <a 
+      href={item.readUrl} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="group block"
     >
-      <div className="space-y-6">
-        {booksData.map(section => (
-          // {/ V 每个分类都是一个独立的“书架层” /}
-          <div key={section.category} className="relative pt-8">
-            {/* --- 分类头部 --- */}
-            <div className="flex justify-between items-center mb-4 px-2 text-white">
-              <h2 className="font-bold text-2xl" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.7)' }}>{section.category}</h2>
-              <a href="#" className="flex items-center text-sm bg-black/20 px-2 py-1 rounded-full hover:bg-black/40 transition-colors">
-                <span>全部</span>
-                <ChevronRight size={16} className="ml-1" />
-              </a>
-            </div>
-
-            {/* --- 书籍封面横向滚动列表 --- */}
-            <div className="flex gap-x-5 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide">
-              {section.items.map(item => (
-                <a href="#" key={item.id} className="block flex-shrink-0 w-36 group">
-                  <div className="w-full relative">
-                    <Image
-                      src={item.imageUrl}
-                      alt={item.title}
-                      width={150}
-                      height={225}
-                      // {/ V 书籍封面：增加了更强的阴影和变换效果，模拟立在书架上的感觉 /}
-                      className="w-full h-auto object-cover rounded-md shadow-2xl aspect-[2/3] bg-gray-200 dark:bg-gray-700 
-                                 group-hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)] group-hover:-translate-y-2 group-hover:scale-105 transition-all duration-300"
-                    />
-                  </div>
-                  <h3 className="text-sm font-semibold mt-3 text-white truncate" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>{item.title}</h3>
-                  <p className="text-xs text-gray-300 truncate" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>{item.author}</p>
-                </a>
-              ))}
-            </div>
-            
-            {/* --- 关键元素：用图一的木板作为分类的“底座”和分隔符 --- */}
-            <div
-              className="absolute bottom-[-1.5rem] left-0 w-full h-6 bg-cover bg-center rounded-sm shadow-lg"
-              style={{ backgroundImage: "url('/images/muban.jpg')" }}
-            />
-          </div>
-        ))}
+      <div className="relative aspect-[3/4] w-full bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300">
+        <img 
+          src={item.imageUrl} 
+          alt={item.title} 
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <p className="text-white text-center font-semibold">{item.title}</p>
+        </div>
       </div>
+    </a>
+);
+
+
+const BooksContentBlock = () => {
+  const [expandedSections, setExpandedSections] = useState({});
+
+  const toggleSection = (category) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  return (
+    <div className="space-y-8">
+      {booksData.map(section => (
+        <div key={section.category} className="bg-white dark:bg-gray-800/50 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700/50">
+          <div className="flex items-center mb-6">
+            <div className={`w-12 h-12 rounded-lg ${section.color} flex items-center justify-center text-white flex-shrink-0 shadow-lg ${section.color.replace('bg-', 'shadow-')}/50`}>
+              {section.icon}
+            </div>
+            <div className="ml-4">
+              <h2 className="font-bold text-xl text-gray-900 dark:text-gray-100">{section.category}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{section.description}</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
+            {(expandedSections[section.category] ? section.items : section.items.slice(0, 3)).map(item => (
+                <BookItem key={item.id} item={item} />
+            ))}
+          </div>
+
+          {section.items.length > 3 && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => toggleSection(section.category)}
+                className="group inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              >
+                {expandedSections[section.category] ? '收起' : '显示更多'}
+                <ChevronRight className={`ml-1 transform transition-transform duration-300 ${expandedSections[section.category] ? 'rotate-90' : ''}`} size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 };
-
-// 小提示: 为了实现干净的横向滚动效果，您可能需要在全局 CSS 文件中添加这个类
-// .scrollbar-hide::-webkit-scrollbar { display: none; }
-// .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 export default BooksContentBlock;
