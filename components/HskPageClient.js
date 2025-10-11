@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link'; // 导入 Link
-import { ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Mic2, Music4, BookText } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // --- HSK 数据 (保持不变) ---
