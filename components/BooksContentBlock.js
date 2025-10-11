@@ -8,7 +8,7 @@ const booksData = [
   {
     category: 'HSK 标准教程',
     items: [
-      { id: 'hsk-1', title: 'HSK 1', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/71X8k3s0c+L._AC_UF1000,1000_QL80_.jpg' },
+      { id: 'hsk-1', title: 'HSK 1', author: '姜丽萍 主编', imageUrl: '/images/hsk1.png' },
       { id: 'hsk-2', title: 'HSK 2', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/51552z0a1TL._AC_UF1000,1000_QL80_.jpg' },
       { id: 'hsk-3', title: 'HSK 3', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/81Lflq8-yNL._AC_UF1000,1000_QL80_.jpg' },
       { id: 'hsk-4a', title: 'HSK 4上', author: '姜丽萍 主编', imageUrl: 'https://m.media-amazon.com/images/I/516a73K-3pL.jpg' },
