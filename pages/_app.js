@@ -1,4 +1,4 @@
-// /pages/_app.js (最终集成PWA自定义弹窗版)
+// /pages/_app.js (最终集成PWA自定义窗版)
 
 import '@/styles/globals.css'
 import '@/styles/utility-patterns.css'
