@@ -1,3 +1,5 @@
+// next.config.js <-- 最终修复版 (完整代码)
+
 const { THEME } = require('./blog.config')
 const fs = require('fs')
 const path = require('path')
@@ -219,56 +221,8 @@ const nextConfig = {
                 value:
                   'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
               }
-              // 安全头部 相关配置，谨慎开启
-            //   { key: 'X-Frame-Options', value: 'DENY' },
-            //   { key: 'X-Content-Type-Options', value: 'nosniff' },
-            //   { key: 'X-XSS-Protection', value: '1; mode=block' },
-            //   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-            //   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-            //   {
-            //     key: 'Strict-Transport-Security',
-            //     value: 'max-age=31536000; includeSubDomains; preload'
-            //   },
-            //   {
-            //     key: 'Content-Security-Policy',
-            //     value: [
-            //       "default-src 'self'",
-            //       "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.googleapis.com *.gstatic.com *.google-analytics.com *.googletagmanager.com",
-            //       "style-src 'self' 'unsafe-inline' *.googleapis.com *.gstatic.com",
-            //       "img-src 'self' data: blob: *.notion.so *.unsplash.com *.githubusercontent.com *.gravatar.com",
-            //       "font-src 'self' *.googleapis.com *.gstatic.com",
-            //       "connect-src 'self' *.google-analytics.com *.googletagmanager.com",
-            //       "frame-src 'self' *.youtube.com *.vimeo.com",
-            //       "object-src 'none'",
-            //       "base-uri 'self'",
-            //       "form-action 'self'"
-            //     ].join('; ')
-            //   },
-
-            //   // CORS 配置（更严格）
-            //   { key: 'Access-Control-Allow-Credentials', value: 'false' },
-            //   {
-            //     key: 'Access-Control-Allow-Origin',
-            //     value: process.env.NODE_ENV === 'production'
-            //       ? siteConfig('LINK') || 'https://yourdomain.com'
-            //       : '*'
-            //   },
-            //   { key: 'Access-Control-Max-Age', value: '86400' }
             ]
           },
-            //   {
-            //     source: '/api/:path*',
-            //     headers: [
-            //       // API 特定的安全头部
-            //       { key: 'X-Frame-Options', value: 'DENY' },
-            //       { key: 'X-Content-Type-Options', value: 'nosniff' },
-            //       { key: 'Cache-Control', value: 'no-store, max-age=0' },
-            //       {
-            //         key: 'Access-Control-Allow-Methods',
-            //         value: 'GET,POST,PUT,DELETE,OPTIONS'
-            //       }
-            //     ]
-            //   }
         ]
       },
   webpack: (config, { dev, isServer }) => {
@@ -326,16 +280,10 @@ const nextConfig = {
     // 性能优化实验性功能
     optimizePackageImports: ['@heroicons/react', 'lodash']
   },
-  exportPathMap: function (
-    defaultPathMap,
-    { dev, dir, outDir, distDir, buildId }
-  ) {
-    // export 静态导出时 忽略/pages/sitemap.xml.js ， 否则和getServerSideProps这个动态文件冲突
-    const pages = { ...defaultPathMap }
-    delete pages['/sitemap.xml']
-    delete pages['/auth']
-    return pages
-  },
+
+  // --- 核心修复：下面的 exportPathMap 部分已被完全删除 ---
+  // exportPathMap: function ( ... ) { ... },
+
   publicRuntimeConfig: {
     // 这里的配置既可以服务端获取到，也可以在浏览器端获取到
     THEMES: themes
