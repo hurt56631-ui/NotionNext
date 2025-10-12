@@ -1,4 +1,4 @@
-// /components/PinyinChartClient.js <-- 最终版 (全新动画和声调表布局)
+// /components/PinyinChartClient.js <-- 最终版 (回归直接动画 + 增强点击反馈)
 
 "use client";
 
@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { ArrowLeft, PlayCircle, PauseCircle, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- (新增) 自定义声波动画图标 ---
+// --- (保留) 自定义声波动画图标 ---
 const SoundWaveIcon = ({ isPlaying }) => (
   <div className="w-4 h-4 flex justify-between items-end">
     <motion.span
@@ -32,11 +32,11 @@ const SoundWaveIcon = ({ isPlaying }) => (
 );
 
 export default function PinyinChartClient({ initialData }) {
-    const [isPlaying, setIsPlaying] = useState(null); // 正在播放的字母 (e.g., 'ā')
+    const [isPlaying, setIsPlaying] = useState(null);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     const [currentIndex, setCurrentIndex] = useState({ cat: 0, row: 0, col: 0 });
     const [playbackRate, setPlaybackRate] = useState(1.0);
-    const [activeTab, setActiveTab] = useState(0); // 用于声调表
+    const [activeTab, setActiveTab] = useState(0);
 
     const audioRef = useRef(null);
     const timeoutRef = useRef(null);
@@ -50,22 +50,19 @@ export default function PinyinChartClient({ initialData }) {
     };
 
     useEffect(() => {
-      // 自动播放逻辑
       if (isAutoPlaying) {
         let item;
-        if (initialData.categories) { // 声调表
+        if (initialData.categories) {
           item = initialData.categories[currentIndex.cat]?.rows[currentIndex.row]?.[currentIndex.col];
-        } else { // 声母/韵母表
+        } else {
           item = initialData.items[currentIndex.col];
         }
-        
         if (item?.audio) {
           audioRef.current.src = item.audio;
           audioRef.current.playbackRate = playbackRate;
           audioRef.current.play().catch(e => console.error("音频播放失败:", e));
           setIsPlaying(item.letter);
         } else {
-          // 如果当前项没有音频，跳到下一个
           handleAudioEnd();
         }
       }
@@ -77,21 +74,21 @@ export default function PinyinChartClient({ initialData }) {
         if (isAutoPlaying) {
             timeoutRef.current = setTimeout(() => {
               let nextIndex;
-              if (initialData.categories) { // 声调表
+              if (initialData.categories) {
                 const cat = initialData.categories[currentIndex.cat];
                 if (currentIndex.col < cat.rows[currentIndex.row].length - 1) {
                   nextIndex = { ...currentIndex, col: currentIndex.col + 1 };
                 } else if (currentIndex.row < cat.rows.length - 1) {
                   nextIndex = { ...currentIndex, row: currentIndex.row + 1, col: 0 };
                 } else {
-                  setIsAutoPlaying(false); // 当前类别播放完毕
+                  setIsAutoPlaying(false);
                   return;
                 }
-              } else { // 声母/韵母表
+              } else {
                 if (currentIndex.col < initialData.items.length - 1) {
                   nextIndex = { ...currentIndex, col: currentIndex.col + 1 };
                 } else {
-                  setIsAutoPlaying(false); // 播放完毕
+                  setIsAutoPlaying(false);
                   return;
                 }
               }
@@ -107,7 +104,6 @@ export default function PinyinChartClient({ initialData }) {
             if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
             setIsPlaying(null);
         } else {
-            // 从当前活动Tab的第一项开始
             setCurrentIndex({ cat: activeTab, row: 0, col: 0 });
             setIsAutoPlaying(true);
         }
@@ -115,7 +111,6 @@ export default function PinyinChartClient({ initialData }) {
 
     // --- 渲染函数 ---
     const renderGrid = () => {
-      // 声母/韵母表
       if (!initialData.categories) {
         return (
           <div className="grid grid-cols-4 gap-4 sm:gap-5">
@@ -125,7 +120,6 @@ export default function PinyinChartClient({ initialData }) {
           </div>
         );
       }
-      // 声调表
       return (
         <div>
           <div className="flex space-x-2 overflow-x-auto pb-4 mb-4 scroll-hidden">
@@ -150,21 +144,21 @@ export default function PinyinChartClient({ initialData }) {
     };
 
     const LetterButton = ({ item }) => (
+      // --- 核心修改：移除 layoutId，回归直接的条件样式 ---
       <motion.div
         onClick={() => playAudio(item)}
-        className="relative aspect-square flex flex-col items-center justify-center rounded-2xl cursor-pointer bg-white/30 dark:bg-gray-800/30 backdrop-blur-lg border border-white/20 shadow-lg"
-        whileTap={{ scale: 0.92 }}
+        // --- 核心修改：增强点击缩放效果 ---
+        whileTap={{ scale: 0.88 }}
+        className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl cursor-pointer transition-all duration-200 border shadow-lg 
+        ${isPlaying === item.letter 
+            ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-400' // 选中时直接变色
+            : 'bg-white/30 dark:bg-gray-800/30 backdrop-blur-lg border-white/20 hover:border-white/50'
+        }`}
       >
-        {isPlaying === item.letter && (
-          <motion.div 
-            layoutId="highlight"
-            className="absolute inset-0 bg-teal-500 rounded-2xl"
-          />
-        )}
-        <span className="relative text-4xl sm:text-5xl font-bold text-gray-800 dark:text-white">
+        <span className={`relative text-4xl sm:text-5xl font-bold transition-colors ${isPlaying === item.letter ? 'text-white' : 'text-gray-800 dark:text-white'}`}>
           {item.letter}
         </span>
-        <div className={`relative mt-1 h-4 w-4 ${item.audio ? 'text-gray-400' : 'text-transparent'}`}>
+        <div className={`relative mt-1 h-4 w-4 transition-colors ${item.audio ? (isPlaying === item.letter ? 'text-white' : 'text-gray-400') : 'text-transparent'}`}>
             <SoundWaveIcon isPlaying={isPlaying === item.letter} />
         </div>
       </motion.div>
@@ -208,4 +202,4 @@ export default function PinyinChartClient({ initialData }) {
         </div>
       </div>
     );
-                                        }
+                                                     }
