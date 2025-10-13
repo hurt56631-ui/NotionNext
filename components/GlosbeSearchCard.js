@@ -1,5 +1,3 @@
-/components/GlosbeSearchCard.js
-
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Globe, Settings, X, Loader2, Bot, Copy, Volume2, Repeat } from 'lucide-react';
 
@@ -67,8 +65,8 @@ const GlosbeSearchCard = () => {
     };
 
     // AI 翻译处理
-    const handleAiTranslate = async () => {
-        const trimmedWord = word.trim();
+    const handleAiTranslate = async (text) => {
+        const trimmedWord = (text || word).trim();
         if (!trimmedWord) return;
 
         if (!apiSettings.key) {
@@ -103,13 +101,13 @@ const GlosbeSearchCard = () => {
             }
 
             const data = await response.json();
-            const text = data.choices?.[0]?.message?.content;
+            const responseText = data.choices?.[0]?.message?.content;
 
-            if (!text) {
+            if (!responseText) {
                 throw new Error('API返回了非预期的格式。');
             }
              // --- 核心修改: 解析原始Prompt格式，并移除[] ---
-            const parsedResults = text.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
+            const parsedResults = responseText.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
                 const lines = part.trim().split('\n');
                 const translation = lines[1]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
                 const meaning = lines[2]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
@@ -160,7 +158,7 @@ const GlosbeSearchCard = () => {
             };
             recognitionRef.current = recognition;
         }
-    }, [searchDirection, useAI]); // 依赖项加入useAI
+    }, [searchDirection, useAI, apiSettings]); // 依赖项加入useAI和apiSettings
 
     // 切换翻译方向
     const toggleDirection = () => {
@@ -187,7 +185,8 @@ const GlosbeSearchCard = () => {
     // --- AI 结果卡片操作 ---
     const handleCopy = (text) => navigator.clipboard.writeText(text);
     const handleSpeak = (textToSpeak) => { 
-        const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; // 假设缅甸语语音
+        // Note: You might want to use different voices for different target languages.
+        const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${lang}&r=-20`; 
         new Audio(url).play(); 
     };
@@ -195,8 +194,9 @@ const GlosbeSearchCard = () => {
         toggleDirection(); 
         setTimeout(() => { 
             setWord(text); 
+            // Trigger AI translation directly after setting the word
             if (useAI) { 
-                handleAiTranslate(); 
+                 handleAiTranslate(text); 
             }
         }, 100); 
     }
@@ -251,35 +251,35 @@ const GlosbeSearchCard = () => {
             )}
 
             {/* 输入区域 */}
-            <div className="relative flex items-center gap-2">
-                <div className="relative flex-grow">
-                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                        <Search className="w-5 h-5 text-gray-400" />
-                    </div>
-                    <input
-                        ref={inputRef}
-                        type="text"
-                        value={word}
-                        onChange={(e) => setWord(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSearch();
-                            }
-                        }}
-                        placeholder={placeholderText}
-                        className="w-full pl-10 pr-4 py-3 text-base text-gray-900 dark:text-gray-100 bg-gray-100/60 dark:bg-gray-900/60 border-2 border-transparent rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-300"
-                    />
+            <div className="relative">
+                 <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <Search className="w-5 h-5 text-gray-400" />
                 </div>
-                <button
-                    onClick={toggleListening}
-                    className={`flex-shrink-0 p-3 rounded-xl transition-colors ${
-                        isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                    title="语音输入"
-                >
-                    <Mic size={20} />
-                </button>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={word}
+                    onChange={(e) => setWord(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSearch();
+                        }
+                    }}
+                    placeholder={placeholderText}
+                    className="w-full pl-12 pr-14 py-3 text-base text-gray-900 dark:text-gray-100 bg-gray-100/60 dark:bg-gray-900/60 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-300"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    <button
+                        onClick={toggleListening}
+                        className={`p-2 rounded-full transition-colors ${
+                            isListening ? 'bg-red-500/20 text-red-500' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                        title="语音输入"
+                    >
+                        <Mic size={20} />
+                    </button>
+                </div>
             </div>
 
 
@@ -300,8 +300,8 @@ const GlosbeSearchCard = () => {
 
                 <button
                     onClick={handleSearch}
-                    disabled={isAISearching}
-                    className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl shadow-lg hover:shadow-cyan-500/50 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isAISearching || !word.trim()}
+                    className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-lg shadow-lg hover:shadow-cyan-500/50 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
                 >
                     {isAISearching ? <Loader2 className="animate-spin" /> : "查询"}
                 </button>
