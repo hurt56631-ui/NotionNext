@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 移除主页Footer & 恢复顶部空白修复
+// themes/heo/index.js  <-- 最终修版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 移除主页Footer & 恢复顶部空白修复
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
