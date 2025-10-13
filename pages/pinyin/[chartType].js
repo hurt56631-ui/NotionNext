@@ -1,7 +1,9 @@
-// /pages/pinyin/[chartType].js <-- 最终版 (已统一鼻韵母音频路径)
+// /pages/pinyin/[chartType].js <-- 最终版 (已统一鼻韵母音频路径并添加手势切换)
 
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
+import { useSwipeable } from 'react-swipeable';
+import { useEffect } from 'react';
 
 // 动态导入客户端组件，禁用服务端渲染
 const PinyinChartClient = dynamic(
@@ -84,9 +86,47 @@ const pinyinData = {
   }
 };
 
+const chartTypes = Object.keys(pinyinData); // ['initials', 'finals', 'tones']
+
 export default function PinyinChartPage() {
   const router = useRouter();
   const { chartType } = router.query;
+
+  const navigate = (direction) => {
+    const currentIndex = chartTypes.indexOf(chartType);
+    if (currentIndex === -1) return;
+
+    let nextIndex;
+    if (direction === 'next') {
+      nextIndex = (currentIndex + 1) % chartTypes.length;
+    } else { // 'prev'
+      nextIndex = (currentIndex - 1 + chartTypes.length) % chartTypes.length;
+    }
+    
+    const nextChartType = chartTypes[nextIndex];
+    router.push(`/pinyin/${nextChartType}`);
+  };
+
+  const handlers = useSwipeable({
+    onSwipedLeft: () => navigate('next'),
+    onSwipedRight: () => navigate('prev'),
+    preventScrollOnSwipe: true,
+    trackMouse: true,
+  });
+  
+  // 预加载相邻的拼音表数据，提升切换体验
+  useEffect(() => {
+    if (chartType) {
+      const currentIndex = chartTypes.indexOf(chartType);
+      if (currentIndex !== -1) {
+        const nextIndex = (currentIndex + 1) % chartTypes.length;
+        const prevIndex = (currentIndex - 1 + chartTypes.length) % chartTypes.length;
+        router.prefetch(`/pinyin/${chartTypes[nextIndex]}`);
+        router.prefetch(`/pinyin/${chartTypes[prevIndex]}`);
+      }
+    }
+  }, [chartType, router]);
+
 
   if (!router.isReady) {
     return <div className="text-center pt-20 text-white/80">正在加载页面数据...</div>;
@@ -95,7 +135,8 @@ export default function PinyinChartPage() {
   const chartData = pinyinData[chartType] || pinyinData['initials']; 
   
   return (
-    <div className="w-full min-h-screen">
+    // 使用 div 包裹并应用 useSwipeable 返回的 handlers
+    <div {...handlers} className="w-full min-h-screen touch-pan-y">
       <PinyinChartClient initialData={chartData} key={chartType} />
     </div>
   );
