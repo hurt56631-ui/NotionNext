@@ -24,28 +24,28 @@ const BookItem = ({ item }) => (
 )
 
 const BooksContentBlock = ({ notionBooks }) => {
-  // 【核心修改】数据分组逻辑也需要相应简化
+  // --- 关键日志 ---
+  // 打印在浏览器端，组件实际接收到的 props 数据
+  console.log('\n================ 浏览器客户端日志 (BooksContentBlock) ================');
+  console.log(`【日志-客户端】组件收到了 notionBooks prop，包含 ${notionBooks?.length ?? 0} 项数据。`);
+  console.log('【日志-客户端】接收到的 notionBooks prop 完整数据是:');
+  console.log(notionBooks);
+  console.log('====================================================================\n');
+  // --- 日志结束 ---
+
   const groupedBooks = useMemo(() => {
-    // 如果 notionBooks 不存在或不是数组，返回空数组
     if (!notionBooks || !Array.isArray(notionBooks)) return []
-
     const categories = {}
-
     notionBooks.forEach(book => {
-      // 现在 book 对象非常干净，直接使用即可
       const category = book.category || '未分类'
-      
       if (!categories[category]) {
         categories[category] = {
           category: category,
           items: []
         }
       }
-
-      // 直接将干净的 book 对象 push 进去
       categories[category].items.push(book)
     })
-
     return Object.values(categories)
   }, [notionBooks])
 
