@@ -250,7 +250,7 @@ const ActionButtons = () => {
  * 首页 - 终极融合版 (已重写)
  */
 const LayoutIndex = props => {
-  const { books } = props // <-- 【唯一新增的逻辑】从 props 中解构出 books 数据
+  const { books } = props // <-- 【关键代码】从 props 中解构出 books 数据
 
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
@@ -413,7 +413,7 @@ const LayoutIndex = props => {
                                     {tab.name === 'HSK' && <HskContentBlock />}
                                     {tab.name === '口语' && <SpeakingContentBlock />}
                                     {tab.name === '练习' && <PracticeContentBlock />}
-                                    {/* 【核心修改】: 将 props 中的 books 数据传递给 BooksContentBlock */}
+                                    {/* 【关键代码】: 将 props 中的 books 数据传递给 BooksContentBlock */}
                                     {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
                                 </div>
                             </div>
