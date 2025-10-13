@@ -1,6 +1,10 @@
+// pages/index.js
+
 import BLOG from '@/blog.config'
 import { siteConfig } from '@/lib/config'
-import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData'
+// import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData' // getPostBlocks 移到下方按需加载
+import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData' // 保持原有导入
+import { getAllBooks } from '@/lib/db/getBooks' // <--- 【新增】导入我们创建的图书获取函数
 import { generateRobotsTxt } from '@/lib/robots.txt'
 import { generateRss } from '@/lib/rss'
 import { generateSitemapXml } from '@/lib/sitemap.xml'
@@ -25,7 +29,29 @@ const Index = props => {
 export async function getStaticProps(req) {
   const { locale } = req
   const from = 'index'
+  // 1. 先获取主要的站点数据
   const props = await getGlobalData({ from, locale })
+
+  // 2. 【新增】获取图书数据
+  const databaseId = BLOG.NOTION_BOOK_DATABASE_ID
+  let allBooks = []; // 默认一个空数组
+  if (databaseId) {
+    allBooks = await getAllBooks({ databaseId })
+  }
+  
+  // --- 【新增】关键日志 ---
+  // 打印在服务器端，即将发送到浏览器的最终数据
+  console.log('\n================ VERCEL 服务端日志 (getStaticProps) ================');
+  console.log(`【日志-服务端】获取到 ${allBooks.length} 本书的数据，准备将其作为 props 发送到浏览器。`);
+  console.log('【日志-服务端】完整的 props.books 数据是:');
+  console.log(JSON.stringify(allBooks, null, 2));
+  console.log('====================================================================\n');
+  // --- 日志结束 ---
+
+  // 3. 【新增】将图书数据添加到 props 中
+  props.books = allBooks;
+
+  // 4. 继续处理文章数据（沿用您原有的逻辑）
   const POST_PREVIEW_LINES = siteConfig(
     'POST_PREVIEW_LINES',
     12,
@@ -56,6 +82,7 @@ export async function getStaticProps(req) {
     }
   }
 
+  // 5. 继续执行您原有的其他构建任务
   // 生成robotTxt
   generateRobotsTxt(props)
   // 生成Feed订阅
