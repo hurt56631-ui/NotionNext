@@ -1,9 +1,7 @@
-// /pages/pinyin/[chartType].js <-- 最终版 (已统一鼻韵母音频路径并添加手势切换)
+// /pages/pinyin/[chartType].js <-- 最终版 (逻辑已移至 PinyinChartClient)
 
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
-import { useSwipeable } from 'react-swipeable';
-import { useEffect } from 'react';
 
 // 动态导入客户端组件，禁用服务端渲染
 const PinyinChartClient = dynamic(
@@ -54,14 +52,14 @@ const pinyinData = {
       },
       {
         name: '前鼻韵母',
-        folder: 'nasal', // <--- 核心修改：指向统一的 'nasal' 文件夹
+        folder: 'nasal',
         rows: [
           ['ān','án','ǎn','àn'], ['ēn','én','ěn','èn'], ['īn','ín','ǐn','ìn'], ['ūn','ún','ǔn','ùn'], ['ǖn','ǘn','ǚn','ǜn']
         ]
       },
       {
         name: '后鼻韵母',
-        folder: 'nasal', // <--- 核心修改：同样指向统一的 'nasal' 文件夹
+        folder: 'nasal',
         rows: [
           ['āng','áng','ǎng','àng'], ['ēng','éng','ěng','èng'], ['īng','íng','ǐng','ìng'], ['ōng','óng','ǒng','òng']
         ]
@@ -75,7 +73,6 @@ const pinyinData = {
       }
     ].map(category => ({
       ...category,
-      // 根据文件夹和字母名生成音频路径
       rows: category.rows.map(row => row.map(letter => {
         return {
           letter,
@@ -86,47 +83,9 @@ const pinyinData = {
   }
 };
 
-const chartTypes = Object.keys(pinyinData); // ['initials', 'finals', 'tones']
-
 export default function PinyinChartPage() {
   const router = useRouter();
   const { chartType } = router.query;
-
-  const navigate = (direction) => {
-    const currentIndex = chartTypes.indexOf(chartType);
-    if (currentIndex === -1) return;
-
-    let nextIndex;
-    if (direction === 'next') {
-      nextIndex = (currentIndex + 1) % chartTypes.length;
-    } else { // 'prev'
-      nextIndex = (currentIndex - 1 + chartTypes.length) % chartTypes.length;
-    }
-    
-    const nextChartType = chartTypes[nextIndex];
-    router.push(`/pinyin/${nextChartType}`);
-  };
-
-  const handlers = useSwipeable({
-    onSwipedLeft: () => navigate('next'),
-    onSwipedRight: () => navigate('prev'),
-    preventScrollOnSwipe: true,
-    trackMouse: true,
-  });
-  
-  // 预加载相邻的拼音表数据，提升切换体验
-  useEffect(() => {
-    if (chartType) {
-      const currentIndex = chartTypes.indexOf(chartType);
-      if (currentIndex !== -1) {
-        const nextIndex = (currentIndex + 1) % chartTypes.length;
-        const prevIndex = (currentIndex - 1 + chartTypes.length) % chartTypes.length;
-        router.prefetch(`/pinyin/${chartTypes[nextIndex]}`);
-        router.prefetch(`/pinyin/${chartTypes[prevIndex]}`);
-      }
-    }
-  }, [chartType, router]);
-
 
   if (!router.isReady) {
     return <div className="text-center pt-20 text-white/80">正在加载页面数据...</div>;
@@ -135,8 +94,8 @@ export default function PinyinChartPage() {
   const chartData = pinyinData[chartType] || pinyinData['initials']; 
   
   return (
-    // 使用 div 包裹并应用 useSwipeable 返回的 handlers
-    <div {...handlers} className="w-full min-h-screen touch-pan-y">
+    <div className="w-full min-h-screen">
+      {/* 将数据传递给客户端组件，并用 key 来确保切换页面时组件能重新渲染 */}
       <PinyinChartClient initialData={chartData} key={chartType} />
     </div>
   );
