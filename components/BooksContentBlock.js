@@ -1,23 +1,20 @@
 // components/BooksContentBlock.js
 
-import { useMemo } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { ChevronDown } from 'lucide-react'
 
-// --- 书籍封面组件 (全新3D立体效果) ---
+// --- 书籍封面组件 (保持3D立体效果) ---
 const BookItem3D = ({ item }) => (
     <a
       href={item.readUrl}
       target="_blank"
       rel="noopener noreferrer"
-      // group: 启用父级悬停效果, perspective: 创建3D舞台
       className="group block [perspective:1000px]"
       title={item.title}
     >
-      {/* 3D变换的核心容器 */}
       <div 
-        className="relative aspect-[3/4] w-full rounded-md shadow-lg transition-transform duration-500 ease-in-out [transform-style:preserve-3d] group-hover:rotate-y-0 group-hover:scale-105"
-        // 默认给一个轻微的Y轴旋转，制造透视感
-        style={{ transform: 'rotateY(-10deg)' }}
+        className="relative aspect-[3/4] w-full rounded-md shadow-lg transition-transform duration-500 ease-in-out [transform-style:preserve-3d] group-hover:-translate-y-2"
+        style={{ transform: 'rotateX(5deg) rotateY(-10deg)' }} // 增加X轴旋转，更有俯视感
       >
         {/* 书籍封面 */}
         <img
@@ -29,61 +26,70 @@ const BookItem3D = ({ item }) => (
         <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-md">
           <p className="text-white text-center text-sm font-semibold">{item.title}</p>
         </div>
-        {/* 模拟书本的厚度 */}
-        <div 
-            className="absolute top-0 left-0 w-full h-full rounded-md bg-gray-200 dark:bg-gray-800 [transform:translateZ(-5px)]"
-            style={{ backfaceVisibility: 'hidden' }}
-        />
       </div>
     </a>
 );
 
-// --- 单个书架组件 ---
-const BookShelf = ({ section }) => {
+// --- 单个落地书架组件 ---
+const FloorShelf = ({ section, isExpanded, onToggle }) => {
     return (
-        <div className="space-y-3">
-            {/* 1. 分类标题区域 */}
-            <div className="flex justify-between items-end px-4">
-                <h2 className="font-bold text-2xl text-gray-900 dark:text-gray-100">{section.category}</h2>
-                {/* 2. 右上角的“全部 XX 本”按钮 */}
-                <a href={`/category/${encodeURIComponent(section.category)}`} className="flex items-center text-sm font-medium text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 transition-colors">
-                    全部 {section.items.length} 本 <ChevronRight size={16} className="ml-0.5" />
-                </a>
-            </div>
-        
-            {/* 3. 横向滚动的容器 */}
-            <div
-                // 【核心】阻止滑动事件冒泡到父级，解决手势冲突
-                onTouchStart={(e) => e.stopPropagation()}
-                className="flex gap-x-5 overflow-x-auto pb-4 horizontal-scrollbar"
+        <div className="space-y-4">
+            {/* 1. 可点击的分类标题区域 */}
+            <button 
+              onClick={onToggle}
+              className="w-full flex justify-between items-center px-4 py-2 rounded-lg hover:bg-white/10 transition-colors"
             >
-                {section.items.map((item, index) => (
-                    <div 
-                        key={item.id}
-                        // 手机上默认显示约3本，通过控制宽度实现
-                        // flex-shrink-0 确保项目不会被压缩
-                        className="w-[30vw] sm:w-36 md:w-40 flex-shrink-0"
-                        // 第一个和最后一个元素添加边距，让滚动看起来更舒适
-                        style={{
-                            scrollSnapAlign: 'start',
-                            marginLeft: index === 0 ? '1rem' : undefined,
-                            marginRight: index === section.items.length - 1 ? '1rem' : undefined
-                        }}
-                    >
-                        <BookItem3D item={item} />
-                    </div>
-                ))}
+                <h2 className="font-bold text-2xl text-gray-100">{section.category}</h2>
+                <div className="flex items-center text-sm font-medium text-gray-400">
+                    <span>{isExpanded ? '收起' : '展开'}</span>
+                    <ChevronDown size={20} className={`ml-1 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                </div>
+            </button>
+        
+            {/* 2. 可展开的书籍列表，现在是网格布局 */}
+            <div 
+              // 【核心】手势冲突解决方案：包裹一个div并阻止触摸事件冒泡
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+            >
+              <div 
+                className={`grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-x-4 gap-y-8 px-4 transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}
+              >
+                  {section.items.map((item) => (
+                      <div key={item.id}>
+                          <BookItem3D item={item} />
+                      </div>
+                  ))}
+              </div>
             </div>
 
-             {/* 4. 模拟实体书架的木板 */}
-            <div className="h-2 bg-gray-300 dark:bg-gray-700/50 rounded-md shadow-inner mx-4"></div>
+             {/* 3. “地板”图片 */}
+            <div className="px-4">
+                <div 
+                  className="h-8 w-full bg-cover bg-center rounded-b-lg"
+                  style={{ backgroundImage: "url('/images/muban.jpg')" }}
+                ></div>
+            </div>
         </div>
     )
 }
 
-
-// --- “书架”主组件 ---
+// --- 主组件 ---
 const BooksContentBlock = ({ notionBooks }) => {
+  // 使用 useState 来管理每个分类的展开/折叠状态
+  const [expandedSections, setExpandedSections] = useState({});
+
+  // 点击标题时，切换对应分类的展开状态
+  const toggleSection = (category) => {
+    setExpandedSections(prev => ({
+      // 可以支持同时展开多个
+      ...prev,
+      [category]: !prev[category]
+      // 如果希望每次只展开一个，使用下面这行
+      // { [category]: !prev[category] }
+    }));
+  };
 
   const groupedBooks = useMemo(() => {
     if (!notionBooks || !Array.isArray(notionBooks)) return []
@@ -105,32 +111,17 @@ const BooksContentBlock = ({ notionBooks }) => {
     return <p className="text-center text-gray-500">暂无书籍数据，请检查Notion数据库配置。</p>
   }
 
-  // 自定义极细滚动条样式
-  const CustomScrollbarStyle = () => (
-    <style jsx global>{`
-        .horizontal-scrollbar::-webkit-scrollbar {
-            height: 3px;
-        }
-        .horizontal-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .horizontal-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(150, 150, 150, 0.2);
-            border-radius: 10px;
-        }
-        .dark .horizontal-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(100, 100, 100, 0.3);
-        }
-    `}</style>
-  );
-
   return (
     // 整体背景色和垂直间距
-    <div className="bg-gray-100 dark:bg-[#1E1E1E] py-8">
-        <div className="space-y-12 max-w-5xl mx-auto">
-            <CustomScrollbarStyle />
+    <div className="bg-[#18171d] dark:bg-[#18171d] py-8">
+        <div className="space-y-8 max-w-5xl mx-auto">
             {groupedBooks.map(section => (
-                <BookShelf key={section.category} section={section} />
+                <FloorShelf 
+                  key={section.category}
+                  section={section}
+                  isExpanded={!!expandedSections[section.category]}
+                  onToggle={() => toggleSection(section.category)}
+                />
             ))}
         </div>
     </div>
