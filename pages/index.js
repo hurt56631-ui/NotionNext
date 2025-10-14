@@ -40,12 +40,11 @@ export async function getStaticProps(req) {
     getSentenceCards({ databaseId: BLOG.NOTION_SENTENCE_CARD_ID })
   ]);
 
-  // --- 【新增】服务端日志 ---
+  // --- 【核心修正】: 增强服务端日志，用于最终确认 ---
   console.log('\n================ VERCEL 服务端日志 (getStaticProps) ================');
   console.log(`【日志-服务端】获取到 ${allBooks?.length ?? 0} 本书。`);
   console.log(`【日志-服务端】获取到 ${speakingCourses?.length ?? 0} 个口语课程。`);
   console.log(`【日志-服务端】获取到 ${sentenceCards?.length ?? 0} 张句子卡片。`);
-  // 为了调试，打印一部分获取到的数据样本
   if (speakingCourses?.length > 0) {
     console.log('【日志-服务端】口语课程样本:', JSON.stringify(speakingCourses.slice(0, 2), null, 2));
   }
@@ -53,10 +52,9 @@ export async function getStaticProps(req) {
     console.log('【日志-服务端】句子卡片样本:', JSON.stringify(sentenceCards.slice(0, 2), null, 2));
   }
   console.log('====================================================================\n');
-  // --- 日志结束 ---
 
 
-  // 3. 将所有获取到的数据添加到 props 中
+  // 3. 将所有获取到的数据添加到 props 中 (你的这部分逻辑是正确的)
   props.books = allBooks || [];
   props.speakingCourses = speakingCourses || [];
   props.sentenceCards = sentenceCards || [];
@@ -93,20 +91,13 @@ export async function getStaticProps(req) {
   }
 
   // 5. 继续执行您原有的其他构建任务
-  // 生成robotTxt
   generateRobotsTxt(props)
-  // 生成Feed订阅
   generateRss(props)
-  // 生成
   generateSitemapXml(props)
-  // 检查数据是否需要从algolia删除
   checkDataFromAlgolia(props)
   if (siteConfig('UUID_REDIRECT', false, props?.NOTION_CONFIG)) {
-    // 生成重定向 JSON
     generateRedirectJson(props)
   }
-
-  // 生成全文索引 - 仅在 yarn build 时执行 && process.env.npm_lifecycle_event === 'build'
 
   delete props.allPages
 
