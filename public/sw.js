@@ -1,36 +1,63 @@
-// 定义缓存名称
-const CACHE_NAME = 'your-learning-site-v1';
-// 定义需要被缓存的核心文件列表
-const urlsToCache = [
-  '/',
-  // 注意：这里需要根据您网站的实际文件进行调整
-  // 例如 '/index.html', '/css/style.css', '/js/main.js' 等
-  // 对于Next.js，通常缓存核心的页面路由和静态资源
-];
+// public/sw.js  <-- 最终修复版，采用网络优先策略
 
-// 监听 'install' 事件，在安装时缓存核心资源
-self.addEventListener('install', event => {
+// 每次部署时，Vercel 都会重新生成这个文件，这个时间戳会变化，从而触发 Service Worker 更新
+const CACHE_NAME = `notion-next-cache-v${new Date().getTime()}`;
+
+self.addEventListener('install', (event) => {
+  // 安装阶段，强制新的 Service Worker 跳过等待，立即进入激活状态
+  event.waitUntil(self.skipWaiting()); 
+  console.log('Service Worker: installed');
+});
+
+self.addEventListener('activate', (event) => {
+  // 激活阶段，清理所有旧的缓存
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          // 如果缓存名不是当前最新的，就删除它
+          if (cacheName !== CACHE_NAME) {
+            console.log('Service Worker: deleting old cache', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => {
+      // 激活后，立即取得对所有客户端的控制权
+      console.log('Service Worker: activated and claimed clients');
+      return self.clients.claim(); 
+    })
   );
 });
 
-// 监听 'fetch' 事件，拦截网络请求并优先从缓存中返回
-self.addEventListener('fetch', event => {
+self.addEventListener('fetch', (event) => {
+  // 我们只处理 GET 请求
+  if (event.request.method !== 'GET') {
+    return;
+  }
+  
+  // 对于导航请求 (HTML页面)，总是网络优先
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/_offline')) // 如果断网，可以显示一个离线页面（可选）
+    );
+    return;
+  }
+
+  // 对于其他资源 (CSS, JS, 图片)，采用网络优先策略
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // 如果缓存中有匹配的资源，则直接返回它
-        if (response) {
-          return response;
-        }
-        // 否则，通过网络发起请求
-        return fetch(event.request);
-      }
-    )
+    fetch(event.request)
+      .then((networkResponse) => {
+        // 请求成功，将最新的响应存入新缓存，并返回给页面
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+        return networkResponse;
+      })
+      .catch(() => {
+        // 网络请求失败 (比如断网了)，才尝试从缓存中获取
+        return caches.match(event.request);
+      })
   );
 });
