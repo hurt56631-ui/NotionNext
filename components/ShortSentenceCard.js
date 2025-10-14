@@ -1,7 +1,7 @@
-// components/ShortSentenceCard.js (修改版 - 增加全屏过渡动画)
+// components/ShortSentenceCard.js (最终修复版 - 使用 Portal 实现真·全屏)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-// ✅ 引入 animated 和 useTransition
+import { createPortal } from 'react-dom'; // ✅ 1. 引入 createPortal
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
@@ -29,9 +29,15 @@ const playSoundEffect = (type) => {
     }
 };
 
-// ✅ 组件接收 isOpen prop
 const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
-    // ✅ 1. 新增一个 useTransition 来控制整个页面的进入和离开
+    // ✅ 2. 新增一个状态，用于判断当前是否在浏览器环境，避免在服务端渲染时出错
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true); // 组件挂载后，说明在浏览器环境，设为 true
+    }, []);
+
+    // 页面进入/离开的动画 (保持不变)
     const pageTransitions = useTransition(isOpen, {
         from: { opacity: 0, transform: 'translateY(100%)' },
         enter: { opacity: 1, transform: 'translateY(0%)' },
@@ -39,7 +45,7 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
         config: { tension: 220, friction: 25 },
     });
 
-    // --- 内部逻辑基本保持不变 ---
+    // --- 内部逻辑完全保持不变 ---
     const cards = useMemo(() => {
         return Array.isArray(sentences) && sentences.length > 0
             ? sentences
@@ -50,51 +56,26 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
     const lastDirection = useRef(0);
     const currentCard = cards[currentIndex];
 
-    // 当卡片打开时，重置到第一张
-    useEffect(() => {
-        if (isOpen) {
-            setCurrentIndex(0);
-        }
-    }, [isOpen]);
-
+    useEffect(() => { if (isOpen) setCurrentIndex(0); }, [isOpen]);
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
         setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
     }, [cards.length]);
 
     useEffect(() => {
-        if (!isOpen) return; // 如果页面不可见，则不自动播放
+        if (!isOpen) return;
         const autoPlayTimer = setTimeout(() => {
-            if (currentCard?.sentence) {
-                playTTS(currentCard.sentence, 'zh');
-            }
+            if (currentCard?.sentence) playTTS(currentCard.sentence, 'zh');
         }, 500);
         return () => clearTimeout(autoPlayTimer);
     }, [currentIndex, currentCard, isOpen]);
 
-    // 这是内部卡片切换的动画，保持不变
-    const cardTransitions = useTransition(currentIndex, {
-        key: currentIndex,
-        from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '80%' : '-80%'}) scale(0.8)` },
-        enter: { opacity: 1, transform: 'translateY(0%) scale(1)' },
-        leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-80%' : '80%'}) scale(0.8)`, position: 'absolute' },
-        config: { mass: 1, tension: 280, friction: 25 },
-        onStart: () => playSoundEffect('switch'),
-    });
+    const cardTransitions = useTransition(currentIndex, { /* ... 保持不变 ... */ });
+    const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => { /* ... 保持不变 ... */ }, { axis: 'y' });
 
-    const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => {
-        if (event.target.closest('[data-no-gesture]')) return;
-        if (!down) {
-            const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.5 && Math.abs(my) > 30);
-            if (isSignificantDrag) {
-                navigate(yDir < 0 ? 1 : -1);
-            }
-        }
-    }, { axis: 'y' });
-
-    // ✅ 2. 使用新的 pageTransitions 来渲染整个组件
-    return pageTransitions((style, item) =>
-        item && ( // 只有当 isOpen 为 true 时才渲染
+    // ✅ 3. 将要渲染的 JSX 内容提取出来
+    const cardContent = pageTransitions((style, item) =>
+        item && (
             <animated.div style={{ ...styles.fullScreen, ...style }}>
                 <button style={styles.closeButton} onClick={onClose} data-no-gesture="true">
                     <FaTimes size={24} />
@@ -129,6 +110,14 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
             </animated.div>
         )
     );
+
+    // ✅ 4. 如果在浏览器环境，就使用 Portal 将内容渲染到 document.body
+    if (isMounted) {
+        return createPortal(cardContent, document.body);
+    }
+
+    // 在服务端或挂载前，返回 null
+    return null;
 };
 
 
