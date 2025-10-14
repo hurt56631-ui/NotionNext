@@ -14,7 +14,7 @@ const BLOG = {
 
   // 【最终版口语配置】
   NOTION_SPEAKING_COURSE_ID: '28cc928a2fa680db9d7dda67b05e9dcb', // 已填入“口语课程库”的 ID
-  NOTION_SENTENCE_CARD_ID: '28cc928a2fa68055ad01e63da2b347f4', // 已填入“句子卡片库”的 ID
+  NOTION_SENTENCE_CARD_ID: '28cc928a2fa6808294f6dff980d79103', // 已填入“句子卡片库”的 ID
   // ==========================================
 
   THEME: process.env.NEXT_PUBLIC_THEME || 'heo', // 当主题，在themes文件夹下可找到所有支持的主题；主题名称就是文件夹名，例如 example,fukasawa,gitbook,heo,hexo,landing,matery,medium,next,nobelium,plog,simple
