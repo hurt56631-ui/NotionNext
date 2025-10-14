@@ -250,7 +250,11 @@ const ActionButtons = () => {
  * 首页 - 终极融合版 (已重写)
  */
 const LayoutIndex = props => {
-  const { books } = props // <-- 【关键代码】从 props 中解构出 books 数据
+  // =========================================================================
+  // ====================== 【第 1 处核心修正】 ================================
+  // 从 props 中解构出 speakingCourses 和 sentenceCards 数据
+  // =========================================================================
+  const { books, speakingCourses, sentenceCards } = props
 
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
@@ -411,9 +415,14 @@ const LayoutIndex = props => {
                                 <div className='p-4'>
                                     {tab.name === '文章' && <PostListComponent {...props} />}
                                     {tab.name === 'HSK' && <HskContentBlock />}
-                                    {tab.name === '口语' && <SpeakingContentBlock />}
+                                    
+                                    {/* ========================================================================= */}
+                                    {/* ====================== 【第 2 处核心修正】 ================================ */}
+                                    {/* 将解构出的数据作为 props 传递给 SpeakingContentBlock 组件 */}
+                                    {/* ========================================================================= */}
+                                    {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
+                                    
                                     {tab.name === '练习' && <PracticeContentBlock />}
-                                    {/* 【关键代码】: 将 props 中的 books 数据传递给 BooksContentBlock */}
                                     {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
                                 </div>
                             </div>
