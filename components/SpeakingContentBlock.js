@@ -2,46 +2,54 @@
 
 import { useState } from 'react';
 import { ChevronRight, MessageCircle, X } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import dynamic from 'next/dynamic'; // 保持使用动态导入
 
-// --- 使用动态导入 CiDianKa，并禁用 SSR ---
-const CiDianKa = dynamic(
-  () => import('@/components/Tixing/CiDianKa'),
+// --- 【核心修正】: 导入正确的 ShortSentenceCard 组件，而不是 CiDianKa ---
+const ShortSentenceCard = dynamic(
+  () => import('@/components/ShortSentenceCard'), // 确保路径正确
   { 
-    ssr: false,
+    ssr: false, // 关键：不在服务器上渲染这个组件
     loading: () => <p className="text-center p-8">正在加载学习卡片...</p> 
   }
 );
 
 const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
-  // --- 【日志-客户端】: 检查组件接收到的原始数据 ---
-  console.log('\n================ SpeakingContentBlock 客户端日志 ================');
-  console.log('【日志】组件收到的 speakingCourses:', speakingCourses);
-  console.log('【日志】组件收到的 sentenceCards:', sentenceCards);
+  // --- 日志，用于最终确认数据传递 ---
+  console.log('\n================ SpeakingContentBlock 最终确认日志 ================');
+  console.log('【客户端日志】收到的 speakingCourses:', speakingCourses);
+  console.log('【客户端日志】收到的 sentenceCards:', sentenceCards);
   console.log('====================================================================\n');
 
   const [activeCourse, setActiveCourse] = useState(null);
 
   const handleCourseClick = (course) => {
-    console.log(`【日志】点击了课程: "${course.title}" (ID: ${course.id})`);
+    console.log(`【客户端日志】点击了课程: "${course.title}" (ID: ${course.id})`);
 
-    const cardsForCourse = sentenceCards.filter(card => {
-      const isIncluded = card.courseIds && card.courseIds.includes(course.id);
-      return isIncluded;
-    });
+    const cardsForCourse = sentenceCards.filter(card => 
+      card.courseIds && card.courseIds.includes(course.id)
+    );
 
-    console.log(`【日志】为课程 "${course.title}" 筛选出 ${cardsForCourse.length} 张卡片。`);
+    console.log(`【客户端日志】为课程 "${course.title}" 筛选出 ${cardsForCourse.length} 张卡片。`);
     if (cardsForCourse.length === 0) {
-        console.warn('【日志】警告：没有为这个课程找到任何关联的卡片。请检查 Notion "句子卡片库" 中的 "所属课程" 关联是否正确设置。');
+        console.warn('【客户端日志】警告：没有找到关联卡片。请检查 Notion "句子卡片库" 的 "所属课程" 关联是否正确。');
     }
     
     setActiveCourse({ ...course, cards: cardsForCourse });
   };
 
+  // 如果 activeCourse 有值，就显示 ShortSentenceCard 组件
   if (activeCourse) {
     return (
       <div style={{ position: 'relative', width: '100%', height: '80vh' }}>
-        <CiDianKa flashcards={activeCourse.cards} />
+        {/* 【核心修正】: 调用正确的 ShortSentenceCard 组件 */}
+        {/* 我们需要将数据格式从 {word, meaning} 映射到 {sentence, translation} */}
+        <ShortSentenceCard sentences={activeCourse.cards.map(card => ({
+            id: card.id,
+            sentence: card.word, // “中文” 对应 sentence
+            translation: card.meaning, // “缅语” 对应 translation
+            pinyin: card.pinyin,
+            // ShortSentenceCard 目前不直接使用 example, burmeseExample, imageUrl，但可以保留
+        }))} />
         <button
           onClick={() => setActiveCourse(null)}
           className="absolute top-4 right-4 z-[10000] p-2 bg-white/50 rounded-full hover:bg-white/80 transition-colors"
@@ -53,8 +61,9 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
     );
   }
 
+  // 默认显示课程列表 (这部分逻辑保持不变)
   if (!speakingCourses || speakingCourses.length === 0) {
-      return <p className="text-center text-gray-500">暂无口语课程，请检查Notion“口语课程库”配置。</p>;
+      return <p className="text-center text-gray-500">暂无口语课程，请检查Notion数据库配置。</p>;
   }
 
   return (
