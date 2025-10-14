@@ -1,19 +1,21 @@
-// components/SpeakingContentBlock.js (修改版 - 控制 ShortSentenceCard 的状态)
+// components/SpeakingContentBlock.js (最终修复版 - 使用路由哈希控制卡片)
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { ChevronRight, MessageCircle } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
 const ShortSentenceCard = dynamic(
   () => import('@/components/ShortSentenceCard'),
-  { 
-    ssr: false,
-    loading: () => <p className="text-center p-8">正在加载学习卡片...</p> 
-  }
+  { ssr: false }
 );
 
 const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
+  const router = useRouter();
   const [activeCourseCards, setActiveCourseCards] = useState(null);
+
+  // 判断卡片是否应该打开，现在基于 URL 哈希
+  const isCardViewOpen = router.asPath.includes('#cards');
 
   const handleCourseClick = (course) => {
     if (!Array.isArray(sentenceCards)) {
@@ -26,21 +28,32 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
     );
     
     if (cardsForCourse.length > 0) {
+      // 设置数据，并通过路由哈希打开卡片
       setActiveCourseCards(cardsForCourse);
+      router.push(router.asPath + '#cards', undefined, { shallow: true });
     } else {
       alert(`课程 "${course.title}" 下暂无句子卡片。`);
     }
   };
 
-  // ✅ 1. 将 activeCourseCards 是否存在转换为一个布尔值
-  const isCardViewOpen = activeCourseCards !== null;
+  // 监听路由变化，当用户点击后退导致哈希消失时，清除卡片数据
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (!window.location.hash.includes('cards')) {
+        setActiveCourseCards(null);
+      }
+    };
+    // popstate 事件能监听到浏览器的前进/后退操作
+    window.addEventListener('popstate', handleHashChange);
+    return () => {
+      window.removeEventListener('popstate', handleHashChange);
+    };
+  }, []);
 
   if (!Array.isArray(speakingCourses) || speakingCourses.length === 0) {
       return <p className="text-center text-gray-500">暂无口语课程，请检查Notion数据库配置。</p>;
   }
 
-  // ✅ 2. 移除 if 条件，始终渲染课程列表和 ShortSentenceCard
-  // 使用 Fragment (<> ... </>) 来包裹两个同级组件
   return (
     <>
       <div className="space-y-4">
@@ -66,19 +79,16 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
         ))}
       </div>
 
-      {/* ✅ 3. ShortSentenceCard 现在常驻于此 */}
       <ShortSentenceCard 
-        // 传递 isOpen 状态
         isOpen={isCardViewOpen}
-        // 当 activeCourseCards 为 null 时，传递一个空数组以避免错误
         sentences={(activeCourseCards || []).map(card => ({
             id: card.id,
             sentence: card.word,
             translation: card.meaning,
             pinyin: card.pinyin,
         }))}
-        // 关闭时，将状态设回 null
-        onClose={() => setActiveCourseCards(null)}
+        // 关闭操作现在是简单的“后退一步”
+        onClose={() => router.back()}
       />
     </>
   );
