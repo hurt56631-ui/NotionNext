@@ -1,13 +1,14 @@
-// components/ShortSentenceCard.js (最终稳定版 - 全屏播放器)
+// components/ShortSentenceCard.js (修改版 - 增加全屏过渡动画)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+// ✅ 引入 animated 和 useTransition
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { FaVolumeUp, FaTimes } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 
-// --- 音频播放工具 ---
+// --- 音频播放工具 (保持不变) ---
 let _howlInstance = null;
 const playTTS = (text, lang, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
@@ -20,7 +21,6 @@ const playTTS = (text, lang, e) => {
 };
 
 const playSoundEffect = (type) => {
-    // 确保只在浏览器环境中创建 Howl 实例，避免水合错误
     if (typeof window !== 'undefined') {
         const sounds = {
             switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
@@ -29,7 +29,17 @@ const playSoundEffect = (type) => {
     }
 };
 
-const ShortSentenceCard = ({ sentences = [], onClose }) => {
+// ✅ 组件接收 isOpen prop
+const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
+    // ✅ 1. 新增一个 useTransition 来控制整个页面的进入和离开
+    const pageTransitions = useTransition(isOpen, {
+        from: { opacity: 0, transform: 'translateY(100%)' },
+        enter: { opacity: 1, transform: 'translateY(0%)' },
+        leave: { opacity: 0, transform: 'translateY(100%)' },
+        config: { tension: 220, friction: 25 },
+    });
+
+    // --- 内部逻辑基本保持不变 ---
     const cards = useMemo(() => {
         return Array.isArray(sentences) && sentences.length > 0
             ? sentences
@@ -40,20 +50,29 @@ const ShortSentenceCard = ({ sentences = [], onClose }) => {
     const lastDirection = useRef(0);
     const currentCard = cards[currentIndex];
 
+    // 当卡片打开时，重置到第一张
+    useEffect(() => {
+        if (isOpen) {
+            setCurrentIndex(0);
+        }
+    }, [isOpen]);
+
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
         setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
     }, [cards.length]);
 
     useEffect(() => {
+        if (!isOpen) return; // 如果页面不可见，则不自动播放
         const autoPlayTimer = setTimeout(() => {
             if (currentCard?.sentence) {
                 playTTS(currentCard.sentence, 'zh');
             }
         }, 500);
         return () => clearTimeout(autoPlayTimer);
-    }, [currentIndex, currentCard]);
+    }, [currentIndex, currentCard, isOpen]);
 
+    // 这是内部卡片切换的动画，保持不变
     const cardTransitions = useTransition(currentIndex, {
         key: currentIndex,
         from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '80%' : '-80%'}) scale(0.8)` },
@@ -73,43 +92,47 @@ const ShortSentenceCard = ({ sentences = [], onClose }) => {
         }
     }, { axis: 'y' });
 
-    return (
-        <div style={styles.fullScreen}>
-            <button style={styles.closeButton} onClick={onClose} data-no-gesture="true">
-                <FaTimes size={24} />
-            </button>
-            <div style={styles.counter} data-no-gesture="true">
-                {currentIndex + 1} / {cards.length}
-            </div>
-            <div style={styles.gestureArea} {...bind()} />
+    // ✅ 2. 使用新的 pageTransitions 来渲染整个组件
+    return pageTransitions((style, item) =>
+        item && ( // 只有当 isOpen 为 true 时才渲染
+            <animated.div style={{ ...styles.fullScreen, ...style }}>
+                <button style={styles.closeButton} onClick={onClose} data-no-gesture="true">
+                    <FaTimes size={24} />
+                </button>
+                <div style={styles.counter} data-no-gesture="true">
+                    {currentIndex + 1} / {cards.length}
+                </div>
+                <div style={styles.gestureArea} {...bind()} />
 
-            {cardTransitions((style, i) => {
-                const cardData = cards[i];
-                if (!cardData) return null;
-                const pinyinText = cardData.pinyin || pinyinConverter(cardData.sentence, { toneType: 'mark', separator: ' ' });
+                {cardTransitions((cardStyle, i) => {
+                    const cardData = cards[i];
+                    if (!cardData) return null;
+                    const pinyinText = cardData.pinyin || pinyinConverter(cardData.sentence, { toneType: 'mark', separator: ' ' });
 
-                return (
-                    <animated.div key={i} style={{ ...styles.animatedCardShell, ...style }}>
-                        <div style={styles.cardContainer}>
-                            <div style={styles.chineseSection} onClick={(e) => playTTS(cardData.sentence, 'zh', e)}>
-                                <div style={styles.pinyin}>{pinyinText}</div>
-                                <div style={styles.textChinese}>{cardData.sentence}</div>
-                            </div>
-                            <div style={styles.translationSection} onClick={(e) => playTTS(cardData.translation, 'my', e)}>
-                                <div style={styles.translationContent}>
-                                    <FaVolumeUp style={{ marginRight: '10px', color: '#6d28d9', flexShrink: 0 }} />
-                                    <div style={styles.textBurmese}>{cardData.translation}</div>
+                    return (
+                        <animated.div key={i} style={{ ...styles.animatedCardShell, ...cardStyle }}>
+                            <div style={styles.cardContainer}>
+                                <div style={styles.chineseSection} onClick={(e) => playTTS(cardData.sentence, 'zh', e)}>
+                                    <div style={styles.pinyin}>{pinyinText}</div>
+                                    <div style={styles.textChinese}>{cardData.sentence}</div>
+                                </div>
+                                <div style={styles.translationSection} onClick={(e) => playTTS(cardData.translation, 'my', e)}>
+                                    <div style={styles.translationContent}>
+                                        <FaVolumeUp style={{ marginRight: '10px', color: '#6d28d9', flexShrink: 0 }} />
+                                        <div style={styles.textBurmese}>{cardData.translation}</div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </animated.div>
-                );
-            })}
-        </div>
+                        </animated.div>
+                    );
+                })}
+            </animated.div>
+        )
     );
 };
 
-// --- 样式表 ---
+
+// --- 样式表 (保持不变) ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f0f4f8' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
