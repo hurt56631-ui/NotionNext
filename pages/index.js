@@ -33,14 +33,30 @@ export async function getStaticProps(req) {
   // 1. 先获取主要的站点数据
   const props = await getGlobalData({ from, locale })
 
-  // 2. 【最终修改】: 并行获取所有额外的数据库数据
+  // 2. 并行获取所有额外的数据库数据
   const [allBooks, speakingCourses, sentenceCards] = await Promise.all([
     getAllBooks({ databaseId: BLOG.NOTION_BOOK_DATABASE_ID }),
     getSpeakingCourses({ databaseId: BLOG.NOTION_SPEAKING_COURSE_ID }),
     getSentenceCards({ databaseId: BLOG.NOTION_SENTENCE_CARD_ID })
   ]);
 
-  // 3. 【最终修改】: 将所有获取到的数据添加到 props 中
+  // --- 【新增】服务端日志 ---
+  console.log('\n================ VERCEL 服务端日志 (getStaticProps) ================');
+  console.log(`【日志-服务端】获取到 ${allBooks?.length ?? 0} 本书。`);
+  console.log(`【日志-服务端】获取到 ${speakingCourses?.length ?? 0} 个口语课程。`);
+  console.log(`【日志-服务端】获取到 ${sentenceCards?.length ?? 0} 张句子卡片。`);
+  // 为了调试，打印一部分获取到的数据样本
+  if (speakingCourses?.length > 0) {
+    console.log('【日志-服务端】口语课程样本:', JSON.stringify(speakingCourses.slice(0, 2), null, 2));
+  }
+  if (sentenceCards?.length > 0) {
+    console.log('【日志-服务端】句子卡片样本:', JSON.stringify(sentenceCards.slice(0, 2), null, 2));
+  }
+  console.log('====================================================================\n');
+  // --- 日志结束 ---
+
+
+  // 3. 将所有获取到的数据添加到 props 中
   props.books = allBooks || [];
   props.speakingCourses = speakingCourses || [];
   props.sentenceCards = sentenceCards || [];
