@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 
 // 【核心】: 动态导入你指定的 CombinedPhraseCard 组件
 const CombinedPhraseCard = dynamic(
-  () => import('@/components/Tixing/CombinedPhraseCard'),
+  () => import('@/components/PhraseCard'),
   { 
     ssr: false, // 这是一个高度交互的组件，只在客户端渲染
     loading: () => <p className="text-center p-8">正在加载学习模块...</p>
@@ -42,7 +42,7 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
   // 如果播放器被激活，就渲染 CombinedPhraseCard
   if (isPlayerActive) {
     return (
-      <CombinedPhraseCard 
+      <PhraseCard 
         // 【核心】: 将数据从我们的格式转换为 CombinedPhraseCard 需要的格式
         flashcards={activeCourseCards.map(card => ({
             id: card.id,
