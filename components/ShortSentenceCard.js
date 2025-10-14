@@ -1,9 +1,9 @@
-// components/ShortSentenceCard.js (最终修复版 - 使用 Portal 实现真·全屏)
+// components/ShortSentenceCard.js (最终版 - 集成手势滑动和Portal真全屏)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom'; // ✅ 1. 引入 createPortal
+import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
-import { useDrag } from '@use-gesture/react';
+import { useDrag } from '@use-gesture/react'; // ✅ 1. 引入手势库
 import { Howl } from 'howler';
 import { FaVolumeUp, FaTimes } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
@@ -30,12 +30,8 @@ const playSoundEffect = (type) => {
 };
 
 const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
-    // ✅ 2. 新增一个状态，用于判断当前是否在浏览器环境，避免在服务端渲染时出错
     const [isMounted, setIsMounted] = useState(false);
-
-    useEffect(() => {
-        setIsMounted(true); // 组件挂载后，说明在浏览器环境，设为 true
-    }, []);
+    useEffect(() => { setIsMounted(true); }, []);
 
     // 页面进入/离开的动画 (保持不变)
     const pageTransitions = useTransition(isOpen, {
@@ -45,7 +41,6 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
         config: { tension: 220, friction: 25 },
     });
 
-    // --- 内部逻辑完全保持不变 ---
     const cards = useMemo(() => {
         return Array.isArray(sentences) && sentences.length > 0
             ? sentences
@@ -53,10 +48,12 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
     }, [sentences]);
 
     const [currentIndex, setCurrentIndex] = useState(0);
-    const lastDirection = useRef(0);
+    const lastDirection = useRef(0); // ✅ 2. 新增 Ref 记录滑动方向
     const currentCard = cards[currentIndex];
 
     useEffect(() => { if (isOpen) setCurrentIndex(0); }, [isOpen]);
+
+    // ✅ 3. 新增 navigate 函数，用于切换卡片并记录方向
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
         setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
@@ -70,20 +67,46 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
         return () => clearTimeout(autoPlayTimer);
     }, [currentIndex, currentCard, isOpen]);
 
-    const cardTransitions = useTransition(currentIndex, { /* ... 保持不变 ... */ });
-    const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => { /* ... 保持不变 ... */ }, { axis: 'y' });
+    // ✅ 4. 升级卡片切换动画，使其感知方向
+    const cardTransitions = useTransition(currentIndex, {
+        key: currentIndex,
+        from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` },
+        enter: { opacity: 1, transform: 'translateY(0%)' },
+        leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
+        config: { mass: 1, tension: 280, friction: 30 },
+        onStart: () => playSoundEffect('switch'),
+    });
 
-    // ✅ 3. 将要渲染的 JSX 内容提取出来
+    // ✅ 5. 创建手势绑定
+    const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => {
+        // 阻止在按钮等控件上触发滑动
+        if (event.target.closest('[data-no-gesture]')) return;
+        
+        // 当用户手指离开屏幕时
+        if (!down) {
+            // 判断是否为一次有效的滑动 (移动距离足够或速度足够快)
+            const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30);
+            if (isSignificantDrag) {
+                // yDir < 0 表示向上滑动 (下一张), yDir > 0 表示向下滑动 (上一张)
+                navigate(yDir < 0 ? 1 : -1);
+            }
+        }
+    }, { axis: 'y' }); // 只监听垂直方向的拖动
+
+
     const cardContent = pageTransitions((style, item) =>
         item && (
             <animated.div style={{ ...styles.fullScreen, ...style }}>
+                {/* ✅ 6. 添加手势捕获区域，并应用手势绑定 */}
+                <div style={styles.gestureArea} {...bind()} />
+
+                {/* ✅ 7. 为按钮和计数器添加 data-no-gesture 属性，防止滑动 */}
                 <button style={styles.closeButton} onClick={onClose} data-no-gesture="true">
                     <FaTimes size={24} />
                 </button>
                 <div style={styles.counter} data-no-gesture="true">
                     {currentIndex + 1} / {cards.length}
                 </div>
-                <div style={styles.gestureArea} {...bind()} />
 
                 {cardTransitions((cardStyle, i) => {
                     const cardData = cards[i];
@@ -111,17 +134,15 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
         )
     );
 
-    // ✅ 4. 如果在浏览器环境，就使用 Portal 将内容渲染到 document.body
     if (isMounted) {
         return createPortal(cardContent, document.body);
     }
 
-    // 在服务端或挂载前，返回 null
     return null;
 };
 
 
-// --- 样式表 (保持不变) ---
+// --- 样式表 (与上一版保持一致) ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f0f4f8' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
