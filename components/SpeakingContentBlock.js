@@ -2,15 +2,42 @@
 
 import { useState } from 'react';
 import { ChevronRight, MessageCircle, X } from 'lucide-react';
-import CiDianKa from '@/components/Tixing/CiDianKa';
+import dynamic from 'next/dynamic'; // 使用动态导入，防止服务端渲染问题
+
+// --- 使用动态导入 CiDianKa，并禁用 SSR ---
+const CiDianKa = dynamic(
+  () => import('@/components/Tixing/CiDianKa'),
+  { 
+    ssr: false, // 关键：不在服务器上渲染这个组件
+    loading: () => <p className="text-center p-8">正在加载学习卡片...</p> 
+  }
+);
 
 const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
+  // --- 【日志-客户端】: 检查组件接收到的原始数据 ---
+  console.log('\n================ SpeakingContentBlock 客户端日志 ================');
+  console.log('【日志】组件收到的 speakingCourses:', speakingCourses);
+  console.log('【日志】组件收到的 sentenceCards:', sentenceCards);
+  console.log('====================================================================\n');
+
   const [activeCourse, setActiveCourse] = useState(null);
 
   const handleCourseClick = (course) => {
-    const cardsForCourse = sentenceCards.filter(card => 
-      card.courseIds && card.courseIds.includes(course.id)
-    );
+    console.log(`【日志】点击了课程: "${course.title}" (ID: ${course.id})`);
+
+    // 筛选出属于这个课程的所有卡片
+    const cardsForCourse = sentenceCards.filter(card => {
+      const isIncluded = card.courseIds && card.courseIds.includes(course.id);
+      // 打印每一张卡片的筛选过程
+      // console.log(`  - 检查卡片 "${card.word}": 关联的课程ID [${card.courseIds}], 是否包含 ${course.id}? -> ${isIncluded}`);
+      return isIncluded;
+    });
+
+    console.log(`【日志】为课程 "${course.title}" 筛选出 ${cardsForCourse.length} 张卡片。`);
+    if (cardsForCourse.length === 0) {
+        console.warn('【日志】警告：没有为这个课程找到任何关联的卡片。请检查 Notion "句子卡片库" 中的 "所属课程" 关联是否正确设置。');
+    }
+    
     setActiveCourse({ ...course, cards: cardsForCourse });
   };
 
@@ -30,7 +57,7 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
   }
 
   if (!speakingCourses || speakingCourses.length === 0) {
-      return <p className="text-center text-gray-500">暂无口语课程，请检查Notion数据库配置。</p>;
+      return <p className="text-center text-gray-500">暂无口语课程，请检查Notion“口语课程库”配置。</p>;
   }
 
   return (
