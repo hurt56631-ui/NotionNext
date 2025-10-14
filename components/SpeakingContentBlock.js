@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { ChevronRight, MessageCircle, X } from 'lucide-react';
-import dynamic from 'next/dynamic'; // 使用动态导入，防止服务端渲染问题
+import dynamic from 'next/dynamic';
 
 // --- 使用动态导入 CiDianKa，并禁用 SSR ---
 const CiDianKa = dynamic(
   () => import('@/components/Tixing/CiDianKa'),
   { 
-    ssr: false, // 关键：不在服务器上渲染这个组件
+    ssr: false,
     loading: () => <p className="text-center p-8">正在加载学习卡片...</p> 
   }
 );
@@ -25,11 +25,8 @@ const SpeakingContentBlock = ({ speakingCourses, sentenceCards }) => {
   const handleCourseClick = (course) => {
     console.log(`【日志】点击了课程: "${course.title}" (ID: ${course.id})`);
 
-    // 筛选出属于这个课程的所有卡片
     const cardsForCourse = sentenceCards.filter(card => {
       const isIncluded = card.courseIds && card.courseIds.includes(course.id);
-      // 打印每一张卡片的筛选过程
-      // console.log(`  - 检查卡片 "${card.word}": 关联的课程ID [${card.courseIds}], 是否包含 ${course.id}? -> ${isIncluded}`);
       return isIncluded;
     });
 
