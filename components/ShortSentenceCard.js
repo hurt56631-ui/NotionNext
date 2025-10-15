@@ -359,9 +359,9 @@ const styles = {
     // --- 卡片内容 ---
     mainContent: { flex: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', textAlign: 'center', cursor: 'pointer' },
     translationContent: { flex: 2, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '20px', cursor: 'pointer', textAlign: 'center' },
-    pinyin: { fontSize: '1.3rem', color: '#f1f5f9', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1rem', letterSpacing: '0.05em' },
-    textChinese: { fontSize: '2.8rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.4, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
-    textBurmese: { fontSize: '2.2rem', color: '#e0e7ff', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
+    pinyin: { fontSize: '1.3rem', color: '#f1f5f9', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '0.8rem', letterSpacing: '0.05em' }, // 调整：marginBottom从1rem改为0.8rem
+    textChinese: { fontSize: '2.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, // 调整：fontSize从2.8rem改为2.2rem，lineHeight从1.4改为1.2
+    textBurmese: { fontSize: '2.2rem', color: '#fcd34d', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }, // 调整：color改为#fcd34d (黄色)
 
     // --- 控件 ---
     headerControls: { position: 'fixed', top: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' },
