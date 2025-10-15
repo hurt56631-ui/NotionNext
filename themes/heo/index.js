@@ -267,53 +267,6 @@ const LayoutIndex = props => {
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
-
-  // =================================================================================
-  // ====================== 【新增代码】实现上滑显示/下滑隐藏导航栏 ========================
-  // =================================================================================
-  const scrollContainerRef = useRef(null); // 为可滚动容器创建 ref
-  const [lastScrollY, setLastScrollY] = useState(0);
-  const [isNavVisible, setIsNavVisible] = useState(true); // 控制导航栏可见性的状态
-
-  // 使用 useCallback 优化事件处理器，以避免不必要的重新渲染
-  const handleScroll = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const currentScrollY = container.scrollTop;
-
-    // 仅当导航栏已经滚动到顶部（即 isCategoryBarSticky 为 true）时才应用隐藏/显示逻辑
-    if (isCategoryBarSticky) {
-        if (currentScrollY > lastScrollY && currentScrollY > 10) {
-            // 向下滚动，隐藏导航栏
-            setIsNavVisible(false);
-        } else {
-            // 向上滚动，显示导航栏
-            setIsNavVisible(true);
-        }
-    } else {
-        // 如果还未滚动到吸顶位置，则始终保持导航栏可见
-        setIsNavVisible(true);
-    }
-
-    // 更新上一次的滚动位置
-    setLastScrollY(currentScrollY <= 0 ? 0 : currentScrollY);
-  }, [lastScrollY, isCategoryBarSticky]);
-
-  // 在组件挂载和卸载时添加和移除滚动事件监听器
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      // 使用 passive: true 提高滚动性能
-      container.addEventListener('scroll', handleScroll, { passive: true });
-    }
-    return () => {
-      if (container) {
-        container.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [handleScroll]);
-  // ====================== 【新增代码结束】 ====================================
   
   // ===== ✅ 高级拖拽侧边栏 State 和 Refs =====
   const sidebarWidth = 288;
@@ -438,18 +391,12 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            {/* ============================================================================== */}
-            {/* ====================== 【修改点 1】为这个 div 添加 ref ======================== */}
-            {/* ============================================================================== */}
-            <div ref={scrollContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
+            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
 
-                    {/* ================================================================================================================ */}
-                    {/* ====================== 【修改点 2】修改这个 div 的 className 来动态控制显示和隐藏 ==================================== */}
-                    {/* ================================================================================================================ */}
-                    <div className={`sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
