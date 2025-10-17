@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修改版：实现点击“收藏短句”按钮直接打开卡片功能
+// themes/heo/index.js  <-- 最终修复版：为收藏夹卡片传递独立的进度Key
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -17,7 +17,7 @@ import { Transition } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useSwipeable } from 'react-swipeable' // ✅ 重新导入 useSwipeable
+import { useSwipeable } from 'react-swipeable'
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
 import BlogPostArchive from './components/BlogPostArchive'
@@ -53,9 +53,9 @@ import {
     Sun,
     UserCircle,
     Mic,
-    Heart,    // <-- 新增图标
-    List,     // <-- 新增图标
-    BookText  // <-- 新增图标
+    Heart,
+    List,
+    BookText
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -68,40 +68,35 @@ import BooksContentBlock from '@/components/BooksContentBlock'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
-// ✅ 新增：导入短句卡片组件
 const ShortSentenceCard = dynamic(() => import('@/components/ShortSentenceCard'), { ssr: false })
 
 
 // =================================================================================
-// ====================== ✅ 重写：高级拖拽侧边栏组件 ✅ ========================
+// ====================== ✅ 高级拖拽侧边栏组件 ✅ ========================
 // =================================================================================
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
-  const sidebarWidth = 288; // 侧边栏宽度 (w-72)
+  const sidebarWidth = 288;
 
   const sidebarLinks = [
     { icon: <Settings size={20} />, text: '通用设置', href: '/settings' },
     { icon: <LifeBuoy size={20} />, text: '帮助中心', href: '/help' },
   ];
 
-  // 在拖拽时禁用CSS过渡动画，以确保平滑跟随；松手后启用动画，实现吸附效果
   const transitionClass = isDragging ? '' : 'transition-transform duration-300 ease-in-out';
 
   return (
     <>
-      {/* 遮罩层 (实现拖拽时透明度渐变) */}
       <div
         className={`fixed inset-0 bg-black z-30 transition-opacity duration-300 ${isOpen ? 'opacity-50' : 'opacity-0 pointer-events-none'}`}
         onClick={onClose}
         style={{ opacity: isOpen ? 0.5 : (sidebarX + sidebarWidth) / sidebarWidth * 0.5 }}
       />
-      {/* 侧边栏内容 */}
       <div
         className={`fixed inset-y-0 left-0 w-72 bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-2xl z-40 transform ${transitionClass}`}
-        style={{ transform: `translateX(${sidebarX}px)` }} // ✅ 核心：通过transform实时更新位置
+        style={{ transform: `translateX(${sidebarX}px)` }}
       >
         <div className="flex flex-col h-full">
-            {/* 顶部用户信息 */}
             <div className="p-6 flex items-center gap-4 border-b dark:border-gray-700">
                 <UserCircle size={48} className="text-gray-500" />
                 <div>
@@ -109,7 +104,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
                     <p className="text-sm text-gray-500 dark:text-gray-400">欢迎来到本站</p>
                 </div>
             </div>
-            {/* 导航链接 */}
             <nav className="flex-grow p-4 space-y-2">
                 {sidebarLinks.map((link, index) => (
                     <SmartLink key={index} href={link.href} className="flex items-center gap-4 px-4 py-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 transition-colors">
@@ -118,7 +112,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
                     </SmartLink>
                 ))}
             </nav>
-            {/* 底部操作 */}
             <div className="p-4 border-t dark:border-gray-700">
                 <button
                     onClick={toggleDarkMode}
@@ -136,7 +129,7 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
 
 
 /**
- * 基础布局 (已正确修复)
+ * 基础布局
  */
 const LayoutBase = props => {
   const { children, slotTop, className } = props
@@ -148,7 +141,6 @@ const LayoutBase = props => {
   const headerSlot = (
     <header>
       <Header {...props} />
-      {/* [正确逻辑] PostHeader (白色区域) 只会在文章页(props.post存在时)显示 */}
       {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
     </header>
   )
@@ -175,7 +167,7 @@ const LayoutBase = props => {
   )
 }
 
-// 纤细滚动条样式 (保持不变)
+// 纤细滚动条样式
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -187,7 +179,7 @@ const CustomScrollbarStyle = () => (
 
 
 // =================================================================================
-// ====================== [修复] 重新定义主页专用的底部导航栏 ========================
+// ====================== 主页专用的底部导航栏 ========================
 // =================================================================================
 const BottomNavBar = () => {
     const navItems = [
@@ -224,7 +216,7 @@ const BottomNavBar = () => {
 };
 
 // =================================================================================
-// ====================== ✅ 重写：快捷操作按钮组件（已更新）✅ ========================
+// ====================== 快捷操作按钮组件 ========================
 // =================================================================================
 const ActionButtons = ({ onOpenFavorites }) => {
   const actions = [
@@ -265,7 +257,7 @@ const ActionButtons = ({ onOpenFavorites }) => {
 };
 
 
-// ✅ 新增：IndexedDB 辅助函数
+// IndexedDB 辅助函数
 const DB_NAME = 'ChineseLearningDB';
 const SENTENCE_STORE_NAME = 'favoriteSentences';
 
@@ -301,7 +293,7 @@ async function getAllFavorites(storeName) {
 
 
 /**
- * 首页 - 终极融合版 (已重写并集成卡片功能)
+ * 首页 - 终极融合版
  */
 const LayoutIndex = props => {
   const { books, speakingCourses, sentenceCards } = props
@@ -325,16 +317,13 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  // ✅ 新增：管理收藏卡片的状态
   const [isCardOpen, setIsCardOpen] = useState(false);
   const [cardData, setCardData] = useState([]);
 
-  // ✅ 新增：处理打开收藏夹的事件
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
         if (sentences && sentences.length > 0) {
-            // 将从IndexedDB读出的数据格式，转换为ShortSentenceCard组件需要的格式
             const formattedSentences = sentences.map(s => ({
                 id: s.id,
                 sentence: s.chinese,
@@ -466,7 +455,6 @@ const LayoutIndex = props => {
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
-                    {/* ✅ 将 handleOpenFavorites 函数传递给 ActionButtons */}
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
 
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
@@ -500,12 +488,13 @@ const LayoutIndex = props => {
             <BottomNavBar />
         </div>
 
-        {/* ✅ 新增：条件渲染短句卡片 */}
+        {/* ✅ 关键修改点：传递 progressKey */}
         {isCardOpen && (
             <ShortSentenceCard
                 sentences={cardData}
                 isOpen={isCardOpen}
                 onClose={() => setIsCardOpen(false)}
+                progressKey="favorites" 
             />
         )}
     </div>
@@ -514,7 +503,7 @@ const LayoutIndex = props => {
 
 
 // =========================================================================
-// =============  ✅ 所有其他组件恢复为您的原始结构 ✅ ===================
+// =============  其他组件保持不变  ===================
 // =========================================================================
 
 const LayoutPostList = props => {
@@ -716,7 +705,6 @@ const LayoutTagIndex = props => {
   )
 }
 
-// 最终修复：保持您原始文件的聚合导出结构
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
   LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
