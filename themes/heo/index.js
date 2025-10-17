@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：应用路由哈希方案，代码一字不漏
+// themes/heo/index.js  <-- 最终修复完整版：将 sentenceCards 传递给 HSK 组件
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -296,7 +296,7 @@ async function getAllFavorites(storeName) {
  * 首页 - 终极融合版 (已应用路由哈希方案)
  */
 const LayoutIndex = props => {
-  const router = useRouter(); // ✅ 1. 获取 router 实例
+  const router = useRouter(); 
   const { books, speakingCourses, sentenceCards } = props
 
   const tabs = [
@@ -318,13 +318,10 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  // ✅ 2. 不再使用 isCardOpen，改用 cardData 来存储数据
   const [cardData, setCardData] = useState(null);
 
-  // ✅ 3. 卡片是否打开的状态，完全由 URL 哈希决定
   const isFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
 
-  // ✅ 4. 修改 handleOpenFavorites 函数以使用路由
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
@@ -337,7 +334,6 @@ const LayoutIndex = props => {
                 imageUrl: s.imageUrl
             }));
             setCardData(formattedSentences);
-            // 关键：使用 router.push 添加哈希来打开卡片
             router.push(router.asPath + '#favorite-sentences', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何短句。');
@@ -347,17 +343,14 @@ const LayoutIndex = props => {
     } else if (type === 'grammar') {
         alert('“收藏语法”功能正在开发中，敬请期待！');
     }
-  }, [router]); // 依赖 router
+  }, [router]); 
 
-  // ✅ 5. 新增 useEffect 来监听浏览器后退事件，确保状态同步
   useEffect(() => {
     const handlePopState = () => {
-      // 当 URL 哈希不再是 '#favorite-sentences' 时，清空数据
       if (!window.location.hash.includes('favorite-sentences')) {
         setCardData(null);
       }
     };
-    // popstate 事件能监听到浏览器的前进/后退/手势操作
     window.addEventListener('popstate', handlePopState);
     return () => {
       window.removeEventListener('popstate', handlePopState);
@@ -495,7 +488,10 @@ const LayoutIndex = props => {
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'>
                                     {tab.name === '文章' && <PostListComponent {...props} />}
-                                    {tab.name === 'HSK' && <HskContentBlock />}
+                                    
+                                    {/* ✅ 唯一修改点：将 sentenceCards 传递下去 */}
+                                    {tab.name === 'HSK' && <HskContentBlock sentenceCards={sentenceCards} />}
+                                    
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
                                     {tab.name === '练习' && <PracticeContentBlock />}
                                     {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
@@ -509,7 +505,6 @@ const LayoutIndex = props => {
             <BottomNavBar />
         </div>
 
-        {/* ✅ 6. 更新 ShortSentenceCard 的调用方式 */}
         <ShortSentenceCard
             sentences={cardData || []}
             isOpen={isFavoritesCardOpen}
