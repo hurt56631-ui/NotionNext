@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修版：恢复分类手势 & 实现高级拖拽侧边栏 & 升级快捷按钮 & 移除主页Footer & 恢复顶部空白修复
+// themes/heo/index.js  <-- 最终修改版：实现点击“收藏短句”按钮直接打开卡片功能
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -53,9 +53,9 @@ import {
     Sun,
     UserCircle,
     Mic,
-    BookUser,
-    Video,
-    Info
+    Heart,    // <-- 新增图标
+    List,     // <-- 新增图标
+    BookText  // <-- 新增图标
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -68,6 +68,8 @@ import BooksContentBlock from '@/components/BooksContentBlock'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
+// ✅ 新增：导入短句卡片组件
+const ShortSentenceCard = dynamic(() => import('@/components/ShortSentenceCard'), { ssr: false })
 
 
 // =================================================================================
@@ -222,38 +224,86 @@ const BottomNavBar = () => {
 };
 
 // =================================================================================
-// ====================== ✅ 重写：快捷操作按钮组件 ✅ ========================
+// ====================== ✅ 重写：快捷操作按钮组件（已更新）✅ ========================
 // =================================================================================
-const ActionButtons = () => {
+const ActionButtons = ({ onOpenFavorites }) => {
   const actions = [
-    { icon: <Phone size={24} />, text: '联系我们', href: 'tel:YOUR_PHONE_NUMBER', color: 'from-blue-500 to-sky-500' },
-    { icon: <MessageSquare size={24} />, text: '在线客服', href: '#', color: 'from-green-500 to-emerald-500' },
-    { icon: <Users size={24} />, text: '加入社群', href: '#', color: 'from-purple-500 to-indigo-500' },
-    { icon: <BookUser size={24} />, text: '预约课程', href: '#', color: 'from-orange-500 to-amber-500' },
-    { icon: <Video size={24} />, text: '视频教程', href: '#', color: 'from-red-500 to-rose-500' },
-    { icon: <Info size={24} />, text: '关于我们', href: '#', color: 'from-gray-500 to-slate-500' },
+    { icon: <Phone size={24} />, text: '联系我们', type: 'link', href: 'tel:YOUR_PHONE_NUMBER', color: 'from-blue-500 to-sky-500' },
+    { icon: <MessageSquare size={24} />, text: '在线客服', type: 'link', href: '#', color: 'from-green-500 to-emerald-500' },
+    { icon: <Users size={24} />, text: '加入社群', type: 'link', href: '#', color: 'from-purple-500 to-indigo-500' },
+    { icon: <Heart size={24} />, text: '收藏单词', type: 'words', color: 'from-orange-500 to-amber-500' },
+    { icon: <List size={24} />, text: '收藏短句', type: 'sentences', color: 'from-red-500 to-rose-500' },
+    { icon: <BookText size={24} />, text: '收藏语法', type: 'grammar', color: 'from-gray-500 to-slate-500' },
   ];
   return (
     <div className="grid grid-cols-3 gap-4 my-6 px-4">
-      {actions.map((action, index) => (
-        <a key={index} href={action.href} className={`flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1`}>
-          <div className="mb-2">{action.icon}</div>
-          <span className="text-sm font-semibold">{action.text}</span>
-        </a>
-      ))}
+      {actions.map((action, index) => {
+        const content = (
+          <>
+            <div className="mb-2">{action.icon}</div>
+            <span className="text-sm font-semibold">{action.text}</span>
+          </>
+        );
+        const className = `flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1 w-full`;
+
+        if (action.type === 'link') {
+          return (
+            <a key={index} href={action.href} className={className}>
+              {content}
+            </a>
+          );
+        }
+
+        return (
+          <button key={index} onClick={() => onOpenFavorites(action.type)} className={className}>
+            {content}
+          </button>
+        );
+      })}
     </div>
   );
 };
 
 
+// ✅ 新增：IndexedDB 辅助函数
+const DB_NAME = 'ChineseLearningDB';
+const SENTENCE_STORE_NAME = 'favoriteSentences';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject('数据库打开失败');
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(SENTENCE_STORE_NAME)) {
+        db.createObjectStore(SENTENCE_STORE_NAME, { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+async function getAllFavorites(storeName) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        return new Promise((resolve, reject) => {
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = (event) => reject(new Error('Failed to retrieve items: ' + event.target.errorCode));
+        });
+    } catch (error) {
+        console.error("IndexedDB Error:", error);
+        return [];
+    }
+}
+
+
 /**
- * 首页 - 终极融合版 (已重写)
+ * 首页 - 终极融合版 (已重写并集成卡片功能)
  */
 const LayoutIndex = props => {
-  // =========================================================================
-  // ====================== 【第 1 处核心修正】 ================================
-  // 从 props 中解构出 speakingCourses 和 sentenceCards 数据
-  // =========================================================================
   const { books, speakingCourses, sentenceCards } = props
 
   const tabs = [
@@ -267,14 +317,43 @@ const LayoutIndex = props => {
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
-  
-  // ===== ✅ 高级拖拽侧边栏 State 和 Refs =====
+
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
+
+  // ✅ 新增：管理收藏卡片的状态
+  const [isCardOpen, setIsCardOpen] = useState(false);
+  const [cardData, setCardData] = useState([]);
+
+  // ✅ 新增：处理打开收藏夹的事件
+  const handleOpenFavorites = useCallback(async (type) => {
+    if (type === 'sentences') {
+        const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
+        if (sentences && sentences.length > 0) {
+            // 将从IndexedDB读出的数据格式，转换为ShortSentenceCard组件需要的格式
+            const formattedSentences = sentences.map(s => ({
+                id: s.id,
+                sentence: s.chinese,
+                translation: s.burmese,
+                pinyin: s.pinyin,
+                imageUrl: s.imageUrl
+            }));
+            setCardData(formattedSentences);
+            setIsCardOpen(true);
+        } else {
+            alert('您还没有收藏任何短句。');
+        }
+    } else if (type === 'words') {
+        alert('“收藏单词”功能正在开发中，敬请期待！');
+    } else if (type === 'grammar') {
+        alert('“收藏语法”功能正在开发中，敬请期待！');
+    }
+  }, []);
+
 
   useEffect(() => {
     const backgrounds = [
@@ -293,15 +372,13 @@ const LayoutIndex = props => {
     return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
   }, []);
 
-  // ===== ✅ 高级拖拽侧边栏事件处理函数 =====
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
-    // 边缘检测：只在屏幕最左侧 50px 内（手势拉出）或侧边栏已打开时（手势关闭）才启动拖拽
     if ((!isSidebarOpen && startX > 50)) return;
 
     touchStartX.current = startX;
     currentSidebarX.current = sidebarX;
-    setIsDragging(true); // 开始拖拽，禁用CSS动画
+    setIsDragging(true);
   };
 
   const handleTouchMove = (e) => {
@@ -310,24 +387,22 @@ const LayoutIndex = props => {
     const deltaX = currentX - touchStartX.current;
 
     let newX = currentSidebarX.current + deltaX;
-    newX = Math.max(-sidebarWidth, Math.min(newX, 0)); // 限制拖拽范围在 [-sidebarWidth, 0] 之间
+    newX = Math.max(-sidebarWidth, Math.min(newX, 0));
     setSidebarX(newX);
   };
 
   const handleTouchEnd = () => {
     if (!isDragging || touchStartX.current === null) return;
-    setIsDragging(false); // 结束拖拽，启用CSS动画
+    setIsDragging(false);
     touchStartX.current = null;
 
-    // 根据最后的位置决定是打开还是关闭
-    if (sidebarX < -sidebarWidth / 2) { // 如果拉出不足一半，则收回
+    if (sidebarX < -sidebarWidth / 2) {
         closeSidebar();
-    } else { // 否则，完全打开
+    } else {
         openSidebar();
     }
   };
 
-  // ===== ✅ 恢复分类切换手势处理器 =====
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -341,14 +416,12 @@ const LayoutIndex = props => {
               setActiveTab(tabs[currentIndex - 1].name);
           }
       },
-      // 关键修复：当分类栏未吸顶或正在拖动侧边栏时，禁用此滑动
       disabled: !isCategoryBarSticky || isDragging,
       preventDefaultTouchmoveEvent: true,
       trackMouse: true,
       delta: 50
   });
 
-  // 控制侧边栏打开/关闭的函数
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
 
@@ -361,7 +434,6 @@ const LayoutIndex = props => {
         
         <HomeSidebar isOpen={isSidebarOpen} onClose={closeSidebar} sidebarX={sidebarX} isDragging={isDragging} />
 
-        {/* 将拖拽事件绑定到主内容容器上 */}
         <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -394,7 +466,8 @@ const LayoutIndex = props => {
             <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
-                    <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons /></div>
+                    {/* ✅ 将 handleOpenFavorites 函数传递给 ActionButtons */}
+                    <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
 
                     <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
@@ -408,20 +481,13 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* ✅ 将分类滑动手势绑定到 main 元素上 */}
                     <main className="min-h-[70vh]" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'>
                                     {tab.name === '文章' && <PostListComponent {...props} />}
                                     {tab.name === 'HSK' && <HskContentBlock />}
-                                    
-                                    {/* ========================================================================= */}
-                                    {/* ====================== 【第 2 处核心修正】 ================================ */}
-                                    {/* 将解构出的数据作为 props 传递给 SpeakingContentBlock 组件 */}
-                                    {/* ========================================================================= */}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
-                                    
                                     {tab.name === '练习' && <PracticeContentBlock />}
                                     {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
                                 </div>
@@ -431,9 +497,17 @@ const LayoutIndex = props => {
                 </div>
             </div>
             
-            {/* [关键修复] 在主页末尾调用主页专用的 BottomNavBar，而不是全局的 Footer */}
             <BottomNavBar />
         </div>
+
+        {/* ✅ 新增：条件渲染短句卡片 */}
+        {isCardOpen && (
+            <ShortSentenceCard
+                sentences={cardData}
+                isOpen={isCardOpen}
+                onClose={() => setIsCardOpen(false)}
+            />
+        )}
     </div>
   );
 };
