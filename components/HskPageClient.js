@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, Mic2, Music4, BookText } from 'lucide-react';
+// ✅ 1. 引入新图标
+import { ChevronDown, ChevronUp, Mic2, Music4, BookText, ListTodo } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// --- [核心修复] HSK 数据：已为您补全所有课程的官方标准名称 ---
+// --- HSK 数据 (保持不变) ---
 const hskData = [
     { 
         level: 1, 
@@ -157,6 +158,16 @@ const pinyinModules = [
   { title: '声调表', href: '/pinyin/tones', icon: BookText, color: 'text-yellow-500', borderColor: 'border-yellow-500' },
 ];
 
+// ✅ 2. 创建词汇数据
+const vocabularyData = [
+  { level: 1, href: '/vocabulary/hsk1', color: 'text-teal-500', borderColor: 'border-teal-500', bgColor: 'bg-teal-50', darkBgColor: 'dark:bg-teal-900/50' },
+  { level: 2, href: '/vocabulary/hsk2', color: 'text-cyan-500', borderColor: 'border-cyan-500', bgColor: 'bg-cyan-50', darkBgColor: 'dark:bg-cyan-900/50' },
+  { level: 3, href: '/vocabulary/hsk3', color: 'text-sky-500', borderColor: 'border-sky-500', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900/50' },
+  { level: 4, href: '/vocabulary/hsk4', color: 'text-indigo-500', borderColor: 'border-indigo-500', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900/50' },
+  { level: 5, href: '/vocabulary/hsk5', color: 'text-purple-500', borderColor: 'border-purple-500', bgColor: 'bg-purple-50', darkBgColor: 'dark:bg-purple-900/50' },
+  { level: 6, href: '/vocabulary/hsk6', color: 'text-pink-500', borderColor: 'border-pink-500', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900/50' },
+];
+
 const HskCard = ({ level }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const hasMore = level.lessons.length > 5;
@@ -239,6 +250,28 @@ export default function HomePage() {
                             >
                                 <module.icon className={`${module.color} w-8 h-8 mb-2 transition-transform group-hover:scale-110`} />
                                 <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{module.title}</h3>
+                            </motion.a>
+                        </Link>
+                    ))}
+                </div>
+            </div>
+
+            {/* ✅ 3. 新增“词汇学习”模块 */}
+            <div className="space-y-4 pt-4">
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-rose-500 pl-4 py-1 flex items-center">
+                    <ListTodo className="mr-3 text-rose-500" size={24} />
+                    词汇学习
+                </h2>
+                <div className="grid grid-cols-3 gap-4">
+                    {vocabularyData.map((vocab) => (
+                        <Link key={vocab.level} href={vocab.href} passHref>
+                            <motion.a
+                                whileHover={{ y: -5, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}
+                                whileTap={{ scale: 0.95 }}
+                                className={`block p-4 rounded-xl shadow border ${vocab.borderColor} ${vocab.bgColor} ${vocab.darkBgColor} transition-all duration-300 cursor-pointer text-center group`}
+                            >
+                                <h3 className={`font-extrabold text-2xl ${vocab.color}`}>HSK {vocab.level}</h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-300">词汇列表</p>
                             </motion.a>
                         </Link>
                     ))}
