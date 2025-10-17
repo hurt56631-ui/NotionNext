@@ -1,13 +1,70 @@
-// components/ShortSentenceCard.js (视觉和UI优化最终版)
+// components/ShortSentenceCard.js (视觉和UI优化最终版 + IndexedDB收藏功能)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaHeart, FaRegHeart } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; // 确保您项目中存在此汉字笔顺组件
+
+// =================================================================================
+// ===== IndexedDB 收藏管理模块 ====================================================
+// =================================================================================
+const DB_NAME = 'ChineseLearningDB';
+const STORE_NAME = 'favoriteSentences';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject('数据库打开失败');
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+  });
+}
+
+async function toggleFavorite(sentence) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  const existing = await new Promise((resolve) => {
+    const getReq = store.get(sentence.id);
+    getReq.onsuccess = () => resolve(getReq.result);
+    getReq.onerror = () => resolve(null); // 发生错误时按未找到处理
+  });
+  if (existing) {
+    store.delete(sentence.id);
+    return false; // 已取消收藏
+  } else {
+    // 确保只存储必要的数据
+    const sentenceToStore = {
+      id: sentence.id,
+      chinese: sentence.chinese,
+      burmese: sentence.burmese,
+      pinyin: sentence.pinyin,
+      imageUrl: sentence.imageUrl, // 如果有的话
+    };
+    store.put(sentenceToStore);
+    return true; // 收藏成功
+  }
+}
+
+async function isFavorite(id) {
+  const db = await openDB();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  return new Promise((resolve) => {
+    const getReq = store.get(id);
+    getReq.onsuccess = () => resolve(!!getReq.result);
+    getReq.onerror = () => resolve(false); // 发生错误时按未找到处理
+  });
+}
 
 // =================================================================================
 // ===== 辅助工具 & 常量 ===========================================================
@@ -207,11 +264,26 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [writerChar, setWriterChar] = useState(null);
+  const [isFavoriteCard, setIsFavoriteCard] = useState(false); // <--- 新增状态
 
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = cards[currentIndex];
+
+  // <--- 新增: 检查收藏状态的 Effect ---
+  useEffect(() => {
+    if (currentCard?.id && currentCard.id !== 'fallback') {
+      isFavorite(currentCard.id).then(setIsFavoriteCard);
+    }
+  }, [currentCard]);
+  
+  // <--- 新增: 收藏/取消收藏的处理函数 ---
+  const handleToggleFavorite = async () => {
+    if (!currentCard || currentCard.id === 'fallback') return;
+    const result = await toggleFavorite(currentCard);
+    setIsFavoriteCard(result);
+  };
 
   const navigate = useCallback((direction) => {
       lastDirection.current = direction;
@@ -334,6 +406,13 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
                 <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺">
                     <FaPenFancy size={20} />
                 </button>
+                {/* --- 新增的收藏按钮 --- */}
+                <button
+                  style={styles.rightIconButton}
+                  onClick={handleToggleFavorite}
+                  title={isFavoriteCard ? "取消收藏" : "收藏"}>
+                  {isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}
+                </button>
             </div>
         )}
       </animated.div>
@@ -357,25 +436,25 @@ const styles = {
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     
     // --- 卡片内容 ---
-    mainContent: { // <<<< ****** 这里是修改点 ******
+    mainContent: {
         flex: 3, 
         display: 'flex', 
         flexDirection: 'column', 
-        justifyContent: 'flex-end', // 从 'center' 改为 'flex-end'，让内容沉底
+        justifyContent: 'flex-end',
         alignItems: 'center', 
         padding: '20px',
-        paddingBottom: '15px', // 增加一点下边距，避免和缅文贴太近
+        paddingBottom: '15px',
         textAlign: 'center', 
         cursor: 'pointer' 
     },
-    translationContent: { // <<<< ****** 这里是修改点 ******
+    translationContent: {
         flex: 2, 
         display: 'flex', 
         flexDirection: 'column', 
-        justifyContent: 'flex-start', // 从 'center' 改为 'flex-start'，让内容置顶
+        justifyContent: 'flex-start',
         alignItems: 'center', 
         padding: '20px', 
-        paddingTop: '15px', // 增加一点上边距，避免和中文贴太近
+        paddingTop: '15px',
         cursor: 'pointer', 
         textAlign: 'center' 
     },
