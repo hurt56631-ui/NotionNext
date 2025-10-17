@@ -1,4 +1,4 @@
-// components/ShortSentenceCard.js (视觉和UI优化最终版 + IndexedDB收藏功能)
+// components/ShortSentenceCard.js (最终修复版：进度保存 + 内容居中 + 手势退出修复)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -36,19 +36,18 @@ async function toggleFavorite(sentence) {
   const existing = await new Promise((resolve) => {
     const getReq = store.get(sentence.id);
     getReq.onsuccess = () => resolve(getReq.result);
-    getReq.onerror = () => resolve(null); // 发生错误时按未找到处理
+    getReq.onerror = () => resolve(null);
   });
   if (existing) {
     store.delete(sentence.id);
     return false; // 已取消收藏
   } else {
-    // 确保只存储必要的数据
     const sentenceToStore = {
       id: sentence.id,
       chinese: sentence.chinese,
       burmese: sentence.burmese,
       pinyin: sentence.pinyin,
-      imageUrl: sentence.imageUrl, // 如果有的话
+      imageUrl: sentence.imageUrl,
     };
     store.put(sentenceToStore);
     return true; // 收藏成功
@@ -62,7 +61,7 @@ async function isFavorite(id) {
   return new Promise((resolve) => {
     const getReq = store.get(id);
     getReq.onsuccess = () => resolve(!!getReq.result);
-    getReq.onerror = () => resolve(false); // 发生错误时按未找到处理
+    getReq.onerror = () => resolve(false);
   });
 }
 
@@ -121,7 +120,6 @@ const parsePinyin = (pinyinNum) => {
 // ===== 自定义 Hook & 子组件 ======================================================
 // =================================================================================
 
-// --- 设置管理的 Hook ---
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
@@ -140,7 +138,6 @@ const useCardSettings = () => {
   return [settings, setSettings];
 };
 
-// --- 拼音可视化组件 ---
 const PinyinVisualizer = React.memo(({ analysis }) => {
     const { parts, errors } = analysis;
     const initialStyle = parts.initial && errors.initial ? styles.wrongPart : styles.correctPart;
@@ -158,7 +155,6 @@ const PinyinVisualizer = React.memo(({ analysis }) => {
     );
 });
 
-// --- 发音对比面板 ---
 const PronunciationComparison = ({ correctWord, userText, onContinue, onClose }) => {
     const analysis = useMemo(() => {
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
@@ -222,7 +218,6 @@ const PronunciationComparison = ({ correctWord, userText, onContinue, onClose })
     );
 };
 
-// --- 设置面板 ---
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
   return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
@@ -232,11 +227,13 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 // =================================================================================
 // ===== 主组件: ShortSentenceCard =================================================
 // =================================================================================
-const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
+const ShortSentenceCard = ({ sentences = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
+  
+  const storageKey = `sentenceCardProgress_${progressKey}`;
 
   const processedCards = useMemo(() => {
     try {
@@ -259,26 +256,46 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
 
   const cards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无卡片", pinyin: "zàn wú kǎ piàn", burmese: "..." }];
   
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (typeof window !== 'undefined') {
+        try {
+            const savedIndex = localStorage.getItem(storageKey);
+            return savedIndex ? parseInt(savedIndex, 10) : 0;
+        } catch (error) {
+            console.error("读取进度失败", error);
+            return 0;
+        }
+    }
+    return 0;
+  });
+
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [writerChar, setWriterChar] = useState(null);
-  const [isFavoriteCard, setIsFavoriteCard] = useState(false); // <--- 新增状态
+  const [isFavoriteCard, setIsFavoriteCard] = useState(false);
 
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = cards[currentIndex];
 
-  // <--- 新增: 检查收藏状态的 Effect ---
+  useEffect(() => {
+    if (currentIndex >= cards.length && cards.length > 0) {
+        const newIndex = 0;
+        setCurrentIndex(newIndex);
+        localStorage.setItem(storageKey, newIndex);
+    } else {
+        localStorage.setItem(storageKey, currentIndex);
+    }
+  }, [currentIndex, cards, storageKey]);
+
   useEffect(() => {
     if (currentCard?.id && currentCard.id !== 'fallback') {
       isFavorite(currentCard.id).then(setIsFavoriteCard);
     }
   }, [currentCard]);
   
-  // <--- 新增: 收藏/取消收藏的处理函数 ---
   const handleToggleFavorite = async () => {
     if (!currentCard || currentCard.id === 'fallback') return;
     const result = await toggleFavorite(currentCard);
@@ -358,18 +375,47 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
       onStart: () => playSoundEffect('switch'),
   });
   
-  const bind = useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => {
+  // ✅ 关键手势修复：重写 useDrag hook
+  const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
+      // 如果按下的目标是按钮，则不处理手势
       if (event.target.closest('[data-no-gesture]')) return;
-      if (!down) {
-          const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30);
-          if (isSignificantDrag) navigate(yDir < 0 ? 1 : -1);
+      
+      // 只在拖拽结束后判断
+      if (down) return;
+
+      event.stopPropagation(); // 额外增加：停止事件冒泡
+
+      const isHorizontal = Math.abs(mx) > Math.abs(my);
+
+      if (isHorizontal) {
+          // 水平滑动：尝试关闭卡片
+          // 条件：水平移动超过80像素，或者速度足够快且移动超过40像素
+          const isSignificant = Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40);
+          if (isSignificant) {
+              onClose(); // 调用父组件传入的关闭函数
+          }
+      } else {
+          // 垂直滑动：切换上下卡片
+          const isSignificant = Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30);
+          if (isSignificant) {
+              navigate(yDir < 0 ? 1 : -1);
+          }
       }
-  }, { axis: 'y' });
+  }, {
+      filterTaps: true,
+      // ✅ 核心修复：这个选项会阻止手势事件的默认行为，例如浏览器的“滑动返回”。
+      preventDefault: true, 
+      threshold: 10,
+  });
 
   const cardContent = pageTransitions((style, item) =>
     item && (
       <animated.div style={{ ...styles.fullScreen, ...style }}>
         <div style={styles.gestureArea} {...bind()} />
+        
+        <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭">
+            <FaTimes size={22} />
+        </button>
         
         <div style={styles.headerControls} data-no-gesture="true">
             <div style={styles.counter}>{currentIndex + 1} / {cards.length}</div>
@@ -385,12 +431,20 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
           return (
             <animated.div key={i} style={{ ...styles.animatedCardShell, ...cardStyle }}>
               <div style={styles.cardContainer}>
-                  <div style={styles.mainContent} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                      <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
-                      <div style={styles.textChinese}>{cardData.chinese}</div>
-                  </div>
-                  <div style={styles.translationContent} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
-                      <div style={styles.textBurmese}>{cardData.burmese}</div>
+                  <div style={{ textAlign: 'center' }}>
+                      <div
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}
+                      >
+                          <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
+                          <div style={styles.textChinese}>{cardData.chinese}</div>
+                      </div>
+                      <div
+                          style={{ cursor: 'pointer', marginTop: '1.5rem' }}
+                          onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}
+                      >
+                          <div style={styles.textBurmese}>{cardData.burmese}</div>
+                      </div>
                   </div>
               </div>
             </animated.div>
@@ -406,7 +460,6 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
                 <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺">
                     <FaPenFancy size={20} />
                 </button>
-                {/* --- 新增的收藏按钮 --- */}
                 <button
                   style={styles.rightIconButton}
                   onClick={handleToggleFavorite}
@@ -426,43 +479,22 @@ const ShortSentenceCard = ({ sentences = [], isOpen, onClose }) => {
 };
 
 // =================================================================================
-// ===== 样式表 =====================================================================
+// ===== 样式表 (已更新为居中布局) ===================================================
 // =================================================================================
 const styles = {
     // --- 核心布局 ---
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
-    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
+    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     
     // --- 卡片内容 ---
-    mainContent: {
-        flex: 3, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        justifyContent: 'flex-end',
-        alignItems: 'center', 
-        padding: '20px',
-        paddingBottom: '15px',
-        textAlign: 'center', 
-        cursor: 'pointer' 
-    },
-    translationContent: {
-        flex: 2, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        justifyContent: 'flex-start',
-        alignItems: 'center', 
-        padding: '20px', 
-        paddingTop: '15px',
-        cursor: 'pointer', 
-        textAlign: 'center' 
-    },
     pinyin: { fontSize: '1.3rem', color: '#f1f5f9', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '0.8rem', letterSpacing: '0.05em' },
     textChinese: { fontSize: '2.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
     textBurmese: { fontSize: '2.2rem', color: '#fcd34d', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
 
     // --- 控件 ---
+    exitButton: { position: 'fixed', top: '25px', left: '20px', zIndex: 101, background: 'rgba(0, 0, 0, 0.4)', border: 'none', color: 'white', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' },
     headerControls: { position: 'fixed', top: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' },
     counter: { background: 'rgba(0, 0, 0, 0.5)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold' },
     rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
