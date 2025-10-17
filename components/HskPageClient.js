@@ -1,10 +1,19 @@
-import React, { useState } from 'react';
+// components/HskPageClient.js (最终修复版 - 补全所有 HSK 数据并集成词汇功能)
+
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-// ✅ 1. 引入新图标
+import { useRouter } from 'next/router';
 import { ChevronDown, ChevronUp, Mic2, Music4, BookText, ListTodo } from 'lucide-react';
 import { motion } from 'framer-motion';
+import dynamic from 'next/dynamic';
 
-// --- HSK 数据 (保持不变) ---
+// 动态导入 ShortSentenceCard 组件，因为它只在客户端渲染
+const ShortSentenceCard = dynamic(
+  () => import('@/components/ShortSentenceCard'),
+  { ssr: false }
+);
+
+// --- HSK 数据：已为您补全所有课程的官方标准名称 ---
 const hskData = [
     { 
         level: 1, 
@@ -158,17 +167,7 @@ const pinyinModules = [
   { title: '声调表', href: '/pinyin/tones', icon: BookText, color: 'text-yellow-500', borderColor: 'border-yellow-500' },
 ];
 
-// ✅ 2. 创建词汇数据
-const vocabularyData = [
-  { level: 1, href: '/vocabulary/hsk1', color: 'text-teal-500', borderColor: 'border-teal-500', bgColor: 'bg-teal-50', darkBgColor: 'dark:bg-teal-900/50' },
-  { level: 2, href: '/vocabulary/hsk2', color: 'text-cyan-500', borderColor: 'border-cyan-500', bgColor: 'bg-cyan-50', darkBgColor: 'dark:bg-cyan-900/50' },
-  { level: 3, href: '/vocabulary/hsk3', color: 'text-sky-500', borderColor: 'border-sky-500', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900/50' },
-  { level: 4, href: '/vocabulary/hsk4', color: 'text-indigo-500', borderColor: 'border-indigo-500', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900/50' },
-  { level: 5, href: '/vocabulary/hsk5', color: 'text-purple-500', borderColor: 'border-purple-500', bgColor: 'bg-purple-50', darkBgColor: 'dark:bg-purple-900/50' },
-  { level: 6, href: '/vocabulary/hsk6', color: 'text-pink-500', borderColor: 'border-pink-500', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900/50' },
-];
-
-const HskCard = ({ level }) => {
+const HskCard = ({ level, onVocabularyClick }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const hasMore = level.lessons.length > 5;
     const visibleLessons = isExpanded ? level.lessons : level.lessons.slice(0, 5);
@@ -205,86 +204,136 @@ const HskCard = ({ level }) => {
                     ))}
                 </div>
                 
-                {hasMore && (
-                    <button onClick={() => setIsExpanded(!isExpanded)} className="w-full text-center text-sm py-2 hover:bg-white/20 rounded-md transition-colors flex items-center justify-center gap-1 mt-2 font-semibold">
-                        {isExpanded ? '收起列表' : `展开所有 ${level.lessons.length} 门课程`}
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                <div className="mt-auto pt-4 space-y-2">
+                    {hasMore && (
+                        <button onClick={() => setIsExpanded(!isExpanded)} className="w-full text-center text-sm py-2 bg-white/10 hover:bg-white/20 rounded-md transition-colors flex items-center justify-center gap-1 font-semibold backdrop-blur-sm">
+                            {isExpanded ? '收起列表' : `展开所有 ${level.lessons.length} 门课程`}
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                    )}
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation(); 
+                            onVocabularyClick(level);
+                        }} 
+                        className="w-full text-center text-sm py-2 bg-white/10 hover:bg-white/20 rounded-md transition-colors flex items-center justify-center gap-2 font-semibold backdrop-blur-sm"
+                    >
+                        <ListTodo size={16} />
+                        词汇列表
                     </button>
-                )}
+                </div>
             </div>
         </motion.div>
     );
 }
 
-export default function HomePage() {
+export default function HskPageClient({ sentenceCards }) {
+  const router = useRouter();
+  const [activeHskWords, setActiveHskWords] = useState(null);
+  const [activeLevelTag, setActiveLevelTag] = useState(null);
+
+  const isCardViewOpen = router.asPath.includes('#hsk-vocabulary');
+
+  const handleVocabularyClick = (level) => {
+    if (!Array.isArray(sentenceCards)) {
+        console.error('错误: sentenceCards 数据未正确传递或不是数组。');
+        alert('加载词汇数据失败，请稍后重试。');
+        return;
+    }
+    
+    const levelTag = `hsk${level.level}`;
+    const wordsForLevel = sentenceCards.filter(card => 
+      Array.isArray(card.tags) && card.tags.includes(levelTag)
+    );
+
+    if (wordsForLevel.length > 0) {
+      setActiveHskWords(wordsForLevel);
+      setActiveLevelTag(levelTag);
+      router.push(router.asPath + '#hsk-vocabulary', undefined, { shallow: true });
+    } else {
+      alert(`暂无 HSK ${level.level} 级别的词汇卡片。\n请检查 Notion 数据库并确保单词已正确添加 "${levelTag}" 标签。`);
+    }
+  };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (!window.location.hash.includes('hsk-vocabulary')) {
+        setActiveHskWords(null);
+        setActiveLevelTag(null);
+      }
+    };
+    window.addEventListener('popstate', handleHashChange);
+    return () => {
+      window.removeEventListener('popstate', handleHashChange);
+    };
+  }, []);
+
   return (
-    <div 
-        className="relative min-h-screen bg-gray-100 dark:bg-gray-900"
-        style={{
-            backgroundImage: 'url(https://images.unsplash.com/photo-1534777367048-a53b2d1ac68e?fit=crop&w=1600&q=80)',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundAttachment: 'fixed'
-        }}
-    >
-        <div className="space-y-10 p-4 max-w-4xl mx-auto md:py-10 bg-white/80 dark:bg-black/70 backdrop-blur-md rounded-lg my-8 shadow-2xl">
-            <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="text-center"
-            >
-                <h1 className="text-4xl sm:text-5xl font-extrabold mb-2 text-gray-800 dark:text-white">汉语学习中心</h1>
-                <p className="text-xl text-gray-600 dark:text-gray-300">开启你的中文学习之旅</p>
-            </motion.div>
-      
-            <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-cyan-500 pl-4 py-1">拼音基础</h2>
-                <div className="grid grid-cols-3 gap-4">
-                    {pinyinModules.map((module) => (
-                        <Link key={module.title} href={module.href} passHref>
-                            <motion.a
-                                whileHover={{ y: -5 }}
-                                whileTap={{ scale: 0.95 }}
-                                className={`block p-4 rounded-xl shadow-md border ${module.borderColor} transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center group bg-white dark:bg-gray-800 hover:shadow-lg`}
-                            >
-                                <module.icon className={`${module.color} w-8 h-8 mb-2 transition-transform group-hover:scale-110`} />
-                                <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{module.title}</h3>
-                            </motion.a>
-                        </Link>
-                    ))}
-                </div>
-            </div>
+    <>
+      <div 
+          className="relative min-h-screen bg-gray-100 dark:bg-gray-900"
+          style={{
+              backgroundImage: 'url(https://images.unsplash.com/photo-1534777367048-a53b2d1ac68e?fit=crop&w=1600&q=80)',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundAttachment: 'fixed'
+          }}
+      >
+          <div className="space-y-10 p-4 max-w-4xl mx-auto md:py-10 bg-white/80 dark:bg-black/70 backdrop-blur-md rounded-lg my-8 shadow-2xl">
+              <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6 }}
+                  className="text-center"
+              >
+                  <h1 className="text-4xl sm:text-5xl font-extrabold mb-2 text-gray-800 dark:text-white">汉语学习中心</h1>
+                  <p className="text-xl text-gray-600 dark:text-gray-300">开启你的中文学习之旅</p>
+              </motion.div>
+        
+              <div className="space-y-4">
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-cyan-500 pl-4 py-1">拼音基础</h2>
+                  <div className="grid grid-cols-3 gap-4">
+                      {pinyinModules.map((module) => (
+                          <Link key={module.title} href={module.href} passHref>
+                              <motion.a
+                                  whileHover={{ y: -5 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  className={`block p-4 rounded-xl shadow-md border ${module.borderColor} transition-all duration-300 cursor-pointer flex flex-col items-center justify-center text-center group bg-white dark:bg-gray-800 hover:shadow-lg`}
+                              >
+                                  <module.icon className={`${module.color} w-8 h-8 mb-2 transition-transform group-hover:scale-110`} />
+                                  <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{module.title}</h3>
+                              </motion.a>
+                          </Link>
+                      ))}
+                  </div>
+              </div>
 
-            {/* ✅ 3. 新增“词汇学习”模块 */}
-            <div className="space-y-4 pt-4">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-rose-500 pl-4 py-1 flex items-center">
-                    <ListTodo className="mr-3 text-rose-500" size={24} />
-                    词汇学习
-                </h2>
-                <div className="grid grid-cols-3 gap-4">
-                    {vocabularyData.map((vocab) => (
-                        <Link key={vocab.level} href={vocab.href} passHref>
-                            <motion.a
-                                whileHover={{ y: -5, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}
-                                whileTap={{ scale: 0.95 }}
-                                className={`block p-4 rounded-xl shadow border ${vocab.borderColor} ${vocab.bgColor} ${vocab.darkBgColor} transition-all duration-300 cursor-pointer text-center group`}
-                            >
-                                <h3 className={`font-extrabold text-2xl ${vocab.color}`}>HSK {vocab.level}</h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-300">词汇列表</p>
-                            </motion.a>
-                        </Link>
-                    ))}
-                </div>
-            </div>
+              <div className="space-y-8 pt-4">
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-purple-500 pl-4 py-1">HSK 等级课程</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {hskData.map(level => (
+                        <HskCard 
+                          key={level.level} 
+                          level={level} 
+                          onVocabularyClick={handleVocabularyClick}
+                        />
+                      ))}
+                  </div>
+              </div>
+          </div>
+      </div>
 
-            <div className="space-y-8 pt-4">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 border-l-4 border-purple-500 pl-4 py-1">HSK 等级课程</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {hskData.map(level => (<HskCard key={level.level} level={level} />))}
-                </div>
-            </div>
-        </div>
-    </div>
+      <ShortSentenceCard 
+        isOpen={isCardViewOpen}
+        sentences={(activeHskWords || []).map(card => ({
+            id: card.id,
+            sentence: card.word,
+            translation: card.meaning,
+            pinyin: card.pinyin,
+        }))}
+        onClose={() => router.back()}
+        progressKey={activeLevelTag || 'hsk-vocab'}
+      />
+    </>
   );
 };
