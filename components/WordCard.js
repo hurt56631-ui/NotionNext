@@ -1,4 +1,4 @@
-// components/WordCard.js (最终样式布局版：移除左上角❌，计数移动到右下角)
+// components/WordCard.js (最终美化和布局修复版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -66,7 +66,7 @@ async function isFavorite(id) {
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 (保持不变) =================================================
+// ===== 辅助工具 & 常量 ===========================================================
 // =================================================================================
 
 const TTS_VOICES = [
@@ -95,6 +95,23 @@ const playSoundEffect = (type) => {
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (sounds[type]) sounds[type].play();
 };
+
+// 确保拼音总是使用符号声调 (mark)
+const formatPinyin = (rawPinyinNum) => {
+    if (!rawPinyinNum) return '';
+    // 如果传入的拼音已经是符号声调，则直接返回；否则进行转换
+    if (/[āēīōūǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(rawPinyinNum)) {
+        return rawPinyinNum;
+    }
+    // 使用 pinyin-pro 将数字声调转换为符号声调
+    try {
+        return pinyinConverter(rawPinyinNum, { toneType: 'symbol', separator: ' ' });
+    } catch (e) {
+        return rawPinyinNum; // 转换失败返回原样
+    }
+};
+
+// parsePinyin 保持不变，它只在 PronunciationComparison 内部用于详细解析和错误对比
 const parsePinyin = (pinyinNum) => {
     if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
     const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -157,6 +174,7 @@ const PinyinVisualizer = React.memo(({ analysis }) => {
 
 const PronunciationComparison = ({ correctWord, userText, onContinue, onClose }) => {
     const analysis = useMemo(() => {
+        // ... (发音对比逻辑保持不变，它需要数字声调)
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
         if (correctPinyin.length === 0 || userPinyin.length === 0) {
@@ -254,7 +272,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     } catch (error) { console.error("处理卡片数据出错:", error, words); return []; }
   }, [words, settings.order]);
 
-  const cards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", pinyin: "zàn wú dān cí", burmese: "..." }]; // 更改 fallback 文本
+  const cards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", pinyin: "zàn wú dān cí", burmese: "..." }];
   
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -407,14 +425,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       <animated.div style={{ ...styles.fullScreen, ...style }}>
         <div style={styles.gestureArea} {...bind()} />
         
-        {/* 移除左上角的退出按钮 <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭">
-            <FaTimes size={22} />
-        </button> */}
-        
-        {/* 移除顶部的计数 <div style={styles.headerControls} data-no-gesture="true">
-            <div style={styles.counter}>{currentIndex + 1} / {cards.length}</div>
-        </div> */}
-
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         {!!recognizedText && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} onContinue={handleNavigateToNext} onClose={handleCloseComparison} />)}
@@ -427,18 +437,18 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               <div style={styles.cardContainer}>
                   <div style={{ textAlign: 'center' }}>
                       
-                      {/* 1. 拼音显示区域 */}
+                      {/* 1. 拼音显示区域 (使用符号声调) */}
                       <div
                           style={{ cursor: 'pointer' }}
                           onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}
                       >
-                          <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
+                          <div style={styles.pinyin}>{formatPinyin(cardData.pinyin)}</div>
                           
-                          {/* 2. 中文单词显示区域 (确保颜色可见) */}
+                          {/* 2. 中文单词显示区域 */}
                           <div style={styles.textWordChinese}>{cardData.chinese}</div> 
                       </div>
                       
-                      {/* 3. 缅语翻译显示区域 (确保颜色可见) */}
+                      {/* 3. 缅语翻译显示区域 */}
                       <div
                           style={{ cursor: 'pointer', marginTop: '2.5rem' }}
                           onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}
@@ -454,9 +464,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
-                
-                {/* 单词计数移动到最上方 */}
-                <div style={styles.counterInControls}>{currentIndex + 1} / {cards.length}</div> 
                 
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
                 <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
@@ -479,10 +486,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   {isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}
                 </button>
                 
-                {/* 新增：退出按钮移动到最下方 */}
+                {/* 退出按钮 */}
                 <button style={styles.exitButtonInControls} onClick={onClose} title="关闭">
                     <FaTimes size={22} color='#4a5568'/>
                 </button>
+            </div>
+        )}
+        
+        {/* 单词计数移动到底部中央 */}
+        {cards.length > 0 && (
+            <div style={styles.bottomCenterCounter} data-no-gesture="true">
+                {currentIndex + 1} / {cards.length}
             </div>
         )}
       </animated.div>
@@ -496,7 +510,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 (已更新布局和颜色) ===============================================
+// ===== 样式表 (已更新：缅语颜色和底部计数布局) ===============================================
 // =================================================================================
 const styles = {
     // --- 核心布局 ---
@@ -505,23 +519,13 @@ const styles = {
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     
-    // --- 卡片内容 ---
+    // --- 卡片内容 (缅语颜色调整为更亮的 #fce38a) ---
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
-    textWordBurmese: { fontSize: '3.5rem', color: '#e0f2f1', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }, 
+    textWordBurmese: { fontSize: '3.5rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }, // 缅语颜色调整
 
     // --- 控件 (主要修改区域) ---
-    // 删除了原 exitButton 和 headerControls 样式
-    rightControls: { position: 'fixed', bottom: '2%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, // 移动到底部
-    counterInControls: { 
-        background: 'rgba(255, 255, 255, 0.2)', // 使用浅色背景，使其在深色背景上可见
-        color: 'white', 
-        padding: '5px 15px', 
-        borderRadius: '15px', 
-        fontSize: '1rem', 
-        fontWeight: 'bold', 
-        marginBottom: '10px' // 与下面的按钮分开
-    },
+    rightControls: { position: 'fixed', bottom: '20px', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
     rightIconButton: { 
         background: 'white', 
         border: 'none', 
@@ -536,7 +540,7 @@ const styles = {
         transition: 'transform 0.2s', 
         color: '#4a5568' 
     },
-    exitButtonInControls: { // 新增底部退出按钮样式
+    exitButtonInControls: { 
         background: 'white', 
         border: 'none', 
         cursor: 'pointer', 
@@ -549,10 +553,23 @@ const styles = {
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
         transition: 'transform 0.2s', 
         color: '#4a5568',
-        marginTop: '15px', // 与上一个按钮分开
+        marginTop: '15px', 
     },
-
-    // --- 发音对比面板/设置面板 (保持不变) ---
+    bottomCenterCounter: { // 新增底部中央计数样式
+        position: 'fixed', 
+        bottom: '25px', 
+        left: '50%', 
+        transform: 'translateX(-50%)', 
+        zIndex: 10,
+        background: 'rgba(255, 255, 255, 0.2)',
+        color: 'white', 
+        padding: '5px 15px', 
+        borderRadius: '15px', 
+        fontSize: '1rem', 
+        fontWeight: 'bold', 
+        backdropFilter: 'blur(3px)',
+    },
+    // ... (其他样式保持不变)
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
