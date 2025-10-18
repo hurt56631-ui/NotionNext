@@ -1,19 +1,17 @@
-// components/HskPageClient.js (最终修复版 - 补全所有 HSK 数据并集成词汇功能)
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ChevronDown, ChevronUp, Mic2, Music4, BookText, ListTodo } from 'lucide-react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
-// 动态导入 ShortSentenceCard 组件，因为它只在客户端渲染
-const ShortSentenceCard = dynamic(
-  () => import('@/components/ShortSentenceCard'),
+// 动态导入 WordCard 组件，因为它是全屏组件，通常只在客户端渲染
+const WordCard = dynamic(
+  () => import('@/components/WordCard'),
   { ssr: false }
 );
 
-// --- HSK 数据：已为您补全所有课程的官方标准名称 ---
+// --- HSK 数据 (保持不变，用于渲染卡片) ---
 const hskData = [
     { 
         level: 1, 
@@ -219,7 +217,7 @@ const HskCard = ({ level, onVocabularyClick }) => {
                         className="w-full text-center text-sm py-2 bg-white/10 hover:bg-white/20 rounded-md transition-colors flex items-center justify-center gap-2 font-semibold backdrop-blur-sm"
                     >
                         <ListTodo size={16} />
-                        词汇列表
+                        词汇列表 (全屏)
                     </button>
                 </div>
             </div>
@@ -227,34 +225,49 @@ const HskCard = ({ level, onVocabularyClick }) => {
     );
 }
 
-export default function HskPageClient({ sentenceCards }) {
+// 接收来自父组件 (例如 pages/hsk.js) 传递的全部 words 数据
+export default function HskPageClient({ words }) { 
   const router = useRouter();
   const [activeHskWords, setActiveHskWords] = useState(null);
   const [activeLevelTag, setActiveLevelTag] = useState(null);
 
   const isCardViewOpen = router.asPath.includes('#hsk-vocabulary');
 
-  const handleVocabularyClick = (level) => {
-    if (!Array.isArray(sentenceCards)) {
-        console.error('错误: sentenceCards 数据未正确传递或不是数组。');
+  const handleVocabularyClick = useCallback((level) => {
+    if (!Array.isArray(words)) {
+        console.error('错误: words 数据未正确传递或不是数组。');
         alert('加载词汇数据失败，请稍后重试。');
         return;
     }
     
-    const levelTag = `hsk${level.level}`;
-    const wordsForLevel = sentenceCards.filter(card => 
-      Array.isArray(card.tags) && card.tags.includes(levelTag)
+    // Notion 等级属性的值是 hsk1, hsk2 等
+    const levelTag = `hsk${level.level}`; 
+    
+    // 根据 levelTag 过滤单词
+    const wordsForLevel = words.filter(word => 
+      Array.isArray(word.tags) && word.tags.includes(levelTag)
     );
 
     if (wordsForLevel.length > 0) {
       setActiveHskWords(wordsForLevel);
       setActiveLevelTag(levelTag);
+      // 使用 hash 触发全屏组件打开
       router.push(router.asPath + '#hsk-vocabulary', undefined, { shallow: true });
     } else {
       alert(`暂无 HSK ${level.level} 级别的词汇卡片。\n请检查 Notion 数据库并确保单词已正确添加 "${levelTag}" 标签。`);
     }
-  };
+  }, [words, router]); // 依赖 words 和 router
 
+  const handleCloseCard = useCallback(() => {
+    setActiveHskWords(null);
+    setActiveLevelTag(null);
+    // 使用 router.back() 或手动移除 hash
+    if (window.location.hash.includes('#hsk-vocabulary')) {
+        router.back(); 
+    }
+  }, [router]);
+
+  // 处理浏览器后退按钮关闭 WordCard
   useEffect(() => {
     const handleHashChange = () => {
       if (!window.location.hash.includes('hsk-vocabulary')) {
@@ -262,11 +275,21 @@ export default function HskPageClient({ sentenceCards }) {
         setActiveLevelTag(null);
       }
     };
-    window.addEventListener('popstate', handleHashChange);
+    window.addEventListener('hashchange', handleHashChange);
     return () => {
-      window.removeEventListener('popstate', handleHashChange);
+      window.removeEventListener('hashchange', handleHashChange);
     };
   }, []);
+  
+  // 如果 words 是空数组，显示提示
+  if (!words || words.length === 0) {
+      return (
+        <div className="container mx-auto p-8 text-center bg-white dark:bg-gray-800 rounded-lg shadow-lg my-12">
+          <h1 className="text-2xl font-bold mb-4">HSK 单词学习</h1>
+          <p>Notion 数据库没有加载到任何单词数据。请检查 `blog.config.js` 中的 ID 和父页面 (`pages/hsk.js`) 中的属性映射。</p>
+        </div>
+      );
+  }
 
   return (
     <>
@@ -323,15 +346,12 @@ export default function HskPageClient({ sentenceCards }) {
           </div>
       </div>
 
-      <ShortSentenceCard 
+      {/* 使用 WordCard 组件，传入过滤后的单词数据 */}
+      {/* 结构：{id, chinese, burmese, pinyin, imageUrl} */}
+      <WordCard 
         isOpen={isCardViewOpen}
-        sentences={(activeHskWords || []).map(card => ({
-            id: card.id,
-            sentence: card.word,
-            translation: card.meaning,
-            pinyin: card.pinyin,
-        }))}
-        onClose={() => router.back()}
+        words={activeHskWords || []} // 传入过滤后的单词
+        onClose={handleCloseCard}
         progressKey={activeLevelTag || 'hsk-vocab'}
       />
     </>
