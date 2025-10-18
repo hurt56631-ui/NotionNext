@@ -1,3 +1,5 @@
+// components/WordCard.js (最终样式布局版：移除左上角❌，计数移动到右下角)
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
@@ -8,10 +10,10 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; // 确保您项目中存在此汉字笔顺组件
 
 // =================================================================================
-// ===== IndexedDB 收藏管理模块 (已修改为 Words 存储) ================================
+// ===== IndexedDB 收藏管理模块 (保持不变) =========================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
-const STORE_NAME = 'favoriteWords'; // 更改为 Words 专用存储
+const STORE_NAME = 'favoriteWords';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -21,7 +23,6 @@ function openDB() {
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        // 创建新的存储空间
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
     };
@@ -65,7 +66,7 @@ async function isFavorite(id) {
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 (与原组件相同) =============================================
+// ===== 辅助工具 & 常量 (保持不变) =================================================
 // =================================================================================
 
 const TTS_VOICES = [
@@ -116,13 +117,12 @@ const parsePinyin = (pinyinNum) => {
 
 
 // =================================================================================
-// ===== 自定义 Hook & 子组件 (与原组件相同) =========================================
+// ===== 自定义 Hook & 子组件 (保持不变) =========================================
 // =================================================================================
 
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
-      // 更改设置的存储键，以防与句子组件混淆
       const savedSettings = localStorage.getItem('learningWordCardSettings'); 
       const defaultSettings = {
         order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000,
@@ -225,23 +225,22 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 
 
 // =================================================================================
-// ===== 主组件: WordCard (已修改) ===================================================
+// ===== 主组件: WordCard ==========================================================
 // =================================================================================
-const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => { // 接收 words 属性
+const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
   
-  // 更改进度存储键
   const storageKey = `wordCardProgress_${progressKey}`;
 
   const processedCards = useMemo(() => {
     try {
         const mapped = words.map(w => ({
             id: w.id,
-            chinese: w.chineseWord, // 假设您的数据源中中文词语字段为 chineseWord
-            burmese: w.burmeseTranslation, // 假设您的数据源中缅语翻译字段为 burmeseTranslation
+            chinese: w.chinese,
+            burmese: w.burmese,
             pinyin: w.pinyin,
             imageUrl: w.imageUrl,
         }));
@@ -376,7 +375,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       onStart: () => playSoundEffect('switch'),
   });
   
-  // 手势逻辑 (与原组件相同)
+  // 手势逻辑 (保持不变)
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
       if (event.target.closest('[data-no-gesture]')) return;
       
@@ -408,13 +407,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       <animated.div style={{ ...styles.fullScreen, ...style }}>
         <div style={styles.gestureArea} {...bind()} />
         
-        <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭">
+        {/* 移除左上角的退出按钮 <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭">
             <FaTimes size={22} />
-        </button>
+        </button> */}
         
-        <div style={styles.headerControls} data-no-gesture="true">
+        {/* 移除顶部的计数 <div style={styles.headerControls} data-no-gesture="true">
             <div style={styles.counter}>{currentIndex + 1} / {cards.length}</div>
-        </div>
+        </div> */}
 
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
@@ -427,28 +426,25 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             <animated.div key={i} style={{ ...styles.animatedCardShell, ...cardStyle }}>
               <div style={styles.cardContainer}>
                   <div style={{ textAlign: 'center' }}>
+                      
+                      {/* 1. 拼音显示区域 */}
                       <div
                           style={{ cursor: 'pointer' }}
                           onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}
                       >
                           <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
-                          {/* 更改为 Word 专属样式 (更大字体) */}
+                          
+                          {/* 2. 中文单词显示区域 (确保颜色可见) */}
                           <div style={styles.textWordChinese}>{cardData.chinese}</div> 
                       </div>
+                      
+                      {/* 3. 缅语翻译显示区域 (确保颜色可见) */}
                       <div
                           style={{ cursor: 'pointer', marginTop: '2.5rem' }}
                           onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}
                       >
-                          {/* 更改为 Word 专属样式 (更大字体) */}
                           <div style={styles.textWordBurmese}>{cardData.burmese}</div>
                       </div>
-                      
-                      {/* 可选：在此处添加 Pinyin 细节显示 (因为是单字/词) */}
-                      {cardData.chinese && cardData.chinese.length === 1 && cardData.pinyin && (
-                          <div style={{marginTop: '30px'}}>
-                              <PinyinVisualizer analysis={{ parts: parsePinyin(cardData.pinyin.split(' ')[0]), errors: {} }} />
-                          </div>
-                      )}
                       
                   </div>
               </div>
@@ -458,21 +454,34 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
+                
+                {/* 单词计数移动到最上方 */}
+                <div style={styles.counterInControls}>{currentIndex + 1} / {cards.length}</div> 
+                
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
                 <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
                     <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} />
                 </button>
-                {/* 仅在单字时显示笔顺按钮 */}
-                {currentCard.chinese && currentCard.chinese.length <= 2 && (
+                
+                {/* 笔顺按钮：只在汉字词汇且长度合理时显示 */}
+                {currentCard.chinese && currentCard.chinese.length > 0 && 
+                 currentCard.chinese.length <= 5 && 
+                 !currentCard.chinese.includes(' ') && ( 
                     <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺">
                         <FaPenFancy size={20} />
                     </button>
                 )}
+                
                 <button
                   style={styles.rightIconButton}
                   onClick={handleToggleFavorite}
                   title={isFavoriteCard ? "取消收藏" : "收藏"}>
                   {isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}
+                </button>
+                
+                {/* 新增：退出按钮移动到最下方 */}
+                <button style={styles.exitButtonInControls} onClick={onClose} title="关闭">
+                    <FaTimes size={22} color='#4a5568'/>
                 </button>
             </div>
         )}
@@ -487,28 +496,63 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 (已更新为单词专用样式) ===============================================
+// ===== 样式表 (已更新布局和颜色) ===============================================
 // =================================================================================
 const styles = {
-    // --- 核心布局 (与原组件相同) ---
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed' },
+    // --- 核心布局 ---
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     
-    // --- 卡片内容 (为 WORDS 优化了字体大小) ---
-    pinyin: { fontSize: '1.5rem', color: '#f1f5f9', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
-    textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
-    textWordBurmese: { fontSize: '3.5rem', color: '#fcd34d', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
+    // --- 卡片内容 ---
+    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
+    textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
+    textWordBurmese: { fontSize: '3.5rem', color: '#e0f2f1', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' }, 
 
-    // --- 控件 (与原组件相同) ---
-    exitButton: { position: 'fixed', top: '25px', left: '20px', zIndex: 101, background: 'rgba(0, 0, 0, 0.4)', border: 'none', color: 'white', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' },
-    headerControls: { position: 'fixed', top: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' },
-    counter: { background: 'rgba(0, 0, 0, 0.5)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold' },
-    rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
-    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    // --- 控件 (主要修改区域) ---
+    // 删除了原 exitButton 和 headerControls 样式
+    rightControls: { position: 'fixed', bottom: '2%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' }, // 移动到底部
+    counterInControls: { 
+        background: 'rgba(255, 255, 255, 0.2)', // 使用浅色背景，使其在深色背景上可见
+        color: 'white', 
+        padding: '5px 15px', 
+        borderRadius: '15px', 
+        fontSize: '1rem', 
+        fontWeight: 'bold', 
+        marginBottom: '10px' // 与下面的按钮分开
+    },
+    rightIconButton: { 
+        background: 'white', 
+        border: 'none', 
+        cursor: 'pointer', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        width: '44px', 
+        height: '44px', 
+        borderRadius: '50%', 
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
+        transition: 'transform 0.2s', 
+        color: '#4a5568' 
+    },
+    exitButtonInControls: { // 新增底部退出按钮样式
+        background: 'white', 
+        border: 'none', 
+        cursor: 'pointer', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        width: '44px', 
+        height: '44px', 
+        borderRadius: '50%', 
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
+        transition: 'transform 0.2s', 
+        color: '#4a5568',
+        marginTop: '15px', // 与上一个按钮分开
+    },
 
-    // --- 发音对比面板/设置面板 (与原组件相同) ---
+    // --- 发音对比面板/设置面板 (保持不变) ---
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
