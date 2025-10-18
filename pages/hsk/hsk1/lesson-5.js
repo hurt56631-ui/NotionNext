@@ -1,31 +1,35 @@
-// pages/hsk/hsk1/lesson-5.js (修复 Module Not Found 错误)
+// pages/hsk/hsk1/_LessonSectionClient.js (运行在客户端环境)
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/router';
-import LianXianTi from '@/components/Tixing/LianXianTi';
+import React from 'react';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-import { FaVolumeUp } from 'react-icons/fa';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Howl } from 'howler';
+import { FaVolumeUp } from 'react-icons/fa';
 
-// ✅ 修复：直接导入本地 JSON 文件，Next.js 会自动处理
-import lessonDataRaw from '@/data/hsk/hsk1/lesson-5.json'; 
+// 确保只在客户端运行
+if (typeof window === 'undefined') {
+    // 如果由于某种原因在服务器端被调用，返回 null 或空内容
+    export default () => null; 
+}
 
-// 假设的 TTS 播放函数（与 LianXianTi.js 中的保持一致）
+
+// TTS 播放函数（依赖于 Howl）
 const playTTS = (text) => {
     if (!text) return;
-    console.log(`TTS 播放: ${text}`);
-    // 实际实现
-    // const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=0`;
-    // new Howl({ src: [ttsUrl], html5: true }).play();
+    const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=0`;
+    // 确保每次都是新的 Howl 实例
+    new Howl({ src: [ttsUrl], html5: true, volume: 0.8 }).play(); 
 };
 
+// Pinyin 格式化函数（依赖于 pinyin-pro）
+const formatPinyin = (pinyin) => {
+    try {
+        return pinyinConverter(pinyin, { toneType: 'symbol' });
+    } catch (e) {
+        return pinyin;
+    }
+};
 
-// 通用的 Section 渲染组件
-const SectionRenderer = ({ section }) => {
-    // 假设 formatPinyin 函数，用于将数字声调转换为符号声调（如果需要）
-    const formatPinyin = (pinyin) => pinyinConverter(pinyin, { toneType: 'symbol' });
-
+const ClientPinyinSection = ({ section }) => {
     switch (section.type) {
         case 'title_card':
             const { main, pinyin, english } = section.data;
@@ -36,8 +40,6 @@ const SectionRenderer = ({ section }) => {
                     <p className="text-lg text-gray-500 mt-4">{english}</p>
                 </div>
             );
-        case 'lian_xian_ti':
-            return <LianXianTi data={section.data} mapping={section.mapping} title={section.title} />;
         case 'dialogue':
             return (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 my-4">
@@ -59,83 +61,8 @@ const SectionRenderer = ({ section }) => {
                 </div>
             );
         default:
-            return <div className="p-4 bg-red-100 text-red-800 rounded-lg">未知组件类型: {section.type}</div>;
+            return null;
     }
 };
 
-
-const Lesson5Page = () => {
-    const router = useRouter();
-    // ✅ 修正：直接使用导入的 JSON 数据
-    const lessonData = lessonDataRaw; 
-    const [pageIndex, setPageIndex] = useState(0); // 当前是第几页（从 0 开始）
-    
-    const currentPage = lessonData.pages[pageIndex];
-    const totalPages = lessonData.pages.length;
-
-    // 切换页面逻辑
-    const goToNextPage = useCallback(() => {
-        if (pageIndex < totalPages - 1) {
-            setPageIndex(pageIndex + 1);
-            window.scrollTo(0, 0); // 切换页面后滚动到顶部
-        }
-    }, [pageIndex, totalPages]);
-
-    const goToPrevPage = useCallback(() => {
-        if (pageIndex > 0) {
-            setPageIndex(pageIndex - 1);
-            window.scrollTo(0, 0);
-        }
-    }, [pageIndex]);
-
-    return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
-            {/* 顶栏 */}
-            <header className="bg-white shadow-md sticky top-0 z-10">
-                <div className="max-w-4xl mx-auto flex justify-between items-center p-4">
-                    <button onClick={() => router.back()} className="text-gray-600 hover:text-gray-800">
-                        <ChevronLeft size={24} />
-                    </button>
-                    <h1 className="text-lg font-semibold text-gray-800">{lessonData.lessonTitle}</h1>
-                    <div className="w-6"></div> {/* 占位符 */}
-                </div>
-                <div className="w-full h-1 bg-blue-200">
-                    <div className="h-full bg-blue-500" style={{ width: `${(pageIndex + 1) / totalPages * 100}%` }}></div>
-                </div>
-            </header>
-
-            <main className="max-w-4xl mx-auto p-4">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4">{pageIndex + 1}. {currentPage.title}</h2>
-                
-                {currentPage.components.map((component, index) => (
-                    <SectionRenderer key={index} section={component} />
-                ))}
-            </main>
-
-            {/* 底部导航 */}
-            <footer className="sticky bottom-0 bg-white/90 backdrop-blur-sm shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t border-gray-200 z-10">
-                <div className="max-w-4xl mx-auto flex justify-between p-4">
-                    <button 
-                        onClick={goToPrevPage} 
-                        disabled={pageIndex === 0}
-                        className={`py-2 px-4 rounded-xl font-semibold transition-colors flex items-center gap-2 ${pageIndex === 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
-                    >
-                        <ChevronLeft size={20} /> 上一页
-                    </button>
-                    
-                    <span className="text-gray-600 font-medium self-center">{pageIndex + 1} / {totalPages}</span>
-
-                    <button 
-                        onClick={goToNextPage} 
-                        disabled={pageIndex === totalPages - 1}
-                        className={`py-2 px-4 rounded-xl font-semibold transition-colors flex items-center gap-2 ${pageIndex === totalPages - 1 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 text-white'}`}
-                    >
-                        {pageIndex === totalPages - 1 ? '完成课程' : '下一页'} <ChevronRight size={20} />
-                    </button>
-                </div>
-            </footer>
-        </div>
-    );
-};
-
-export default Lesson5Page;
+export default ClientPinyinSection;
