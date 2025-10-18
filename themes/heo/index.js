@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：将 sentenceCards 传递给 HSK 组件
+// themes/heo/index.js  <-- 最终修复完整版：将 allWords 传递给 HSK 组件并添加收藏单词功能
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -69,10 +69,12 @@ import BooksContentBlock from '@/components/BooksContentBlock'
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const ShortSentenceCard = dynamic(() => import('@/components/ShortSentenceCard'), { ssr: false })
+// ✅ 动态导入 WordCard 组件 (用于收藏单词)
+const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
 
 // =================================================================================
-// ====================== ✅ 高级拖拽侧边栏组件 ✅ ========================
+// ====================== ✅ 高级拖拽侧边栏组件 (保持不变) ✅ ========================
 // =================================================================================
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
@@ -179,7 +181,7 @@ const CustomScrollbarStyle = () => (
 
 
 // =================================================================================
-// ====================== 主页专用的底部导航栏 ========================
+// ====================== 主页专用的底部导航栏 (保持不变) ========================
 // =================================================================================
 const BottomNavBar = () => {
     const navItems = [
@@ -216,7 +218,7 @@ const BottomNavBar = () => {
 };
 
 // =================================================================================
-// ====================== 快捷操作按钮组件 ========================
+// ====================== 快捷操作按钮组件 (已修改) ========================
 // =================================================================================
 const ActionButtons = ({ onOpenFavorites }) => {
   const actions = [
@@ -257,9 +259,12 @@ const ActionButtons = ({ onOpenFavorites }) => {
 };
 
 
-// IndexedDB 辅助函数
+// =================================================================================
+// ====================== IndexedDB 辅助函数 (已修改) ========================
+// =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const SENTENCE_STORE_NAME = 'favoriteSentences';
+const WORD_STORE_NAME = 'favoriteWords'; // 单词收藏存储名
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -270,6 +275,10 @@ function openDB() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(SENTENCE_STORE_NAME)) {
         db.createObjectStore(SENTENCE_STORE_NAME, { keyPath: 'id' });
+      }
+      // ✅ 新增：创建单词收藏存储
+      if (!db.objectStoreNames.contains(WORD_STORE_NAME)) {
+        db.createObjectStore(WORD_STORE_NAME, { keyPath: 'id' });
       }
     };
   });
@@ -297,7 +306,8 @@ async function getAllFavorites(storeName) {
  */
 const LayoutIndex = props => {
   const router = useRouter(); 
-  const { books, speakingCourses, sentenceCards } = props
+  // 引入 HSK 单词数据，用于传递给 HskContentBlock
+  const { books, speakingCourses, sentenceCards, allWords } = props 
 
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
@@ -318,47 +328,66 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  const [cardData, setCardData] = useState(null);
+  // 收藏卡片数据状态
+  const [sentenceCardData, setSentenceCardData] = useState(null); // 用于收藏短句
+  const [wordCardData, setWordCardData] = useState(null); // 用于收藏单词
 
-  const isFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
+  const isSentenceFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
+  const isWordFavoritesCardOpen = router.asPath.includes('#favorite-words');
 
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
         if (sentences && sentences.length > 0) {
-            const formattedSentences = sentences.map(s => ({
+            // 映射到 ShortSentenceCard 所需的结构: {id, sentence, translation, pinyin, imageUrl}
+            setSentenceCardData(sentences.map(s => ({
                 id: s.id,
                 sentence: s.chinese,
                 translation: s.burmese,
                 pinyin: s.pinyin,
                 imageUrl: s.imageUrl
-            }));
-            setCardData(formattedSentences);
+            })));
+            setWordCardData(null); // 确保只打开一个
             router.push(router.asPath + '#favorite-sentences', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何短句。');
         }
     } else if (type === 'words') {
-        alert('“收藏单词”功能正在开发中，敬请期待！');
+        const words = await getAllFavorites(WORD_STORE_NAME); // 获取单词收藏
+        if (words && words.length > 0) {
+            // 映射到 WordCard 所需的结构: {id, chinese, burmese, pinyin, imageUrl}
+            setWordCardData(words);
+            setSentenceCardData(null); // 确保只打开一个
+            router.push(router.asPath + '#favorite-words', undefined, { shallow: true });
+        } else {
+            alert('您还没有收藏任何单词。');
+        }
     } else if (type === 'grammar') {
         alert('“收藏语法”功能正在开发中，敬请期待！');
     }
   }, [router]); 
 
+  const handleCloseFavorites = useCallback(() => {
+    setSentenceCardData(null);
+    setWordCardData(null);
+    // 自动回退，移除 hash
+    if (window.location.hash.includes('#favorite')) {
+        router.back();
+    }
+  }, [router]);
+
+
   useEffect(() => {
+    // 监听哈希变化，处理浏览器后退
     const handlePopState = () => {
-      if (!window.location.hash.includes('favorite-sentences')) {
-        setCardData(null);
+      const hash = window.location.hash;
+      if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
+        setSentenceCardData(null);
+        setWordCardData(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, []);
 
-
-  useEffect(() => {
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
@@ -372,9 +401,13 @@ const LayoutIndex = props => {
 
     const currentSentinel = sentinelRef.current;
     if (currentSentinel) observer.observe(currentSentinel);
-    return () => { if (currentSentinel) observer.unobserve(currentSentinel); };
+    return () => { 
+        if (currentSentinel) observer.unobserve(currentSentinel); 
+        window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
+  // ... (侧边栏拖拽逻辑保持不变)
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
     if ((!isSidebarOpen && startX > 50)) return;
@@ -489,8 +522,8 @@ const LayoutIndex = props => {
                                 <div className='p-4'>
                                     {tab.name === '文章' && <PostListComponent {...props} />}
                                     
-                                    {/* ✅ 唯一修改点：将 sentenceCards 传递下去 */}
-                                    {tab.name === 'HSK' && <HskContentBlock sentenceCards={sentenceCards} />}
+                                    {/* ✅ HSK 组件现在接收 allWords 属性 */}
+                                    {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
                                     {tab.name === '练习' && <PracticeContentBlock />}
@@ -505,11 +538,20 @@ const LayoutIndex = props => {
             <BottomNavBar />
         </div>
 
+        {/* 收藏短句组件 (使用 ShortSentenceCard) */}
         <ShortSentenceCard
-            sentences={cardData || []}
-            isOpen={isFavoritesCardOpen}
-            onClose={() => router.back()}
-            progressKey="favorites" 
+            sentences={sentenceCardData || []}
+            isOpen={isSentenceFavoritesCardOpen}
+            onClose={handleCloseFavorites}
+            progressKey="favorites-sentences" 
+        />
+        
+        {/* ✅ 收藏单词组件 (使用 WordCard) */}
+        <WordCard
+            words={wordCardData || []}
+            isOpen={isWordFavoritesCardOpen}
+            onClose={handleCloseFavorites}
+            progressKey="favorites-words" 
         />
     </div>
   );
@@ -570,6 +612,7 @@ const LayoutSearch = props => {
 
 const LayoutArchive = props => {
   const { archivePosts } = props
+  const { locale } = useGlobal()
   return (
     <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
       <CategoryBar {...props} border={false} />
