@@ -1,0 +1,62 @@
+{
+    "lessonId": "hsk1-lesson5",
+    "lessonTitle": "她女儿今年二十岁 - HSK 1",
+    "pages": [
+        {
+            "pageId": 1,
+            "title": "热身 (Warm-up) & 连线",
+            "components": [
+                {
+                    "type": "title_card",
+                    "data": {
+                        "main": "她女儿今年二十岁",
+                        "pinyin": "Tā nǚ'ér jīnnián èrshí suì",
+                        "english": "Her daughter is 20 years old this year"
+                    }
+                },
+                {
+                    "type": "lian_xian_ti",
+                    "title": "给下面的词语选择对应的图片 (Match the words with the pictures)",
+                    "data": [
+                        { "id": "A", "text_zh": "女儿", "pinyin_zh": "nǚ'ér", "match_id": "C", "image_url": "https://i.imgur.com/vHq0L5F.jpeg" },
+                        { "id": "B", "text_zh": "七十岁", "pinyin_zh": "qīshí suì", "match_id": "F", "image_url": "https://i.imgur.com/eB4jK8Z.jpeg" },
+                        { "id": "C", "text_zh": "学生", "pinyin_zh": "xuésheng", "match_id": "E", "image_url": "https://i.imgur.com/jM8c3L9.jpeg" },
+                        { "id": "D", "text_zh": "二十岁", "pinyin_zh": "èrshí suì", "match_id": "D", "image_url": "https://i.imgur.com/lM8m5Qc.jpeg" },
+                        { "id": "E", "text_zh": "家", "pinyin_zh": "jiā", "match_id": "B", "image_url": "https://i.imgur.com/4vB8D3W.jpeg" },
+                        { "id": "F", "text_zh": "六口人", "pinyin_zh": "liù kǒu rén", "match_id": "A", "image_url": "https://i.imgur.com/tH0n8xH.jpeg" }
+                    ],
+                    "mapping": [
+                        {"word_zh": "六口人", "match_img_id": "B"},
+                        {"word_zh": "家", "match_img_id": "C"},
+                        {"word_zh": "女儿", "match_img_id": "A"},
+                        {"word_zh": "学生", "match_img_id": "E"},
+                        {"word_zh": "七十岁", "match_img_id": "F"},
+                        {"word_zh": "二十岁", "match_img_id": "D"}
+                    ]
+                }
+            ]
+        },
+        {
+            "pageId": 2,
+            "title": "课文 (Text) - 在学校 & 在办公室",
+            "components": [
+                {
+                    "type": "dialogue",
+                    "title": "在学校 (In the school)",
+                    "data": [
+                        {"speaker": "A", "chinese": "你家有几口人？", "pinyin": "Nǐ jiā yǒu jǐ kǒu rén?", "english": "How many people are there in your family?"},
+                        {"speaker": "B", "chinese": "我家有三口人。", "pinyin": "Wǒ jiā yǒu sān kǒu rén.", "english": "There are three people in my family."}
+                    ]
+                },
+                {
+                    "type": "dialogue",
+                    "title": "在办公室 (In the office)",
+                    "data": [
+                        {"speaker": "A", "chinese": "你女儿几岁了？", "pinyin": "Nǐ nǚ'ér jǐ suì le?", "english": "How old is your daughter?"},
+                        {"speaker": "B", "chinese": "她今年四岁了。", "pinyin": "Tā jīnnián sì suì le.", "english": "She is four years old."}
+                    ]
+                }
+            ]
+        }
+    ]
+}
