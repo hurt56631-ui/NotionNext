@@ -1,8 +1,8 @@
-// pages/index.js (修改版)
+// pages/index.js (最终修复版，移除错误的 getAllPosts 导入)
 
 import BLOG from '@/blog.config'
 import { siteConfig } from '@/lib/config'
-import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData'
+import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData' // 移除 getAllPosts 的导入
 import { getAllBooks } from '@/lib/db/getBooks'
 import { getSpeakingCourses } from '@/lib/db/getSpeakingCourses'
 import { getSentenceCards } from '@/lib/db/getSentenceCards'
@@ -73,6 +73,7 @@ export async function getStaticProps(req) {
     12,
     props?.NOTION_CONFIG
   )
+  // 这里使用的是 props.allPages，它是由 getGlobalData 提供的，不受 getAllPosts 导入的影响
   props.posts = props.allPages?.filter(
     page => page.type === 'Post' && page.status === 'Published'
   )
