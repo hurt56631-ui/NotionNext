@@ -1,15 +1,14 @@
-// pages/hsk/hsk1/lesson-5.js
+// pages/hsk/hsk1/lesson-5.js (修复 Module Not Found 错误)
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import { getLessonData } from '@/lib/data/localData'; // 假设的本地数据加载函数
 import LianXianTi from '@/components/Tixing/LianXianTi';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { FaVolumeUp } from 'react-icons/fa';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Howl } from 'howler';
 
-// 导入数据文件 (实际项目中需要根据您的路径调整)
+// ✅ 修复：直接导入本地 JSON 文件，Next.js 会自动处理
 import lessonDataRaw from '@/data/hsk/hsk1/lesson-5.json'; 
 
 // 假设的 TTS 播放函数（与 LianXianTi.js 中的保持一致）
@@ -24,12 +23,15 @@ const playTTS = (text) => {
 
 // 通用的 Section 渲染组件
 const SectionRenderer = ({ section }) => {
+    // 假设 formatPinyin 函数，用于将数字声调转换为符号声调（如果需要）
+    const formatPinyin = (pinyin) => pinyinConverter(pinyin, { toneType: 'symbol' });
+
     switch (section.type) {
         case 'title_card':
             const { main, pinyin, english } = section.data;
             return (
                 <div className="text-center py-8 bg-white rounded-xl shadow-xl mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800">{pinyinConverter(main, { toneType: 'symbol' })}</h1>
+                    <h1 className="text-3xl font-bold text-gray-800">{formatPinyin(pinyin)}</h1>
                     <h2 className="text-5xl font-extrabold text-blue-600 mt-2">{main}</h2>
                     <p className="text-lg text-gray-500 mt-4">{english}</p>
                 </div>
@@ -44,7 +46,7 @@ const SectionRenderer = ({ section }) => {
                         <div key={index} className="flex flex-col mb-4 p-3 rounded-lg bg-gray-50 border-l-2 border-gray-300">
                             <div className="flex justify-between items-start">
                                 <div className="flex flex-col">
-                                    <p className="text-sm text-gray-500">{item.speaker}: {pinyinConverter(item.pinyin, { toneType: 'symbol' })}</p>
+                                    <p className="text-sm text-gray-500">{item.speaker}: {formatPinyin(item.pinyin)}</p>
                                     <p className="text-xl font-bold text-gray-800">{item.chinese}</p>
                                 </div>
                                 <button onClick={() => playTTS(item.chinese)} className="text-gray-500 hover:text-blue-600 transition-colors">
@@ -64,10 +66,10 @@ const SectionRenderer = ({ section }) => {
 
 const Lesson5Page = () => {
     const router = useRouter();
-    const lessonData = lessonDataRaw; // 直接加载本地数据
+    // ✅ 修正：直接使用导入的 JSON 数据
+    const lessonData = lessonDataRaw; 
     const [pageIndex, setPageIndex] = useState(0); // 当前是第几页（从 0 开始）
     
-    // 假设每页有多个 Section，这里我们用 pageIndex 对应 lessonData.pages 的索引
     const currentPage = lessonData.pages[pageIndex];
     const totalPages = lessonData.pages.length;
 
