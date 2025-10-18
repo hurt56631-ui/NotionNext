@@ -1,4 +1,4 @@
-// pages/index.js
+// pages/index.js (修改版)
 
 import BLOG from '@/blog.config'
 import { siteConfig } from '@/lib/config'
@@ -6,6 +6,7 @@ import { getGlobalData, getPostBlocks } from '@/lib/db/getSiteData'
 import { getAllBooks } from '@/lib/db/getBooks'
 import { getSpeakingCourses } from '@/lib/db/getSpeakingCourses'
 import { getSentenceCards } from '@/lib/db/getSentenceCards'
+import { getWords } from '@/lib/db/getWords' // 【新增】引入 getWords 函数
 import { generateRobotsTxt } from '@/lib/robots.txt'
 import { generateRss } from '@/lib/rss'
 import { generateSitemapXml } from '@/lib/sitemap.xml'
@@ -34,10 +35,11 @@ export async function getStaticProps(req) {
   const props = await getGlobalData({ from, locale })
 
   // 2. 并行获取所有额外的数据库数据
-  const [allBooks, speakingCourses, sentenceCards] = await Promise.all([
+  const [allBooks, speakingCourses, sentenceCards, allWords] = await Promise.all([ // 【新增】allWords
     getAllBooks({ databaseId: BLOG.NOTION_BOOK_DATABASE_ID }),
     getSpeakingCourses({ databaseId: BLOG.NOTION_SPEAKING_COURSE_ID }),
-    getSentenceCards({ databaseId: BLOG.NOTION_SENTENCE_CARD_ID })
+    getSentenceCards({ databaseId: BLOG.NOTION_SENTENCE_CARD_ID }),
+    getWords({ databaseId: BLOG.NOTION_HSK_WORD_ID, notionHost: BLOG.API_BASE_URL }) // 【新增】调用 getWords
   ]);
 
   // --- 【核心修正】: 增强服务端日志，用于最终确认 ---
@@ -45,19 +47,25 @@ export async function getStaticProps(req) {
   console.log(`【日志-服务端】获取到 ${allBooks?.length ?? 0} 本书。`);
   console.log(`【日志-服务端】获取到 ${speakingCourses?.length ?? 0} 个口语课程。`);
   console.log(`【日志-服务端】获取到 ${sentenceCards?.length ?? 0} 张句子卡片。`);
-  if (speakingCourses?.length > 0) {
-    console.log('【日志-服务端】口语课程样本:', JSON.stringify(speakingCourses.slice(0, 2), null, 2));
-  }
-  if (sentenceCards?.length > 0) {
-    console.log('【日志-服务端】句子卡片样本:', JSON.stringify(sentenceCards.slice(0, 2), null, 2));
+  console.log(`【日志-服务端】获取到 ${allWords?.length ?? 0} 个 HSK 单词。`); // 【新增】单词日志
+  if (allWords?.length > 0) {
+    // 假设 WordCard 需要 id, chinese, burmese, pinyin, tags 属性
+    console.log('【日志-服务端】HSK 单词样本:', JSON.stringify(allWords.slice(0, 2).map(w => ({
+        id: w.id, 
+        chinese: w.title, 
+        burmese: w.translation || w.meaning || w.释义, 
+        pinyin: w.pinyin, 
+        tags: w.tag
+    })), null, 2));
   }
   console.log('====================================================================\n');
 
 
-  // 3. 将所有获取到的数据添加到 props 中 (你的这部分逻辑是正确的)
+  // 3. 将所有获取到的数据添加到 props 中
   props.books = allBooks || [];
   props.speakingCourses = speakingCourses || [];
   props.sentenceCards = sentenceCards || [];
+  props.allWords = allWords || []; // 【新增】将全部单词数据注入 props
 
   // 4. 继续处理文章数据（沿用您原有的逻辑）
   const POST_PREVIEW_LINES = siteConfig(
