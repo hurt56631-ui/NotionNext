@@ -1,6 +1,6 @@
-// components/WordCard.js (最终精修版)
+// components/WordCard.js (最终精修版 - 已修复语法错误)
 
-import React, a, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // ✅ 核心语法修复：修正了错误的 import 语句
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
@@ -11,7 +11,7 @@ import HanziModal from '@/components/HanziModal';
 import HandwritingModal from '@/components/HandwritingModal';
 
 // =================================================================================
-// ===== 辅助工具 & Hooks (已优化) ===============================================
+// ===== 辅助工具 & Hooks ========================================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB'; const STORE_NAME = 'favoriteWords';
 function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'id' }); }; }); }
@@ -42,7 +42,7 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== ✅ 全新发音对比面板 =======================================================
+// ===== 全新发音对比面板 =======================================================
 // =================================================================================
 const PronunciationComparisonPanel = ({ isOpen, onClose, correctText, userText, userAudioURL, settings }) => {
     const analysis = useMemo(() => {
@@ -133,7 +133,7 @@ const PronunciationComparisonPanel = ({ isOpen, onClose, correctText, userText, 
                                 <FaUser/> 我的录音
                             </button>
                         )}
-                        <button style={{...styles.actionButton, background: '#007BFF'}} onClick={onClose}>
+                        <button style={{...styles.actionButton, background: '#007BFF', color: 'white'}} onClick={onClose}>
                             <FaSyncAlt/> 再试一次
                         </button>
                     </div>
@@ -160,7 +160,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState(false);
   
-  // ✅ 发音练习相关状态
+  // 发音练习相关状态
   const [isRecording, setIsRecording] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [userAudioURL, setUserAudioURL] = useState(null);
@@ -181,34 +181,28 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   // 自动播放逻辑
   useEffect(() => { if (!isOpen) return; clearTimeout(autoBrowseTimerRef.current); const playSequence = () => { if (settings.autoPlayChinese && currentCard?.chinese) { playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => { if (settings.autoPlayBurmese && currentCard?.burmese) { playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, startAutoBrowseTimer); } else { startAutoBrowseTimer(); } }); } else if (settings.autoPlayBurmese && currentCard?.burmese) { playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, startAutoBrowseTimer); } else { startAutoBrowseTimer(); } }; const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } }; const initialPlayTimer = setTimeout(playSequence, 600); return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); }; }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ 核心发音练习逻辑：结合录音与识别
+  // 核心发音练习逻辑
   const handlePronunciationPractice = useCallback(async (e) => {
     e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
     
-    // 如果正在录音，则停止
     if (isRecording) {
-      recognitionRef.current?.stop(); // stop() 会自动触发 onend
+      recognitionRef.current?.stop();
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
       return;
     }
 
-    // 清理上一次的录音和结果
     if (userAudioURL) URL.revokeObjectURL(userAudioURL);
     setUserAudioURL(null);
     setRecognizedText('');
     
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition || !navigator.mediaDevices?.getUserMedia) {
-        alert('抱歉，您的浏览器不支持语音识别或录音功能。');
-        return;
-    }
+    if (!SpeechRecognition || !navigator.mediaDevices?.getUserMedia) { alert('抱歉，您的浏览器不支持语音识别或录音功能。'); return; }
     
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         
-        // 1. 设置语音识别
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.lang = 'zh-CN';
         recognitionRef.current.interimResults = false;
@@ -217,20 +211,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             setRecognizedText(transcript);
         };
         recognitionRef.current.onend = () => {
-            if (mediaRecorderRef.current?.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            }
+            if (mediaRecorderRef.current?.state === 'recording') { mediaRecorderRef.current.stop(); }
             setIsRecording(false);
-            // 显示对比面板
             setIsComparisonPanelOpen(true);
         };
 
-        // 2. 设置录音
         mediaRecorderRef.current = new MediaRecorder(stream);
         audioChunksRef.current = [];
-        mediaRecorderRef.current.ondataavailable = (event) => {
-            audioChunksRef.current.push(event.data);
-        };
+        mediaRecorderRef.current.ondataavailable = (event) => { audioChunksRef.current.push(event.data); };
         mediaRecorderRef.current.onstop = () => {
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
             const url = URL.createObjectURL(audioBlob);
@@ -238,7 +226,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             stream.getTracks().forEach(track => track.stop());
         };
 
-        // 3. 开始
         mediaRecorderRef.current.start();
         recognitionRef.current.start();
         setIsRecording(true);
@@ -249,9 +236,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     }
   }, [isRecording, userAudioURL]);
 
-  const closeComparisonPanel = useCallback(() => {
-      setIsComparisonPanelOpen(false);
-  }, []);
+  const closeComparisonPanel = useCallback(() => { setIsComparisonPanelOpen(false); }, []);
 
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0 }, enter: { opacity: 1 }, leave: { opacity: 0 } });
   const cardTransitions = useTransition(currentIndex, { key: currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' } });
@@ -330,30 +315,30 @@ const styles = {
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     textWordBurmese: { fontSize: '3.5rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
-    // ✅ 修改：右侧按钮改为垂直居中
-    rightControls: { position: 'fixed', top: '50%', right: '15px', transform: 'translateY(-50%)', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'center' },
+    // ✅ 修改：右侧按钮改为垂直居中偏下
+    rightControls: { position: 'fixed', top: '60%', right: '15px', transform: 'translateY(-50%)', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'center' },
     rightIconButton: { background: 'rgba(255, 255, 255, 0.9)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'transform 0.2s', color: '#4a5568' },
     recordingIndicator: { width: '18px', height: '18px', borderRadius: '50%', background: '#f44336', animation: 'pulse 1.5s infinite' },
     bottomCenterCounter: { position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(0, 0, 0, 0.4)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)' },
     
-    // ✅ 全新：简洁版发音对比面板样式
+    // 全新：简洁版发音对比面板样式
     practicePanelOverlay: { position: 'fixed', inset: '0', zIndex: 10001, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(5px)' },
-    practicePanel: { width: '100%', background: '#f8f9fa', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -10px 40px rgba(0,0,0,0.2)', padding: '20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' },
+    practicePanel: { width: '100%', maxWidth: '600px', margin: '0 auto', background: '#f8f9fa', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -10px 40px rgba(0,0,0,0.2)', padding: '20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' },
     panelHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #e9ecef', paddingBottom: '10px' },
     panelTitle: { margin: 0, fontSize: '1.2rem', fontWeight: 'bold', color: '#343a40' },
-    overallScore: { fontSize: '1rem', color: '#495057' },
+    overallScore: { fontSize: '1rem', color: '#495057', fontWeight: '500' },
     'overallScore span': { fontWeight: 'bold', fontSize: '1.4rem', color: '#007BFF' },
-    analysisMessage: { textAlign: 'center', padding: '30px 10px', color: '#6c757d' },
-    analysisContainer: { display: 'flex', gap: '10px', padding: '15px 0', overflowX: 'auto', scrollbarWidth: 'none' },
-    charAnalysis: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', background: 'white', padding: '10px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', flexShrink: 0 },
+    analysisMessage: { textAlign: 'center', padding: '30px 10px', color: '#6c757d', fontSize: '1.1rem' },
+    analysisContainer: { display: 'flex', gap: '10px', padding: '15px 5px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
+    charAnalysis: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', background: 'white', padding: '10px 12px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', flexShrink: 0, border: '1px solid #dee2e6' },
     charDisplay: { fontSize: '2rem', fontWeight: 'bold', color: '#212529' },
     pinyinDisplay: { fontSize: '1.2rem' },
     userPinyinDisplay: { fontSize: '0.9rem', color: '#6c757d', fontStyle: 'italic' },
     pinyinPart: { transition: 'color 0.3s' },
-    panelActions: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', marginTop: '20px' },
-    actionButton: { padding: '12px', borderRadius: '12px', border: 'none', background: '#e9ecef', color: '#495057', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+    panelActions: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginTop: '20px' },
+    actionButton: { padding: '12px', borderRadius: '12px', border: 'none', background: '#e9ecef', color: '#495057', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.9rem' },
 
-    // --- 设置面板样式 ---
+    // 设置面板样式
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
@@ -366,20 +351,19 @@ const styles = {
 };
 
 // 动态添加 @keyframes 规则
-const styleSheet = document.styleSheets[0];
+const styleSheet = typeof window !== 'undefined' ? document.styleSheets[0] : null;
 try {
     if (styleSheet) {
         styleSheet.insertRule(`
             @keyframes pulse {
-                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
-                70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
-                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+                0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+                70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
             }
         `, styleSheet.cssRules.length);
     }
 } catch (e) {
     console.warn("无法插入 CSS 规则", e);
 }
-
 
 export default WordCard;
