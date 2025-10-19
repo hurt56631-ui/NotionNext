@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-// 移除所有客户端依赖的顶部导入 (pinyin-pro, Howl, FaVolumeUp)
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import lessonDataRaw from '@/data/hsk/hsk1/lesson-5.json'; 
 import dynamic from 'next/dynamic'; 
+
 
 // ====================================================================
 // 动态导入组件 - 它们都依赖浏览器 API
@@ -17,16 +17,10 @@ const LianXianTi = dynamic(
     { ssr: false, loading: () => <div className="p-4 text-center">加载连线题...</div> }
 );
 
-// 动态导入客户端 Section 渲染器
-const ClientSectionRenderer = dynamic(
-    () => import('./_ClientPinyinSectionRenderer'), // 假设我们将客户端逻辑放入此文件
-    { ssr: false, loading: () => <div className="p-4 text-center">加载内容...</div> }
-);
-
-// **然而，我们避免新建文件。下面是整合的 Dynamic Component**
+// ✅ 核心：DynamicPinyinSection，包含了 pinyin-pro 和 howl 的客户端逻辑
 const DynamicPinyinSection = dynamic(
     () => import('react-icons/fa').then(mod => { // 使用一个已知的客户端依赖作为触发器
-        // 在客户端环境下安全导入 pinyin-pro 和 howl
+        // 客户端环境下安全导入 pinyin-pro 和 howl
         const { pinyin: pinyinConverter } = require('pinyin-pro');
         const { Howl } = require('howler');
         const { FaVolumeUp } = mod;
@@ -89,7 +83,7 @@ const DynamicPinyinSection = dynamic(
 
 
 // ====================================================================
-// 通用的 Section 渲染组件 (使用 DynamicPinyinSection 替代 ClientPinyinSection)
+// 通用的 Section 渲染组件 
 // ====================================================================
 
 const SectionRenderer = ({ section }) => {
