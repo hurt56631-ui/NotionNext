@@ -1,4 +1,4 @@
-// components/WordCard.js (最终修复版)
+// components/WordCard.js (最终修复版 - 直接从汉字生成拼音)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,33 +9,7 @@ import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, F
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// =================================================================================
-// ===== 核心修复：formatPinyin 函数 ===============================================
-// =================================================================================
-const formatPinyin = (pinyin) => {
-    if (!pinyin) return '';
-    if (/[āēīōūǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(pinyin)) return pinyin;
-    try {
-        // ✅ 核心修复：在转换前移除所有空格，以解决 pinyin-pro 的解析问题
-        const sanitizedPinyin = pinyin.replace(/\s+/g, '');
-        const result = pinyinConverter(sanitizedPinyin, { toneType: 'symbol', separator: ' ' });
-        return result;
-    } catch (e) {
-        console.error("Pinyin-pro 转换失败!", e);
-        return pinyin; 
-    }
-};
-
-// (其他所有代码保持不变，这里省略以保持简洁，请使用下面完整代码块中的代码)
-
-// ... [其他所有辅助函数和子组件代码都和之前一样] ...
-
-
-// =================================================================================
-// ===== 完整代码提供 ============================================================
-// =================================================================================
-// 为了方便，请直接复制下面的完整版本
-
+// (所有辅助函数和子组件保持不变，它们是正常的)
 const DB_NAME = 'ChineseLearningDB'; const STORE_NAME = 'favoriteWords';
 function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: 'id' }); } }; }); }
 async function toggleFavorite(word) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readwrite'); const store = tx.objectStore(STORE_NAME); const existing = await new Promise((resolve) => { const getReq = store.get(word.id); getReq.onsuccess = () => resolve(getReq.result); getReq.onerror = () => resolve(null); }); if (existing) { store.delete(word.id); return false; } else { store.put({ id: word.id, chinese: word.chinese, burmese: word.burmese, pinyin: word.pinyin, imageUrl: word.imageUrl }); return true; } }
@@ -49,6 +23,9 @@ const useCardSettings = () => { const [settings, setSettings] = useState(() => {
 const PronunciationComparison = React.memo(({ correctWord, userText, userAudioUrl, onContinue, onClose, onPlayStandard }) => { const analysis = useMemo(() => { const correctPinyin = pinyinConverter(correctWord, { toneType: 'symbol', type: 'array', removeNonHan: true }); const userPinyin = pinyinConverter(userText, { toneType: 'symbol', type: 'array', removeNonHan: true }); if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, message: '无法识别有效发音' }; if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` }; const results = correctPinyin.map((correctPy, index) => ({ char: correctWord[index], isMatch: correctPy === (userPinyin[index] || ''), correctPinyin: correctPy, userPinyin: userPinyin[index] || '' })); const isCorrect = results.every(r => r.isMatch); const accuracy = (results.filter(r => r.isMatch).length / results.length * 100).toFixed(0); return { isCorrect, results, accuracy }; }, [correctWord, userText]); const playUserAudio = useCallback(() => { if (userAudioUrl) new Audio(userAudioUrl).play(); }, [userAudioUrl]); useEffect(() => { playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis.isCorrect]); return (<div style={styles.comparisonOverlay}><div style={styles.comparisonPanel}><div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}><div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div><div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div><div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div></div><div style={styles.errorDetailsContainer}>{analysis.message ? ( <div style={styles.lengthError}><h3>{analysis.message}</h3></div> ) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={{...styles.comparisonCell, borderColor: result.isMatch ? '#34d399' : '#f87171'}}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinRow}><span style={styles.pinyinLabel}>标准:</span><span style={{...styles.pinyinText, color: '#10b981'}}>{result.correctPinyin}</span>{result.isMatch ? <FaCheckCircle color="#10b981" /> : <FaTimesCircle color="#ef4444"/>}</div>{!result.isMatch && ( <div style={styles.comparisonPinyinRow}><span style={styles.pinyinLabel}>你的:</span><span style={{...styles.pinyinText, color: '#ef4444'}}>{result.userPinyin}</span></div> )}</div>))}</div>)}</div><div style={styles.audioPlaybackSection}><button onClick={onPlayStandard} style={{...styles.playbackButton, ...styles.standardButton}}><FaPlayCircle /> 听标准发音</button>{userAudioUrl && <button onClick={playUserAudio} style={{...styles.playbackButton, ...styles.userButton}}><FaUser /> 听我的录音</button>}</div><div style={styles.comparisonActions}>{analysis.isCorrect ? ( <button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button> ) : ( <button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button> )}</div></div></div>); });
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => { const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>); });
 
+// =================================================================================
+// ===== 主组件: WordCard ==========================================================
+// =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
@@ -69,7 +46,54 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' } });
   const cardTransitions = useTransition(currentIndex, { key: currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, onStart: () => playSoundEffect('switch') });
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => { if (event.target.closest('[data-no-gesture]')) return; if (down) return; event.stopPropagation(); if (Math.abs(mx) > Math.abs(my)) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); } else { if (Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30)) navigate(yDir < 0 ? 1 : -1); } }, { filterTaps: true, preventDefault: true, threshold: 10 });
-  const cardContent = pageTransitions((style, item) => item && ( <animated.div style={{ ...styles.fullScreen, ...style }}> <div style={styles.gestureArea} {...bind()} /> <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭"><FaTimes size={22} /></button> {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />} {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />} {!!recognizedText && currentCard && ( <PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} userAudioUrl={userAudioUrl} onContinue={handleNavigateToNext} onClose={handleCloseComparison} onPlayStandard={() => playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese)} /> )} {cardTransitions((cardStyle, i) => { const cardData = cards[i]; if (!cardData) return null; return ( <animated.div key={i} style={{ ...styles.animatedCardShell, ...cardStyle }}> <div style={styles.cardContainer}> <div style={{ textAlign: 'center' }}> <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}> <div style={styles.pinyin}>{formatPinyin(cardData.pinyin)}</div> <div style={styles.textWordChinese}>{cardData.chinese}</div> </div> <div style={{ cursor: 'pointer', marginTop: '2.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}> <div style={styles.textWordBurmese}>{cardData.burmese}</div> </div> </div> </div> </animated.div> ); })} {currentCard && ( <div style={styles.rightControls} data-no-gesture="true"> <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button> <button style={styles.rightIconButton} onClick={handlePronunciationPractice} title={isRecording ? "停止识别" : "发音练习"}><div style={isRecording ? styles.recordingIndicator : {}}><FaMicrophone size={20} color={isRecording ? '#fff' : '#4a5568'} /></div></button> {currentCard.chinese?.length <= 5 && !currentCard.chinese.includes(' ') && (<button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={20} /></button>)} <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}</button> </div> )} {cards.length > 0 && ( <div style={styles.bottomCenterCounter} data-no-gesture="true">{currentIndex + 1} / {cards.length}</div> )} </animated.div> ) );
+
+  const cardContent = pageTransitions((style, item) => item && (
+      <animated.div style={{ ...styles.fullScreen, ...style }}>
+        <div style={styles.gestureArea} {...bind()} />
+        <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭"><FaTimes size={22} /></button>
+        {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
+        {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
+        {!!recognizedText && currentCard && ( <PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} userAudioUrl={userAudioUrl} onContinue={handleNavigateToNext} onClose={handleCloseComparison} onPlayStandard={() => playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese)} /> )}
+        
+        {cardTransitions((cardStyle, i) => {
+          const cardData = cards[i];
+          if (!cardData) return null;
+          
+          // ✅ 核心修复：如果 cardData.chinese 存在，就直接用它来生成拼音，忽略 cardData.pinyin
+          const displayPinyin = cardData.chinese && cardData.id !== 'fallback'
+            ? pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })
+            : cardData.pinyin; // 否则，使用原始 pinyin (主要用于 fallback 卡片)
+
+          return (
+            <animated.div key={i} style={{ ...styles.animatedCardShell, ...cardStyle }}>
+              <div style={styles.cardContainer}>
+                  <div style={{ textAlign: 'center' }}>
+                      <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                          <div style={styles.pinyin}>{displayPinyin}</div>
+                          <div style={styles.textWordChinese}>{cardData.chinese}</div> 
+                      </div>
+                      <div style={{ cursor: 'pointer', marginTop: '2.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
+                          <div style={styles.textWordBurmese}>{cardData.burmese}</div>
+                      </div>
+                  </div>
+              </div>
+            </animated.div>
+          );
+        })}
+
+        {currentCard && (
+            <div style={styles.rightControls} data-no-gesture="true">
+                <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
+                <button style={styles.rightIconButton} onClick={handlePronunciationPractice} title={isRecording ? "停止识别" : "发音练习"}><div style={isRecording ? styles.recordingIndicator : {}}><FaMicrophone size={20} color={isRecording ? '#fff' : '#4a5568'} /></div></button>
+                {currentCard.chinese?.length <= 5 && !currentCard.chinese.includes(' ') && (<button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={20} /></button>)}
+                <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}</button>
+            </div>
+        )}
+        
+        {cards.length > 0 && ( <div style={styles.bottomCenterCounter} data-no-gesture="true">{currentIndex + 1} / {cards.length}</div> )}
+      </animated.div>
+    )
+  );
   if (isMounted) return createPortal(cardContent, document.body);
   return null;
 };
