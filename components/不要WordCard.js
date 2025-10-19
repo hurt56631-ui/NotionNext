@@ -1,4 +1,4 @@
-// components/WordCard.js (全新重构版本)
+// components/WordCard.js (全新重版本)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
