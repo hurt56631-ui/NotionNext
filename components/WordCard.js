@@ -66,7 +66,7 @@ async function isFavorite(id) {
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 (TTS 函数已修改) ==========================================
+// ===== 辅助工具 & 常量 (TTS 函数已更新) ==========================================
 // =================================================================================
 
 const TTS_VOICES = [
@@ -82,7 +82,7 @@ const sounds = {
 };
 let _howlInstance = null;
 
-// [重要] 已修改此函数以使用新的TTS服务
+// [重要] 已根据您提供的最新 API (libretts.is-an.org) 修改此函数
 const playTTS = async (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) {
@@ -94,41 +94,47 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         _howlInstance.stop();
     }
 
-    // 新的 API 地址和密钥
-    const apiUrl = 'https://otts.api.zwei.de.eu.org/v1/audio/speech';
-    const apiKey = 'sk-Zwei';
-
-    // 将 settings 的 rate 值 (-100 to 100) 转换为 API 需要的 speed (0.5 to 1.5)
-    const speed = 1.0 + (rate / 200.0);
+    // 新的 API 地址
+    const apiUrl = 'https://libretts.is-an.org/api/tts';
+    
+    // API rate 参数与 UI 的 rate (-100 到 100) 对应
+    // 根据示例，直接使用 rate 值，但通常会有一个范围，这里将其转换为 -50 到 50
+    const rateValue = Math.round(rate / 2);
 
     try {
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                // 这个 API 不需要授权密钥
             },
             body: JSON.stringify({
-                model: 'tts-1',
-                input: text,
+                text: text,
                 voice: voice,
-                speed: speed,
+                rate: rateValue,
+                pitch: 0 // pitch 参数根据示例设为 0
             }),
         });
 
         if (!response.ok) {
-            const errorBody = await response.text();
-            console.error('TTS API 请求失败:', response.status, response.statusText, errorBody);
+            const errorText = await response.text();
+            console.error('TTS API 请求失败! 状态码:', response.status, '错误响应:', errorText);
             if (onEndCallback) onEndCallback();
             return;
         }
 
         const audioBlob = await response.blob();
+        if (!audioBlob.type.startsWith('audio/')) {
+            console.error('TTS API 未返回有效的音频文件，返回类型:', audioBlob.type);
+            if (onEndCallback) onEndCallback();
+            return;
+        }
+        
         const audioUrl = URL.createObjectURL(audioBlob);
 
         _howlInstance = new Howl({
             src: [audioUrl],
-            format: ['mp3'],
+            format: ['mpeg'], // API 通常返回 mpeg 音频
             html5: true,
             onend: () => {
                 URL.revokeObjectURL(audioUrl);
@@ -149,7 +155,7 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         _howlInstance.play();
 
     } catch (error) {
-        console.error('获取 TTS 音频时发生网络错误:', error);
+        console.error('获取 TTS 音频时发生网络或CORS错误:', error);
         if (onEndCallback) onEndCallback();
     }
 };
@@ -159,7 +165,6 @@ const playSoundEffect = (type) => {
     if (sounds[type]) sounds[type].play();
 };
 
-// 确保拼音总是使用符号声调 (mark)
 const formatPinyin = (rawPinyinNum) => {
     if (!rawPinyinNum) return '';
     if (/[āēīōūǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(rawPinyinNum)) {
@@ -168,7 +173,7 @@ const formatPinyin = (rawPinyinNum) => {
     try {
         return pinyinConverter(rawPinyinNum, { toneType: 'symbol', separator: ' ' });
     } catch (e) {
-        return rawPinyinNum; // 转换失败返回原样
+        return rawPinyinNum;
     }
 };
 
