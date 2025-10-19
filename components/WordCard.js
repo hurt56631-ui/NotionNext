@@ -1,17 +1,19 @@
-// components/WordCard.js (最终精修版 - 已修复语法错误)
+// components/WordCard.js (最终精修版 - 已移除手写功能依赖)
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // ✅ 核心语法修复：修正了错误的 import 语句
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaHeart, FaRegHeart, FaPencilAlt, FaPlay, FaUser, FaSyncAlt } from 'react-icons/fa';
+// ✅ 修复：移除了 FaPencilAlt 图标，因为它不再被使用
+import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaHeart, FaRegHeart, FaPlay, FaUser, FaSyncAlt } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
-import HandwritingModal from '@/components/HandwritingModal';
+// ✅ 修复：移除了对不存在的 HandwritingModal 组件的引用
+// import HandwritingModal from '@/components/HandwritingModal';
 
 // =================================================================================
-// ===== 辅助工具 & Hooks ========================================================
+// ===== 辅助工具 & Hooks (保持不变) =============================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB'; const STORE_NAME = 'favoriteWords';
 function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'id' }); }; }); }
@@ -158,7 +160,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
-  const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState(false);
+  
+  // ✅ 修复：移除了 isHandwritingModalOpen 状态
+  // const [isHandwritingModalOpen, setIsHandwritingModalOpen] = useState(false);
   
   // 发音练习相关状态
   const [isRecording, setIsRecording] = useState(false);
@@ -247,7 +251,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         <div style={styles.gestureArea} {...bind()} />
         
         {/* Modals & Panels */}
-        <HandwritingModal isOpen={isHandwritingModalOpen} onClose={() => setIsHandwritingModalOpen(false)} />
+        {/* ✅ 修复：移除了 HandwritingModal 的渲染 */}
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         
@@ -286,7 +290,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <button style={styles.rightIconButton} onClick={handlePronunciationPractice} title="发音练习">
                    {isRecording ? <div style={styles.recordingIndicator} /> : <FaMicrophone size={20} />}
                 </button>
-                <button style={styles.rightIconButton} onClick={() => setIsHandwritingModalOpen(true)} title="手写练习"><FaPencilAlt size={20} /></button>
+                {/* ✅ 修复：移除了手写练习的按钮 */}
                 {currentCard.chinese && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( 
                     <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺动画"><FaPenFancy size={20} /></button>
                 )}
@@ -305,7 +309,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 ====================================================================
+// ===== 样式表 (保持不变) =========================================================
 // =================================================================================
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
@@ -315,13 +319,11 @@ const styles = {
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     textWordBurmese: { fontSize: '3.5rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
-    // ✅ 修改：右侧按钮改为垂直居中偏下
     rightControls: { position: 'fixed', top: '60%', right: '15px', transform: 'translateY(-50%)', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '18px', alignItems: 'center' },
     rightIconButton: { background: 'rgba(255, 255, 255, 0.9)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'transform 0.2s', color: '#4a5568' },
     recordingIndicator: { width: '18px', height: '18px', borderRadius: '50%', background: '#f44336', animation: 'pulse 1.5s infinite' },
     bottomCenterCounter: { position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(0, 0, 0, 0.4)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)' },
     
-    // 全新：简洁版发音对比面板样式
     practicePanelOverlay: { position: 'fixed', inset: '0', zIndex: 10001, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(5px)' },
     practicePanel: { width: '100%', maxWidth: '600px', margin: '0 auto', background: '#f8f9fa', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -10px 40px rgba(0,0,0,0.2)', padding: '20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' },
     panelHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid #e9ecef', paddingBottom: '10px' },
@@ -338,7 +340,6 @@ const styles = {
     panelActions: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', marginTop: '20px' },
     actionButton: { padding: '12px', borderRadius: '12px', border: 'none', background: '#e9ecef', color: '#495057', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.9rem' },
 
-    // 设置面板样式
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
@@ -350,7 +351,6 @@ const styles = {
     settingSlider: { flex: 1 },
 };
 
-// 动态添加 @keyframes 规则
 const styleSheet = typeof window !== 'undefined' ? document.styleSheets[0] : null;
 try {
     if (styleSheet) {
