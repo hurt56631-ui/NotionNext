@@ -1,3 +1,5 @@
+// components/WordCard.js (全新重构版本)
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
@@ -8,10 +10,10 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; // 确保您项目中存在此汉字笔顺组件
 
 // =================================================================================
-// ===== IndexedDB & 辅助工具 (保持不变) =========================================
+// ===== IndexedDB & 辅助工具 ====================================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
-const STORE_NAME = 'favoriteWords';
+const STORE_NAME = 'favoriteWords'; // 存储 store 改为 favoriteWords
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -40,6 +42,7 @@ async function toggleFavorite(word) {
     store.delete(word.id);
     return false;
   } else {
+    // 确保存储的是单词的正确字段
     store.put({ id: word.id, chinese: word.chinese, burmese: word.burmese, pinyin: word.pinyin, imageUrl: word.imageUrl });
     return true;
   }
@@ -71,6 +74,7 @@ const sounds = {
 };
 let _howlInstance = null;
 
+// ✅ 使用稳定有效的 TTS 函数
 const playTTS = async (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
@@ -99,13 +103,18 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
 
 const playSoundEffect = (type) => { if (sounds[type]) sounds[type].play(); };
 
+// ✅ 关键修复：确保任何拼音输入都转换为带声调符号的格式用于显示
 const formatPinyin = (pinyin) => {
     if (!pinyin) return '';
+    // 如果已经是带声调符号的格式，直接返回
     if (/[āēīōūǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(pinyin)) return pinyin;
+    // 否则，使用 pinyin-pro 进行转换
     try {
+        // 确保 pinyin-pro 已经通过 npm/yarn 安装
         return pinyinConverter(pinyin, { toneType: 'symbol', separator: ' ' });
     } catch (e) {
-        return pinyin;
+        console.error("Pinyin-pro 转换失败，请确认已安装。错误:", e);
+        return pinyin; // 转换失败则返回原始值
     }
 };
 
@@ -122,23 +131,22 @@ const useCardSettings = () => {
 };
 
 // =================================================================================
-// ===== [已修改] 发音对比组件 (使用符号声调) ======================================
+// ===== 子组件 ====================================================================
 // =================================================================================
+
 const PronunciationComparison = React.memo(({ correctWord, userText, userAudioUrl, onContinue, onClose, onPlayStandard }) => {
     const analysis = useMemo(() => {
-        // 使用带声调符号的拼音进行比较
-        const correctPinyinSymbol = pinyinConverter(correctWord, { toneType: 'symbol', type: 'array', removeNonHan: true });
-        const userPinyinSymbol = pinyinConverter(userText, { toneType: 'symbol', type: 'array', removeNonHan: true });
+        const correctPinyin = pinyinConverter(correctWord, { toneType: 'symbol', type: 'array', removeNonHan: true });
+        const userPinyin = pinyinConverter(userText, { toneType: 'symbol', type: 'array', removeNonHan: true });
 
-        if (correctPinyinSymbol.length === 0 || userPinyinSymbol.length === 0) return { isCorrect: false, message: '无法识别有效发音' };
-        if (correctPinyinSymbol.length !== userPinyinSymbol.length) return { isCorrect: false, message: `字数不对：应为 ${correctPinyinSymbol.length} 字，你读了 ${userPinyinSymbol.length} 字` };
+        if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, message: '无法识别有效发音' };
+        if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` };
 
-        const results = correctPinyinSymbol.map((correctPy, index) => {
-            const userPy = userPinyinSymbol[index] || '';
+        const results = correctPinyin.map((correctPy, index) => {
+            const userPy = userPinyin[index] || '';
             return {
                 char: correctWord[index],
                 isMatch: correctPy === userPy,
-                // 拼音已经是带声调符号的格式
                 correctPinyin: correctPy,
                 userPinyin: userPy,
             };
@@ -186,7 +194,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 
 
 // =================================================================================
-// ===== 主组件: WordCard (保持不变) ===============================================
+// ===== 主组件: WordCard ==========================================================
 // =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
@@ -196,6 +204,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const storageKey = `wordCardProgress_${progressKey}`;
 
   const cards = useMemo(() => {
+    // 直接映射单词数据，字段为 chinese, burmese, pinyin
     const mapped = words.map(w => ({ id: w.id, chinese: w.chinese, burmese: w.burmese, pinyin: w.pinyin, imageUrl: w.imageUrl }));
     if (settings.order === 'random') {
         for (let i = mapped.length - 1; i > 0; i--) {
@@ -210,7 +219,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (typeof window === 'undefined') return 0;
     try {
         const savedIndex = localStorage.getItem(storageKey);
-        return savedIndex ? parseInt(savedIndex, 10) : 0;
+        const index = savedIndex ? parseInt(savedIndex, 10) : 0;
+        return index < cards.length ? index : 0; // 确保索引在有效范围内
     } catch (error) { return 0; }
   });
 
@@ -228,7 +238,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const lastDirection = useRef(0);
   const currentCard = cards[currentIndex];
 
-  useEffect(() => { localStorage.setItem(storageKey, Math.min(currentIndex, cards.length - 1)); }, [currentIndex, cards.length, storageKey]);
+  useEffect(() => { localStorage.setItem(storageKey, currentIndex); }, [currentIndex, storageKey]);
   useEffect(() => { if (currentCard?.id && currentCard.id !== 'fallback') isFavorite(currentCard.id).then(setIsFavoriteCard); }, [currentCard]);
   const handleToggleFavorite = async () => { if (currentCard?.id !== 'fallback') setIsFavoriteCard(await toggleFavorite(currentCard)); };
   const navigate = useCallback((direction) => { lastDirection.current = direction; setCurrentIndex(prev => (prev + direction + cards.length) % cards.length); }, [cards.length]);
@@ -250,6 +260,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
+  // ✅ 使用带录音功能的发音练习逻辑
   const handlePronunciationPractice = useCallback(async (e) => {
       e.stopPropagation();
       if (_howlInstance?.playing()) _howlInstance.stop();
@@ -277,9 +288,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               if (transcript) setRecognizedText(transcript);
           };
           recognition.onend = () => {
-              if (mediaRecorderRef.current?.state === 'recording') {
-                  mediaRecorderRef.current.stop();
-              }
+              if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
               recognitionRef.current = null;
           };
           
@@ -338,6 +347,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               <div style={styles.cardContainer}>
                   <div style={{ textAlign: 'center' }}>
                       <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                          {/* ✅ 关键：使用 formatPinyin 函数确保显示带声调符号的拼音 */}
                           <div style={styles.pinyin}>{formatPinyin(cardData.pinyin)}</div>
                           <div style={styles.textWordChinese}>{cardData.chinese}</div> 
                       </div>
@@ -372,26 +382,28 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 (保持不变) =========================================================
+// ===== 样式表 ====================================================================
 // =================================================================================
 const styles = {
-    // --- 核心布局 ---
+    // --- 核心布局 (采用稳定版本) ---
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
+    
+    // --- 文本样式 (采用大字体单词版本) ---
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     textWordBurmese: { fontSize: '3.5rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     
-    // --- 控件样式 ---
+    // --- 控件 (采用稳定版本) ---
     exitButton: { position: 'fixed', top: '25px', left: '20px', zIndex: 101, background: 'rgba(0, 0, 0, 0.4)', border: 'none', color: 'white', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' },
     rightControls: { position: 'fixed', top: '50%', right: '15px', transform: 'translateY(-50%)', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s, background-color 0.3s', color: '#4a5568' },
     recordingIndicator: { width: '100%', height: '100%', borderRadius: '50%', background: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulse 1.5s infinite' },
     bottomCenterCounter: { position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(255, 255, 255, 0.2)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(3px)' },
     
-    // --- 发音对比界面样式 ---
+    // --- 发音对比界面 ---
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: '#f8fafc', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
