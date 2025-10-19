@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react'
 import { ChevronRight, ChevronUp } from 'lucide-react'
 
-// --- 📘 单本书封面（优化版） ---
+// --- 📘 单本书封面（保持不变） ---
 const BookItem = ({ item }) => (
   <a
     href={item.readUrl}
@@ -22,7 +22,7 @@ const BookItem = ({ item }) => (
         
         {/* 书本主体 */}
         <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 p-1.5 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-          {/* 书封面 - 移除梯形效果 */}
+          {/* 书封面 */}
           <div className="relative aspect-[3/4] w-full overflow-hidden rounded">
             <img
               src={item.imageUrl}
@@ -43,7 +43,7 @@ const BookItem = ({ item }) => (
   </a>
 );
 
-// --- 📚 分类区域 ---
+// --- 📚 分类区域 (已修改书架部分) ---
 const BookCategorySection = ({ section }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const defaultShowCount = 4;
@@ -83,9 +83,9 @@ const BookCategorySection = ({ section }) => {
         )}
       </div>
 
-      {/* 书架底板 */}
+      {/* 书架区域 */}
       <div className="relative">
-        {/* 书籍列表放在底板上 */}
+        {/* 书籍列表 */}
         <div className="relative z-10 pb-6 px-6">
           <div
             onTouchStart={(e) => e.stopPropagation()}
@@ -106,18 +106,17 @@ const BookCategorySection = ({ section }) => {
           </div>
         </div>
 
-        {/* 🌳 美化后的书架底板 */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-900 to-amber-800 dark:from-amber-950 dark:to-amber-900 rounded-t-xl border-t border-amber-700 dark:border-amber-800 shadow-lg">
-          {/* 书架纹理 */}
-          <div className="absolute inset-0 opacity-20 bg-wood-pattern"></div>
-          
-          {/* 书架边缘装饰 */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600"></div>
-          <div className="absolute top-1 left-4 right-4 h-0.5 bg-amber-700/50 rounded-full"></div>
-          
-          {/* 支撑脚 */}
-          <div className="absolute -bottom-1 left-6 w-8 h-2 bg-amber-900 dark:bg-amber-950 rounded-full"></div>
-          <div className="absolute -bottom-1 right-6 w-8 h-2 bg-amber-900 dark:bg-amber-950 rounded-full"></div>
+        {/* ✅ 核心修改：使用真实的图片作为书架，并移除所有装饰性 div */}
+        <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none">
+          <img
+            // 我为您找到了一张高质量的真实书架图片，您可以直接使用
+            // 如果您想更换，只需替换下面的 src 链接即可
+            src="https://images.unsplash.com/photo-1542826438-c2d279252285?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+            alt="Wooden Bookshelf"
+            className="w-full h-full object-cover rounded-t-xl"
+          />
+           {/* 书架顶部添加一点阴影，让书本更有立体感 */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent rounded-t-xl"></div>
         </div>
       </div>
     </div>
@@ -148,6 +147,7 @@ const BooksContentBlock = ({ notionBooks }) => {
       </div>
     );
 
+  // ✅ 清理：移除了不再使用的 bg-wood-pattern 样式
   const HideScrollbarStyle = () => (
     <style jsx global>{`
       .no-scrollbar::-webkit-scrollbar {
@@ -156,10 +156,6 @@ const BooksContentBlock = ({ notionBooks }) => {
       .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
-      }
-      .bg-wood-pattern {
-        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h100v100H0z' fill='none'/%3E%3Cpath d='M20 20h60v60H20z' stroke='%23000' stroke-width='0.5' fill='none'/%3E%3C/svg%3E");
-        background-size: 50px 50px;
       }
     `}</style>
   );
