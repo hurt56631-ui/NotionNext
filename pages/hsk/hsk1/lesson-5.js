@@ -1,14 +1,13 @@
-// pages/hsk/hsk1/lesson-5.js (修复 Module Not Found & 整合客户端逻辑)
+// pages/hsk/hsk1/lesson-5.js (最终修复版 V7 - 使用 Client Wrapper)
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import lessonDataRaw from '@/data/hsk/hsk1/lesson-5.json'; 
 import dynamic from 'next/dynamic'; 
 
-
 // ====================================================================
-// 动态导入组件 - 它们都依赖浏览器 API
+// 动态导入客户端组件
 // ====================================================================
 
 // 动态导入 LianXianTi (客户端运行)
@@ -17,73 +16,15 @@ const LianXianTi = dynamic(
     { ssr: false, loading: () => <div className="p-4 text-center">加载连线题...</div> }
 );
 
-// ✅ 核心：DynamicPinyinSection，包含了 pinyin-pro 和 howl 的客户端逻辑
-const DynamicPinyinSection = dynamic(
-    () => import('react-icons/fa').then(mod => { // 使用一个已知的客户端依赖作为触发器
-        // 客户端环境下安全导入 pinyin-pro 和 howl
-        const { pinyin: pinyinConverter } = require('pinyin-pro');
-        const { Howl } = require('howler');
-        const { FaVolumeUp } = mod;
-
-        // TTS 播放函数（依赖于 Howl）
-        const playTTS = (text) => {
-            if (!text) return;
-            const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=0`;
-            new Howl({ src: [ttsUrl], html5: true, volume: 0.8 }).play(); 
-        };
-
-        // Pinyin 格式化函数（依赖于 pinyin-pro）
-        const formatPinyin = (pinyin) => {
-            try {
-                return pinyinConverter(pinyin, { toneType: 'symbol' });
-            } catch (e) {
-                return pinyin;
-            }
-        };
-        
-        // 返回实际的客户端组件
-        return ({ section }) => {
-            switch (section.type) {
-                case 'title_card':
-                    const { main, pinyin, english } = section.data;
-                    return (
-                        <div className="text-center py-8 bg-white rounded-xl shadow-xl mb-6">
-                            <h1 className="text-3xl font-bold text-gray-800">{formatPinyin(pinyin)}</h1>
-                            <h2 className="text-5xl font-extrabold text-blue-600 mt-2">{main}</h2>
-                            <p className="text-lg text-gray-500 mt-4">{english}</p>
-                        </div>
-                    );
-                case 'dialogue':
-                    return (
-                        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 my-4">
-                            <h3 className="text-xl font-bold mb-4 border-l-4 border-amber-500 pl-3">{section.title}</h3>
-                            {section.data.map((item, index) => (
-                                <div key={index} className="flex flex-col mb-4 p-3 rounded-lg bg-gray-50 border-l-2 border-gray-300">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex flex-col">
-                                            <p className="text-sm text-gray-500">{item.speaker}: {formatPinyin(item.pinyin)}</p>
-                                            <p className="text-xl font-bold text-gray-800">{item.chinese}</p>
-                                        </div>
-                                        <button onClick={() => playTTS(item.chinese)} className="text-gray-500 hover:text-blue-600 transition-colors">
-                                            <FaVolumeUp size={20} />
-                                        </button>
-                                    </div>
-                                    <p className="text-sm text-green-600 mt-1">{item.english}</p>
-                                </div>
-                            ))}
-                        </div>
-                    );
-                default:
-                    return null;
-            }
-        };
-    }),
+// ✅ 动态导入客户端渲染器 (LessonSectionClientWrapper)
+const ClientSectionWrapper = dynamic(
+    () => import('@/components/LessonSectionClientWrapper'),
     { ssr: false, loading: () => <div className="p-4 text-center">加载内容...</div> }
 );
 
 
 // ====================================================================
-// 通用的 Section 渲染组件 
+// 通用的 Section 渲染组件 (服务器端逻辑)
 // ====================================================================
 
 const SectionRenderer = ({ section }) => {
@@ -92,11 +33,10 @@ const SectionRenderer = ({ section }) => {
     switch (section.type) {
         case 'title_card':
         case 'dialogue':
-            // 依赖 pinyin-pro 的组件，使用动态导入的组件
-            return <DynamicPinyinSection section={section} />;
+            // 路由到客户端组件，并传入 section 数据
+            return <ClientSectionWrapper section={section} />;
             
         case 'lian_xian_ti':
-            // LianXianTi 已经是动态导入的
             return <LianXianTi data={section.data} mapping={section.mapping} title={section.title} />;
 
         default:
@@ -115,6 +55,7 @@ const Lesson5Page = () => {
     const [pageIndex, setPageIndex] = useState(0); 
     
     if (!lessonData || !lessonData.pages || lessonData.pages.length === 0) {
+        // 确保 JSON 文件加载失败时有友好的提示
         return <div className="min-h-screen flex items-center justify-center">课程数据加载失败或为空。请检查 JSON 文件。</div>;
     }
 
