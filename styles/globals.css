@@ -1,18 +1,18 @@
-/* /styles/globals.css (最终完整版 - 已恢复所有样式) */
+/* /styles/globals.css (最终完整版 - 已恢复所有样式并添加背景) */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* --- (新添加) 全局背景图样式 --- */
 body {
   /* 确保您已将 background.jpg 放入 /public 文件夹 */
-  background-image: url('/background.jpg'); 
+  background-image: url('/background.jpg');
   background-size: cover;
   background-position: center;
   background-attachment: fixed; /* 固定背景，滚动内容时不移动 */
 }
 /* --- (新添加) 样式结束 --- */
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 html {
   overflow-x: hidden;
@@ -301,7 +301,7 @@ img {
 
 
 .lazy-image-placeholder{
-  background: 
+  background:
       linear-gradient(90deg,#0001 33%,#0005 50%,#0001 66%)
       #f2f2f2;
   background-size:300% 100%;
