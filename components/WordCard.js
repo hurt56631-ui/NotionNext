@@ -99,16 +99,13 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
 
 const playSoundEffect = (type) => { if (sounds[type]) sounds[type].play(); };
 
-// ✅ 关键修复：确保任何拼音输入都转换为带声调符号的格式
 const formatPinyin = (pinyin) => {
     if (!pinyin) return '';
-    // 如果已经是带声调符号的格式，直接返回
     if (/[āēīōūǖáéíóúǘǎěǐǒǔǚàèìòùǜ]/.test(pinyin)) return pinyin;
-    // 否则，使用 pinyin-pro 进行转换
     try {
         return pinyinConverter(pinyin, { toneType: 'symbol', separator: ' ' });
     } catch (e) {
-        return pinyin; // 转换失败则返回原始值
+        return pinyin;
     }
 };
 
@@ -125,25 +122,25 @@ const useCardSettings = () => {
 };
 
 // =================================================================================
-// ===== [已修复] 发音对比组件 (确保显示声调符号) =================================
+// ===== [已修改] 发音对比组件 (使用符号声调) ======================================
 // =================================================================================
 const PronunciationComparison = React.memo(({ correctWord, userText, userAudioUrl, onContinue, onClose, onPlayStandard }) => {
     const analysis = useMemo(() => {
-        // 使用数字音调进行比较，因为这最准确
-        const correctPinyinNum = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
-        const userPinyinNum = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
+        // 使用带声调符号的拼音进行比较
+        const correctPinyinSymbol = pinyinConverter(correctWord, { toneType: 'symbol', type: 'array', removeNonHan: true });
+        const userPinyinSymbol = pinyinConverter(userText, { toneType: 'symbol', type: 'array', removeNonHan: true });
 
-        if (correctPinyinNum.length === 0 || userPinyinNum.length === 0) return { isCorrect: false, message: '无法识别有效发音' };
-        if (correctPinyinNum.length !== userPinyinNum.length) return { isCorrect: false, message: `字数不对：应为 ${correctPinyinNum.length} 字，你读了 ${userPinyinNum.length} 字` };
+        if (correctPinyinSymbol.length === 0 || userPinyinSymbol.length === 0) return { isCorrect: false, message: '无法识别有效发音' };
+        if (correctPinyinSymbol.length !== userPinyinSymbol.length) return { isCorrect: false, message: `字数不对：应为 ${correctPinyinSymbol.length} 字，你读了 ${userPinyinSymbol.length} 字` };
 
-        const results = correctPinyinNum.map((correctPy, index) => {
-            const userPy = userPinyinNum[index] || '';
+        const results = correctPinyinSymbol.map((correctPy, index) => {
+            const userPy = userPinyinSymbol[index] || '';
             return {
                 char: correctWord[index],
                 isMatch: correctPy === userPy,
-                // ✅ 关键修复：使用 formatPinyin 转换为带声调符号的拼音用于显示
-                correctPinyin: formatPinyin(correctPy),
-                userPinyin: formatPinyin(userPy),
+                // 拼音已经是带声调符号的格式
+                correctPinyin: correctPy,
+                userPinyin: userPy,
             };
         });
         const isCorrect = results.every(r => r.isMatch);
@@ -189,7 +186,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 
 
 // =================================================================================
-// ===== 主组件: WordCard (已修复和重构) =============================================
+// ===== 主组件: WordCard (保持不变) ===============================================
 // =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
@@ -253,15 +250,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ 关键修复：重构语音识别和录音逻辑
   const handlePronunciationPractice = useCallback(async (e) => {
       e.stopPropagation();
       if (_howlInstance?.playing()) _howlInstance.stop();
 
-      // 如果正在录音，则再次点击是【手动停止】
       if (isRecording) {
           mediaRecorderRef.current?.stop();
-          recognitionRef.current?.stop(); // 调用stop会触发onend事件，从而处理结果
+          recognitionRef.current?.stop();
           playSoundEffect('recordStop');
           return;
       }
@@ -274,7 +269,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
           playSoundEffect('recordStart');
           setIsRecording(true);
 
-          // --- 语音识别实例 ---
           const recognition = new SpeechRecognition();
           recognition.lang = 'zh-CN';
           recognition.interimResults = false;
@@ -283,27 +277,23 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               if (transcript) setRecognizedText(transcript);
           };
           recognition.onend = () => {
-              // 无论自动结束还是手动stop(), 都会触发 onend
-              // 此时可以安全地停止媒体录制器（如果它还在运行）
               if (mediaRecorderRef.current?.state === 'recording') {
                   mediaRecorderRef.current.stop();
               }
               recognitionRef.current = null;
           };
           
-          // --- 媒体录制器实例 ---
           const recorder = new MediaRecorder(stream);
           audioChunksRef.current = [];
           recorder.ondataavailable = (event) => audioChunksRef.current.push(event.data);
           recorder.onstop = () => {
               const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
               const url = URL.createObjectURL(audioBlob);
-              setUserAudioUrl(url); // 保存录音URL，用于结果面板播放
-              stream.getTracks().forEach(track => track.stop()); // 关闭麦克风
+              setUserAudioUrl(url);
+              stream.getTracks().forEach(track => track.stop());
               setIsRecording(false);
           };
 
-          // 保存实例并开始
           recognitionRef.current = recognition;
           mediaRecorderRef.current = recorder;
           recognition.start();
@@ -334,7 +324,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       <animated.div style={{ ...styles.fullScreen, ...style }}>
         <div style={styles.gestureArea} {...bind()} />
         
-        {/* ✅ 布局修复：添加左上角关闭按钮 */}
         <button style={styles.exitButton} onClick={onClose} data-no-gesture="true" title="关闭"><FaTimes size={22} /></button>
         
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
@@ -383,7 +372,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== [已修复] 样式表 ===========================================================
+// ===== 样式表 (保持不变) =========================================================
 // =================================================================================
 const styles = {
     // --- 核心布局 ---
@@ -395,14 +384,14 @@ const styles = {
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     textWordBurmese: { fontSize: '3.5rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     
-    // --- ✅ 布局修复：控件样式 ---
+    // --- 控件样式 ---
     exitButton: { position: 'fixed', top: '25px', left: '20px', zIndex: 101, background: 'rgba(0, 0, 0, 0.4)', border: 'none', color: 'white', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' },
     rightControls: { position: 'fixed', top: '50%', right: '15px', transform: 'translateY(-50%)', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s, background-color 0.3s', color: '#4a5568' },
     recordingIndicator: { width: '100%', height: '100%', borderRadius: '50%', background: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulse 1.5s infinite' },
     bottomCenterCounter: { position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(255, 255, 255, 0.2)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(3px)' },
     
-    // --- [已修复] 发音对比界面样式 ---
+    // --- 发音对比界面样式 ---
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: '#f8fafc', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
@@ -423,7 +412,7 @@ const styles = {
     continueButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     retryButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
 
-    // --- 设置面板 (无变化) ---
+    // --- 设置面板 ---
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
