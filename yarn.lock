@@ -4233,6 +4233,11 @@ gzip-size@^6.0.0:
   dependencies:
     duplexer "^0.1.2"
 
+handwriting@^0.0.3:
+  version "0.0.3"
+  resolved "https://registry.yarnpkg.com/handwriting/-/handwriting-0.0.3.tgz#bece038beaa9463f2bf16276e24115cc9347c79e"
+  integrity sha512-UFEFEdvbq54+pyLSgBLvzbWyH2GxcuGv3n/L6a3qQuz3VGpMlK/LzkVDDMM+mNukxBklK2MxwCbHGmgpSxSR4w==
+
 hanzi-writer@^3.7.3:
   version "3.7.3"
   resolved "https://registry.yarnpkg.com/hanzi-writer/-/hanzi-writer-3.7.3.tgz#b5a1177b070821e29d40b49d30bf7e5abb11c9b2"
