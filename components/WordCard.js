@@ -1,4 +1,4 @@
-// components/WordCard.js (最终优化版 - 纯前端最稳定方案)
+// components/WordCard.js (最终稳定版 - 已修复资源冲突和生命周期问题)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -66,7 +66,7 @@ async function isFavorite(id) {
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 ===========================================================
+// ===== 辅助工具 & 常量 (保持不变) ================================================
 // =================================================================================
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' },
@@ -139,7 +139,7 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== 自定义 Hook & 子组件 ======================================================
+// ===== 自定义 Hook & 子组件 (保持不变) ===========================================
 // =================================================================================
 
 const useCardSettings = () => {
@@ -356,10 +356,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
+  
+  const lastDirection = useRef(0);
+  const autoBrowseTimerRef = useRef(null);
 
+  // Refs for managing API instances and the audio stream
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
-  const audioStreamRef = useRef(null); // Ref to hold the stream
+  const audioStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  
+  const currentCard = cards[currentIndex];
 
   useEffect(() => { if (typeof window !== 'undefined') { localStorage.setItem(storageKey, currentIndex); } }, [currentIndex, storageKey]);
   useEffect(() => { if (currentCard?.id && currentCard.id !== 'fallback') { isFavorite(currentCard.id).then(setIsFavoriteCard); } }, [currentCard]);
@@ -405,29 +412,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ The final, most robust implementation for pure front-end
+  // ✅ [核心修复] 重写后的、健壮的语音识别与录音处理函数
   const handleListen = useCallback(async (e) => {
       e.stopPropagation();
       if (_howlInstance?.playing()) _howlInstance.stop();
 
-      const cleanup = () => {
-          if (audioStreamRef.current) {
-              audioStreamRef.current.getTracks().forEach(track => track.stop());
-              audioStreamRef.current = null;
-          }
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-              mediaRecorderRef.current.stop();
-              mediaRecorderRef.current = null;
-          }
-          if (recognitionRef.current) {
-              recognitionRef.current.abort(); // Use abort for immediate stop
-              recognitionRef.current = null;
-          }
-          setIsListening(false);
-      };
-      
+      // 如果正在监听，则停止。让 onend 事件处理所有清理工作。
       if (isListening) {
-          cleanup();
+          recognitionRef.current?.stop();
           return;
       }
 
@@ -438,38 +430,52 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       }
       
       try {
+          // 1. 获取麦克风音频流
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           audioStreamRef.current = stream;
-          
+
+          // 2. 初始化 SpeechRecognition
           const recognition = new SpeechRecognition();
           recognitionRef.current = recognition;
           recognition.lang = 'zh-CN';
           recognition.interimResults = false;
           
-          const audioChunks = [];
-          const mediaRecorder = new MediaRecorder(stream);
-          mediaRecorderRef.current = mediaRecorder;
+          // 3. 初始化 MediaRecorder
+          const recorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = recorder;
+          audioChunksRef.current = [];
 
-          mediaRecorder.ondataavailable = event => {
-              if (event.data.size > 0) audioChunks.push(event.data);
+          // 4. 定义事件处理器
+          
+          // 当录音机数据可用时，收集数据块
+          recorder.ondataavailable = (event) => {
+              if (event.data.size > 0) {
+                  audioChunksRef.current.push(event.data);
+              }
           };
 
-          mediaRecorder.onstop = () => {
-              if (audioChunks.length > 0) {
-                  const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          // 当录音机停止时，创建并设置音频URL
+          recorder.onstop = () => {
+              if (audioChunksRef.current.length > 0) {
+                  const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                   const audioUrl = URL.createObjectURL(audioBlob);
                   setUserAudioURL(audioUrl);
               }
           };
           
+          // 当语音识别开始时
           recognition.onstart = () => {
-              setIsListening(true);
+              // 清理上一次的录音URL
+              if (userAudioURL) URL.revokeObjectURL(userAudioURL);
+              // 重置状态
               setRecognizedText('');
               setUserAudioURL(null);
-              if (userAudioURL) URL.revokeObjectURL(userAudioURL); // Clean previous
-              mediaRecorder.start();
+              setIsListening(true);
+              // 同步启动录音机
+              recorder.start();
           };
 
+          // 当有识别结果时
           recognition.onresult = (event) => {
               const transcript = event.results[event.results.length - 1][0].transcript.trim().replace(/[.,。，]/g, '');
               if (transcript) {
@@ -477,37 +483,59 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               }
           };
 
+          // 当识别过程结束时（无论是正常结束、手动停止还是出错）
+          // 这是最关键的统一清理点！
+          recognition.onend = () => {
+              // 确保录音机一定停止
+              if (recorder.state === 'recording') {
+                  recorder.stop();
+              }
+              // 确保麦克风轨道一定关闭
+              if (audioStreamRef.current) {
+                  audioStreamRef.current.getTracks().forEach(track => track.stop());
+              }
+              // 清理引用并重置UI状态
+              recognitionRef.current = null;
+              mediaRecorderRef.current = null;
+              audioStreamRef.current = null;
+              setIsListening(false);
+          };
+
+          // 当发生错误时
           recognition.onerror = (event) => {
               console.error('语音识别错误:', event.error);
               let errorMessage = `语音识别出错: ${event.error}`;
-              if (event.error === 'no-speech') errorMessage = '没有检测到语音，请再说一次。';
-              else if (event.error === 'not-allowed') errorMessage = '无法使用麦克风，请检查权限。';
+              if (event.error === 'no-speech') errorMessage = '没有检测到语音，请靠近麦克风再说一次。';
+              else if (event.error === 'not-allowed') errorMessage = '无法使用麦克风，请检查浏览器权限。';
               alert(errorMessage);
-              cleanup();
-          };
-
-          recognition.onend = () => {
-              cleanup();
+              // onerror 后通常会自动触发 onend，所以清理工作会由 onend 完成
           };
           
+          // 5. 启动语音识别
           recognition.start();
 
       } catch (err) {
           console.error("无法获取麦克风权限:", err);
           alert("无法获取麦克风权限，请检查您的浏览器设置。");
-          cleanup();
+          setIsListening(false);
       }
-  }, [isListening, userAudioURL]);
+  }, [isListening, userAudioURL]); // 移除了不必要的依赖，仅保留isListening和userAudioURL（用于清理）
 
   const handleCloseComparison = useCallback(() => {
       if (userAudioURL) URL.revokeObjectURL(userAudioURL);
       setRecognizedText('');
       setUserAudioURL(null);
   }, [userAudioURL]);
-  const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
+
+  const handleNavigateToNext = useCallback(() => { 
+      handleCloseComparison(); 
+      setTimeout(() => navigate(1), 100); 
+  }, [handleCloseComparison, navigate]);
   
+  // 组件卸载时，确保所有资源都被释放
   useEffect(() => {
       return () => {
+          if (recognitionRef.current) recognitionRef.current.stop();
           if (audioStreamRef.current) {
               audioStreamRef.current.getTracks().forEach(track => track.stop());
           }
@@ -591,16 +619,23 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 // ===== 样式表 (保持不变) ==========================================================
 // =================================================================================
 const styles = {
+    // --- 核心布局 ---
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
+    
+    // --- 卡片内容 ---
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     textWordBurmese: { fontSize: '2.2rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
+    
+    // --- 控件与计数器 ---
     rightControls: { position: 'fixed', bottom: '50%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
     bottomCenterCounter: { position: 'fixed', bottom: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(0, 0, 0, 0.3)', color: 'white', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)', cursor: 'pointer', userSelect: 'none' },
+    
+    // --- 发音对比面板 ---
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
@@ -621,6 +656,8 @@ const styles = {
     actionButton: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
     continueButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     retryButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+    
+    // --- 设置面板 ---
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
@@ -630,6 +667,8 @@ const styles = {
     settingButton: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', flex: 1, justifyContent: 'center' },
     settingSelect: { width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #ccc' },
     settingSlider: { flex: 1 },
+
+    // --- 跳转弹窗 ---
     jumpModalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002 },
     jumpModalContent: { background: 'white', padding: '25px', borderRadius: '15px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
     jumpModalTitle: { marginTop: 0, marginBottom: '15px', color: '#333' },
