@@ -1,4 +1,4 @@
-// components/WordCard.js (已集成方案A，实现稳定录音和UI优化)
+// components/WordCard.js (已最终修正识别与录音的冲突)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -172,9 +172,13 @@ const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => {
 
 const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings, onContinue, onClose }) => {
     const analysis = useMemo(() => {
+        // [修正] 如果 userText 为空，直接返回“未能识别”
+        if (!userText) {
+            return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
+        }
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
-        if (!userText || correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
+        if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
         if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` };
         
         const results = correctPinyin.map((correctPy, index) => {
@@ -194,7 +198,7 @@ const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings
         return { isCorrect, results, accuracy };
     }, [correctWord, userText]);
 
-    useEffect(() => { if (analysis) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
+    useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
 
     const playUserAudio = useCallback(() => {
         if (userAudioURL) {
@@ -254,7 +258,6 @@ const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings
     );
 };
 
-// ... SettingsPanel and JumpModal components remain unchanged ...
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
   return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
@@ -320,12 +323,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const [userAudioURL, setUserAudioURL] = useState(null); // 状态名统一
+  const [userAudioURL, setUserAudioURL] = useState(null);
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
   
-  // 🧠 新增/统一的 Refs
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioContextRef = useRef(null);
@@ -374,95 +376,90 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ [核心替换] 植入您提供的、稳定可靠的 handleListen 函数
   const handleListen = useCallback(async (e) => {
     e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
 
-    // --- 停止 ---
     if (isListening) {
-      recognitionRef.current?.stop();
-      // onend 事件会自动处理后续逻辑
-      return;
+        recognitionRef.current?.stop();
+        mediaRecorderRef.current?.stop();
+        return;
     }
 
-    // --- 开始 ---
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("抱歉，您的浏览器不支持语音识别。");
-      return;
+        alert("抱歉，您的浏览器不支持语音识别。");
+        return;
     }
 
     try {
-      // 🎙️ 初始化语音识别
-      const recognition = new SpeechRecognition();
-      recognition.lang = "zh-CN";
-      recognition.interimResults = false;
+        const recognition = new SpeechRecognition();
+        recognition.lang = "zh-CN";
+        recognition.continuous = true;
+        recognition.interimResults = false;
 
-      recognition.onstart = () => {
-        setIsListening(true);
-        setRecognizedText("");
-        if (userAudioURL) URL.revokeObjectURL(userAudioURL); // 清理旧的录音
-        setUserAudioURL(null);
-      };
+        recognition.onstart = () => {
+            setIsListening(true);
+            setRecognizedText("");
+            if (userAudioURL) URL.revokeObjectURL(userAudioURL);
+            setUserAudioURL(null);
+        };
 
-      recognition.onresult = (event) => {
-        const result = event.results[event.results.length - 1][0].transcript;
-        setRecognizedText(result.trim().replace(/[.,。，]/g, ''));
-      };
+        recognition.onresult = (event) => {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                finalTranscript += event.results[i][0].transcript;
+            }
+            setRecognizedText(finalTranscript.trim().replace(/[.,。，]/g, ''));
+        };
 
-      recognition.onerror = (event) => {
-        console.error("语音识别出错：", event.error);
-         if (event.error === 'no-speech') {
-            setRecognizedText(''); // 确保在没有语音时清空文本，以便显示 "未能识别"
-        } else if (event.error !== 'aborted') { // 用户主动停止不算错误
-            alert(`语音识别错误: ${event.error}`);
-        }
-      };
+        recognition.onerror = (event) => {
+            console.error("语音识别出错：", event.error);
+             if (event.error !== 'aborted' && event.error !== 'no-speech') {
+                alert(`语音识别错误: ${event.error}`);
+            }
+        };
 
-      recognition.onend = () => {
-        setIsListening(false);
-        recognitionRef.current = null;
-        try { mediaRecorderRef.current?.stop(); } catch (_) {}
-        try { audioContextRef.current?.close(); } catch (_) {}
-      };
+        recognition.onend = () => {
+             if (mediaRecorderRef.current?.state === "recording") {
+                mediaRecorderRef.current.stop();
+            }
+            setIsListening(false);
+            recognitionRef.current = null;
+            try { audioContextRef.current?.close(); } catch (_) {}
+        };
 
-      recognitionRef.current = recognition;
+        recognitionRef.current = recognition;
 
-      // 🧩 使用 Web Audio API 创建旁路录音
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new AudioContext();
+        audioContextRef.current = audioContext;
 
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
+        const source = audioContext.createMediaStreamSource(stream);
+        const destination = audioContext.createMediaStreamDestination();
+        source.connect(destination);
 
-      const source = audioContext.createMediaStreamSource(stream);
-      const destination = audioContext.createMediaStreamDestination();
-      source.connect(destination);
+        const recorder = new MediaRecorder(destination.stream);
+        mediaRecorderRef.current = recorder;
 
-      const recorder = new MediaRecorder(destination.stream);
-      mediaRecorderRef.current = recorder;
-
-      const chunks = [];
-      recorder.ondataavailable = (ev) => {
-        if (ev.data.size > 0) chunks.push(ev.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setUserAudioURL(url);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      
-      // 🧠 启动
-      recognition.start();
-      recorder.start();
+        const chunks = [];
+        recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: "audio/webm" });
+            const url = URL.createObjectURL(blob);
+            setUserAudioURL(url);
+            stream.getTracks().forEach((t) => t.stop());
+        };
+        
+        recognition.start();
+        recorder.start();
 
     } catch (err) {
-      console.error("音频初始化失败:", err);
-      alert("请检查麦克风权限。");
+        console.error("音频初始化失败:", err);
+        alert("请检查麦克风权限。");
     }
-  }, [isListening, userAudioURL]);
+}, [isListening, userAudioURL]);
+
 
   const handleCloseComparison = useCallback(() => {
       if (userAudioURL) URL.revokeObjectURL(userAudioURL);
@@ -498,8 +495,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         
-        {/* 🔗 传递录音 URL 到对比组件 */}
-        {(!!recognizedText || (userAudioURL && !isListening)) && currentCard && (
+        {(userAudioURL && !isListening) && currentCard && (
             <PronunciationComparison 
                 correctWord={currentCard.chinese} 
                 userText={recognizedText} 
