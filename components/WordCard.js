@@ -1,4 +1,4 @@
-// components/WordCard.js (已最终修正识别与录音的冲突)
+// components/WordCard.js (加强日志版，用于最终问题排查 - 完整文件)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +10,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; // 确保您项目中存在此汉字笔顺组件
 
 // =================================================================================
-// ===== IndexedDB 收藏管理模块 (保持不变) =========================================
+// ===== IndexedDB 收藏管理模块 ====================================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
@@ -130,9 +130,8 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== 子组件 (UI部分保持不变) =======================================
+// ===== 子组件 ====================================================================
 // =================================================================================
-
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
@@ -258,6 +257,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
   return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
 });
+
 const JumpModal = ({ max, current, onJump, onClose }) => {
     const [inputValue, setInputValue] = useState(current + 1);
     const inputRef = useRef(null);
@@ -373,13 +373,15 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ [最终修正版] handleListen 函数
+  // ✅ [加强日志版] handleListen 函数
   const handleListen = useCallback(async (e) => {
     e.stopPropagation();
+    console.log("🎤 handleListen triggered. isListening:", isListening); // [日志]
     if (_howlInstance?.playing()) _howlInstance.stop();
 
     if (isListening) {
         if (recognitionRef.current) {
+            console.log("🛑 User clicked stop. Stopping recognition..."); // [日志]
             recognitionRef.current.stop();
         }
         return;
@@ -392,34 +394,36 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     }
 
     try {
+        console.log("🚀 Initializing Recognition & Recording..."); // [日志]
         const recognition = new SpeechRecognition();
         recognition.lang = "zh-CN";
-        // ✅ [核心修正] 移除 continuous: true，回归简单可靠的单次识别模式
-        // recognition.continuous = true; 
         recognition.interimResults = false;
 
         recognition.onstart = () => {
+            console.log("▶️ Recognition has started."); // [日志]
             setIsListening(true);
             setRecognizedText("");
             if (userAudioURL) URL.revokeObjectURL(userAudioURL);
             setUserAudioURL(null);
         };
 
-        // ✅ [核心修正] 简化 onresult，单次模式下逻辑更清晰
         recognition.onresult = (event) => {
             const result = event.results[event.results.length - 1][0].transcript;
+            console.log("💬 Recognition result received:", result); // [日志]
             setRecognizedText(result.trim().replace(/[.,。，]/g, ''));
         };
 
         recognition.onerror = (event) => {
-            console.error("语音识别出错:", event.error);
+            console.error("❌ Recognition error:", event.error); // [日志]
              if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 alert(`语音识别错误: ${event.error}`);
             }
         };
         
         recognition.onend = () => {
+            console.log("⏹️ Recognition has ended."); // [日志]
             if (mediaRecorderRef.current?.state === "recording") {
+                console.log("   -> Recognition ended, now stopping recorder..."); // [日志]
                 mediaRecorderRef.current.stop();
             }
             setIsListening(false);
@@ -428,7 +432,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         recognitionRef.current = recognition;
 
+        console.log("🔒 Requesting microphone permission..."); // [日志]
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("✅ Microphone permission granted."); // [日志]
         streamRef.current = stream;
 
         const audioContext = new AudioContext();
@@ -445,11 +451,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
 
         recorder.onstop = () => {
+            console.log("💾 Recorder has stopped. Creating audio blob..."); // [日志]
             const blob = new Blob(chunks, { type: "audio/webm" });
             const url = URL.createObjectURL(blob);
             setUserAudioURL(url);
+            console.log("   -> Audio URL created:", url); // [日志]
             
             if (streamRef.current) {
+                console.log("✂️ Closing microphone stream."); // [日志]
                 streamRef.current.getTracks().forEach((t) => t.stop());
                 streamRef.current = null;
             }
@@ -459,12 +468,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             }
         };
         
+        console.log("🏁 Starting both Recognition and Recorder..."); // [日志]
         recognition.start();
         recorder.start();
 
     } catch (err) {
-        console.error("音频初始化失败:", err);
-        alert("请检查麦克风权限。");
+        console.error("💥 Audio initialization failed:", err); // [日志]
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            alert("无法获取麦克风权限。请在浏览器地址栏左侧的锁🔒图标处，允许网站使用麦克风，然后刷新页面。");
+        } else {
+            alert(`音频初始化失败: ${err.name}`);
+        }
     }
 }, [isListening, userAudioURL]);
 
@@ -564,7 +578,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 (保持不变) =========================================================
+// ===== 样式表 ====================================================================
 // =================================================================================
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
