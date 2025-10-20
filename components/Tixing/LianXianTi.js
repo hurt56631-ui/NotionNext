@@ -1,4 +1,4 @@
-// components/Tixing/LianXianTi.js (V6 - 大图优化版)
+// components/Tixing/LianXianTi.js (V7 - 紧凑大图最终版)
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Howl } from 'howler';
@@ -6,7 +6,7 @@ import confetti from 'canvas-confetti';
 import { pinyin } from 'pinyin-pro';
 import { FaVolumeUp, FaEye } from 'react-icons/fa';
 
-// --- 样式定义 (V6 - 重点优化图片占比) ---
+// --- 样式定义 (V7 - 紧凑布局与最大化图片占比) ---
 const styles = {
   container: { backgroundColor: '#f7f9fc', borderRadius: '28px', padding: '24px', boxShadow: '0 8px 40px rgba(0, 0, 0, 0.08)', fontFamily: 'sans-serif', maxWidth: '700px', width: '95%', margin: '2rem auto', userSelect: 'none', border: '1px solid rgba(0, 0, 0, 0.05)' },
   titleContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '24px', },
@@ -14,8 +14,10 @@ const styles = {
   readAloudButton: { cursor: 'pointer', color: '#3b82f6', fontSize: '1.5rem', transition: 'transform 0.2s', },
   mainArea: { position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'stretch' },
   column: { display: 'flex', flexDirection: 'column', gap: '16px', width: '47%', zIndex: 2 },
+  
+  // 核心修改区域
   item: {
-    padding: '12px',
+    padding: '10px 12px', // 核心修改：减小上下内边距
     borderRadius: '20px',
     background: 'rgba(255, 255, 255, 0.8)',
     boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 8px -2px rgba(0, 0, 0, 0.04)',
@@ -26,21 +28,22 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '6px', // 核心修改：减小图片与文字的间距，让布局更紧凑
-    minHeight: '120px', // 核心修改：增加最小高度以容纳更大的图片
+    gap: '4px', // 核心修改：极限压缩图片与文字的间距
+    minHeight: '100px', // 核心修改：减小卡片整体高度，使其更紧凑
     justifyContent: 'center',
     flex: 1,
   },
-  // 核心修改：显著增加图片尺寸，使其成为视觉焦点
+  // 核心修改区域
   itemImage: {
-    height: '80px', // 从 60px 大幅增加到 80px
+    height: '75px', // 核心修改：在紧凑卡片中保持较大尺寸，从而提升占比
     width: 'auto',
     maxWidth: '90%',
     borderRadius: '12px',
     objectFit: 'contain',
   },
-  itemContent: { fontSize: '1.2rem', fontWeight: '500', color: '#334155', textAlign: 'center' },
-  pinyin: { fontSize: '0.85rem', color: '#64748b', height: '1.1em' },
+  
+  itemContent: { fontSize: '1.1rem', fontWeight: '500', color: '#334155', textAlign: 'center' }, // 微调字体大小以适应更紧凑的空间
+  pinyin: { fontSize: '0.8rem', color: '#64748b', height: '1.1em' }, // 微调拼音大小
   selected: {
     borderColor: '#6366f1',
     transform: 'translateY(-4px) scale(1.03)',
@@ -56,7 +59,7 @@ const styles = {
   finishMessage: { textAlign: 'center', marginTop: '24px', fontSize: '1.5rem', fontWeight: 'bold' },
 };
 
-// --- 音频管理器 (与 V5 相同，无需改动) ---
+// --- 音频管理器 (与 V5/V6 相同，无需改动) ---
 const audioManager = {
   currentSound: null,
   stopCurrentSound: () => {
@@ -92,7 +95,7 @@ const playTTS = async (text, lang = 'zh') => {
   } catch (e) { console.error('TTS 失败:', e); audioManager.currentSound = null; }
 };
 
-// --- 主组件 (与 V5 相同，无需改动) ---
+// --- 主组件 (与 V5/V6 相同，无需改动) ---
 const LianXianTi = ({ title, columnA, columnB, pairs }) => {
   const [selection, setSelection] = useState({ a: null, b: null });
   const [userPairs, setUserPairs] = useState([]);
@@ -130,7 +133,7 @@ const LianXianTi = ({ title, columnA, columnB, pairs }) => {
   const handleCheckAnswers = () => { setCheckMode(true); const correctCount = userPairs.filter(p => pairs[p.a] === p.b).length; if (correctCount === columnA.length) { playSound('correct'); } else { playSound('incorrect'); } };
   const handleShowAnswers = () => { setShowAnswers(true); const correctPairsArray = Object.entries(pairs).map(([keyA, valueB]) => ({ a: keyA, b: valueB })); setUserPairs(correctPairsArray); };
   const getLinePoints = (pair) => { const elA = itemRefs.current[pair.a]; const elB = itemRefs.current[pair.b]; if (!elA || !elB) return null; const containerRect = elA.closest('[data-id="main-area"]')?.getBoundingClientRect(); if (!containerRect) return null; const rectA = elA.getBoundingClientRect(); const rectB = elB.getBoundingClientRect(); return { x1: rectA.right - containerRect.left, y1: rectA.top + rectA.height / 2 - containerRect.top, x2: rectB.left - containerRect.left, y2: rectB.top + rectB.height / 2 - containerRect.top }; };
-  const getLineStyle = (pair) => { if (showAnswers) return styles.lineCorrect; if (!checkMode) return styles.line; return pairs[pair.a] === pair.b ? styles.lineCorrect : styles.lineIncorrect; };
+  const getLineStyle = (pair) => { if (showAnswers) return styles.lineCorrect; if (!checkMode) return styles.line; return pairs[pair.a] === p.b ? styles.lineCorrect : styles.lineIncorrect; };
   
   const renderItemContent = (item, hasPinyin = false) => (
     <>
