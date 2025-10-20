@@ -130,7 +130,7 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== 子组件 (UI部分保持不变, 逻辑已更新) =======================================
+// ===== 子组件 (UI部分保持不变) =======================================
 // =================================================================================
 
 const useCardSettings = () => {
@@ -172,7 +172,6 @@ const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => {
 
 const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings, onContinue, onClose }) => {
     const analysis = useMemo(() => {
-        // [修正] 如果 userText 为空，直接返回“未能识别”
         if (!userText) {
             return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
         }
@@ -222,7 +221,6 @@ const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div>
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
                 </div>
-
                 <div style={styles.errorDetailsContainer}>
                     {analysis.error ? (
                         <div style={styles.lengthError}><h3>{analysis.message}</h3></div>
@@ -244,12 +242,10 @@ const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings
                         </div>
                     )}
                 </div>
-
                 <div style={styles.audioComparisonSection}>
                     <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>
                     {userAudioURL && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}
                 </div>
-
                 <div style={styles.comparisonActions}>
                     {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}
                 </div>
@@ -331,6 +327,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioContextRef = useRef(null);
+  const streamRef = useRef(null);
 
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
@@ -376,13 +373,15 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
+  // ✅ [最终修正版] handleListen 函数
   const handleListen = useCallback(async (e) => {
     e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
 
     if (isListening) {
-        recognitionRef.current?.stop();
-        mediaRecorderRef.current?.stop();
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+        }
         return;
     }
 
@@ -395,7 +394,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     try {
         const recognition = new SpeechRecognition();
         recognition.lang = "zh-CN";
-        recognition.continuous = true;
+        // ✅ [核心修正] 移除 continuous: true，回归简单可靠的单次识别模式
+        // recognition.continuous = true; 
         recognition.interimResults = false;
 
         recognition.onstart = () => {
@@ -405,33 +405,32 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             setUserAudioURL(null);
         };
 
+        // ✅ [核心修正] 简化 onresult，单次模式下逻辑更清晰
         recognition.onresult = (event) => {
-            let finalTranscript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                finalTranscript += event.results[i][0].transcript;
-            }
-            setRecognizedText(finalTranscript.trim().replace(/[.,。，]/g, ''));
+            const result = event.results[event.results.length - 1][0].transcript;
+            setRecognizedText(result.trim().replace(/[.,。，]/g, ''));
         };
 
         recognition.onerror = (event) => {
-            console.error("语音识别出错：", event.error);
+            console.error("语音识别出错:", event.error);
              if (event.error !== 'aborted' && event.error !== 'no-speech') {
                 alert(`语音识别错误: ${event.error}`);
             }
         };
-
+        
         recognition.onend = () => {
-             if (mediaRecorderRef.current?.state === "recording") {
+            if (mediaRecorderRef.current?.state === "recording") {
                 mediaRecorderRef.current.stop();
             }
             setIsListening(false);
             recognitionRef.current = null;
-            try { audioContextRef.current?.close(); } catch (_) {}
         };
 
         recognitionRef.current = recognition;
 
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+
         const audioContext = new AudioContext();
         audioContextRef.current = audioContext;
 
@@ -444,11 +443,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         const chunks = [];
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
+
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: "audio/webm" });
             const url = URL.createObjectURL(blob);
             setUserAudioURL(url);
-            stream.getTracks().forEach((t) => t.stop());
+            
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((t) => t.stop());
+                streamRef.current = null;
+            }
+            if (audioContextRef.current) {
+                audioContextRef.current.close();
+                audioContextRef.current = null;
+            }
         };
         
         recognition.start();
@@ -460,7 +468,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     }
 }, [isListening, userAudioURL]);
 
-
   const handleCloseComparison = useCallback(() => {
       if (userAudioURL) URL.revokeObjectURL(userAudioURL);
       setRecognizedText('');
@@ -468,7 +475,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   }, [userAudioURL]);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
   
-  useEffect(() => { return () => { if (recognitionRef.current) recognitionRef.current.stop(); }; }, []);
+  useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
   
   const pageTransitions = useTransition(isOpen, {
     from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 },
