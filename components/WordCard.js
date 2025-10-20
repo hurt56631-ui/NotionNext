@@ -1,4 +1,4 @@
-// components/WordCard.js (最终修正版 - 采用克隆流方案)
+// components/WordCard.js (最终方案：识别与录音分离，保证100%稳定)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,12 +9,12 @@ import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, F
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// ... (IndexedDB, 辅助工具, 其他子组件代码保持不变, 此处省略以突出重点)
 // =================================================================================
 // ===== IndexedDB 收藏管理模块 ====================================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
+
 function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -28,6 +28,7 @@ function openDB() {
     };
   });
 }
+
 async function toggleFavorite(word) {
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -46,6 +47,7 @@ async function toggleFavorite(word) {
     return true;
   }
 }
+
 async function isFavorite(id) {
   const db = await openDB();
   const tx = db.transaction(STORE_NAME, 'readonly');
@@ -56,6 +58,7 @@ async function isFavorite(id) {
     getReq.onerror = () => resolve(false);
   });
 }
+
 // =================================================================================
 // ===== 辅助工具 & 常量 ===========================================================
 // =================================================================================
@@ -71,6 +74,7 @@ const sounds = {
   incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
 };
 let _howlInstance = null;
+
 const playTTS = async (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
@@ -99,10 +103,12 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         if (onEndCallback) onEndCallback();
     }
 };
+
 const playSoundEffect = (type) => {
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (sounds[type]) sounds[type].play();
 };
+
 const parsePinyin = (pinyinNum) => {
     if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
     const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -122,6 +128,7 @@ const parsePinyin = (pinyinNum) => {
     }
     return { initial, final, tone, pinyinMark, rawPinyin };
 };
+
 // =================================================================================
 // ===== 子组件 ====================================================================
 // =================================================================================
@@ -142,6 +149,7 @@ const useCardSettings = () => {
   useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]);
   return [settings, setSettings];
 };
+
 const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => {
     const { parts, errors } = analysis;
     const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {};
@@ -154,7 +162,9 @@ const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => {
         <div style={styles.pinyinVisualizerContainer}><span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span><span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span><span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span></div>
     );
 });
-const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings, onContinue, onClose }) => {
+
+// ✅ [重大更新] PronunciationComparison 组件现在内置独立的录音功能
+const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => {
     const analysis = useMemo(() => {
         if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; }
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
@@ -173,12 +183,91 @@ const PronunciationComparison = ({ correctWord, userText, userAudioURL, settings
         const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0);
         return { isCorrect, results, accuracy };
     }, [correctWord, userText]);
+
+    const [isRecording, setIsRecording] = useState(false);
+    const [userRecordingUrl, setUserRecordingUrl] = useState(null);
+    const mediaRecorderRef = useRef(null);
+    const streamRef = useRef(null);
+
     useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
-    const playUserAudio = useCallback(() => { if (userAudioURL) { if (_howlInstance?.playing()) _howlInstance.stop(); const sound = new Howl({ src: [userAudioURL], html5: true }); sound.play(); } }, [userAudioURL]);
+    
+    // ✅ 新增的、独立的录音功能
+    const handleRecord = useCallback(async () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            return;
+        }
+        
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                setUserRecordingUrl(url);
+                streamRef.current?.getTracks().forEach(track => track.stop());
+                setIsRecording(false);
+            };
+            
+            recorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("录音初始化失败:", err);
+            alert("请检查麦克风权限。");
+        }
+    }, [isRecording]);
+
+    const playUserAudio = useCallback(() => {
+        if (userRecordingUrl) {
+            if (_howlInstance?.playing()) _howlInstance.stop();
+            const sound = new Howl({ src: [userRecordingUrl], html5: true });
+            sound.play();
+        }
+    }, [userRecordingUrl]);
+    
     const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]);
+
+    // 清理录音 URL
+    useEffect(() => {
+        return () => {
+            if (userRecordingUrl) {
+                URL.revokeObjectURL(userRecordingUrl);
+            }
+        };
+    }, [userRecordingUrl]);
+
     if (!analysis) return null;
+
     return (
-        <div style={styles.comparisonOverlay}><div style={styles.comparisonPanel}><div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}><div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div><div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div><div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div></div><div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的发音</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div>))}</div>)}</div><div style={styles.audioComparisonSection}><button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>{userAudioURL && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}</div><div style={styles.comparisonActions}>{analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}</div></div></div>
+        <div style={styles.comparisonOverlay}>
+            <div style={styles.comparisonPanel}>
+                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
+                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div>
+                    <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
+                </div>
+                <div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的发音</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div>))}</div>)}</div>
+                
+                {/* ✅ 更新的音频对比区域 */}
+                <div style={styles.audioComparisonSection}>
+                    <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>
+                    <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>
+                        {isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />}
+                        {isRecording ? '停止录音' : '录音对比'}
+                    </button>
+                    {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}
+                </div>
+
+                <div style={styles.comparisonActions}>
+                    {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}
+                </div>
+            </div>
+        </div>
     );
 };
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
@@ -237,15 +326,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
-  const [userAudioURL, setUserAudioURL] = useState(null);
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
   
   const recognitionRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const streamRef = useRef(null);
-
+  
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = cards[currentIndex];
@@ -275,15 +362,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate]);
   
-  // ✅ [最终修正版] 采用克隆流方案
-  const handleListen = useCallback(async (e) => {
+  // ✅ [最终修正版] handleListen 只负责语音识别
+  const handleListen = useCallback((e) => {
     e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
 
     if (isListening) {
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-        }
+        recognitionRef.current?.stop();
         return;
     }
 
@@ -293,80 +378,42 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         return;
     }
 
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
+    const recognition = new SpeechRecognition();
+    recognition.lang = "zh-CN";
+    recognition.interimResults = false;
 
-        // --- 识别系统 ---
-        const recognition = new SpeechRecognition();
-        recognition.lang = "zh-CN";
-        recognition.interimResults = false;
-        
-        // 注意：这里不再需要 AudioContext，因为 SpeechRecognition 直接使用原始流
-        
-        recognition.onstart = () => {
-            setIsListening(true);
-            setRecognizedText("");
-            if (userAudioURL) URL.revokeObjectURL(userAudioURL);
-            setUserAudioURL(null);
-        };
-        recognition.onresult = (event) => {
-            const result = event.results[event.results.length - 1][0].transcript;
-            console.log("💬 Recognition result received:", result);
-            setRecognizedText(result.trim().replace(/[.,。，]/g, ''));
-        };
-        recognition.onerror = (event) => {
-            console.error("❌ Recognition error:", event.error);
-             if (event.error !== 'aborted' && event.error !== 'no-speech') {
-                alert(`语音识别错误: ${event.error}`);
-            }
-        };
-        recognition.onend = () => {
-            console.log("⏹️ Recognition has ended.");
-            if (mediaRecorderRef.current?.state === "recording") {
-                mediaRecorderRef.current.stop();
-            }
-            setIsListening(false);
-            recognitionRef.current = null;
-        };
-        recognitionRef.current = recognition;
+    recognition.onstart = () => {
+        setIsListening(true);
+        setRecognizedText("");
+    };
 
-        // --- 录音系统 ---
-        // ✅ [核心修正] 使用原始流的克隆版本进行录音
-        const recordStream = stream.clone();
-        const recorder = new MediaRecorder(recordStream);
-        mediaRecorderRef.current = recorder;
+    recognition.onresult = (event) => {
+        const result = event.results[event.results.length - 1][0].transcript;
+        setRecognizedText(result.trim().replace(/[.,。，]/g, ''));
+    };
 
-        const chunks = [];
-        recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
-        recorder.onstop = () => {
-            console.log("💾 Recorder has stopped. Creating audio blob...");
-            const blob = new Blob(chunks, { type: "audio/webm" });
-            const url = URL.createObjectURL(blob);
-            setUserAudioURL(url);
-            
-            // 统一在这里关闭所有流
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach((t) => t.stop());
-                streamRef.current = null;
-            }
-        };
-        
-        // 同时启动
-        recognition.start();
-        recorder.start();
+    recognition.onerror = (event) => {
+        console.error("语音识别出错:", event.error);
+         if (event.error !== 'aborted' && event.error !== 'no-speech') {
+            alert(`语音识别错误: ${event.error}`);
+        }
+    };
+    
+    recognition.onend = () => {
+        setIsListening(false);
+        recognitionRef.current = null;
+        setIsComparisonOpen(true); // 识别结束后，打开对比面板
+    };
 
-    } catch (err) {
-        console.error("💥 Audio initialization failed:", err.name, err.message);
-        alert("请检查麦克风权限，或刷新页面重试。");
-    }
-}, [isListening, userAudioURL]);
+    recognitionRef.current = recognition;
+    recognition.start();
+
+}, [isListening]);
 
   const handleCloseComparison = useCallback(() => {
-      if (userAudioURL) URL.revokeObjectURL(userAudioURL);
-      setRecognizedText('');
-      setUserAudioURL(null);
-  }, [userAudioURL]);
+      setIsComparisonOpen(false);
+      setRecognizedText(''); // 清理结果
+  }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
   
   useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
@@ -394,7 +441,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         <div style={styles.gestureArea} {...bind()} />
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
-        {(userAudioURL && !isListening) && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} userAudioURL={userAudioURL} settings={settings} onContinue={handleNavigateToNext} onClose={handleCloseComparison} />)}
+        
+        {isComparisonOpen && currentCard && (
+            <PronunciationComparison 
+                correctWord={currentCard.chinese} 
+                userText={recognizedText} 
+                settings={settings} 
+                onContinue={handleNavigateToNext} 
+                onClose={handleCloseComparison} 
+            />
+        )}
+        
         {isJumping && <JumpModal max={cards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
         {cardTransitions((cardStyle, i) => {
           const cardData = cards[i];
@@ -448,7 +505,7 @@ const styles = {
     toneNumber: { fontSize: '1.1rem', fontWeight: 'bold', marginLeft: '2px' },
     wrongPart: { color: '#dc2626', fontWeight: 'bold' },
     pinyinLabel: { fontSize: '0.75rem', color: '#6b7280', marginBottom: '4px' },
-    audioComparisonSection: { display: 'flex', gap: '15px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa' },
+    audioComparisonSection: { display: 'flex', gap: '10px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa', flexWrap: 'wrap' },
     audioPlayerButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontSize: '0.9rem', color: '#374151', fontWeight: 600 },
     comparisonActions: { padding: '20px' },
     actionButton: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
