@@ -15,6 +15,7 @@ const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
+const InteractiveHSKLesson = dynamic(() => import('@/components/Tixing/InteractiveHSKLesson'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
@@ -63,6 +64,9 @@ const CustomCode = (props) => {
 
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
+        }
+        if (componentPath === '/components/Tixing/InteractiveHSKLesson.jsx') {
+          return <InteractiveHSKLesson {...parsedProps} />;
         }
         if (componentPath === '/components/InteractiveHSKLesson.jsx') {
           return <InteractiveHSKLesson {...parsedProps} />;
