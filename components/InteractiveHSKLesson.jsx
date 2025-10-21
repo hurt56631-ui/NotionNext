@@ -207,13 +207,13 @@ export function DemoLessonPage() {
     id: 'hsk1-lesson5',
     title: 'HSK 第五课：她女儿今年二十岁',
     blocks: [
-      { id: 'b1', sentence: { text: '你女儿几岁了？', pinyin: 'Nǐ nǚ'ér jǐ suì le?', translation: 'How old is your daughter?' }, questions: [] },
-      { id: 'b2', sentence: { text: '她今年四岁了。', pinyin: 'Tā jīnnián sì suì le.', translation: 'She is four years old this year.' },
+      { id: 'b1', sentence: { text: '你女儿几岁了？', pinyin: “Nǐ nǚ'ér jǐ suì le?”, translation: 'How old is your daughter?' }, questions: [] },
+      { id: 'b2', sentence: { text: '她今年四岁了。', pinyin: “Tā jīnnián sì suì le.”, translation: 'She is four years old this year.' },
         questions: [
           { id: 'q1', type: 'choice', prompt: '“她今年四岁了” 的意思是：', choices: [{id:'c1', text:'She is 40 years old.'}, {id:'c2', text:'Her daughter is 4 years old.'}, {id:'c3', text:'She is 4 years old this year.'}], correctId: 'c3' }
         ]
       },
-      { id: 'b3', sentence: { text: '李老师多大了？', pinyin: 'Lǐ lǎoshī duō dà le?', translation: 'How old is Professor Li?' }, questions: [] }
+      { id: 'b3', sentence: { text: '李老师多大了？', pinyin: “Lǐ lǎoshī duō dà le?”, translation: 'How old is Professor Li?' }, questions: [] }
     ]
   };
 
