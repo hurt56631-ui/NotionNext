@@ -1,9 +1,9 @@
-// components/Tixing/GengDuTi.js (V3 - 带日志的调试版)
+// components/Tixing/GengDuTi.js (V4 - 真正支持多语言的最终版)
 
 import React, { useState, useRef, useEffect } from 'react';
 import { pinyin } from 'pinyin-pro';
 import { FaMicrophone, FaStopCircle, FaPlayCircle, FaVolumeUp, FaRedo, FaCheck } from 'react-icons/fa';
-import { Howl } from 'howler';
+import { Howl, Howler } from 'howler';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -38,47 +38,58 @@ const styles = {
 
 let ttsPlayer;
 const playTTS = (text, lang) => {
-  // [LOG] 记录函数调用
-  console.log(`[GengDuTi] playTTS called with text: "${text}" and lang: "${lang}"`);
+  Howler.autoUnlock = true;
+  if (ttsPlayer?.playing()) ttsPlayer.stop();
 
-  if (ttsPlayer?.playing()) {
-    // [LOG] 记录停止当前播放
-    console.log('[GengDuTi] Stopping currently playing TTS.');
-    ttsPlayer.stop();
-  }
+  // ✅ [核心修正] 创建一个语音模型映射表
+  const voiceMap = {
+    'zh-CN': 'zh-CN-XiaoyouNeural',
+    'en-US': 'en-US-JennyNeural',
+    // 未来可以轻松扩展更多语言
+    // 'ja-JP': 'ja-JP-NanamiNeural', 
+  };
 
-  const ttsUrl = lang === 'zh-CN'
-    ? `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural`
-    : `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`;
-
-  // [LOG] 记录生成的URL，这是诊断404问题的关键！
-  console.log(`[GengDuTi] Generated TTS URL: ${ttsUrl}`);
-
-  ttsPlayer = new Howl({
-    src: [ttsUrl],
-    html5: true, // 必须开启，以避免CORS问题
-  });
-
-  // [LOG] 添加关键的错误监听器
-  ttsPlayer.on('loaderror', (id, error) => {
-    console.error(`[GengDuTi] Howler Load Error: `, { id, error });
-    alert(`音频加载失败，可能是TTS服务暂时不可用。请查看控制台获取详细信息。`);
-  });
-
-  ttsPlayer.on('playerror', (id, error) => {
-    console.error(`[GengDuTi] Howler Play Error: `, { id, error });
-    alert(`音频播放失败。请查看控制台获取详细信息。`);
-  });
+  // ✅ [核心修正] 智能选择语音模型，如果找不到则默认使用中文
+  const voice = voiceMap[lang] || voiceMap['zh-CN'];
   
-  // [LOG] 记录播放事件
-  ttsPlayer.on('play', () => {
-    console.log('[GengDuTi] TTS playback started.');
-  });
+  // ✅ [核心修正] 统一使用 t.leftsite.cn 服务
+  const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
+  
+  console.log(`[GengDuTi] Requesting TTS from: ${ttsUrl}`); // 保留日志以供调试
 
+  ttsPlayer = new Howl({ 
+      src: [ttsUrl], 
+      html5: true,
+      onplayerror: (id, err) => {
+        console.error('TTS Play Error:', err);
+        alert('音频播放失败，请检查网络或浏览器权限。');
+      },
+      onloaderror: (id, err) => {
+        console.error(`TTS Load Error for URL [${ttsUrl}]:`, err);
+        alert('音频加载失败，可能是TTS服务暂时不可用或网络问题。');
+      }
+  });
   ttsPlayer.play();
 };
 
-const calcSimilarity = (a, b) => { /* ... (此函数无需修改) ... */ };
+const calcSimilarity = (a, b) => {
+  const clean = (s) => s.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s']/g, "").toLowerCase(); // 保留空格和撇号以更好地处理英文
+  const s1 = clean(a);
+  const s2 = clean(b);
+  if (!s1 || !s2) return 0;
+  const track = Array(s2.length + 1).fill(null).map(() => Array(s1.length + 1).fill(null));
+  for (let i = 0; i <= s1.length; i += 1) track[0][i] = i;
+  for (let j = 0; j <= s2.length; j += 1) track[j][0] = j;
+  for (let j = 1; j <= s2.length; j += 1) {
+    for (let i = 1; i <= s1.length; i += 1) {
+      const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(track[j][i - 1] + 1, track[j - 1][i] + 1, track[j - 1][i - 1] + indicator);
+    }
+  }
+  const distance = track[s2.length][s1.length];
+  const longerLength = Math.max(s1.length, s2.length);
+  return Math.round(Math.max(0, 1 - distance / longerLength) * 100);
+};
 
 const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
   const [state, setState] = useState('idle');
@@ -90,29 +101,24 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
   const recognitionRef = useRef(null);
   const audioChunksRef = useRef([]);
   const userAudioPlayerRef = useRef(null);
+  
+  useEffect(() => {
+    const unlockAudio = () => { Howler.autoUnlock = true; document.removeEventListener('click', unlockAudio); };
+    document.addEventListener('click', unlockAudio);
+    return () => document.removeEventListener('click', unlockAudio);
+  }, []);
 
   const handleStart = async () => {
-    // [LOG]
-    console.log('[GengDuTi] handleStart called.');
     if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能，将仅进行录音。"); }
     if (!navigator.mediaDevices?.getUserMedia) { alert("抱歉，您的浏览器不支持录音功能。"); return; }
 
     try {
-      // [LOG]
-      console.log('[GengDuTi] Requesting microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('[GengDuTi] Microphone permission granted.');
       setState('recording');
       
       mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.ondataavailable = event => {
-        // [LOG]
-        console.log('[GengDuTi] MediaRecorder data available.');
-        audioChunksRef.current.push(event.data);
-      };
+      mediaRecorderRef.current.ondataavailable = event => audioChunksRef.current.push(event.data);
       mediaRecorderRef.current.onstop = () => {
-        // [LOG]
-        console.log('[GengDuTi] MediaRecorder stopped.');
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
         audioChunksRef.current = [];
@@ -128,39 +134,22 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
         
         recognition.onresult = (event) => {
           const resultText = event.results[0][0].transcript;
-          // [LOG]
-          console.log(`[GengDuTi] Speech recognized: "${resultText}"`);
           setRecognizedText(resultText);
           setScore(calcSimilarity(sentence, resultText));
         };
-        recognition.onend = () => {
-            // [LOG]
-            console.log('[GengDuTi] Speech recognition ended.');
-            setState('result');
-        };
-        recognition.onerror = (event) => {
-            // [LOG]
-            console.error('[GengDuTi] Speech recognition error:', event.error);
-            setState('result');
-        };
-        
-        // [LOG]
-        console.log('[GengDuTi] Starting speech recognition...');
+        recognition.onend = () => setState('result');
+        recognition.onerror = (event) => { console.error('Speech Recognition Error:', event.error); setState('result'); };
         recognition.start();
       }
-      // [LOG]
-      console.log('[GengDuTi] Starting media recorder...');
       mediaRecorderRef.current.start();
     } catch (err) {
-      console.error("[GengDuTi] Microphone permission failed:", err);
+      console.error("麦克风授权失败:", err);
       alert("无法开始录音，请检查并授权麦克风权限。");
       setState('idle');
     }
   };
 
   const handleStop = () => {
-    // [LOG]
-    console.log('[GengDuTi] handleStop called.');
     mediaRecorderRef.current?.stop();
     recognitionRef.current?.stop();
     setState('processing');
@@ -168,8 +157,6 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
   };
   
   const handleReset = () => {
-    // [LOG]
-    console.log('[GengDuTi] handleReset called.');
     setAudioBlob(null);
     setRecognizedText("");
     setScore(null);
@@ -177,30 +164,21 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
   };
 
   const playUserAudio = () => {
-    // [LOG]
-    console.log('[GengDuTi] playUserAudio called.');
-    if (!audioBlob) {
-        console.warn('[GengDuTi] No audio blob to play.');
-        return;
-    }
+    if (!audioBlob) return;
     userAudioPlayerRef.current?.pause();
     const audioUrl = URL.createObjectURL(audioBlob);
     userAudioPlayerRef.current = new Audio(audioUrl);
     userAudioPlayerRef.current.play();
   };
 
-  useEffect(() => {
-    // [LOG]
-    console.log('[GengDuTi] Component rerendered due to sentence change. Resetting state.');
-    handleReset();
-  }, [sentence]);
+  useEffect(() => { handleReset(); }, [sentence, lang]);
 
   const finalPinyin = pinyinText || (lang === 'zh-CN' ? pinyin(sentence, { toneType: 'mark' }) : null);
   const scoreColor = score >= 80 ? theme.success : score >= 50 ? theme.warning : theme.error;
 
   return (
     <div style={styles.container}>
-      <style>{`/* ... (动画样式不变) ... */`}</style>
+      <style>{`@keyframes pulse { 0% { box-shadow: 0 0 0 0 ${theme.error}B3; } 70% { box-shadow: 0 0 0 15px ${theme.error}00; } 100% { box-shadow: 0 0 0 0 ${theme.error}00; } } @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } .animate-spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
       <div style={styles.sentenceArea}>
         {finalPinyin && <div style={styles.pinyin}>{finalPinyin}</div>}
         <div style={styles.sentence}>{sentence}</div>
@@ -250,3 +228,5 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN" }) => {
     </div>
   );
 };
+
+export default GengDuTi;
