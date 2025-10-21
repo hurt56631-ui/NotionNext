@@ -33,7 +33,6 @@ import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
 import SearchNav from './components/SearchNav'
 import SideRight from './components/SideRight'
-import LayoutLesson from './components/LayoutLesson'
 
 import CONFIG from './config'
 import { Style } from './style'
@@ -765,5 +764,5 @@ const LayoutTagIndex = props => {
 
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
-  LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, LayoutLesson, CONFIG as THEME_CONFIG
+  LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
 }
