@@ -1,4 +1,4 @@
-// components/NotionPage.js - 最终集成版 (已修复编译错误)
+// components/NotionPage.js - 最终修复完整版
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -15,12 +15,12 @@ const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
-const InteractiveHSKLesson = dynamic(() => import('@/components/Tixing/InteractiveHSKLesson'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
 const AiTtsButton = dynamic(() => import('@/components/AiTtsButton'), { ssr: false })
-const InteractiveHSKLesson = dynamic(() => import('@/components/InteractiveHSKLesson'), { ssr: false })
+// ✅ 修正：只保留一次导入
+const InteractiveHSKLesson = dynamic(() => import('@/components/Tixing/InteractiveHSKLesson'), { ssr: false })
 
 
 // --- 2. 导入 react-notion-x 的原始组件 (保持不变) ---
@@ -39,7 +39,7 @@ const CustomCode = (props) => {
   const blockContent = props.block.properties?.title?.[0]?.[0] || '';
 
   if (blockContent.startsWith('!include')) {
-    const includeRegex = /!include\s+(\S+\.js)\s*({.*})?/s;
+    const includeRegex = /!include\s+(\S+\.jsx?)\s*({.*})?/s; // 匹配 .js 或 .jsx
     const match = blockContent.match(includeRegex);
 
     if (match) {
@@ -61,15 +61,14 @@ const CustomCode = (props) => {
         if (componentPath === '/components/PhraseCard.js') {
           return <PhraseCard {...parsedProps} />;
         }
-
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
         }
-        if (componentPath === '/components/Tixing/InteractiveHSKLesson.jsx') {
-          return <InteractiveHSKLesson {...parsedProps} />;
-        }
-        if (componentPath === '/components/InteractiveHSKLesson.jsx') {
-          return <InteractiveHSKLesson {...parsedProps} />;
+        // ✅ 修正：将两个路径判断合并，并处理 .jsx
+        if (componentPath === '/components/Tixing/InteractiveHSKLesson.jsx' || componentPath === '/components/InteractiveHSKLesson.jsx') {
+          // 注意：您在 Notion 中 !include 的 JSON 数据需要用 `lesson` 字段包裹
+          // 例如: { "lesson": { "id": "...", "title": "...", "blocks": [...] } }
+          return <InteractiveHSKLesson lesson={parsedProps.lesson} />;
         }
         if (componentPath === '/components/Tixing/TingLiZhuJu.js') {
           return <TingLiZhuJu {...parsedProps} />;
@@ -132,7 +131,7 @@ const NotionPage = ({ post, className }) => {
 // --- 辅助函数 ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
-const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); } // <<<< 修复在这里
+const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); }
 const mapPageUrl = id => { return '/' + id.replace(/-/g, '') }
 function getMediumZoomMargin() { const width = window.innerWidth; if (width < 500) { return 8 } else if (width < 800) { return 20 } else if (width < 1280) { return 30 } else if (width < 1600) { return 40 } else if (width < 1920) { return 48 } else { return 72 } }
 
