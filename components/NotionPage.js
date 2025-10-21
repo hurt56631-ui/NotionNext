@@ -19,7 +19,7 @@ const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: fa
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
 const AiTtsButton = dynamic(() => import('@/components/AiTtsButton'), { ssr: false })
-const InteractiveLessonBlock = dynamic(() => import('@/components/Tixing/InteractiveLessonBlock'), { ssr: false })
+const InteractiveHSKLesson = dynamic(() => import('@/components/Tixing/InteractiveHSKLesson'), { ssr: false })
 
 
 // --- 2. 导入 react-notion-x 的原始组件 (保持不变) ---
@@ -64,8 +64,8 @@ const CustomCode = (props) => {
         if (componentPath === '/components/Tixing/LianXianTi.js') {
           return <LianXianTi {...parsedProps} />;
         }
-        if (componentPath === '/components/Tixing/InteractiveLessonBlock.js') {
-          return <InteractiveLessonBlock {...parsedProps} />;
+        if (componentPath === '/components/Tixing/InteractiveHSKLesson.jsx') {
+          return <InteractiveHSKLesson {...parsedProps} />;
         }
         if (componentPath === '/components/Tixing/TingLiZhuJu.js') {
           return <TingLiZhuJu {...parsedProps} />;
