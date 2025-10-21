@@ -1,12 +1,12 @@
-// components/Tixing/LianXianTi.js (V8 - 专业教学产品版)
+// components/Tixing/LianXianTi.js (V9 - 修复稳定版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Howl } from 'howler';
 import confetti from 'canvas-confetti';
 import { pinyin } from 'pinyin-pro';
-import { FaVolumeUp, FaEye, FaRedo, FaSpinner } from 'react-icons/fa';
+import { FaVolumeUp, FaEye, FaRedo, FaSpinner, FaCheck } from 'react-icons/fa';
 
-// ⚙️ [核心] 统一视觉主题，方便全站复用
+// 统一视觉主题
 const theme = {
   primary: '#3b82f6',
   primaryDark: '#6366f1',
@@ -25,7 +25,6 @@ const theme = {
   boxShadowCard: '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 8px -2px rgba(0, 0, 0, 0.04)',
 };
 
-// --- 样式定义 ---
 const styles = {
   container: { backgroundColor: theme.bgContainer, borderRadius: theme.borderRadiusContainer, padding: '24px', boxShadow: theme.boxShadowContainer, fontFamily: 'sans-serif', maxWidth: '700px', width: '95%', margin: '2rem auto', userSelect: 'none', border: '1px solid rgba(0, 0, 0, 0.05)' },
   titleContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '24px' },
@@ -40,37 +39,34 @@ const styles = {
   selected: { borderColor: theme.primaryDark, transform: 'translateY(-4px) scale(1.03)', boxShadow: `0 10px 25px -5px rgba(99, 102, 241, 0.2), 0 8px 10px -6px ${theme.primaryDark}1A` },
   ttsLoader: { position: 'absolute', top: '8px', right: '8px', color: theme.primary, animation: 'spin 1s linear infinite' },
   svgContainer: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' },
-  // ✅ [核心] 曲线样式
   path: { fill: 'none', stroke: '#94a3b8', strokeWidth: 3, strokeDasharray: '5, 5', transition: 'stroke 0.3s ease' },
   pathCorrect: { stroke: theme.success, strokeWidth: 3.5, strokeDasharray: 'none' },
   pathIncorrect: { stroke: theme.error, strokeWidth: 3.5, strokeDasharray: 'none' },
   buttonContainer: { display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '12px', marginTop: '24px' },
   actionButton: { padding: '14px 28px', borderRadius: theme.borderRadiusButton, border: 'none', backgroundColor: theme.primary, color: 'white', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', alignItems: 'center', gap: '8px' },
-  // ✅ [核心] 优化禁用按钮样式
   disabledButton: { backgroundColor: '#9ca3af', cursor: 'not-allowed', opacity: 0.7, pointerEvents: 'none' },
-  finishMessage: { textAlign: 'center', marginTop: '24px', fontSize: '1.5rem', fontWeight: 'bold' },
+  finishMessage: { textAlign: 'center', marginTop: '24px', fontSize: '1.5rem', fontWeight: 'bold', animation: 'fadeIn 0.5s' },
 };
 
-// ⚙️ [优化] 抽离音频管理器 (未来可放入 /utils/audioManager.js)
-const audioManager = { /* ... */ }; // (保持不变)
-const sounds = { /* ... */ }; // (保持不变)
-const playSound = (name) => { /* ... */ };
+const audioManager = { currentSound: null, stopCurrentSound: function() { this.currentSound?.stop(); this.currentSound = null; } };
+const sounds = {
+  click: new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }),
+  correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 1.0 }),
+  incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }),
+};
+const playSound = (name) => { audioManager.stopCurrentSound(); sounds[name]?.play(); };
 
 const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
-  // ⚙️ [优化] 状态命名统一
   const [selection, setSelection] = useState({ a: null, b: null });
   const [userPairs, setUserPairs] = useState([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
-  // 🧠 [新增] TTS 加载状态
   const [ttsPlayingId, setTtsPlayingId] = useState(null);
   const itemRefs = useRef({});
 
-  const isAllPaired = userPairs.length === columnA.length;
-  const isFinished = isAllPaired && isSubmitted;
-  const isAllCorrect = isFinished && userPairs.every(p => pairs[p.a] === p.b);
-  
-  // ✅ [核心] 播放 TTS 逻辑，带加载状态
+  const isAllPaired = userPairs.length === (columnA?.length || 0);
+  const isAllCorrect = isSubmitted && userPairs.every(p => pairs[p.a] === p.b);
+
   const playTTS = useCallback(async (item, lang = 'zh') => {
     if (!item.content) return;
     audioManager.stopCurrentSound();
@@ -78,29 +74,57 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
     const voice = lang === 'zh' ? 'zh-CN-XiaoyouNeural' : 'my-MM-ThihaNeural';
     try {
       const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(item.content)}&v=${voice}&r=-15`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('API Error');
-      const blob = await response.blob();
-      const ttsAudio = new Audio(URL.createObjectURL(blob));
+      const ttsAudio = new Howl({ src: [url], html5: true });
       audioManager.currentSound = ttsAudio;
+      ttsAudio.on('end', () => setTtsPlayingId(null));
+      ttsAudio.on('loaderror', () => setTtsPlayingId(null));
       ttsAudio.play();
-      ttsAudio.onended = () => { if (audioManager.currentSound === ttsAudio) audioManager.currentSound = null; setTtsPlayingId(null); };
-      ttsAudio.onerror = () => setTtsPlayingId(null);
     } catch (e) { console.error('TTS 失败:', e); setTtsPlayingId(null); }
   }, []);
-
+  
   useEffect(() => {
     if (isAllCorrect) {
       confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       if (onCorrect) onCorrect();
     }
   }, [isAllCorrect, onCorrect]);
-
-  const handleSelect = (column, item) => { /* ... */ }; // (逻辑保持不变，调用 playTTS)
-  const handleCheckAnswers = () => { /* ... */ }; // (逻辑保持不变)
-  const handleShowAnswers = () => { /* ... */ }; // (逻辑保持不变)
   
-  // 🧠 [新增] 重置功能
+  useEffect(() => {
+      setUserPairs([]);
+      setIsSubmitted(false);
+      setShowAnswers(false);
+      setSelection({ a: null, b: null });
+  }, [title, columnA, columnB]);
+
+  const handleSelect = (column, item) => {
+    if (isSubmitted || showAnswers) return;
+    if (selection[column] === item.id) {
+        playSound('click');
+        setSelection({ ...selection, [column]: null });
+        return;
+    }
+    playTTS(item, column === 'a' ? 'zh' : 'my');
+    let newSelection = { ...selection, [column]: item.id };
+    if (newSelection.a !== null && newSelection.b !== null) {
+      let updatedPairs = userPairs.filter(p => p.a !== newSelection.a && p.b !== newSelection.b);
+      updatedPairs.push(newSelection);
+      setUserPairs(updatedPairs);
+      setSelection({ a: null, b: null });
+    } else { setSelection(newSelection); }
+  };
+    
+  const handleCheckAnswers = () => {
+      setIsSubmitted(true);
+      const correctCount = userPairs.filter(p => pairs[p.a] === p.b).length;
+      playSound(correctCount === columnA.length ? 'correct' : 'incorrect');
+  };
+
+  const handleShowAnswers = () => {
+      setShowAnswers(true);
+      const correctPairsArray = Object.entries(pairs).map(([keyA, valueB]) => ({ a: keyA, b: valueB }));
+      setUserPairs(correctPairsArray);
+  };
+  
   const handleReset = () => {
     setUserPairs([]);
     setIsSubmitted(false);
@@ -108,7 +132,6 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
     setSelection({ a: null, b: null });
   };
     
-  // ✅ [核心] 计算贝塞尔曲线路径
   const getCurvePath = (pair) => {
     const elA = itemRefs.current[pair.a];
     const elB = itemRefs.current[pair.b];
@@ -121,13 +144,15 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
     const y1 = rectA.top + rectA.height / 2 - containerRect.top;
     const x2 = rectB.left - containerRect.left;
     const y2 = rectB.top + rectB.height / 2 - containerRect.top;
-    
-    // 控制点偏移量，使曲线更平滑
     const offset = Math.abs(x2 - x1) * 0.4;
     return `M ${x1},${y1} C ${x1 + offset},${y1} ${x2 - offset},${y2} ${x2},${y2}`;
   };
 
-  const getPathStyle = (pair) => { /* ... */ }; // (逻辑保持不变, s/line/path/g)
+  const getPathStyle = (pair) => {
+      if (showAnswers || (isSubmitted && pairs[pair.a] === pair.b)) return styles.pathCorrect;
+      if (isSubmitted && pairs[pair.a] !== pair.b) return styles.pathIncorrect;
+      return styles.path;
+  };
 
   const renderItemContent = (item, hasPinyin = false) => (
     <>
@@ -142,16 +167,37 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
     </>
   );
 
+  if (!columnA || !columnB) return <div>加载题目数据中...</div>;
+
   return (
     <div style={styles.container}>
-      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-      <div style={styles.titleContainer}> {/* ... Title ... */} </div>
+      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
+      <div style={styles.titleContainer}>
+        <h2 style={styles.title}>{title}</h2>
+        <FaVolumeUp style={styles.readAloudButton} onClick={() => playTTS({content: title}, 'zh')} />
+      </div>
 
       <div style={styles.mainArea} data-id="main-area">
-        {/* ... Columns and Items ... */}
+        <div style={styles.column}>
+          {columnA.map(item => (
+            <div key={item.id} ref={el => itemRefs.current[item.id] = el} 
+                 style={{...styles.item, ...(selection.a === item.id ? styles.selected : {})}} 
+                 onClick={() => handleSelect('a', item)}>
+                 {renderItemContent(item, true)}
+            </div>
+          ))}
+        </div>
+        <div style={styles.column}>
+           {columnB.map(item => (
+            <div key={item.id} ref={el => itemRefs.current[item.id] = el}
+                 style={{...styles.item, ...(selection.b === item.id ? styles.selected : {})}} 
+                 onClick={() => handleSelect('b', item)}>
+                 {renderItemContent(item)}
+            </div>
+          ))}
+        </div>
         <svg style={styles.svgContainer}>
           {userPairs.map((pair, index) => {
-              // ✅ [核心] 使用 path 替代 line
               const pathData = getCurvePath(pair);
               if (!pathData) return null;
               return <path key={index} d={pathData} style={getPathStyle(pair)} />
@@ -160,19 +206,17 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
       </div>
       
       <div style={styles.buttonContainer}>
-        {!isFinished && !showAnswers && (
+        {!isSubmitted && !showAnswers && (
             <button style={{...styles.actionButton, ...(!isAllPaired || isSubmitted ? styles.disabledButton : {})}} 
                     onClick={handleCheckAnswers} disabled={!isAllPaired || isSubmitted}>
-                检查答案
+                <FaCheck /> 检查答案
             </button>
         )}
-        {/* 🧠 [新增] 只有在提交后、未全对、且未显示答案时，才显示“查看答案” */}
         {isSubmitted && !isAllCorrect && !showAnswers && (
              <button style={{...styles.actionButton, backgroundColor: theme.warning}} onClick={handleShowAnswers}>
                 <FaEye /> 查看答案
             </button>
         )}
-        {/* 🧠 [新增] 只要提交过，就显示“再来一次”按钮 */}
         {(isSubmitted || showAnswers) && (
             <button style={{...styles.actionButton, backgroundColor: theme.gray}} onClick={handleReset}>
                 <FaRedo /> 再来一次
@@ -180,7 +224,7 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         )}
       </div>
 
-      {isFinished && (
+      {isSubmitted && (
         <div style={{ ...styles.finishMessage, color: isAllCorrect ? theme.success : theme.error }}>
           {isAllCorrect ? '🎉 太棒了，全部正确！' : '部分答案有误，请再看看哦！'}
         </div>
