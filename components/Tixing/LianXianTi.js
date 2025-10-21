@@ -17,7 +17,7 @@ const styles = {
   
   // 核心修改区域
   item: {
-    padding: '10px 12px', // 核心修改：减小上下内边距
+    padding: '8px 10px', // 核心修改：减小上下内边距
     borderRadius: '20px',
     background: 'rgba(255, 255, 255, 0.8)',
     boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 2px 8px -2px rgba(0, 0, 0, 0.04)',
@@ -28,8 +28,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '4px', // 核心修改：极限压缩图片与文字的间距
-    minHeight: '100px', // 核心修改：减小卡片整体高度，使其更紧凑
+    gap: '2px', // 核心修改：极限压缩图片与文字的间距
+    minHeight: '80px', // 核心修改：减小卡片整体高度，使其更紧凑
     justifyContent: 'center',
     flex: 1,
   },
