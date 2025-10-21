@@ -1,7 +1,7 @@
 // components/Tixing/LianXianTi.js (V8 - 专业教学产品版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Howl } from 'howl';
+import { Howl } from 'howler';
 import confetti from 'canvas-confetti';
 import { pinyin } from 'pinyin-pro';
 import { FaVolumeUp, FaEye, FaRedo, FaSpinner } from 'react-icons/fa';
