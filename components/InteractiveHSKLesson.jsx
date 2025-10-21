@@ -1,7 +1,8 @@
-// components/InteractiveHSKLesson.jsx (最终整合版)
+// components/InteractiveHSKLesson.jsx (已修复语法错误并优化)
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Howl } from 'howler';
+import { pinyin } from 'pinyin-pro'; // 引入 pinyin-pro 用于自动注音
 
 /* ===================== 1. 我们的 TTS Hook (使用 LibreTTS) ===================== */
 function useLibreTTS() {
@@ -75,7 +76,8 @@ export const useTTS = () => useContext(TTSContext);
 /* ===================== 3. SubtitleBar (使用估算算法) ===================== */
 export function SubtitleBar({ text, className }) {
   const { isPlaying, duration, seek } = useTTS();
-  const words = useMemo(() => text.split(/(\s+|，|。|！|？|,|\.)/).filter(Boolean), [text]);
+  // 使用 pinyin-pro 来分割中文句子更准确
+  const words = useMemo(() => text ? pinyin(text, { type: 'array' }) : [], [text]);
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
   useEffect(() => {
@@ -152,24 +154,23 @@ export function Blackboard({ sentence, showPinyin = true, className }) {
 
 
 /* ===================== 5. Question & InteractiveBlock (与原版相同) ===================== */
-// 这部分您可以直接使用，它已经设计得很好了
 export function ChoiceQuestion({ question, onAnswer }) { const [selected, setSelected] = useState(null); const [result, setResult] = useState(null); function submit() { const ok = selected === question.correctId; setResult(ok); onAnswer && onAnswer({ ok, selected }); } return ( <div className="max-w-3xl mx-auto mt-4 p-4 bg-white/10 rounded-lg text-white"> <div className="font-medium mb-2">听力选择题</div> <div className="text-slate-200 mb-3">{question.prompt}</div> <div className="grid gap-2"> {question.choices.map(c => ( <button key={c.id} onClick={() => setSelected(c.id)} className={`text-left p-3 rounded-md transition-colors ${selected===c.id? 'bg-amber-300 text-black font-bold': 'bg-white/5 text-slate-200 hover:bg-white/10'}`}> {c.text} </button> ))} </div> <div className="flex gap-2 mt-3"> <button className="px-4 py-2 bg-emerald-500 rounded-md disabled:opacity-50" onClick={submit} disabled={!selected}>提交</button> {result !== null && ( <div className={`px-3 py-2 rounded-md ${result? 'bg-green-600':'bg-red-600'}`}> {result ? '回答正确' : '回答错误' } </div> )} </div> </div> ); }
 export function MatchingQuestion({ question, onAnswer }) { return ( <div className="max-w-3xl mx-auto mt-4 p-4 bg-white/10 rounded-lg text-white"> <div className="font-medium mb-2">连线题（示例）</div> <div className="text-slate-200">请将此组件替换为您自己的 LianXianTi.js</div> </div> ); }
 
 export function InteractiveLessonBlock({ lesson, onProgress }) {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { stop } = useTTS(); // 从 Context 中获取 stop 方法
+    const { cancel } = useTTS(); // 从 Context 中获取 cancel 方法
 
     const currentBlock = lesson.blocks[currentIndex];
 
     const goToNext = () => {
-        stop(); // 切换前停止当前播放
+        cancel(); // 切换前停止当前播放
         if (currentIndex < lesson.blocks.length - 1) {
             setCurrentIndex(currentIndex + 1);
         }
     };
     const goToPrev = () => {
-        stop(); // 切换前停止当前播放
+        cancel(); // 切换前停止当前播放
         if (currentIndex > 0) {
             setCurrentIndex(currentIndex - 1);
         }
@@ -202,18 +203,54 @@ export function InteractiveLessonBlock({ lesson, onProgress }) {
 
 
 /* ===================== 6. 最终的 Demo 页面 (入口) ===================== */
-export function DemoLessonPage() {
+export default function DemoLessonPage() {
   const mockLesson = {
     id: 'hsk1-lesson5',
     title: 'HSK 第五课：她女儿今年二十岁',
     blocks: [
-      { id: 'b1', sentence: { text: '你女儿几岁了？', pinyin: “Nǐ nǚ'ér jǐ suì le?”, translation: 'How old is your daughter?' }, questions: [] },
-      { id: 'b2', sentence: { text: '她今年四岁了。', pinyin: “Tā jīnnián sì suì le.”, translation: 'She is four years old this year.' },
+      { 
+        id: 'b1', 
+        sentence: { 
+          text: '你女儿几岁了？',
+          // ✅ 修正: 使用了英文半角双引号，并在内部转义了单引号
+          pinyin: "Nǐ nǚ\'ér jǐ suì le?", 
+          translation: 'How old is your daughter?' 
+        }, 
+        questions: [] 
+      },
+      { 
+        id: 'b2', 
+        sentence: { 
+          text: '她今年四岁了。', 
+          // ✅ 修正: 使用了英文半角双引号
+          pinyin: "Tā jīnnián sì suì le.", 
+          translation: 'She is four years old this year.' 
+        },
         questions: [
-          { id: 'q1', type: 'choice', prompt: '“她今年四岁了” 的意思是：', choices: [{id:'c1', text:'She is 40 years old.'}, {id:'c2', text:'Her daughter is 4 years old.'}, {id:'c3', text:'She is 4 years old this year.'}], correctId: 'c3' }
+          { 
+            id: 'q1', 
+            type: 'choice', 
+            // ✅ 修正: 使用了英文半角双引号
+            prompt: '"她今年四岁了" 的意思是：', 
+            choices: [
+                {id:'c1', text:'She is 40 years old.'}, 
+                {id:'c2', text:'Her daughter is 4 years old.'}, 
+                {id:'c3', text:'She is 4 years old this year.'}
+            ], 
+            correctId: 'c3' 
+          }
         ]
       },
-      { id: 'b3', sentence: { text: '李老师多大了？', pinyin: “Lǐ lǎoshī duō dà le?”, translation: 'How old is Professor Li?' }, questions: [] }
+      { 
+        id: 'b3', 
+        sentence: { 
+          text: '李老师多大了？', 
+          // ✅ 修正: 使用了英文半角双引号
+          pinyin: "Lǐ lǎoshī duō dà le?", 
+          translation: 'How old is Professor Li?' 
+        }, 
+        questions: [] 
+      }
     ]
   };
 
