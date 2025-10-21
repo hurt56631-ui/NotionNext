@@ -1,8 +1,8 @@
-// components/Tixing/GengDuTi.js (V5 - 冲突修复与功能增强最终版)
+// components/Tixing/GengDuTi.js (V7 - 纯前端稳定最终版)
 
-import React, a{ useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { pinyin } from 'pinyin-pro';
-import { FaMicrophone, FaStopCircle, FaPlayCircle, FaVolumeUp, FaRedo, FaCheck, FaSpinner } from 'react-icons/fa';
+import { FaMicrophone, FaStopCircle, FaVolumeUp, FaRedo, FaCheck, FaSpinner } from 'react-icons/fa';
 import { Howl, Howler } from 'howler';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -38,29 +38,20 @@ const styles = {
 
 let ttsPlayer;
 const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN", rate = -35 }) => {
-  const [state, setState] = useState('idle'); // idle, recording, processing, result
+  const [state, setState] = useState('idle'); // idle, recording, result
   const [ttsState, setTtsState] = useState('idle'); // idle, loading, playing
-  const [audioBlob, setAudioBlob] = useState(null);
   const [recognizedText, setRecognizedText] = useState("");
   const [score, setScore] = useState(null);
 
-  const mediaRecorderRef = useRef(null);
   const recognitionRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const userAudioPlayerRef = useRef(null);
   
   const playTTS = () => {
     if (ttsState !== 'idle') return;
-
     Howler.autoUnlock = true;
     if (ttsPlayer?.playing()) ttsPlayer.stop();
-    
     setTtsState('loading');
-    
     const voiceMap = { 'zh-CN': 'zh-CN-XiaoyouNeural', 'en-US': 'en-US-JennyNeural' };
     const voice = voiceMap[lang] || voiceMap['zh-CN'];
-    
-    // ✨ [NEW] 增加了 rate 参数
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(sentence)}&v=${voice}&r=${rate}`;
     
     ttsPlayer = new Howl({ 
@@ -68,15 +59,8 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN", rate = -3
         html5: true,
         onplay: () => setTtsState('playing'),
         onend: () => setTtsState('idle'),
-        onplayerror: () => {
-            console.error('TTS Play Error.');
-            setTtsState('idle');
-        },
-        onloaderror: () => {
-            console.error(`TTS Load Error for URL: ${ttsUrl}`);
-            // ✅ [FIX] 移除了阻塞性的 alert
-            setTtsState('idle');
-        }
+        onplayerror: () => setTtsState('idle'),
+        onloaderror: () => setTtsState('idle')
     });
     ttsPlayer.play();
   };
@@ -100,90 +84,72 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN", rate = -3
     return Math.round(Math.max(0, 1 - distance / longerLength) * 100);
   };
   
-  const handleStart = async () => {
-    if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别功能，将仅进行录音。"); }
-    if (!navigator.mediaDevices?.getUserMedia) { alert("抱歉，您的浏览器不支持录音功能。"); return; }
+  // ✅ [核心变更] 彻底移除 MediaRecorder，只使用 SpeechRecognition
+  const handleStartRecognition = () => {
+    if (!SpeechRecognition) {
+      alert("抱歉，您的浏览器不支持语音识别功能。");
+      return;
+    }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setState('recording');
+      const recognition = new SpeechRecognition();
+      recognition.lang = lang;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognitionRef.current = recognition;
+
+      recognition.onstart = () => {
+        setState('recording');
+      };
+
+      recognition.onresult = (event) => {
+        const resultText = event.results[0][0].transcript;
+        setRecognizedText(resultText);
+        setScore(calcSimilarity(sentence, resultText));
+      };
       
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.ondataavailable = event => audioChunksRef.current.push(event.data);
-      
-      // ✅ [FIX] 串行停止的关键：在 recognition.onend 中停止 mediaRecorder
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        audioChunksRef.current = [];
-        stream.getTracks().forEach(track => track.stop());
+      recognition.onend = () => {
+        setState('result');
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech Recognition Error:', event.error);
+        // 如果出错，也直接跳转到结果页，让用户看到错误/空结果
         setState('result');
       };
       
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.lang = lang;
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognitionRef.current = recognition;
-        
-        recognition.onresult = (event) => {
-          const resultText = event.results[0][0].transcript;
-          setRecognizedText(resultText);
-          setScore(calcSimilarity(sentence, resultText));
-        };
+      recognition.start();
 
-        // ✅ [FIX] 冲突解决核心：在这里触发 mediaRecorder.stop()
-        recognition.onend = () => {
-            if (mediaRecorderRef.current?.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            }
-        };
-        recognition.onerror = (event) => {
-            console.error('Speech Recognition Error:', event.error);
-            if (mediaRecorderRef.current?.state === 'recording') {
-                mediaRecorderRef.current.stop();
-            }
-        };
-        recognition.start();
-      }
-      mediaRecorderRef.current.start();
     } catch (err) {
-      console.error("麦克风授权失败:", err);
-      alert("无法开始录音，请检查并授权麦克风权限。");
+      console.error("语音识别启动失败:", err);
+      alert("无法启动语音识别，请检查浏览器设置或权限。");
       setState('idle');
     }
   };
 
-  const handleStop = () => {
-    setState('processing');
-    // ✅ [FIX] 用户点击停止时，只停止识别器，让识别器的 onend 事件去触发录音器停止
+  const handleStopRecognition = () => {
     if (recognitionRef.current) {
-        recognitionRef.current.stop();
-    } else if (mediaRecorderRef.current?.state === 'recording') {
-        // 如果浏览器不支持识别，则直接停止录音器
-        mediaRecorderRef.current.stop();
+      recognitionRef.current.stop();
     }
   };
   
   const handleReset = () => {
     if (ttsPlayer?.playing()) ttsPlayer.stop();
+    if (recognitionRef.current) recognitionRef.current.abort(); // 确保中止任何正在进行的识别
     setTtsState('idle');
-    setAudioBlob(null);
     setRecognizedText("");
     setScore(null);
     setState('idle');
   };
 
-  const playUserAudio = () => {
-    if (!audioBlob) return;
-    userAudioPlayerRef.current?.pause();
-    const audioUrl = URL.createObjectURL(audioBlob);
-    userAudioPlayerRef.current = new Audio(audioUrl);
-    userAudioPlayerRef.current.play();
-  };
-
-  useEffect(() => { handleReset(); }, [sentence, lang]);
+  useEffect(() => {
+    handleReset();
+    // 组件卸载时，确保停止所有活动
+    return () => {
+        if (ttsPlayer) ttsPlayer.unload();
+        if (recognitionRef.current) recognitionRef.current.abort();
+    }
+  }, [sentence, lang]);
 
   const finalPinyin = pinyinText || (lang === 'zh-CN' ? pinyin(sentence, { toneType: 'mark' }) : null);
   const scoreColor = score >= 80 ? theme.success : score >= 50 ? theme.warning : theme.error;
@@ -202,35 +168,25 @@ const GengDuTi = ({ sentence, pinyinText, translation, lang = "zh-CN", rate = -3
           <span style={styles.buttonLabel}>{ttsState === 'loading' ? '加载中' : '听原音'}</span>
         </button>
         {state === 'idle' && (
-          <button style={{ ...styles.controlButton, backgroundColor: '#fee2e2', color: theme.error }} onClick={handleStart}>
+          <button style={{ ...styles.controlButton, backgroundColor: '#fee2e2', color: theme.error }} onClick={handleStartRecognition}>
             <FaMicrophone size="40%" /><span style={styles.buttonLabel}>开始跟读</span>
           </button>
         )}
         {state === 'recording' && (
-          <button style={{ ...styles.controlButton, backgroundColor: '#fee2e2', color: theme.error, ...styles.recordingPulse }} onClick={handleStop}>
-            <FaStopCircle size="40%" /><span style={styles.buttonLabel}>停止录音</span>
-          </button>
-        )}
-        {state === 'processing' && (
-          <button style={{ ...styles.controlButton, backgroundColor: '#f1f5f9', color: theme.gray }} disabled>
-            <div className="animate-spin"><FaSpinner size="40%" /></div><span style={styles.buttonLabel}>处理中...</span>
+          <button style={{ ...styles.controlButton, backgroundColor: '#fee2e2', color: theme.error, ...styles.recordingPulse }} onClick={handleStopRecognition}>
+            <FaStopCircle size="40%" /><span style={styles.buttonLabel}>停止</span>
           </button>
         )}
         {state === 'result' && (
-          <>
-            {audioBlob && (<button style={{ ...styles.controlButton, backgroundColor: '#dcfce7', color: '#16a34a' }} onClick={playUserAudio}>
-              <FaPlayCircle size="40%" /><span style={styles.buttonLabel}>听回放</span>
-            </button>)}
             <button style={{ ...styles.controlButton, backgroundColor: '#f1f5f9', color: theme.gray }} onClick={handleReset}>
               <FaRedo size="35%" /><span style={styles.buttonLabel}>再试一次</span>
             </button>
-          </>
         )}
       </div>
       {state === 'result' && (
         <div style={styles.resultArea}>
           <div style={styles.resultText}>你的跟读结果：</div>
-          <p style={styles.recognizedText}>{recognizedText || "(未能识别语音，可听回放自我评估)"}</p>
+          <p style={styles.recognizedText}>{recognizedText || "(未能识别语音)"}</p>
           {score !== null && (
             <div style={{ ...styles.scoreBadge, backgroundColor: scoreColor }}>
               <FaCheck /><span>相似度：{score}%</span>
