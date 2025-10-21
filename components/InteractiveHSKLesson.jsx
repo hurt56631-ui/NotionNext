@@ -177,8 +177,6 @@ export default function DemoLessonPage() {
         id: 'b1', 
         sentence: { 
           text: '你女儿几岁了？',
-          // ✅ Pinyin 字段现在是可选的了！
-          // pinyin: "Nǐ nǚ'ér jǐ suì le?",  <-- 您可以删掉这一行
           translation: 'How old is your daughter?' 
         }, 
         questions: [] 
