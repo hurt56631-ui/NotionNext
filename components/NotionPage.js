@@ -23,6 +23,7 @@ const GaiCuoTi = dynamic(() => import('@/components/Tixing/GaiCuoTi'), { ssr: fa
 const FanYiTi = dynamic(() => import('@/components/Tixing/FanYiTi'), { ssr: false })
 const TingLiZhuJu = dynamic(() => import('@/components/Tixing/TingLiZhuJu'), { ssr: false })
 const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: false })
+const GengDuTi = dynamic(() => import('@/components/Tixing/GengDuTi'), { ssr: false })
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false })
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
 const AiTtsButton = dynamic(() => import('@/components/AiTtsButton'), { ssr: false })
@@ -80,6 +81,7 @@ const CustomCode = (props) => {
         if (componentPath === '/components/PhraseCard.js') return <PhraseCard {...parsedProps} />;
         if (componentPath === '/components/Tixing/LianXianTi.js') return <LianXianTi {...parsedProps} />;
         if (componentPath === '/components/Tixing/FanYiTi.js') return <FanYiTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/GengDuTi.js') return <GengDuTi {...parsedProps} />;
         if (componentPath === '/components/Tixing/GaiCuoTi.js') return <GaiCuoTi {...parsedProps} />;
         if (componentPath.includes('InteractiveHSKLesson.jsx')) return <InteractiveHSKLesson lesson={parsedProps.lesson} />;
         if (componentPath === '/components/Tixing/TingLiZhuJu.js') return <TingLiZhuJu {...parsedProps} />;
