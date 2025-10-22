@@ -1,4 +1,4 @@
-// components/NotionPage.js (最终完整调试版)
+// components/NotionPage.js (最终、唯一的修改)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -44,45 +44,26 @@ const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
  * 解析 Notion 页面中的 JSON 代码块
  */
 function parseLessonData(blockMap) {
-  console.log('[调试日志] 步骤 3: 进入 parseLessonData 函数，准备解析 blockMap...');
-
   if (!blockMap || !blockMap.block) {
-    console.error('[调试日志] 错误: blockMap 或 blockMap.block 不存在。');
+    console.error('解析错误: blockMap 或 blockMap.block 不存在。');
     return null;
   }
-
-  // ✅ 我们将展开整个 blockMap 对象，看看里面到底有什么
-  console.log('[调试日志] 步骤 4: 这是 NotionNext 传递过来的完整 blockMap 数据:', blockMap);
-
   try {
     for (const blockId in blockMap.block) {
       const block = blockMap.block[blockId].value;
-      
       if (block.type === 'code' && block.properties?.language?.[0]?.[0]?.toLowerCase() === 'json') {
-        console.log('%c[调试日志] 步骤 5: 找到了一个 JSON 代码块！', 'color: green; font-weight: bold;', block);
         const jsonString = block.properties.title[0][0];
-        console.log('[调试日志] 步骤 6: 提取出的 JSON 字符串:', jsonString);
-        
         const parsed = JSON.parse(jsonString);
-        console.log('[调试日志] 步骤 7: JSON 字符串解析成功！解析后的对象:', parsed);
-        
-        const lessonData = parsed.lesson || parsed;
-        console.log('%c[调试日志] 步骤 8: 最终返回的课程数据:', 'color: green; font-weight: bold;', lessonData);
-        return lessonData;
+        return parsed.lesson || parsed;
       }
     }
-  } catch (error) { 
-    console.error('[调试日志] 错误: 在解析 JSON 字符串时发生错误:', error); 
-    return null; 
-  }
-
-  console.warn('[调试日志] 警告: 遍历完所有块，但没有找到任何 JSON 代码块。');
+  } catch (error) { console.error('解析JSON失败:', error); return null; }
+  console.warn('警告: 未找到任何 JSON 代码块。');
   return null;
 }
 
-
 /**
- * 增强版的 Code 组件，用于处理 !include 指令 (保持不变)
+ * 增强版的 Code 组件，用于处理 !include 指令
  */
 const CustomCode = (props) => {
   const blockContent = props.block.properties?.title?.[0]?.[0] || '';
@@ -117,35 +98,29 @@ const CustomCode = (props) => {
   return <DefaultCodeComponent {...props} />;
 };
 
-
 /**
  * 主页面渲染组件
  */
 const NotionPage = (props) => {
   const { post, className } = props;
   
-  console.log('%c[调试日志] 步骤 1: NotionPage 组件开始渲染。', 'color: blue; font-weight: bold;');
-  console.log('[调试日志] 这是从 props 接收到的 post 对象:', post);
-  
+  // ✅ 核心修改：在 NotionPage 组件内部直接获取 blockMap
+  // NotionNext 会把完整的页面内容传递给 slug 页面的 NotionPage 组件
   const blockMap = post?.blockMap;
 
+  // ✅ 核心逻辑：优先判断是否为课程页面
   if (post?.tags?.includes('Lesson')) {
-    console.log('%c[调试日志] 步骤 2: 检测到页面的 tags 包含 "Lesson"，进入课程渲染逻辑。', 'color: blue; font-weight: bold;');
-    
     const lessonData = parseLessonData(blockMap);
-    
     if (lessonData) {
-      console.log('%c[调试日志] 步骤 9: 成功获取到课程数据，准备渲染 LessonPlayer 组件。', 'color: green; font-weight: bold;');
+      // 如果是课程，并且成功解析了 JSON，就渲染我们的终极播放器
       return <LessonPlayer lesson={lessonData} onProgress={(p) => console.log('保存进度:', p)} />;
     } else {
-      console.error('%c[调试日志] 最终错误: 虽然页面是 Lesson 类型，但 parseLessonData 函数未能返回有效的 JSON 数据。', 'color: red; font-weight: bold;');
+      // 如果是课程页面，但没找到 JSON 数据，显示明确的错误提示
       return <div className="text-center text-red-500 font-bold p-10">错误：此课程页面未找到有效的JSON数据块。</div>;
     }
   }
 
   // --- 如果不是课程页面，则执行原来的普通文章渲染逻辑 ---
-  console.log('[调试日志] 提示: 页面 tags 不包含 "Lesson"，将作为普通文章渲染。');
-
   const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK');
   const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK');
   const SPOILER_TEXT_TAG = siteConfig('SPOILER_TEXT_TAG');
@@ -191,7 +166,7 @@ const NotionPage = (props) => {
   return (
     <div id='notion-article' className={`mx-auto overflow-hidden ${className || ''}`}>
       <NotionRenderer
-        recordMap={blockMap}
+        recordMap={blockMap} // 使用从 post 中解构的 blockMap
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
