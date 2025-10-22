@@ -9,8 +9,8 @@ import { useSwipeable } from 'react-swipeable';
 import { Transition } from '@headlessui/react';
 
 // --- 导入您所有的题型组件 ---
- import LianXianTi from './LianXianTi';
- import XuanZeTi from './XuanZeTi';
+ //import LianXianTi from './LianXianTi';
+ //import XuanZeTi from './XuanZeTi';
 
 // 临时的占位符组件，请用您自己的组件替换
 const XuanZeTi = ({ data, onComplete }) => <div className="w-full max-w-md mx-auto bg-white/80 p-6 rounded-xl shadow-lg"><p className="font-bold">{data.prompt}</p><p>这是一个选择题占位符。</p><button onClick={onComplete} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">点击完成</button></div>;
