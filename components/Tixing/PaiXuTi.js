@@ -1,4 +1,4 @@
-// components/Tixing/PaiXuTi.js (V18 - 尺寸优化与多语言支持版)
+// components/Tixing/PaiXuTi.js (最终修复版 - 修正字段名)
 
 import React, { useState, useMemo, useEffect, useCallback, forwardRef } from 'react';
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
@@ -10,8 +10,8 @@ import { FaVolumeUp, FaCheck, FaTimes, FaRedo, FaSpinner, FaCommentAlt, FaLightb
 import confetti from 'canvas-confetti';
 import { pinyin } from 'pinyin-pro';
 
-// --- 样式定义 (已调整) ---
-const keyColors = [ { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b' }, { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' }, { bg: '#fef9c3', border: '#fde047', text: '#854d0e' }, { bg: '#dcfce7', border: '#86efac', text: '#166534' }, { bg: '#e0f2fe', border: '#7dd3fc', text: '#0c4a6e' }, { bg: '#e0e7ff', border: '#a5b4fc', text: '#3730a3' }, { bg: '#f1f5f9', border: '#cbd5e1', text: '#334155' }, ];
+// --- 样式定义 ---
+const keyColors = [ { bg: '#fee2e2', border: '#fca5a5', text: '#991b1b' }, { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' }, { bg: '#fef9c3', border: '#fde047', text: '#854d0e' }, { bg: '#dcfce7', border: '#86efac', text: '#166534' }, { bg: '#e0f2fe', border: '#7dd3fc', text: '#0c4a6e' }, { bg: '#e0e7ff', border: '#a5b4fc', text: '#3730a3' }, { bg: '##f1f5f9', border: '#cbd5e1', text: '#334155' }, ];
 
 const styles = {
   container: { backgroundColor: '#f0f4f8', borderRadius: '24px', padding: '24px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.1)', fontFamily: 'sans-serif', maxWidth: '520px', margin: '2rem auto', display: 'flex', flexDirection: 'column', gap: '16px' },
@@ -21,10 +21,8 @@ const styles = {
   answerArea: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', padding: '12px', minHeight: '60px', backgroundColor: '#cbd5e1', borderRadius: '12px', border: '2px solid #94a3b8', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.15)', transition: 'border-color 0.3s ease' },
   answerAreaError: { borderColor: '#ef4444' },
   wordPool: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', padding: '12px', minHeight: '60px', backgroundColor: '#cbd5e1', borderRadius: '12px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.15)' },
-  // 卡片尺寸已减小
   card: { touchAction: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '72px', padding: '6px 4px', borderRadius: '10px', border: '1px solid #94a3b8', borderBottomWidth: '4px', cursor: 'pointer', position: 'relative', transition: 'transform 0.1s ease, box-shadow 0.1s ease' },
   cardActive: { transform: 'translateY(2px)', borderBottomWidth: '2px' },
-  // 字体已减小
   pinyin: { fontSize: '0.8rem', color: 'inherit', opacity: 0.7, height: '1.2em', lineHeight: '1.2em' },
   content: { fontSize: '1.3rem', fontWeight: '500', color: 'inherit', lineHeight: '1.5em' },
   dragOverlay: { transform: 'scale(1.1) rotate(-5deg)', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -2px rgba(0,0,0,0.1)', cursor: 'grabbing' },
@@ -38,22 +36,17 @@ const styles = {
   spinner: { animation: 'spin 1s linear infinite' },
 };
 
-// --- 音频与TTS (已更新) ---
+// --- 音频与TTS ---
 let sounds = {};
 let ttsCache = new Map();
 if (typeof window !== 'undefined') { sounds.click = new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }); sounds.correct = new Howl({ src: ['/sounds/correct.mp3'], volume: 0.7 }); sounds.incorrect = new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }); }
 const playSound = (name) => { if (sounds[name]) sounds[name].play(); };
 
-// TTS 语音引擎配置
-const ttsVoices = {
-  zh: 'zh-CN-XiaoyouNeural', // 中文
-  my: 'my-MM-Nilar',          // 缅甸语
-};
+const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-Nilar' };
 
-// 预加载TTS音频
 const preloadTTS = async (text, lang = 'zh') => {
   const cacheKey = `${lang}:${text}`;
-  if (ttsCache.has(cacheKey)) return;
+  if (ttsCache.has(cacheKey) || !text) return;
   try {
     const voice = ttsVoices[lang];
     if (!voice) throw new Error(`Unsupported language: ${lang}`);
@@ -63,35 +56,29 @@ const preloadTTS = async (text, lang = 'zh') => {
     const blob = await response.blob();
     const audio = new Audio(URL.createObjectURL(blob));
     ttsCache.set(cacheKey, audio);
-  } catch (error) {
-    console.error(`预加载 "${text}" (${lang}) 失败:`, error);
-  }
+  } catch (error) { console.error(`预加载 "${text}" (${lang}) 失败:`, error); }
 };
 
-// 播放缓存的TTS音频
 const playCachedTTS = (text, lang = 'zh') => {
+  if (!text) return;
   const cacheKey = `${lang}:${text}`;
-  if (ttsCache.has(cacheKey)) {
-    ttsCache.get(cacheKey).play();
-  } else {
-    preloadTTS(text, lang).then(() => {
-      if (ttsCache.has(cacheKey)) {
-        ttsCache.get(cacheKey).play();
-      }
-    });
-  }
+  if (ttsCache.has(cacheKey)) { ttsCache.get(cacheKey).play(); } 
+  else { preloadTTS(text, lang).then(() => { if (ttsCache.has(cacheKey)) { ttsCache.get(cacheKey).play(); } }); }
 };
 
 const buildCorrectionPrompt = (title, userOrderText, correctOrderText) => { return `你是一位专业的中文语法老师。一名学生做错了句子排序题，请用亲切、简单的方式为他解释。\n\n规则：\n1. 先鼓励学生。\n2. 指出学生的答案和正确答案。\n3. 详细解释语法点（如主谓宾）。\n4. 最后再次鼓励。\n\n题目信息：\n- 题目: "${title}"\n- 学生的错误答案: "${userOrderText}"\n- 正确答案: "${correctOrderText}"\n\n请开始你的解释：`; };
 
-// --- 卡片组件 (已更新) ---
+// --- 卡片组件 ---
 const Card = forwardRef(({ content, color, lang, ...props }, ref) => {
   const [isActive, setIsActive] = useState(false);
-  const isPunctuation = useMemo(() => /^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(content.trim()), [content]);
   
-  // 根据语言决定是否显示拼音
+  const isPunctuation = useMemo(() => {
+    if (typeof content !== 'string') return false;
+    return /^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(content.trim());
+  }, [content]);
+  
   const pinyinContent = useMemo(() => {
-    if (lang !== 'zh' || isPunctuation) return '';
+    if (lang !== 'zh' || !content || isPunctuation) return '';
     return pinyin(content, { toneType: 'mark' }).toLowerCase();
   }, [content, isPunctuation, lang]);
 
@@ -114,7 +101,7 @@ const SortableCard = ({ id, content, color, lang, onClick }) => {
   return ( <div ref={setNodeRef} style={style}> <Card id={id} content={content} color={color} lang={lang} onClick={onClick} {...attributes} {...listeners} /> </div> );
 };
 
-// --- 主组件 (已更新) ---
+// --- 主组件 ---
 const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCorrectionRequest, lang = 'zh' }) => {
   const [isMounted, setIsMounted] = useState(false);
   const [answerItems, setAnswerItems] = useState([]);
@@ -130,11 +117,11 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
       setPoolItems(shuffledItems);
       setAnswerItems([]);
       setFeedback({ shown: false, correct: false, showExplanation: false });
-      // 预加载题目和所有卡片的音频
       if(title) preloadTTS(title, lang);
       itemsWithColors.forEach(item => {
-        if (!/^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(item.content.trim())) {
-          preloadTTS(item.content, lang);
+        // [核心修复] 从 item.text 读取
+        if (item.text && !/^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(item.text.trim())) {
+          preloadTTS(item.text, lang);
         }
       });
     }
@@ -148,7 +135,19 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
   const toggleItemPlacement = useCallback((itemToMove) => { playSound('click'); if (answerItems.some(item => item.id === itemToMove.id)) { setAnswerItems(prev => prev.filter(item => item.id !== itemToMove.id)); setPoolItems(prev => [...prev, itemToMove]); } else { setPoolItems(prev => prev.filter(item => item.id !== itemToMove.id)); setAnswerItems(prev => [...prev, itemToMove]); } }, [answerItems]);
   const handleSubmit = useCallback(() => { const isCorrect = answerItems.map(item => item.id).join(',') === correctOrder.join(','); setFeedback({ shown: true, correct: isCorrect, showExplanation: !isCorrect }); playSound(isCorrect ? 'correct' : 'incorrect'); if (isCorrect) confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); }, [answerItems, correctOrder]);
   const handleReset = useCallback(() => { const reShuffled = [...itemsWithColors].sort(() => Math.random() - 0.5); setPoolItems(reShuffled); setAnswerItems([]); setFeedback({ shown: false, correct: false, showExplanation: false }); }, [itemsWithColors]);
-  const handleAskForCorrection = useCallback(() => { if (!onCorrectionRequest) return; setIsRequestingCorrection(true); const userOrderText = answerItems.map(item => item.content).join(''); const correctItems = correctOrder.map(id => itemsWithColors.find(item => item.id === id)); const correctOrderText = correctItems.map(item => item.content).join(''); const prompt = buildCorrectionPrompt(title, userOrderText, correctOrderText); onCorrectionRequest(prompt); }, [answerItems, correctOrder, itemsWithColors, onCorrectionRequest, title]);
+  
+  const handleAskForCorrection = useCallback(() => { 
+    if (!onCorrectionRequest) return; 
+    setIsRequestingCorrection(true); 
+    // [核心修复] 从 item.text 读取
+    const userOrderText = answerItems.map(item => item.text).join(''); 
+    const correctItems = correctOrder.map(id => itemsWithColors.find(item => item.id === id));
+    // [核心修复] 从 item.text 读取
+    const correctOrderText = correctItems.map(item => item.text).join(''); 
+    const prompt = buildCorrectionPrompt(title, userOrderText, correctOrderText); 
+    onCorrectionRequest(prompt); 
+  }, [answerItems, correctOrder, itemsWithColors, onCorrectionRequest, title]);
+  
   const activeItem = useMemo(() => itemsWithColors.find(item => item.id === activeId), [activeId, itemsWithColors]);
   
   if (!isMounted || !initialItems) return null;
@@ -167,15 +166,24 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div style={{ ...styles.answerArea, ...(feedback.shown && !feedback.correct ? styles.answerAreaError : {})}}>
                 <SortableContext items={answerItems} strategy={rectSortingStrategy}>
-                    {answerItems.map(item => <SortableCard key={item.id} id={item.id} content={item.content} color={item.color} lang={lang} onClick={() => toggleItemPlacement(item)} />)}
+                    {answerItems.map(item => 
+                        // [核心修复] 传递 item.text 给 content prop
+                        <SortableCard key={item.id} id={item.id} content={item.text} color={item.color} lang={lang} onClick={() => toggleItemPlacement(item)} />
+                    )}
                 </SortableContext>
             </div>
             <DragOverlay modifiers={[restrictToParentElement, restrictToHorizontalAxis]}>
-              {activeId && activeItem ? <Card id={activeItem.id} content={activeItem.content} color={activeItem.color} lang={lang} style={styles.dragOverlay} /> : null}
+              {activeId && activeItem ? 
+                // [核心修复] 传递 item.text 给 content prop
+                <Card id={activeItem.id} content={activeItem.text} color={activeItem.color} lang={lang} style={styles.dragOverlay} /> 
+              : null}
             </DragOverlay>
         </DndContext>
         <div style={styles.wordPool}>
-            {poolItems.map(item => <Card key={item.id} id={item.id} content={item.content} color={item.color} lang={lang} onClick={() => toggleItemPlacement(item)} />)}
+            {poolItems.map(item => 
+                // [核心修复] 传递 item.text 给 content prop
+                <Card key={item.id} id={item.id} content={item.text} color={item.color} lang={lang} onClick={() => toggleItemPlacement(item)} />
+            )}
         </div>
         <div style={styles.buttonContainer}>
             {!feedback.shown ? (
