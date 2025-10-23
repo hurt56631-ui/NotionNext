@@ -1,4 +1,4 @@
-// components/Tixing/LianXianTi.js (V11 - 优化卡片配对样式)
+// components/Tixing/LianXianTi.js (V13 - 移除标题朗读延迟)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Howl } from 'howler';
@@ -38,18 +38,10 @@ const styles = {
   itemImage: { height: '75px', width: 'auto', maxWidth: '90%', borderRadius: '12px', objectFit: 'contain' },
   itemContent: { fontSize: '1.1rem', fontWeight: '500', color: theme.textSecondary, textAlign: 'center' },
   pinyin: { fontSize: '0.8rem', color: theme.textSecondary, height: '1.1em' },
-  
-  // --- 修改/新增样式 ---
-  // 当前点击选中的项（尚未配对）
   selected: { borderColor: theme.primaryDark, transform: 'translateY(-4px) scale(1.03)', boxShadow: `0 10px 25px -5px rgba(99, 102, 241, 0.2), 0 8px 10px -6px ${theme.primaryDark}1A` },
-  // 已配对但未检查的项
   itemPaired: { borderColor: theme.primary },
-  // 检查后正确的项
   itemCorrect: { borderColor: theme.success, background: theme.bgSuccess },
-  // 检查后错误的项
   itemIncorrect: { borderColor: theme.error, background: theme.bgError },
-  // --- 样式修改结束 ---
-
   ttsLoader: { position: 'absolute', top: '8px', right: '8px', color: theme.primary, animation: 'spin 1s linear infinite' },
   svgContainer: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' },
   path: { fill: 'none', stroke: theme.primary, strokeWidth: 3.5, transition: 'stroke 0.3s ease', opacity: 0.8 },
@@ -83,7 +75,7 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
   const playTTS = useCallback(async (item, lang = 'zh') => {
     if (!item.content) return;
     audioManager.stopCurrentSound();
-    setTtsPlayingId(item.id);
+    setTtsPlayingId(item.id || 'title');
     const voice = lang === 'zh' ? 'zh-CN-XiaoyouNeural' : 'my-MM-ThihaNeural';
     try {
       const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(item.content)}&v=${voice}&r=-15`;
@@ -94,6 +86,13 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
       ttsAudio.play();
     } catch (e) { console.error('TTS 失败:', e); setTtsPlayingId(null); }
   }, []);
+  
+  // --- 组件加载后自动朗读标题 (已移除延迟) ---
+  useEffect(() => {
+    if (title) {
+      playTTS({ content: title }, 'zh');
+    }
+  }, [title, playTTS]);
   
   useEffect(() => {
     if (isAllCorrect) {
@@ -117,13 +116,17 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         return;
     }
     playTTS(item, column === 'a' ? 'zh' : 'my');
+    
     let newSelection = { ...selection, [column]: item.id };
+
     if (newSelection.a !== null && newSelection.b !== null) {
       let updatedPairs = userPairs.filter(p => p.a !== newSelection.a && p.b !== newSelection.b);
       updatedPairs.push(newSelection);
       setUserPairs(updatedPairs);
       setSelection({ a: null, b: null });
-    } else { setSelection(newSelection); }
+    } else {
+      setSelection(newSelection);
+    }
   };
     
   const handleCheckAnswers = () => {
@@ -167,12 +170,10 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
       return styles.path;
   };
 
-  // --- 新增函数：根据状态获取卡片样式 ---
   const getItemStyle = (item) => {
     const baseStyle = styles.item;
     const pairedInfo = userPairs.find(p => p.a === item.id || p.b === item.id);
 
-    // 状态1: 已提交或查看答案
     if (isSubmitted || showAnswers) {
       if (pairedInfo) {
         const isCorrect = pairs[pairedInfo.a] === pairedInfo.b;
@@ -182,18 +183,12 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         return { ...baseStyle, ...styles.itemIncorrect };
       }
     }
-
-    // 状态2: 已配对但未提交
     if (pairedInfo) {
       return { ...baseStyle, ...styles.itemPaired };
     }
-
-    // 状态3: 当前正被点击选中
     if (selection.a === item.id || selection.b === item.id) {
       return { ...baseStyle, ...styles.selected };
     }
-
-    // 状态4: 默认
     return baseStyle;
   };
 
@@ -217,14 +212,13 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
       <style>{`@keyframes spin { 100% { transform: rotate(360deg); } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
       <div style={styles.titleContainer}>
         <h2 style={styles.title}>{title}</h2>
-        <FaVolumeUp style={styles.readAloudButton} onClick={() => playTTS({content: title}, 'zh')} />
+        <FaVolumeUp style={{...styles.readAloudButton, color: ttsPlayingId === 'title' ? theme.primaryDark : theme.primary}} onClick={() => playTTS({content: title}, 'zh')} />
       </div>
 
       <div style={styles.mainArea} data-id="main-area">
         <div style={styles.column}>
           {columnA.map(item => (
             <div key={item.id} ref={el => itemRefs.current[item.id] = el} 
-                 // --- 应用新的样式逻辑 ---
                  style={getItemStyle(item)} 
                  onClick={() => handleSelect('a', item)}>
                  {renderItemContent(item, true)}
@@ -234,7 +228,6 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         <div style={styles.column}>
            {columnB.map(item => (
             <div key={item.id} ref={el => itemRefs.current[item.id] = el}
-                 // --- 应用新的样式逻辑 ---
                  style={getItemStyle(item)} 
                  onClick={() => handleSelect('b', item)}>
                  {renderItemContent(item)}
