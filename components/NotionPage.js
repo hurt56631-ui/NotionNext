@@ -1,4 +1,4 @@
-// components/NotionPage.js (最终修正版)
+// components/NotionPage.js (真正完整且已修正的最终版)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -38,15 +38,13 @@ const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
  * [已修正] 解析 Notion 页面中的 JSON 代码块
  */
 function parseLessonData (blockMap) {
-  // 增加对 blockMap 和 blockMap.block 的健壮性检查
   if (!blockMap || !blockMap.block) {
     console.error('[parseLessonData] 错误: blockMap 或 blockMap.block 不存在。', blockMap);
     return null;
   }
 
-  // ✅ 核心修正：我们必须遍历 blockMap.block 对象，而不是 blockMap 本身。
+  // 核心修正：我们必须遍历 blockMap.block 对象
   for (const blockId in blockMap.block) {
-    // ✅ 核心修正：从 blockMap.block 中获取每个块的数据
     const block = blockMap.block[blockId]?.value;
     
     if (block && block.type === 'code') {
@@ -56,8 +54,8 @@ function parseLessonData (blockMap) {
           const jsonString = block.properties.title[0][0];
           const parsedData = JSON.parse(jsonString);
           if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
-            console.log('[parseLessonData] ✅✅✅ 成功找到并解析了课程JSON！', parsedData);
-            return parsedData; // 成功，返回数据
+            console.log('[parseLessonData] ✅ 成功找到并解析了课程JSON！');
+            return parsedData;
           }
         } catch (error) {
           console.error(`[parseLessonData] ❌ 解析JSON时出错，块ID: ${blockId}`, error);
@@ -71,12 +69,43 @@ function parseLessonData (blockMap) {
 }
 
 /**
- * !include 指令处理组件 (无修改)
+ * [完整版] 增强版的 Code 组件，用于处理 !include 指令
  */
-const CustomCode = (props) => { /* ... 此处代码无修改 ... */ };
+const CustomCode = (props) => {
+  const blockContent = props.block.properties?.title?.[0]?.[0] || '';
+  if (blockContent.startsWith('!include')) {
+    const includeRegex = /!include\s+(\S+\.jsx?)\s*({.*})?/s;
+    const match = blockContent.match(includeRegex);
+    if (match) {
+      const componentPath = match[1];
+      const propsString = match[2] || '{}';
+      try {
+        const parsedProps = JSON.parse(propsString);
+        if (componentPath === '/components/Tixing/PaiXuTi.js') return <PaiXuTi {...parsedProps} />;
+        if (componentPath === '/components/HanziModal.js') return <HanziModal {...parsedProps} />;
+        if (componentPath === '/components/AiTtsButton.js') return <AiTtsButton {...parsedProps} />;
+        if (componentPath === '/components/PhraseCard.js') return <PhraseCard {...parsedProps} />;
+        if (componentPath === '/components/Tixing/LianXianTi.js') return <LianXianTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/FanYiTi.js') return <FanYiTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/GengDuTi.js') return <GengDuTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/GaiCuoTi.js') return <GaiCuoTi {...parsedProps} />;
+        if (componentPath.includes('InteractiveHSKLesson.jsx')) return <InteractiveHSKLesson lesson={parsedProps.lesson} />;
+        if (componentPath === '/components/Tixing/TingLiZhuJu.js') return <TingLiZhuJu {...parsedProps} />;
+        if (componentPath === '/components/Tixing/PanDuanTi.js') return <PanDuanTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/XuanZeTi.js') return <XuanZeTi {...parsedProps} />;
+        if (componentPath === '/components/Tixing/CiDianKa.js') return <CiDianKa {...parsedProps} />;
+        return <div style={{ color: 'orange' }}>未找到组件: {componentPath}</div>;
+      } catch (e) {
+        console.error('!include JSON 解析失败:', e);
+        return <div style={{ padding: '1rem', border: '2px dashed red', color: 'red' }}>!include 块的 JSON 配置错误。</div>;
+      }
+    }
+  }
+  return <DefaultCodeComponent {...props} />;
+};
 
 /**
- * 主页面渲染组件 (无修改)
+ * 主页面渲染组件
  */
 const NotionPage = (props) => {
   const { post, className } = props;
@@ -96,7 +125,6 @@ const NotionPage = (props) => {
             <h1 className="text-2xl font-bold text-red-600 mb-4">课程加载失败</h1>
             <p className="text-gray-700">此页面被标记为课程 (Lesson)，但未能找到有效的 JSON 数据块。</p>
             <p className="text-gray-500 mt-2 text-sm">请检查 Notion 页面中是否包含一个语言设置为 "JSON" 且格式正确的代码块。</p>
-            <p className="text-xs text-gray-400 mt-4">(详细诊断信息请查看浏览器开发者控制台)</p>
           </div>
         </div>
       );
@@ -167,7 +195,7 @@ const NotionPage = (props) => {
   )
 }
 
-// --- 辅助函数 (无修改) ---
+// --- 辅助函数 ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
 const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); }
