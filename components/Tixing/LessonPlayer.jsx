@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终完整版)
+// components/Tixing/LessonPlayer.jsx (最终适配版 - 在您的代码上修改)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -208,33 +208,66 @@ export default function LessonPlayer({ lesson }) {
 
   const currentBlock = lesson.blocks[currentIndex];
 
-  // 渲染逻辑：根据 type 调度不同的全屏组件
+  // [核心修改] 渲染逻辑：根据 type 调度不同的全屏组件，并为 XuanZeTi 适配 Props
   const renderBlock = () => {
-    const props = { data: currentBlock.content, onComplete: goToNext };
+    // 为那些期望接收 { data, onComplete } 的组件准备通用 props
+    const genericProps = {
+      data: currentBlock.content,
+      onComplete: goToNext
+    };
 
     switch (currentBlock.type.toLowerCase()) {
       case 'teaching':
         return <TeachingBlock content={currentBlock.content} />;
-      // --- 以下是您所有的题型组件 ---
+      
+      // --- 适配 XuanZeTi 组件 ---
       case 'choice':
-        return <XuanZeTi {...props} />;
+        // 1. 从我们的 JSON 数据中提取信息
+        const { prompt, choices, correctId, explanation, imageUrl, videoUrl, audioUrl } = currentBlock.content;
+
+        // 2. 按照 XuanZeTi 组件的要求，构建 props 对象
+        const xuanZeTiProps = {
+          question: {
+            text: prompt,     // prompt 对应 question.text
+            imageUrl: imageUrl, // 传递图片/视频/音频 URL
+            videoUrl: videoUrl,
+            audioUrl: audioUrl
+          },
+          options: choices || [], // choices 对应 options，并提供默认空数组
+          correctAnswer: correctId ? [correctId] : [], // correctId 必须转换为数组
+          explanation: explanation, // 传递解析
+          onNext: goToNext, // onComplete 必须重命名为 onNext
+          // onCorrect 和 onIncorrect 是可选的，可以在这里添加日志
+          onCorrect: () => {
+            console.log('Answered Correctly!');
+            // 答对后自动进入下一页 (延迟1.5秒，让用户看到庆祝动画)
+            setTimeout(() => {
+              goToNext();
+            }, 1500);
+          },
+          onIncorrect: () => console.log('Answered Incorrectly.')
+        };
+        return <XuanZeTi {...xuanZeTiProps} />;
+
+      // --- 其他题型组件 ---
+      // 假设其他组件仍然使用通用的 { data, onComplete } 格式
       case 'panduan':
-        return <PanDuanTi {...props} />;
+        return <PanDuanTi {...genericProps} />;
       case 'lianxian':
-        return <LianXianTi {...props} />;
+        return <LianXianTi {...genericProps} />;
       case 'paixu':
-        return <PaiXuTi {...props} />;
+        return <PaiXuTi {...genericProps} />;
       case 'gaicuo':
-        return <GaiCuoTi {...props} />;
+        return <GaiCuoTi {...genericProps} />;
       case 'fanyi':
-        return <FanYiTi {...props} />;
+        return <FanYiTi {...genericProps} />;
       case 'tinglizhuju':
-        return <TingLiZhuJu {...props} />;
+        return <TingLiZhuJu {...genericProps} />;
       case 'cidianka':
-        return <CiDianKa {...props} />;
+        return <CiDianKa {...genericProps} />;
       case 'gengdu':
-        return <GengDuTi {...props} />;
-      // --- 如果有更多题型，继续在这里添加 case ---
+        return <GengDuTi {...genericProps} />;
+      
       default:
         return (
           <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">
@@ -258,7 +291,7 @@ export default function LessonPlayer({ lesson }) {
 
       {settings.showSubtitles && subtitles.length > 0 && (
           <div className="absolute bottom-24 md:bottom-28 w-full text-center px-4 pointer-events-none">
-              <p className="inline-block text-2xl md:text-3xl font-semibold text-white" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.8)' }}>
+              <p className="inline-block text-2xl md:text-3dl font-semibold text-white" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.8)' }}>
                   {subtitles.join('')}
               </p>
           </div>
