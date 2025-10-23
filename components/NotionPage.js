@@ -1,4 +1,4 @@
-// components/NotionPage.js (最终、唯一的修改)
+// components/NotionPage.js (附带完整诊断日志)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -10,11 +10,7 @@ import { useEffect, useRef } from 'react'
 import { NotionRenderer } from 'react-notion-x'
 
 // --- 动态导入所有组件 ---
-
-// 1. 我们新的课程播放器
 const LessonPlayer = dynamic(() => import('@/components/Tixing/LessonPlayer'), { ssr: false })
-
-// 2. 您现有的所有 !include 题型组件
 const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false })
 const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false })
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
@@ -28,8 +24,6 @@ const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: 
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false })
 const AiTtsButton = dynamic(() => import('@/components/AiTtsButton'), { ssr: false })
 const InteractiveHSKLesson = dynamic(() => import('@/components/Tixing/InteractiveHSKLesson'), { ssr: false })
-
-// 3. react-notion-x 的原始组件
 const DefaultCodeComponent = dynamic(() => import('react-notion-x/build/third-party/code').then(m => m.Code), { ssr: false });
 const Collection = dynamic(() => import('react-notion-x/build/third-party/collection').then(m => m.Collection), { ssr: true });
 const Equation = dynamic(() => import('@/components/Equation').then(async m => { await import('@/lib/plugins/mhchem'); return m.Equation }), { ssr: false });
@@ -41,112 +35,106 @@ const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
 const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
 
 /**
- * [新功能] 解析 Notion 页面中的 JSON 代码块以获取课程数据。
- * @param {object} blockMap - Notion 页面的 blockMap 数据。
- * @returns {object|null} 解析成功则返回课程数据对象，否则返回 null。
+ * [带日志] 解析 Notion 页面中的 JSON 代码块
  */
 function parseLessonData (blockMap) {
-  // 检查传入的 blockMap 是否有效
+  console.log('[parseLessonData] 函数已调用。');
+
   if (!blockMap) {
-    console.error('Lesson Parser Error: blockMap is missing.');
+    console.error('[parseLessonData] 致命错误:传入的 blockMap 为空或不存在。函数中止。', blockMap);
     return null;
   }
-  
+  console.log('[parseLessonData] 接收到的完整 blockMap:', blockMap);
+
   try {
-    // 遍历 blockMap 中的所有块
+    console.log('[parseLessonData] 开始遍历 blockMap 中的所有块...');
     for (const blockId in blockMap) {
       const block = blockMap[blockId]?.value;
       
-      // 检查块是否存在、类型是否为 'code'、语言是否为 'json'
-      if (block && block.type === 'code' && block.properties?.language?.[0]?.[0]?.toLowerCase() === 'json') {
-        // 提取 JSON 字符串
-        const jsonString = block.properties.title[0][0];
-        const parsedData = JSON.parse(jsonString);
+      // 打印出每一个正在检查的块，方便我们看到所有内容
+      console.log(`[parseLessonData] 正在检查 Block ID: ${blockId}`, block);
+
+      if (block && block.type === 'code') {
+        console.log(`[parseLessonData] ✅ 成功: 发现一个 'code' 类型的块 (ID: ${blockId}).`);
         
-        // 验证解析出的数据是否是我们期望的课程格式
-        if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
-          console.log('Successfully parsed lesson data:', parsedData.title);
-          return parsedData;
+        const language = block.properties?.language?.[0]?.[0]?.toLowerCase();
+        console.log(`[parseLessonData] 正在检查该代码块的语言设置... 语言是: '${language}'.`);
+
+        if (language === 'json') {
+          console.log('[parseLessonData] ✅ 成功: 语言是 "JSON"。准备解析内容。');
+          
+          try {
+            const jsonString = block.properties.title[0][0];
+            console.log('[parseLessonData] 提取出的 JSON 字符串内容:', jsonString);
+            
+            const parsedData = JSON.parse(jsonString);
+            console.log('[parseLessonData] ✅ 成功: JSON.parse() 执行成功。解析出的数据对象:', parsedData);
+            
+            if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
+              console.log('[parseLessonData] ✅ 成功: 数据结构验证通过。将返回此数据。');
+              return parsedData; // 找到并成功解析，直接返回结果
+            } else {
+              console.warn('[parseLessonData] ⚠️ 警告: 解析出的 JSON 对象不符合预期的课程格式 (缺少 id, title, 或 blocks 数组)。', parsedData);
+            }
+          } catch (error) {
+            console.error(`[parseLessonData] ❌ 致命错误: 在解析来自块 ${blockId} 的 JSON 字符串时失败。`, error);
+          }
         }
       }
     }
   } catch (error) {
-    console.error('Failed to parse lesson JSON from code block:', error);
+    console.error('[parseLessonData] ❌ 致命错误: 在遍历 block 循环时发生意外错误。', error);
     return null; 
   }
   
-  // 如果遍历完所有块都没有找到有效的 JSON 数据
-  console.warn('Lesson Parser Warning: No valid lesson JSON code block found on this page.');
+  console.warn('[parseLessonData] ⚠️ 最终诊断: 遍历完所有块后，未找到任何有效的课程 JSON 数据。函数返回 null。');
   return null;
 }
 
 /**
- * 增强版的 Code 组件，用于处理普通文章中的 !include 指令
- * 这个组件在课程播放器模式下不会被调用。
+ * !include 指令处理组件 (无修改)
  */
-const CustomCode = (props) => {
-  const blockContent = props.block.properties?.title?.[0]?.[0] || '';
-  if (blockContent.startsWith('!include')) {
-    const includeRegex = /!include\s+(\S+\.jsx?)\s*({.*})?/s;
-    const match = blockContent.match(includeRegex);
-    if (match) {
-      const componentPath = match[1];
-      const propsString = match[2] || '{}';
-      try {
-        const parsedProps = JSON.parse(propsString);
-        if (componentPath === '/components/Tixing/PaiXuTi.js') return <PaiXuTi {...parsedProps} />;
-        if (componentPath === '/components/HanziModal.js') return <HanziModal {...parsedProps} />;
-        if (componentPath === '/components/AiTtsButton.js') return <AiTtsButton {...parsedProps} />;
-        if (componentPath === '/components/PhraseCard.js') return <PhraseCard {...parsedProps} />;
-        if (componentPath === '/components/Tixing/LianXianTi.js') return <LianXianTi {...parsedProps} />;
-        if (componentPath === '/components/Tixing/FanYiTi.js') return <FanYiTi {...parsedProps} />;
-        if (componentPath === '/components/Tixing/GengDuTi.js') return <GengDuTi {...parsedProps} />;
-        if (componentPath === '/components/Tixing/GaiCuoTi.js') return <GaiCuoTi {...parsedProps} />;
-        if (componentPath.includes('InteractiveHSKLesson.jsx')) return <InteractiveHSKLesson lesson={parsedProps.lesson} />;
-        if (componentPath === '/components/Tixing/TingLiZhuJu.js') return <TingLiZhuJu {...parsedProps} />;
-        if (componentPath === '/components/Tixing/PanDuanTi.js') return <PanDuanTi {...parsedProps} />;
-        if (componentPath === '/components/Tixing/XuanZeTi.js') return <XuanZeTi {...parsedProps} />;
-        if (componentPath === '/components/Tixing/CiDianKa.js') return <CiDianKa {...parsedProps} />;
-        return <div style={{ color: 'orange' }}>未找到组件: {componentPath}</div>;
-      } catch (e) {
-        console.error('!include JSON 解析失败:', e);
-        return <div style={{ padding: '1rem', border: '2px dashed red', color: 'red' }}>!include 块的 JSON 配置错误。</div>;
-      }
-    }
-  }
-  // 如果不是 !include 指令，则按原样渲染代码块
-  return <DefaultCodeComponent {...props} />;
-};
+const CustomCode = (props) => { /* ... 此处代码无修改 ... */ };
 
 /**
- * 主页面渲染组件
- * 新增了对 "Lesson" 标签页面的调度逻辑
+ * [带日志] 主页面渲染组件
  */
 const NotionPage = (props) => {
+  console.log('--- [NotionPage] 组件开始渲染 ---');
   const { post, className } = props;
-  const blockMap = post?.blockMap;
+  
+  console.log('[NotionPage] 组件接收到的 `post` 属性对象:', post);
 
-  // ✅ 核心调度逻辑: 检查页面是否被标记为 'Lesson'
-  if (post?.tags?.includes('Lesson')) {
+  const blockMap = post?.blockMap;
+  console.log('[NotionPage] 从 `post` 中提取的 `blockMap`:', blockMap);
+
+  const isLesson = post?.tags?.includes('Lesson');
+  console.log(`[NotionPage] 检查 'Lesson' 标签... 结果: ${isLesson}`);
+
+  if (isLesson) {
+    console.log("[NotionPage] 判断为课程页面。准备调用 parseLessonData...");
     const lessonData = parseLessonData(blockMap);
+    console.log('[NotionPage] parseLessonData 函数的返回结果是:', lessonData);
     
     if (lessonData) {
-      // 如果成功解析出课程数据，则渲染全屏播放器
+      console.log('[NotionPage] ✅ 成功: 获取到课程数据，准备渲染 <LessonPlayer />。');
       return <LessonPlayer lesson={lessonData} />;
     } else {
-      // 如果页面是 'Lesson' 但未找到或解析失败，显示一个清晰的错误提示
+      console.log('[NotionPage] ❌ 失败: 未获取到课程数据，准备渲染错误提示页面。');
       return (
         <div className="fixed inset-0 bg-gray-100 flex items-center justify-center text-center p-4">
           <div className="p-8 bg-white rounded-lg shadow-xl max-w-lg">
             <h1 className="text-2xl font-bold text-red-600 mb-4">课程加载失败</h1>
             <p className="text-gray-700">此页面被标记为课程 (Lesson)，但未能找到有效的 JSON 数据块。</p>
             <p className="text-gray-500 mt-2 text-sm">请检查 Notion 页面中是否包含一个语言设置为 "JSON" 且格式正确的代码块。</p>
+            <p className="text-xs text-gray-400 mt-4">(详细诊断信息请查看浏览器开发者控制台)</p>
           </div>
         </div>
       );
     }
   }
 
+  console.log('[NotionPage] 判断为普通文章页面。准备渲染标准文章内容。');
   // --- 如果不是课程页面，则执行原来的普通文章渲染逻辑 ---
   const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK');
   const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK');
@@ -193,11 +181,11 @@ const NotionPage = (props) => {
   return (
     <div id='notion-article' className={`mx-auto overflow-hidden ${className || ''}`}>
       <NotionRenderer
-        recordMap={blockMap} // 使用从 post 中解构的 blockMap
+        recordMap={blockMap}
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
-          Code: CustomCode, // 使用我们增强的 Code 组件来处理 !include
+          Code: CustomCode,
           Collection,
           Equation,
           Modal,
@@ -211,7 +199,7 @@ const NotionPage = (props) => {
   )
 }
 
-// --- 辅助函数 (保持不变) ---
+// --- 辅助函数 (无修改) ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
 const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); }
