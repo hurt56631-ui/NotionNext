@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终完整健壮版)
+// components/Tixing/LessonPlayer.jsx (最终加固版 - 在您的代码上修改)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -84,7 +84,7 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// 课程结束界面组件
+// [新增] 课程结束界面组件
 const CourseCompleteBlock = ({ onRestart }) => {
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
@@ -110,6 +110,7 @@ export default function LessonPlayer({ lesson }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [subtitles, setSubtitles] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
+  // [修改] isCompleted state 保持不变
   const [isCompleted, setIsCompleted] = useState(false); // 课程完成状态
   const [settings, setSettings] = useState({
       chineseVoice: 'zh-CN-XiaoxiaoNeural',
@@ -183,15 +184,21 @@ export default function LessonPlayer({ lesson }) {
     }
   };
 
-  // 导航逻辑
+  // [核心修复] 再次加固导航逻辑
   const goToNext = useCallback(() => {
+    // 增加一道保险，确保在已完成状态下不会执行
+    if (isCompleted) return;
+
     if (currentIndex < totalBlocks - 1) {
-        setTimeout(() => { setCurrentIndex(prev => prev + 1); }, 300);
+        setTimeout(() => {
+            setCurrentIndex(prev => prev + 1);
+        }, 300);
     } else {
-        console.log('Course finished!');
+        // 这是最后一页，直接标记为完成
+        console.log('Course finished! Setting isCompleted to true.');
         setIsCompleted(true);
     }
-  }, [currentIndex, totalBlocks]);
+  }, [currentIndex, totalBlocks, isCompleted]);
 
   const goToPrev = useCallback(() => {
     if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
@@ -211,13 +218,13 @@ export default function LessonPlayer({ lesson }) {
       setCurrentIndex(0);
   };
 
+  // [核心修复] 统一逻辑入口
   const handleCorrectAndProceed = () => {
     console.log('Correct! Proceeding...');
-    if (currentIndex < totalBlocks - 1) {
-        setTimeout(() => { goToNext(); }, 1500);
-    } else {
-        setTimeout(() => { setIsCompleted(true); }, 1500);
-    }
+    // 统一调用 goToNext，它内部已经包含了所有边界检查
+    setTimeout(() => {
+        goToNext();
+    }, 1500);
   };
 
   // 划屏手势
@@ -237,11 +244,21 @@ export default function LessonPlayer({ lesson }) {
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
-  // 渲染逻辑
+  // [核心修复] 再次加固渲染逻辑
   const renderBlock = () => {
-    if (isCompleted) { return <CourseCompleteBlock onRestart={handleRestart} />; }
+    // 优先判断是否完成
+    if (isCompleted) {
+        return <CourseCompleteBlock onRestart={handleRestart} />;
+    }
+    
     const currentBlock = lesson.blocks[currentIndex];
-    if (!currentBlock) { return <div className="text-white bg-red-500/80 p-6 rounded-lg">错误：找不到当前课程数据。</div>; }
+    
+    // 增加对 currentBlock 的最终检查
+    if (!currentBlock) {
+        console.error(`Attempted to render block at index ${currentIndex}, but it is undefined.`);
+        return <div className="text-white bg-red-500/80 p-6 rounded-lg">错误：课程数据加载异常。</div>;
+    }
+
     const genericProps = { data: currentBlock.content, onComplete: goToNext };
     switch (currentBlock.type.toLowerCase()) {
       case 'teaching': return <TeachingBlock content={currentBlock.content} />;
@@ -280,7 +297,7 @@ export default function LessonPlayer({ lesson }) {
             <div className="bg-white/80 backdrop-blur-sm rounded-full shadow-lg p-2 flex items-center space-x-2 md:space-x-4">
             <button onClick={goToPrev} disabled={currentIndex === 0} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
             <button onClick={goToPage} className="text-sm font-mono px-2">{currentIndex + 1} / {totalBlocks}</button>
-            <button onClick={goToNext} disabled={currentIndex === totalBlocks - 1} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
+            <button onClick={goToNext} disabled={isCompleted || currentIndex === totalBlocks - 1} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
             <button onClick={togglePlayPause} className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-transform active:scale-95">{isPlaying ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg>}</button>
             <button onClick={() => setShowSettings(true)} className="p-2 rounded-full hover:bg-gray-200"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
             </div>
