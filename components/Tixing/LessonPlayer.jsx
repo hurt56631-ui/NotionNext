@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终加固版 - 在您的代码上修改)
+// components/Tixing/LessonPlayer.jsx (最终安全加固版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -84,7 +84,7 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// [新增] 课程结束界面组件
+// 课程结束界面组件
 const CourseCompleteBlock = ({ onRestart }) => {
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
@@ -110,7 +110,6 @@ export default function LessonPlayer({ lesson }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [subtitles, setSubtitles] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
-  // [修改] isCompleted state 保持不变
   const [isCompleted, setIsCompleted] = useState(false); // 课程完成状态
   const [settings, setSettings] = useState({
       chineseVoice: 'zh-CN-XiaoxiaoNeural',
@@ -121,8 +120,8 @@ export default function LessonPlayer({ lesson }) {
   
   const audioRef = useRef(null);
   const subtitleTimerRef = useRef(null);
-  const totalBlocks = lesson.blocks.length;
-  const lessonId = lesson.id;
+  const totalBlocks = lesson?.blocks?.length || 0;
+  const lessonId = lesson?.id;
 
   // 从 localStorage 加载进度和设置
   useEffect(() => {
@@ -150,6 +149,8 @@ export default function LessonPlayer({ lesson }) {
   const playAudio = useCallback(async () => {
     console.log('[TTS] playAudio called.');
     stopAudioAndSubtitles();
+    // [加固] 增加对 isCompleted 的判断
+    if (isCompleted || !lesson.blocks[currentIndex]) return;
     const currentBlock = lesson.blocks[currentIndex];
     let textToRead = '';
     if (currentBlock.type === 'teaching') { textToRead = currentBlock.content?.narrationText; } 
@@ -174,7 +175,7 @@ export default function LessonPlayer({ lesson }) {
             console.log('[TTS] Audio playback started.');
         }
     } catch (error) { console.error("[TTS] API Error:", error); alert(`语音播放失败: ${error.message}`); }
-  }, [currentIndex, lesson.blocks, settings, stopAudioAndSubtitles]);
+  }, [currentIndex, lesson, settings, stopAudioAndSubtitles, isCompleted]);
 
   const togglePlayPause = () => {
     if (isPlaying) { audioRef.current?.pause(); setIsPlaying(false); } 
@@ -184,24 +185,23 @@ export default function LessonPlayer({ lesson }) {
     }
   };
 
-  // [核心修复] 再次加固导航逻辑
+  // 导航逻辑
   const goToNext = useCallback(() => {
-    // 增加一道保险，确保在已完成状态下不会执行
     if (isCompleted) return;
-
     if (currentIndex < totalBlocks - 1) {
-        setTimeout(() => {
-            setCurrentIndex(prev => prev + 1);
-        }, 300);
+        setTimeout(() => { setCurrentIndex(prev => prev + 1); }, 300);
     } else {
-        // 这是最后一页，直接标记为完成
         console.log('Course finished! Setting isCompleted to true.');
+        stopAudioAndSubtitles(); // [附加优化] 课程结束时停止音频
         setIsCompleted(true);
     }
-  }, [currentIndex, totalBlocks, isCompleted]);
+  }, [currentIndex, totalBlocks, isCompleted, stopAudioAndSubtitles]);
 
   const goToPrev = useCallback(() => {
-    if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
+    if (currentIndex > 0) {
+        setIsCompleted(false); // 从完成页返回时，取消完成状态
+        setCurrentIndex(prev => prev - 1);
+    }
   }, [currentIndex]);
   
   const goToPage = () => {
@@ -218,13 +218,9 @@ export default function LessonPlayer({ lesson }) {
       setCurrentIndex(0);
   };
 
-  // [核心修复] 统一逻辑入口
   const handleCorrectAndProceed = () => {
     console.log('Correct! Proceeding...');
-    // 统一调用 goToNext，它内部已经包含了所有边界检查
-    setTimeout(() => {
-        goToNext();
-    }, 1500);
+    setTimeout(() => { goToNext(); }, 1500);
   };
 
   // 划屏手势
@@ -246,20 +242,35 @@ export default function LessonPlayer({ lesson }) {
 
   // [核心修复] 再次加固渲染逻辑
   const renderBlock = () => {
-    // 优先判断是否完成
+    // 🧠 防止最后一题结束后 currentIndex 超出范围
     if (isCompleted) {
         return <CourseCompleteBlock onRestart={handleRestart} />;
     }
     
-    const currentBlock = lesson.blocks[currentIndex];
+    // 增加最严格的安全检查
+    if (!lesson || !lesson.blocks || currentIndex < 0 || currentIndex >= totalBlocks) {
+        console.error(`Render Error: Invalid currentIndex. Index: ${currentIndex}, Total: ${totalBlocks}`);
+        return (
+            <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">
+                错误：课程索引超出范围 ({currentIndex + 1}/{totalBlocks})。
+            </div>
+        );
+    }
     
-    // 增加对 currentBlock 的最终检查
-    if (!currentBlock) {
-        console.error(`Attempted to render block at index ${currentIndex}, but it is undefined.`);
-        return <div className="text-white bg-red-500/80 p-6 rounded-lg">错误：课程数据加载异常。</div>;
+    const currentBlock = lesson.blocks[currentIndex];
+
+    if (!currentBlock?.type) {
+        console.error("Render Error: Invalid block data. Block:", currentBlock);
+        return (
+          <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">
+            错误：无效的题型数据。
+          </div>
+        );
     }
 
     const genericProps = { data: currentBlock.content, onComplete: goToNext };
+    
+    // 使用 .toLowerCase() 确保大小写不敏感
     switch (currentBlock.type.toLowerCase()) {
       case 'teaching': return <TeachingBlock content={currentBlock.content} />;
       case 'choice':
