@@ -1,4 +1,4 @@
-// components/Tixing/LianXianTi.js (V13 - 移除标题朗读延迟)
+// components/Tixing/LianXianTi.js (V14 - 增强错误处理，防止404崩溃)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Howl } from 'howler';
@@ -54,12 +54,32 @@ const styles = {
 };
 
 const audioManager = { currentSound: null, stopCurrentSound: function() { this.currentSound?.stop(); this.currentSound = null; } };
-const sounds = {
-  click: new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }),
-  correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 1.0 }),
-  incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }),
+
+// --- 修改点：为所有音效添加错误处理 ---
+const createSound = (src) => {
+  const sound = new Howl({ src: [src], volume: 0.7 });
+  sound.on('loaderror', (id, err) => {
+    console.error(`[Audio Error] Failed to load sound: ${src}`, err);
+  });
+  return sound;
 };
-const playSound = (name) => { audioManager.stopCurrentSound(); sounds[name]?.play(); };
+
+const sounds = {
+  click: createSound('/sounds/click.mp3'),
+  correct: createSound('/sounds/correct.mp3'),
+  incorrect: createSound('/sounds/incorrect.mp3'),
+};
+// --- 修改结束 ---
+
+const playSound = (name) => { 
+  audioManager.stopCurrentSound(); 
+  const soundToPlay = sounds[name];
+  if (soundToPlay && soundToPlay.state() === 'loaded') {
+    soundToPlay.play();
+  } else if (!soundToPlay) {
+    console.error(`[Audio Error] Sound not found: ${name}`);
+  }
+};
 
 const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
   const [selection, setSelection] = useState({ a: null, b: null });
@@ -79,15 +99,26 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
     const voice = lang === 'zh' ? 'zh-CN-XiaoyouNeural' : 'my-MM-ThihaNeural';
     try {
       const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(item.content)}&v=${voice}&r=-15`;
-      const ttsAudio = new Howl({ src: [url], html5: true });
+      const ttsAudio = new Howl({ 
+        src: [url], 
+        html5: true,
+        // --- 修改点：为TTS请求添加详细的错误处理 ---
+        onend: () => setTtsPlayingId(null),
+        onloaderror: (id, err) => {
+          console.error(`[TTS Error] Failed to load TTS audio from URL: ${url}`, err);
+          setTtsPlayingId(null);
+        },
+        onplayerror: (id, err) => {
+          console.error(`[TTS Error] Failed to play TTS audio from URL: ${url}`, err);
+          setTtsPlayingId(null);
+        }
+        // --- 修改结束 ---
+      });
       audioManager.currentSound = ttsAudio;
-      ttsAudio.on('end', () => setTtsPlayingId(null));
-      ttsAudio.on('loaderror', () => setTtsPlayingId(null));
       ttsAudio.play();
-    } catch (e) { console.error('TTS 失败:', e); setTtsPlayingId(null); }
+    } catch (e) { console.error('[TTS Error] Critical failure in playTTS:', e); setTtsPlayingId(null); }
   }, []);
   
-  // --- 组件加载后自动朗读标题 (已移除延迟) ---
   useEffect(() => {
     if (title) {
       playTTS({ content: title }, 'zh');
@@ -116,9 +147,7 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         return;
     }
     playTTS(item, column === 'a' ? 'zh' : 'my');
-    
     let newSelection = { ...selection, [column]: item.id };
-
     if (newSelection.a !== null && newSelection.b !== null) {
       let updatedPairs = userPairs.filter(p => p.a !== newSelection.a && p.b !== newSelection.b);
       updatedPairs.push(newSelection);
@@ -173,22 +202,15 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
   const getItemStyle = (item) => {
     const baseStyle = styles.item;
     const pairedInfo = userPairs.find(p => p.a === item.id || p.b === item.id);
-
     if (isSubmitted || showAnswers) {
       if (pairedInfo) {
         const isCorrect = pairs[pairedInfo.a] === pairedInfo.b;
-        if (showAnswers || isCorrect) {
-          return { ...baseStyle, ...styles.itemCorrect };
-        }
+        if (showAnswers || isCorrect) return { ...baseStyle, ...styles.itemCorrect };
         return { ...baseStyle, ...styles.itemIncorrect };
       }
     }
-    if (pairedInfo) {
-      return { ...baseStyle, ...styles.itemPaired };
-    }
-    if (selection.a === item.id || selection.b === item.id) {
-      return { ...baseStyle, ...styles.selected };
-    }
+    if (pairedInfo) return { ...baseStyle, ...styles.itemPaired };
+    if (selection.a === item.id || selection.b === item.id) return { ...baseStyle, ...styles.selected };
     return baseStyle;
   };
 
@@ -214,59 +236,23 @@ const LianXianTi = ({ title, columnA, columnB, pairs, onCorrect }) => {
         <h2 style={styles.title}>{title}</h2>
         <FaVolumeUp style={{...styles.readAloudButton, color: ttsPlayingId === 'title' ? theme.primaryDark : theme.primary}} onClick={() => playTTS({content: title}, 'zh')} />
       </div>
-
       <div style={styles.mainArea} data-id="main-area">
         <div style={styles.column}>
-          {columnA.map(item => (
-            <div key={item.id} ref={el => itemRefs.current[item.id] = el} 
-                 style={getItemStyle(item)} 
-                 onClick={() => handleSelect('a', item)}>
-                 {renderItemContent(item, true)}
-            </div>
-          ))}
+          {columnA.map(item => ( <div key={item.id} ref={el => itemRefs.current[item.id] = el} style={getItemStyle(item)} onClick={() => handleSelect('a', item)}> {renderItemContent(item, true)} </div> ))}
         </div>
         <div style={styles.column}>
-           {columnB.map(item => (
-            <div key={item.id} ref={el => itemRefs.current[item.id] = el}
-                 style={getItemStyle(item)} 
-                 onClick={() => handleSelect('b', item)}>
-                 {renderItemContent(item)}
-            </div>
-          ))}
+           {columnB.map(item => ( <div key={item.id} ref={el => itemRefs.current[item.id] = el} style={getItemStyle(item)} onClick={() => handleSelect('b', item)}> {renderItemContent(item)} </div> ))}
         </div>
         <svg style={styles.svgContainer}>
-          {userPairs.map((pair, index) => {
-              const pathData = getCurvePath(pair);
-              if (!pathData) return null;
-              return <path key={index} d={pathData} style={getPathStyle(pair)} />
-          })}
+          {userPairs.map((pair, index) => { const pathData = getCurvePath(pair); if (!pathData) return null; return <path key={index} d={pathData} style={getPathStyle(pair)} /> })}
         </svg>
       </div>
-      
       <div style={styles.buttonContainer}>
-        {!isSubmitted && !showAnswers && (
-            <button style={{...styles.actionButton, ...(!isAllPaired || isSubmitted ? styles.disabledButton : {})}} 
-                    onClick={handleCheckAnswers} disabled={!isAllPaired || isSubmitted}>
-                <FaCheck /> 检查答案
-            </button>
-        )}
-        {isSubmitted && !isAllCorrect && !showAnswers && (
-             <button style={{...styles.actionButton, backgroundColor: theme.warning}} onClick={handleShowAnswers}>
-                <FaEye /> 查看答案
-            </button>
-        )}
-        {(isSubmitted || showAnswers) && (
-            <button style={{...styles.actionButton, backgroundColor: theme.gray}} onClick={handleReset}>
-                <FaRedo /> 再来一次
-            </button>
-        )}
+        {!isSubmitted && !showAnswers && ( <button style={{...styles.actionButton, ...(!isAllPaired || isSubmitted ? styles.disabledButton : {})}} onClick={handleCheckAnswers} disabled={!isAllPaired || isSubmitted}> <FaCheck /> 检查答案 </button> )}
+        {isSubmitted && !isAllCorrect && !showAnswers && ( <button style={{...styles.actionButton, backgroundColor: theme.warning}} onClick={handleShowAnswers}> <FaEye /> 查看答案 </button> )}
+        {(isSubmitted || showAnswers) && ( <button style={{...styles.actionButton, backgroundColor: theme.gray}} onClick={handleReset}> <FaRedo /> 再来一次 </button> )}
       </div>
-
-      {isSubmitted && (
-        <div style={{ ...styles.finishMessage, color: isAllCorrect ? theme.success : theme.error }}>
-          {isAllCorrect ? '🎉 太棒了，全部正确！' : '部分答案有误，请再看看哦！'}
-        </div>
-      )}
+      {isSubmitted && ( <div style={{ ...styles.finishMessage, color: isAllCorrect ? theme.success : theme.error }}> {isAllCorrect ? '🎉 太棒了，全部正确！' : '部分答案有误，请再看看哦！'} </div> )}
     </div>
   );
 };
