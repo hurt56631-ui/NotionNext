@@ -1,10 +1,10 @@
-// components/Tixing/LessonPlayer.jsx (最终防弹修复版)
+// components/Tixing/LessonPlayer.jsx (最终完整、全适配版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { pinyin } from 'pinyin-pro';
 import { useSwipeable } from 'react-swipeable';
-import { useRouter } from 'next/router'; // [新增] 导入 useRouter
+import { useRouter } from 'next/router';
 
 // --- 1. 动态导入您所有的题型组件 ---
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false });
@@ -85,16 +85,15 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// [修改] 课程结束界面组件，现在接收 router
+// 课程结束界面组件
 const CourseCompleteBlock = ({ onRestart, router }) => {
-    // [新增] 课程结束后跳转到首页的逻辑
     useEffect(() => {
         const timer = setTimeout(() => {
             router.push('/');
-        }, 3000); // 3秒后自动跳转
+        }, 3000); // 3 seconds
         return () => clearTimeout(timer);
     }, [router]);
-
+    
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
             <h1 className="text-5xl md:text-7xl font-bold mb-4" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.7)' }}>
@@ -136,7 +135,7 @@ export default function LessonPlayer({ lesson }) {
       showSubtitles: true
   });
   
-  const router = useRouter(); // [新增] 获取 router 实例
+  const router = useRouter();
   const audioRef = useRef(null);
   const subtitleTimerRef = useRef(null);
   const totalBlocks = lesson?.blocks?.length || 0;
@@ -232,7 +231,6 @@ export default function LessonPlayer({ lesson }) {
       setCurrentIndex(0);
   };
 
-  // [逻辑修改] 彻底修复竞态问题的核心
   const handleCorrectAndProceed = useCallback(() => {
     console.log(`[handleCorrectAndProceed] Triggered. Index: ${currentIndex}, Total: ${totalBlocks}`);
     if (currentIndex < totalBlocks - 1) {
@@ -263,7 +261,6 @@ export default function LessonPlayer({ lesson }) {
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
-  // [逻辑修改] 最终的防弹渲染逻辑
   const renderBlock = () => {
     // 1. 数据不存在的保护
     if (!lesson || !Array.isArray(lesson.blocks) || lesson.blocks.length === 0) {
