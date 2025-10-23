@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { pinyin } from 'pinyin-pro';
 import { useSwipeable } from 'react-swipeable';
+import { useRouter } from 'next/router'; // [新增] 导入 useRouter
 
 // --- 1. 动态导入您所有的题型组件 ---
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false });
@@ -84,8 +85,11 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// 课程结束界面组件
-const CourseCompleteBlock = ({ onRestart }) => {
+// [修改] 课程结束界面组件，现在接收 router
+const CourseCompleteBlock = ({ onRestart, router }) => {
+    const goToHome = () => {
+        router.push('/');
+    };
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
             <h1 className="text-5xl md:text-7xl font-bold mb-4" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.7)' }}>
@@ -94,12 +98,20 @@ const CourseCompleteBlock = ({ onRestart }) => {
             <p className="text-xl md:text-2xl mb-8" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.7)' }}>
                 您已完成本课的所有内容。
             </p>
-            <button
-                onClick={onRestart}
-                className="px-8 py-4 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105"
-            >
-                重新学习
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                    onClick={onRestart}
+                    className="px-8 py-4 bg-white/80 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105"
+                >
+                    重新学习
+                </button>
+                <button
+                    onClick={goToHome}
+                    className="px-8 py-4 bg-blue-500/80 text-white font-bold text-lg rounded-full shadow-lg hover:bg-blue-500 transition-transform hover:scale-105"
+                >
+                    返回首页
+                </button>
+            </div>
         </div>
     );
 };
@@ -119,6 +131,7 @@ export default function LessonPlayer({ lesson }) {
       showSubtitles: true
   });
   
+  const router = useRouter(); // [新增] 获取 router 实例
   const audioRef = useRef(null);
   const subtitleTimerRef = useRef(null);
   const totalBlocks = lesson?.blocks?.length || 0;
@@ -136,7 +149,12 @@ export default function LessonPlayer({ lesson }) {
     if (savedSettings) setSettings(JSON.parse(savedSettings));
   }, [lessonId, totalBlocks]);
 
-  useEffect(() => { localStorage.setItem(`lesson-progress-${lessonId}`, currentIndex); }, [currentIndex, lessonId]);
+  useEffect(() => { 
+      if (!isCompleted) {
+          localStorage.setItem(`lesson-progress-${lessonId}`, currentIndex); 
+      }
+  }, [currentIndex, lessonId, isCompleted]);
+  
   useEffect(() => { localStorage.setItem('lesson-settings', JSON.stringify(settings)); }, [settings]);
 
   const stopAudioAndSubtitles = useCallback(() => {
@@ -177,13 +195,14 @@ export default function LessonPlayer({ lesson }) {
     }
   };
 
+  // [逻辑修改] 将 setIsCompleted 移到 handleCorrectAndProceed 中处理
   const goToNext = useCallback(() => {
     if (isCompleted) return;
     if (currentIndex < totalBlocks - 1) {
-        setTimeout(() => { setCurrentIndex(prev => prev + 1); }, 300);
+        setCurrentIndex((prev) => prev + 1);
     } else {
-        console.log('Course finished! Setting isCompleted to true.');
-        stopAudioAndSubtitles(); // [附加优化]
+        // 当通过点击下一页按钮到达最后一页时，也标记为完成
+        stopAudioAndSubtitles();
         setIsCompleted(true);
     }
   }, [currentIndex, totalBlocks, isCompleted, stopAudioAndSubtitles]);
@@ -205,26 +224,27 @@ export default function LessonPlayer({ lesson }) {
   };
   
   const handleRestart = () => {
+      stopAudioAndSubtitles();
       setIsCompleted(false);
       setCurrentIndex(0);
   };
 
-  const handleCorrectAndProceed = () => {
-    console.log(`[handleCorrectAndProceed] Triggered at index ${currentIndex}. Total blocks: ${totalBlocks}`);
-    // [逻辑修复] 延迟 setIsCompleted 的调用，确保渲染安全
-    if (currentIndex >= totalBlocks - 1) {
-        console.log('🎯 This is the last block. Scheduling completion...');
-        stopAudioAndSubtitles();
-        setTimeout(() => {
-            setIsCompleted(true);
-        }, 800); // 留出一点时间给UI反应
+  // [逻辑修改] 彻底修复竞态问题的核心
+  const handleCorrectAndProceed = useCallback(() => {
+    console.log(`[handleCorrectAndProceed] Triggered. Index: ${currentIndex}, Total: ${totalBlocks}`);
+    if (currentIndex < totalBlocks - 1) {
+      console.log('✅ Scheduling next block...');
+      setTimeout(() => {
+        setCurrentIndex((prev) => prev + 1);
+      }, 600); // 留出一点时间给UI反应
     } else {
-        console.log('✅ Scheduling next block...');
-        setTimeout(() => {
-            goToNext();
-        }, 1200);
+      console.log('🎯 Course finished! Scheduling completion...');
+      stopAudioAndSubtitles();
+      setTimeout(() => {
+        setIsCompleted(true);
+      }, 400); // 延迟设置完成状态
     }
-  };
+  }, [currentIndex, totalBlocks, stopAudioAndSubtitles]);
 
   const swipeHandlers = useSwipeable({
     onSwipedUp: () => { if (!isCompleted) goToNext(); },
@@ -240,28 +260,37 @@ export default function LessonPlayer({ lesson }) {
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
+  // [逻辑修改] 最终的防弹渲染逻辑
   const renderBlock = () => {
-    // ✅ 优先显示结课界面
+    // 1. 数据不存在的保护
+    if (!lesson || !Array.isArray(lesson.blocks) || lesson.blocks.length === 0) {
+      return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">无法加载课程数据。</div>;
+    }
+
+    // 2. 优先判断课程是否完成
     if (isCompleted) {
-        return <CourseCompleteBlock onRestart={handleRestart} />;
+      return <CourseCompleteBlock onRestart={handleRestart} router={router} />;
     }
 
-    // ✅ 严格的边界检查和数据有效性检查
-    if (!lesson || !lesson.blocks || currentIndex >= totalBlocks) {
-        console.warn(`[RenderGuard] HALT! Invalid index or lesson data. currentIndex=${currentIndex}, totalBlocks=${totalBlocks}`);
-        return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">课程数据加载中或索引越界。</div>;
+    // 3. 索引越界保护
+    if (currentIndex >= totalBlocks) {
+      console.warn(`[RenderGuard] HALT! Invalid index. currentIndex=${currentIndex}, totalBlocks=${totalBlocks}. Forcing to completion state.`);
+      // 如果发生意外越界，强制进入完成状态，而不是崩溃
+      setTimeout(() => setIsCompleted(true), 0);
+      return <div className="p-8 text-center text-white bg-yellow-500/70 rounded-xl">正在加载课程结束页...</div>;
     }
 
+    // 4. 获取当前题并检查有效性
     const currentBlock = lesson.blocks[currentIndex];
-    const type = currentBlock?.type?.toLowerCase();
-
-    if (!type) {
-        console.error(`[RenderGuard] HALT! Invalid block type. Block data:`, currentBlock);
-        return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">错误：当前页面数据无效或题型未定义。</div>;
+    if (!currentBlock || typeof currentBlock.type !== 'string') {
+      console.error("[RenderGuard] HALT! Invalid block data or missing type. Block:", currentBlock);
+      return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">错误：当前页面数据无效。</div>;
     }
 
-    const genericProps = { data: currentBlock.content, onComplete: handleCorrectAndProceed }; // 使用 handleCorrectAndProceed
+    const type = currentBlock.type.toLowerCase();
+    const genericProps = { data: currentBlock.content, onComplete: handleCorrectAndProceed };
     
+    // 5. 安全地渲染组件
     switch (type) {
       case 'teaching': return <TeachingBlock content={currentBlock.content} />;
       case 'choice':
@@ -270,7 +299,6 @@ export default function LessonPlayer({ lesson }) {
       case 'paixu':
         const { prompt: paixuPrompt, items, explanation: paixuExplanation } = currentBlock.content;
         const correctOrder = (items || []).sort((a, b) => a.order - b.order).map(item => item.id);
-        // [修复] PaiXuTi 没有 onCorrect prop，其内部逻辑会处理完成状态，我们不需要传递回调
         return <PaiXuTi title={paixuPrompt} items={items || []} correctOrder={correctOrder} aiExplanation={paixuExplanation} onCorrectionRequest={(prompt) => console.log("AI Correction Requested:", prompt)} />;
       case 'lianxian':
         const { prompt: lianxianPrompt, pairs } = currentBlock.content;
@@ -281,7 +309,6 @@ export default function LessonPlayer({ lesson }) {
       case 'gaicuo':
         const { prompt: gaicuoPrompt, sentence, segmentationType, correctAnswers, corrections, explanation: gaicuoExplanation } = currentBlock.content;
         return <GaiCuoTi title={gaicuoPrompt} sentence={sentence} segmentationType={segmentationType || 'char'} correctAnswers={correctAnswers || []} corrections={corrections || []} explanation={gaicuoExplanation} onCorrect={handleCorrectAndProceed} />;
-      // [修复] 确保所有题型都使用 handleCorrectAndProceed
       case 'panduan': return <PanDuanTi {...genericProps} />;
       case 'fanyi': return <FanYiTi {...genericProps} />;
       case 'tinglizhuju': return <TingLiZhuJu {...genericProps} />;
