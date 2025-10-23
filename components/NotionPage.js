@@ -41,29 +41,48 @@ const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
 const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
 
 /**
- * 解析 Notion 页面中的 JSON 代码块
+ * [新功能] 解析 Notion 页面中的 JSON 代码块以获取课程数据。
+ * @param {object} blockMap - Notion 页面的 blockMap 数据。
+ * @returns {object|null} 解析成功则返回课程数据对象，否则返回 null。
  */
-function parseLessonData(blockMap) {
-  if (!blockMap || !blockMap.block) {
-    console.error('解析错误: blockMap 或 blockMap.block 不存在。');
+function parseLessonData (blockMap) {
+  // 检查传入的 blockMap 是否有效
+  if (!blockMap) {
+    console.error('Lesson Parser Error: blockMap is missing.');
     return null;
   }
+  
   try {
-    for (const blockId in blockMap.block) {
-      const block = blockMap.block[blockId].value;
-      if (block.type === 'code' && block.properties?.language?.[0]?.[0]?.toLowerCase() === 'json') {
+    // 遍历 blockMap 中的所有块
+    for (const blockId in blockMap) {
+      const block = blockMap[blockId]?.value;
+      
+      // 检查块是否存在、类型是否为 'code'、语言是否为 'json'
+      if (block && block.type === 'code' && block.properties?.language?.[0]?.[0]?.toLowerCase() === 'json') {
+        // 提取 JSON 字符串
         const jsonString = block.properties.title[0][0];
-        const parsed = JSON.parse(jsonString);
-        return parsed.lesson || parsed;
+        const parsedData = JSON.parse(jsonString);
+        
+        // 验证解析出的数据是否是我们期望的课程格式
+        if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
+          console.log('Successfully parsed lesson data:', parsedData.title);
+          return parsedData;
+        }
       }
     }
-  } catch (error) { console.error('解析JSON失败:', error); return null; }
-  console.warn('警告: 未找到任何 JSON 代码块。');
+  } catch (error) {
+    console.error('Failed to parse lesson JSON from code block:', error);
+    return null; 
+  }
+  
+  // 如果遍历完所有块都没有找到有效的 JSON 数据
+  console.warn('Lesson Parser Warning: No valid lesson JSON code block found on this page.');
   return null;
 }
 
 /**
- * 增强版的 Code 组件，用于处理 !include 指令
+ * 增强版的 Code 组件，用于处理普通文章中的 !include 指令
+ * 这个组件在课程播放器模式下不会被调用。
  */
 const CustomCode = (props) => {
   const blockContent = props.block.properties?.title?.[0]?.[0] || '';
@@ -95,28 +114,36 @@ const CustomCode = (props) => {
       }
     }
   }
+  // 如果不是 !include 指令，则按原样渲染代码块
   return <DefaultCodeComponent {...props} />;
 };
 
 /**
  * 主页面渲染组件
+ * 新增了对 "Lesson" 标签页面的调度逻辑
  */
 const NotionPage = (props) => {
   const { post, className } = props;
-  
-  // ✅ 核心修改：在 NotionPage 组件内部直接获取 blockMap
-  // NotionNext 会把完整的页面内容传递给 slug 页面的 NotionPage 组件
   const blockMap = post?.blockMap;
 
-  // ✅ 核心逻辑：优先判断是否为课程页面
+  // ✅ 核心调度逻辑: 检查页面是否被标记为 'Lesson'
   if (post?.tags?.includes('Lesson')) {
     const lessonData = parseLessonData(blockMap);
+    
     if (lessonData) {
-      // 如果是课程，并且成功解析了 JSON，就渲染我们的终极播放器
-      return <LessonPlayer lesson={lessonData} onProgress={(p) => console.log('保存进度:', p)} />;
+      // 如果成功解析出课程数据，则渲染全屏播放器
+      return <LessonPlayer lesson={lessonData} />;
     } else {
-      // 如果是课程页面，但没找到 JSON 数据，显示明确的错误提示
-      return <div className="text-center text-red-500 font-bold p-10">错误：此课程页面未找到有效的JSON数据块。</div>;
+      // 如果页面是 'Lesson' 但未找到或解析失败，显示一个清晰的错误提示
+      return (
+        <div className="fixed inset-0 bg-gray-100 flex items-center justify-center text-center p-4">
+          <div className="p-8 bg-white rounded-lg shadow-xl max-w-lg">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">课程加载失败</h1>
+            <p className="text-gray-700">此页面被标记为课程 (Lesson)，但未能找到有效的 JSON 数据块。</p>
+            <p className="text-gray-500 mt-2 text-sm">请检查 Notion 页面中是否包含一个语言设置为 "JSON" 且格式正确的代码块。</p>
+          </div>
+        </div>
+      );
     }
   }
 
@@ -170,7 +197,7 @@ const NotionPage = (props) => {
         mapPageUrl={mapPageUrl}
         mapImageUrl={mapImgUrl}
         components={{
-          Code: CustomCode,
+          Code: CustomCode, // 使用我们增强的 Code 组件来处理 !include
           Collection,
           Equation,
           Modal,
@@ -184,7 +211,7 @@ const NotionPage = (props) => {
   )
 }
 
-// --- 辅助函数 ---
+// --- 辅助函数 (保持不变) ---
 const processDisableDatabaseUrl = () => { if (isBrowser) { const links = document.querySelectorAll('.notion-table a'); for (const e of links) { e.removeAttribute('href') } } }
 const processGalleryImg = zoom => { setTimeout(() => { if (isBrowser) { const imgList = document?.querySelectorAll('.notion-collection-card-cover img'); if (imgList && zoom) { for (let i = 0; i < imgList.length; i++) { zoom.attach(imgList[i]) } } const cards = document.getElementsByClassName('notion-collection-card'); for (const e of cards) { e.removeAttribute('href') } } }, 800) }
 const autoScrollToHash = () => { setTimeout(() => { const hash = window?.location?.hash; if (hash && hash.length > 0) { const tocNode = document.getElementById(hash.substring(1)); if (tocNode && tocNode?.className?.indexOf('notion') > -1) { tocNode.scrollIntoView({ block: 'start', behavior: 'smooth' }) } } }, 180); }
