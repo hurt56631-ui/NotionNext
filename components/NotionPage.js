@@ -1,4 +1,4 @@
-// components/NotionPage.js (附带完整诊断日志)
+// components/NotionPage.js (最终修正版)
 
 import { siteConfig } from '@/lib/config'
 import { compressImage, mapImgUrl } from '@/lib/notion/mapImage'
@@ -35,59 +35,38 @@ const PrismMac = dynamic(() => import('@/components/PrismMac'), { ssr: false });
 const Tweet = ({ id }) => { return <TweetEmbed tweetId={id} /> }
 
 /**
- * [带日志] 解析 Notion 页面中的 JSON 代码块
+ * [已修正] 解析 Notion 页面中的 JSON 代码块
  */
 function parseLessonData (blockMap) {
-  console.log('[parseLessonData] 函数已调用。');
-
-  if (!blockMap) {
-    console.error('[parseLessonData] 致命错误:传入的 blockMap 为空或不存在。函数中止。', blockMap);
+  // 增加对 blockMap 和 blockMap.block 的健壮性检查
+  if (!blockMap || !blockMap.block) {
+    console.error('[parseLessonData] 错误: blockMap 或 blockMap.block 不存在。', blockMap);
     return null;
   }
-  console.log('[parseLessonData] 接收到的完整 blockMap:', blockMap);
 
-  try {
-    console.log('[parseLessonData] 开始遍历 blockMap 中的所有块...');
-    for (const blockId in blockMap) {
-      const block = blockMap[blockId]?.value;
-      
-      // 打印出每一个正在检查的块，方便我们看到所有内容
-      console.log(`[parseLessonData] 正在检查 Block ID: ${blockId}`, block);
-
-      if (block && block.type === 'code') {
-        console.log(`[parseLessonData] ✅ 成功: 发现一个 'code' 类型的块 (ID: ${blockId}).`);
-        
-        const language = block.properties?.language?.[0]?.[0]?.toLowerCase();
-        console.log(`[parseLessonData] 正在检查该代码块的语言设置... 语言是: '${language}'.`);
-
-        if (language === 'json') {
-          console.log('[parseLessonData] ✅ 成功: 语言是 "JSON"。准备解析内容。');
-          
-          try {
-            const jsonString = block.properties.title[0][0];
-            console.log('[parseLessonData] 提取出的 JSON 字符串内容:', jsonString);
-            
-            const parsedData = JSON.parse(jsonString);
-            console.log('[parseLessonData] ✅ 成功: JSON.parse() 执行成功。解析出的数据对象:', parsedData);
-            
-            if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
-              console.log('[parseLessonData] ✅ 成功: 数据结构验证通过。将返回此数据。');
-              return parsedData; // 找到并成功解析，直接返回结果
-            } else {
-              console.warn('[parseLessonData] ⚠️ 警告: 解析出的 JSON 对象不符合预期的课程格式 (缺少 id, title, 或 blocks 数组)。', parsedData);
-            }
-          } catch (error) {
-            console.error(`[parseLessonData] ❌ 致命错误: 在解析来自块 ${blockId} 的 JSON 字符串时失败。`, error);
+  // ✅ 核心修正：我们必须遍历 blockMap.block 对象，而不是 blockMap 本身。
+  for (const blockId in blockMap.block) {
+    // ✅ 核心修正：从 blockMap.block 中获取每个块的数据
+    const block = blockMap.block[blockId]?.value;
+    
+    if (block && block.type === 'code') {
+      const language = block.properties?.language?.[0]?.[0]?.toLowerCase();
+      if (language === 'json') {
+        try {
+          const jsonString = block.properties.title[0][0];
+          const parsedData = JSON.parse(jsonString);
+          if (parsedData && parsedData.id && parsedData.title && Array.isArray(parsedData.blocks)) {
+            console.log('[parseLessonData] ✅✅✅ 成功找到并解析了课程JSON！', parsedData);
+            return parsedData; // 成功，返回数据
           }
+        } catch (error) {
+          console.error(`[parseLessonData] ❌ 解析JSON时出错，块ID: ${blockId}`, error);
         }
       }
     }
-  } catch (error) {
-    console.error('[parseLessonData] ❌ 致命错误: 在遍历 block 循环时发生意外错误。', error);
-    return null; 
   }
-  
-  console.warn('[parseLessonData] ⚠️ 最终诊断: 遍历完所有块后，未找到任何有效的课程 JSON 数据。函数返回 null。');
+
+  console.warn('[parseLessonData] ⚠️ 遍历完成，未找到有效的课程JSON。');
   return null;
 }
 
@@ -97,30 +76,20 @@ function parseLessonData (blockMap) {
 const CustomCode = (props) => { /* ... 此处代码无修改 ... */ };
 
 /**
- * [带日志] 主页面渲染组件
+ * 主页面渲染组件 (无修改)
  */
 const NotionPage = (props) => {
-  console.log('--- [NotionPage] 组件开始渲染 ---');
   const { post, className } = props;
-  
-  console.log('[NotionPage] 组件接收到的 `post` 属性对象:', post);
-
   const blockMap = post?.blockMap;
-  console.log('[NotionPage] 从 `post` 中提取的 `blockMap`:', blockMap);
 
   const isLesson = post?.tags?.includes('Lesson');
-  console.log(`[NotionPage] 检查 'Lesson' 标签... 结果: ${isLesson}`);
 
   if (isLesson) {
-    console.log("[NotionPage] 判断为课程页面。准备调用 parseLessonData...");
     const lessonData = parseLessonData(blockMap);
-    console.log('[NotionPage] parseLessonData 函数的返回结果是:', lessonData);
     
     if (lessonData) {
-      console.log('[NotionPage] ✅ 成功: 获取到课程数据，准备渲染 <LessonPlayer />。');
       return <LessonPlayer lesson={lessonData} />;
     } else {
-      console.log('[NotionPage] ❌ 失败: 未获取到课程数据，准备渲染错误提示页面。');
       return (
         <div className="fixed inset-0 bg-gray-100 flex items-center justify-center text-center p-4">
           <div className="p-8 bg-white rounded-lg shadow-xl max-w-lg">
@@ -134,7 +103,6 @@ const NotionPage = (props) => {
     }
   }
 
-  console.log('[NotionPage] 判断为普通文章页面。准备渲染标准文章内容。');
   // --- 如果不是课程页面，则执行原来的普通文章渲染逻辑 ---
   const POST_DISABLE_GALLERY_CLICK = siteConfig('POST_DISABLE_GALLERY_CLICK');
   const POST_DISABLE_DATABASE_CLICK = siteConfig('POST_DISABLE_DATABASE_CLICK');
