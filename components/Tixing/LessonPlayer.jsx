@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终安全加固版)
+// components/Tixing/LessonPlayer.jsx (防弹最终版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -17,8 +17,6 @@ const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: 
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false });
 
 // --- 2. 辅助组件与函数 (自包含) ---
-
-// 拼音生成工具
 const generateRubyHTML = (text) => {
   if (!text || typeof text !== 'string') return '';
   let html = '';
@@ -33,7 +31,6 @@ const generateRubyHTML = (text) => {
   return html;
 };
 
-// 教学页组件
 const TeachingBlock = ({ content }) => {
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full">
@@ -52,7 +49,6 @@ const TeachingBlock = ({ content }) => {
     );
 };
 
-// 设置面板组件
 const SettingsPanel = ({ settings, setSettings, onClose }) => {
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -84,7 +80,6 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// 课程结束界面组件
 const CourseCompleteBlock = ({ onRestart }) => {
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
@@ -104,13 +99,14 @@ const CourseCompleteBlock = ({ onRestart }) => {
     );
 };
 
+
 // --- 3. 主播放器组件 (核心逻辑) ---
 export default function LessonPlayer({ lesson }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [subtitles, setSubtitles] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false); // 课程完成状态
+  const [isCompleted, setIsCompleted] = useState(false);
   const [settings, setSettings] = useState({
       chineseVoice: 'zh-CN-XiaoxiaoNeural',
       myanmarVoice: 'my-MM-NilarNeural',
@@ -123,24 +119,23 @@ export default function LessonPlayer({ lesson }) {
   const totalBlocks = lesson?.blocks?.length || 0;
   const lessonId = lesson?.id;
 
-  // 从 localStorage 加载进度和设置
   useEffect(() => {
     const savedIndex = localStorage.getItem(`lesson-progress-${lessonId}`);
-    if (savedIndex) setCurrentIndex(parseInt(savedIndex, 10));
+    if (savedIndex) {
+        const index = parseInt(savedIndex, 10);
+        if (index < totalBlocks) {
+            setCurrentIndex(index);
+        }
+    }
     const savedSettings = localStorage.getItem('lesson-settings');
     if (savedSettings) setSettings(JSON.parse(savedSettings));
-  }, [lessonId]);
+  }, [lessonId, totalBlocks]);
 
-  // 保存进度和设置到 localStorage
   useEffect(() => { localStorage.setItem(`lesson-progress-${lessonId}`, currentIndex); }, [currentIndex, lessonId]);
   useEffect(() => { localStorage.setItem('lesson-settings', JSON.stringify(settings)); }, [settings]);
 
-  // TTS 播放与停止逻辑
   const stopAudioAndSubtitles = useCallback(() => {
-    if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-    }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
     if (subtitleTimerRef.current) { cancelAnimationFrame(subtitleTimerRef.current); }
     setIsPlaying(false);
     setSubtitles([]);
@@ -149,30 +144,22 @@ export default function LessonPlayer({ lesson }) {
   const playAudio = useCallback(async () => {
     console.log('[TTS] playAudio called.');
     stopAudioAndSubtitles();
-    // [加固] 增加对 isCompleted 的判断
     if (isCompleted || !lesson.blocks[currentIndex]) return;
     const currentBlock = lesson.blocks[currentIndex];
     let textToRead = '';
     if (currentBlock.type === 'teaching') { textToRead = currentBlock.content?.narrationText; } 
     else { textToRead = currentBlock.content?.prompt; }
     if (!textToRead) { console.warn('[TTS] No text to read found.'); return; }
-    console.log(`[TTS] Text to read: "${textToRead}"`);
-    const params = new URLSearchParams({
-        text: textToRead.replace(/\{\{/g, `<voice name="${settings.myanmarVoice}">`).replace(/\}\}/g, '</voice>'),
-        chinese_voice: settings.chineseVoice, rate: settings.rate, subtitles: 'true'
-    });
+    const params = new URLSearchParams({ text: textToRead.replace(/\{\{/g, `<voice name="${settings.myanmarVoice}">`).replace(/\}\}/g, '</voice>'), chinese_voice: settings.chineseVoice, rate: settings.rate, subtitles: 'true' });
     const ttsUrl = `https://libretts.is-an.org/api/tts?${params.toString()}`;
-    console.log('[TTS] Requesting URL:', ttsUrl);
     try {
         const response = await fetch(ttsUrl);
         if (!response.ok) throw new Error(`API request failed: ${response.status}`);
         const data = await response.json();
-        console.log('[TTS] API Response Data:', data);
         if (audioRef.current && data.audioUrl) {
             audioRef.current.src = data.audioUrl;
             await audioRef.current.play();
             setIsPlaying(true);
-            console.log('[TTS] Audio playback started.');
         }
     } catch (error) { console.error("[TTS] API Error:", error); alert(`语音播放失败: ${error.message}`); }
   }, [currentIndex, lesson, settings, stopAudioAndSubtitles, isCompleted]);
@@ -185,21 +172,20 @@ export default function LessonPlayer({ lesson }) {
     }
   };
 
-  // 导航逻辑
   const goToNext = useCallback(() => {
     if (isCompleted) return;
     if (currentIndex < totalBlocks - 1) {
         setTimeout(() => { setCurrentIndex(prev => prev + 1); }, 300);
     } else {
         console.log('Course finished! Setting isCompleted to true.');
-        stopAudioAndSubtitles(); // [附加优化] 课程结束时停止音频
+        stopAudioAndSubtitles();
         setIsCompleted(true);
     }
   }, [currentIndex, totalBlocks, isCompleted, stopAudioAndSubtitles]);
 
   const goToPrev = useCallback(() => {
     if (currentIndex > 0) {
-        setIsCompleted(false); // 从完成页返回时，取消完成状态
+        setIsCompleted(false);
         setCurrentIndex(prev => prev - 1);
     }
   }, [currentIndex]);
@@ -219,11 +205,10 @@ export default function LessonPlayer({ lesson }) {
   };
 
   const handleCorrectAndProceed = () => {
-    console.log('Correct! Proceeding...');
+    console.log('Correct! Scheduling next block...');
     setTimeout(() => { goToNext(); }, 1500);
   };
 
-  // 划屏手势
   const swipeHandlers = useSwipeable({
     onSwipedUp: () => { if (!isCompleted) goToNext(); },
     onSwipedDown: () => goToPrev(),
@@ -231,46 +216,35 @@ export default function LessonPlayer({ lesson }) {
     trackMouse: true
   });
 
-  // 切换页面时重置状态
   useEffect(() => { stopAudioAndSubtitles(); }, [currentIndex, stopAudioAndSubtitles]);
   
-  // 强化禁止下拉刷新
   useEffect(() => {
       document.body.style.overscrollBehaviorY = 'contain';
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
-  // [核心修复] 再次加固渲染逻辑
   const renderBlock = () => {
-    // 🧠 防止最后一题结束后 currentIndex 超出范围
+    // [ULTIMATE FIX] 增加最严格的安全检查
+    console.log(`[RenderGuard] Checking state: isCompleted=${isCompleted}, currentIndex=${currentIndex}, totalBlocks=${totalBlocks}`);
+    
     if (isCompleted) {
         return <CourseCompleteBlock onRestart={handleRestart} />;
     }
     
-    // 增加最严格的安全检查
     if (!lesson || !lesson.blocks || currentIndex < 0 || currentIndex >= totalBlocks) {
-        console.error(`Render Error: Invalid currentIndex. Index: ${currentIndex}, Total: ${totalBlocks}`);
-        return (
-            <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">
-                错误：课程索引超出范围 ({currentIndex + 1}/{totalBlocks})。
-            </div>
-        );
+        console.error(`[RenderGuard] HALT! Invalid index or lesson data. Index: ${currentIndex}, Total: ${totalBlocks}`);
+        return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：课程索引超出范围 ({currentIndex + 1}/{totalBlocks})。</div> );
     }
     
     const currentBlock = lesson.blocks[currentIndex];
 
-    if (!currentBlock?.type) {
-        console.error("Render Error: Invalid block data. Block:", currentBlock);
-        return (
-          <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">
-            错误：无效的题型数据。
-          </div>
-        );
+    if (!currentBlock || typeof currentBlock.type !== 'string') {
+        console.error("[RenderGuard] HALT! Invalid block data or missing type. Block:", currentBlock);
+        return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：无效的题型数据。</div> );
     }
 
     const genericProps = { data: currentBlock.content, onComplete: goToNext };
     
-    // 使用 .toLowerCase() 确保大小写不敏感
     switch (currentBlock.type.toLowerCase()) {
       case 'teaching': return <TeachingBlock content={currentBlock.content} />;
       case 'choice':
