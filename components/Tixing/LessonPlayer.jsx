@@ -87,16 +87,21 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
 
 // [修改] 课程结束界面组件，现在接收 router
 const CourseCompleteBlock = ({ onRestart, router }) => {
-    const goToHome = () => {
-        router.push('/');
-    };
+    // [新增] 课程结束后跳转到首页的逻辑
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            router.push('/');
+        }, 3000); // 3秒后自动跳转
+        return () => clearTimeout(timer);
+    }, [router]);
+
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white">
             <h1 className="text-5xl md:text-7xl font-bold mb-4" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.7)' }}>
                 🎉 恭喜！
             </h1>
             <p className="text-xl md:text-2xl mb-8" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.7)' }}>
-                您已完成本课的所有内容。
+                您已完成本课，3秒后将返回首页...
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
                 <button
@@ -106,10 +111,10 @@ const CourseCompleteBlock = ({ onRestart, router }) => {
                     重新学习
                 </button>
                 <button
-                    onClick={goToHome}
+                    onClick={() => router.push('/')}
                     className="px-8 py-4 bg-blue-500/80 text-white font-bold text-lg rounded-full shadow-lg hover:bg-blue-500 transition-transform hover:scale-105"
                 >
-                    返回首页
+                    立即返回
                 </button>
             </div>
         </div>
@@ -195,13 +200,11 @@ export default function LessonPlayer({ lesson }) {
     }
   };
 
-  // [逻辑修改] 将 setIsCompleted 移到 handleCorrectAndProceed 中处理
   const goToNext = useCallback(() => {
     if (isCompleted) return;
     if (currentIndex < totalBlocks - 1) {
         setCurrentIndex((prev) => prev + 1);
     } else {
-        // 当通过点击下一页按钮到达最后一页时，也标记为完成
         stopAudioAndSubtitles();
         setIsCompleted(true);
     }
@@ -236,13 +239,13 @@ export default function LessonPlayer({ lesson }) {
       console.log('✅ Scheduling next block...');
       setTimeout(() => {
         setCurrentIndex((prev) => prev + 1);
-      }, 600); // 留出一点时间给UI反应
+      }, 600);
     } else {
       console.log('🎯 Course finished! Scheduling completion...');
       stopAudioAndSubtitles();
       setTimeout(() => {
         setIsCompleted(true);
-      }, 400); // 延迟设置完成状态
+      }, 400);
     }
   }, [currentIndex, totalBlocks, stopAudioAndSubtitles]);
 
@@ -275,7 +278,6 @@ export default function LessonPlayer({ lesson }) {
     // 3. 索引越界保护
     if (currentIndex >= totalBlocks) {
       console.warn(`[RenderGuard] HALT! Invalid index. currentIndex=${currentIndex}, totalBlocks=${totalBlocks}. Forcing to completion state.`);
-      // 如果发生意外越界，强制进入完成状态，而不是崩溃
       setTimeout(() => setIsCompleted(true), 0);
       return <div className="p-8 text-center text-white bg-yellow-500/70 rounded-xl">正在加载课程结束页...</div>;
     }
@@ -328,7 +330,7 @@ export default function LessonPlayer({ lesson }) {
             <div className="bg-white/80 backdrop-blur-sm rounded-full shadow-lg p-2 flex items-center space-x-2 md:space-x-4">
             <button onClick={goToPrev} disabled={currentIndex === 0} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg></button>
             <button onClick={goToPage} className="text-sm font-mono px-2">{currentIndex + 1} / {totalBlocks}</button>
-            <button onClick={goToNext} disabled={isCompleted || currentIndex === totalBlocks - 1} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
+            <button onClick={goToNext} disabled={isCompleted || currentIndex >= totalBlocks - 1} className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg></button>
             <button onClick={togglePlayPause} className="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-transform active:scale-95">{isPlaying ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg>}</button>
             <button onClick={() => setShowSettings(true)} className="p-2 rounded-full hover:bg-gray-200"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
             </div>
