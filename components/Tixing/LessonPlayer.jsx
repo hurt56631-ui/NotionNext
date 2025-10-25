@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终完整、全适配版)
+// components/Tixing/LessonPlayer.jsx (最终全适配修复版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -18,8 +18,6 @@ const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: 
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false });
 
 // --- 2. 辅助组件与函数 (自包含) ---
-
-// 拼音生成工具
 const generateRubyHTML = (text) => {
   if (!text || typeof text !== 'string') return '';
   let html = '';
@@ -34,7 +32,6 @@ const generateRubyHTML = (text) => {
   return html;
 };
 
-// 教学页组件
 const TeachingBlock = ({ content }) => {
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full">
@@ -53,7 +50,6 @@ const TeachingBlock = ({ content }) => {
     );
 };
 
-// 设置面板组件
 const SettingsPanel = ({ settings, setSettings, onClose }) => {
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -306,8 +302,18 @@ export default function LessonPlayer({ lesson }) {
         const correctPairs = (pairs || []).reduce((acc, p) => { acc[p.id] = p.id; return acc; }, {});
         return <LianXianTi title={lianxianPrompt} columnA={columnA} columnB={columnB} pairs={correctPairs} onCorrect={handleCorrectAndProceed} />;
       case 'gaicuo':
+        // [核心修改] 为 GaiCuoTi 添加适配器
         const { prompt: gaicuoPrompt, sentence, segmentationType, correctAnswers, corrections, explanation: gaicuoExplanation } = currentBlock.content;
-        return <GaiCuoTi title={gaicuoPrompt} sentence={sentence} segmentationType={segmentationType || 'char'} correctAnswers={correctAnswers || []} corrections={corrections || []} explanation={gaicuoExplanation} onCorrect={handleCorrectAndProceed} />;
+        const gaiCuoTiProps = {
+          title: gaicuoPrompt,
+          sentence: sentence,
+          segmentationType: segmentationType || 'char',
+          correctAnswers: correctAnswers || [],
+          corrections: corrections || [],
+          explanation: gaicuoExplanation,
+          onCorrect: handleCorrectAndProceed
+        };
+        return <GaiCuoTi {...gaiCuoTiProps} />;
       case 'panduan': return <PanDuanTi {...genericProps} />;
       case 'fanyi': return <FanYiTi {...genericProps} />;
       case 'tinglizhuju': return <TingLiZhuJu {...genericProps} />;
