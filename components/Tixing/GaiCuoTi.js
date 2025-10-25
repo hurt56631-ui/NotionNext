@@ -21,17 +21,9 @@ const styles = {
   feedbackCorrect: { backgroundColor: '#dcfce7', color: '#166534' },
   feedbackIncorrect: { backgroundColor: '#fee2e2', color: '#991b1b' },
   explanationBox: { backgroundColor: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '10px', border: '1px solid #fcd34d', marginTop: '12px', textAlign: 'left', fontSize: '1rem', lineHeight: '1.7', animation: 'fadeIn 0.5s' },
-  // 💡 [新增] 订正提示框样式
   correctionBox: { backgroundColor: '#e0f2fe', color: '#0c4a6e', padding: '16px', borderRadius: '10px', border: '1px solid #7dd3fc', marginTop: '12px', textAlign: 'left', fontSize: '1rem', lineHeight: '1.7', animation: 'fadeIn 0.5s' },
 };
 
-// --- 音频资源 (统一管理) ---
-const sounds = {
-  click: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }) : null,
-  correct: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/correct.mp3'], volume: 0.7 }) : null,
-  incorrect: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }) : null,
-};
-const playSound = (name) => sounds[name]?.play();
 
 /**
  * 万能改错题组件 (GaiCuoTi)
@@ -44,7 +36,35 @@ const playSound = (name) => sounds[name]?.play();
  * @param {function} onCorrect - 答对时的回调函数
  */
 const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers = [], corrections = [], explanation, onCorrect }) => {
-  // 💡 [核心改造] 句子分割逻辑，支持字/词
+  // 💡 [关键修复] 将 aounds 的初始化移入组件内部，并使用 state 和 effect
+  const [sounds, setSounds] = useState(null);
+
+  useEffect(() => {
+    // 这个 effect 只在客户端运行一次，安全地初始化 Howl
+    setSounds({
+      click: new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 }),
+      correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.7 }),
+      incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 }),
+    });
+
+    // 在组件卸载时，清理 Howler 实例，防止内存泄漏
+    return () => {
+      if (sounds) {
+        sounds.click.unload();
+        sounds.correct.unload();
+        sounds.incorrect.unload();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 空依赖数组确保只运行一次
+
+  // 💡 [关键修复] 创建一个安全的播放函数
+  const playSound = useCallback((name) => {
+    if (sounds && sounds[name]) {
+      sounds[name].play();
+    }
+  }, [sounds]);
+
   const segments = useMemo(() => {
     if (segmentationType === 'word') {
       return sentence.split(' ');
@@ -52,12 +72,10 @@ const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers =
     return sentence.split(''); // 默认按字符分割
   }, [sentence, segmentationType]);
 
-  // 💡 [核心改造] state 支持多选
   const [selectedIndices, setSelectedIndices] = useState([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
 
-  // 💡 [核心改造] 点击处理函数，支持多选切换
   const handleWordClick = useCallback((index) => {
     if (isSubmitted) return;
     playSound('click');
@@ -66,9 +84,8 @@ const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers =
         ? prev.filter(i => i !== index) // 取消选择
         : [...prev, index] // 添加选择
     );
-  }, [isSubmitted]);
+  }, [isSubmitted, playSound]);
 
-  // 💡 [核心改造] 提交逻辑，判断两个集合是否完全相等
   const handleSubmit = useCallback(() => {
     if (selectedIndices.length === 0) {
       alert("请选择你认为是错误的部分！");
@@ -88,21 +105,18 @@ const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers =
       confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       if (onCorrect) onCorrect();
     }
-  }, [selectedIndices, correctAnswers, onCorrect]);
+  }, [selectedIndices, correctAnswers, onCorrect, playSound]);
 
-  // 重置题目
   const handleReset = useCallback(() => {
     setSelectedIndices([]);
     setIsSubmitted(false);
     setIsCorrect(false);
   }, []);
   
-  // 题目切换时自动重置
   useEffect(() => {
     handleReset();
   }, [sentence, handleReset]);
 
-  // 💡 [核心改造] 动态样式计算函数，支持多种状态反馈
   const getWordStyle = (index) => {
     let style = { ...styles.wordBox };
     const isSelected = selectedIndices.includes(index);
@@ -165,7 +179,6 @@ const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers =
                 {isCorrect ? <><FaCheck /> 完全正确！</> : <><FaTimes /> 再想想看！</>}
               </div>
               
-              {/* 💡 [新增] 答错后，如果提供了corrections，则显示订正提示 */}
               {isSubmitted && !isCorrect && corrections.length > 0 && (
                 <div style={styles.correctionBox}>
                   <FaWandMagicSparkles style={{ marginRight: '8px', color: '#0ea5e9', flexShrink: 0, verticalAlign: 'middle' }} />
@@ -180,7 +193,6 @@ const GaiCuoTi = ({ title, sentence, segmentationType = 'char', correctAnswers =
                 </div>
               )}
 
-              {/* 💡 [优化] 仅在提交后显示解析 */}
               {isSubmitted && explanation && (
                 <div style={styles.explanationBox}>
                     <FaLightbulb style={{ marginRight: '8px', color: '#f59e0b', flexShrink: 0, verticalAlign: 'middle' }} />
