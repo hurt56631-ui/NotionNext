@@ -1,235 +1,109 @@
-// components/Tixing/GaiCuoTi.js (V2 - 修复React#130 + 稳定版)
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { FaCheck, FaTimes, FaRedo, FaLightbulb, FaWandMagicSparkles } from 'react-icons/fa6';
-import { Howl } from 'howler';
-import confetti from 'canvas-confetti';
-
-// --- 样式定义 ---
-const styles = {
-  container: { backgroundColor: '#f0f4f8', borderRadius: '24px', padding: '24px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.1)', fontFamily: 'sans-serif', maxWidth: '600px', margin: '2rem auto', display: 'flex', flexDirection: 'column', gap: '20px' },
-  title: { fontSize: '1.4rem', fontWeight: '600', color: '#475569', textAlign: 'center', margin: 0, padding: '8px' },
-  sentenceContainer: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px', padding: '16px', backgroundColor: '#e2e8f0', borderRadius: '12px', border: '2px solid #cbd5e1', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' },
-  wordBox: { padding: '8px 10px', fontSize: '1.5rem', fontWeight: '500', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s ease', userSelect: 'none', color: '#334155', border: '2px solid transparent' },
-  wordBoxSelected: { backgroundColor: '#93c5fd', color: '#1e3a8a', transform: 'scale(1.05)', borderColor: '#60a5fa' },
-  wordBoxCorrect: { backgroundColor: '#dcfce7', color: '#166534', borderColor: '#34d399' },
-  wordBoxIncorrect: { backgroundColor: '#fee2e2', color: '#991b1b', borderColor: '#f87171' },
-  wordBoxSolution: { backgroundColor: 'transparent', outline: '3px solid #60a5fa', borderRadius: '8px', animation: 'pulse 1.5s infinite' },
-  buttonContainer: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' },
-  submitButton: { width: '100%', padding: '14px', borderRadius: '10px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s ease, transform 0.1s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-  feedback: { padding: '14px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', animation: 'fadeIn 0.5s' },
-  feedbackCorrect: { backgroundColor: '#dcfce7', color: '#166534' },
-  feedbackIncorrect: { backgroundColor: '#fee2e2', color: '#991b1b' },
-  explanationBox: { backgroundColor: '#fffbeb', color: '#b45309', padding: '16px', borderRadius: '10px', border: '1px solid #fcd34d', marginTop: '12px', textAlign: 'left', fontSize: '1rem', lineHeight: '1.7', animation: 'fadeIn 0.5s' },
-  correctionBox: { backgroundColor: '#e0f2fe', color: '#0c4a6e', padding: '16px', borderRadius: '10px', border: '1px solid #7dd3fc', marginTop: '12px', textAlign: 'left', fontSize: '1rem', lineHeight: '1.7', animation: 'fadeIn 0.5s' },
-};
+// components/Tixing/GaiCuoTi.js
+import React, { useState, useEffect, useRef } from 'react'
+import { Howl } from 'howler'
+import { FaCheck, FaRedo, FaVolumeUp } from 'react-icons/fa'
 
 const GaiCuoTi = ({
-  title,
-  sentence,
-  segmentationType = 'char',
-  correctAnswers = [],
-  corrections = [],
-  explanation = '',
-  onCorrect
+  title = "请改正下列句子的错误：",
+  question = "他昨天去学校了了。",
+  correctAnswer = "他昨天去学校了。",
+  lang = "zh"
 }) => {
-  const [sounds, setSounds] = useState(null);
+  const [userInput, setUserInput] = useState("")
+  const [showAnswer, setShowAnswer] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const soundRef = useRef(null)
 
-  // 初始化音效
+  // 自动朗读标题（加载即播，延迟极低）
   useEffect(() => {
-    const click = new Howl({ src: ['/sounds/click.mp3'], volume: 0.7 });
-    const correct = new Howl({ src: ['/sounds/correct.mp3'], volume: 0.7 });
-    const incorrect = new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.7 });
-
-    setSounds({ click, correct, incorrect });
-
-    return () => {
-      click.unload();
-      correct.unload();
-      incorrect.unload();
-    };
-  }, []);
-
-  const playSound = useCallback((name) => {
-    if (sounds && sounds[name]) {
-      try {
-        sounds[name].play();
-      } catch (err) {
-        console.warn('播放声音失败:', name, err);
-      }
+    const speakTitle = () => {
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+        title
+      )}&tl=zh&client=tw-ob`
+      if (soundRef.current) soundRef.current.stop()
+      soundRef.current = new Howl({
+        src: [url],
+        html5: true,
+        onplay: () => setIsPlaying(true),
+        onend: () => setIsPlaying(false)
+      })
+      soundRef.current.play()
     }
-  }, [sounds]);
+    speakTitle()
+  }, [title])
 
-  // 分割句子
-  const segments = useMemo(() => {
-    if (!sentence) return [];
-    return segmentationType === 'word' ? sentence.split(' ') : sentence.split('');
-  }, [sentence, segmentationType]);
+  // 播放题目音频
+  const handlePlay = () => {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+      question
+    )}&tl=${lang}&client=tw-ob`
+    const sound = new Howl({
+      src: [url],
+      html5: true,
+      onplay: () => setIsPlaying(true),
+      onend: () => setIsPlaying(false)
+    })
+    sound.play()
+  }
 
-  const [selectedIndices, setSelectedIndices] = useState([]);
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
-
-  const handleWordClick = useCallback((index) => {
-    if (isSubmitted) return;
-    playSound('click');
-    setSelectedIndices(prev =>
-      prev.includes(index)
-        ? prev.filter(i => i !== index)
-        : [...prev, index]
-    );
-  }, [isSubmitted, playSound]);
-
-  const handleSubmit = useCallback(() => {
-    if (selectedIndices.length === 0) {
-      alert('请选择你认为是错误的部分！');
-      return;
-    }
-
-    const selectedSet = new Set(selectedIndices.sort());
-    const correctSet = new Set(correctAnswers.sort());
-    const answerCorrect =
-      selectedSet.size === correctSet.size &&
-      [...selectedSet].every(i => correctSet.has(i));
-
-    setIsCorrect(answerCorrect);
-    setIsSubmitted(true);
-    playSound(answerCorrect ? 'correct' : 'incorrect');
-
-    if (answerCorrect) {
-      confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
-      onCorrect && onCorrect();
-    }
-  }, [selectedIndices, correctAnswers, playSound, onCorrect]);
-
-  const handleReset = useCallback(() => {
-    setSelectedIndices([]);
-    setIsSubmitted(false);
-    setIsCorrect(false);
-  }, []);
-
-  // 当题目变更时重置
-  useEffect(() => {
-    handleReset();
-  }, [sentence, handleReset]);
-
-  const getWordStyle = (index) => {
-    let style = { ...styles.wordBox };
-    const isSelected = selectedIndices.includes(index);
-    const isCorrectAnswer = correctAnswers.includes(index);
-
-    if (isSubmitted) {
-      if (isSelected && isCorrectAnswer) style = { ...style, ...styles.wordBoxCorrect };
-      else if (isSelected && !isCorrectAnswer) style = { ...style, ...styles.wordBoxIncorrect };
-      else if (!isSelected && isCorrectAnswer) style = { ...style, ...styles.wordBoxSolution };
-    } else if (isSelected) {
-      style = { ...style, ...styles.wordBoxSelected };
-    }
-    return style;
-  };
+  // 检查答案
+  const handleCheck = () => setShowAnswer(true)
+  const handleRetry = () => {
+    setShowAnswer(false)
+    setUserInput("")
+  }
 
   return (
-    <>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { outline-offset: 0; } 50% { outline-offset: 4px; } }
-        .submit-btn:hover { background-color: #2563eb !important; }
-        .submit-btn:active { transform: scale(0.98); }
-        @media (max-width: 480px) {
-          .gct-container { padding: 16px !important; }
-          .gct-word-box { font-size: 1.2rem !important; padding: 6px 8px !important; }
-        }
-      `}</style>
+    <div className="min-h-[60vh] flex flex-col justify-center items-center p-4 bg-gradient-to-br from-pink-50 to-yellow-100 rounded-3xl shadow-xl">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800 text-center">{title}</h2>
 
-      <div style={styles.container} className="gct-container">
-        <h3 style={styles.title}>{title || '改错题'}</h3>
+      <div className="bg-white rounded-2xl shadow-md p-6 w-full max-w-md text-center relative">
+        <p className="text-xl font-medium text-gray-700 mb-4">{question}</p>
+        <button
+          onClick={handlePlay}
+          className="absolute top-5 right-5 text-pink-500 hover:text-pink-700 transition"
+          title="播放题目"
+        >
+          <FaVolumeUp size={22} />
+        </button>
 
-        <div style={styles.sentenceContainer}>
-          {segments.length > 0 ? (
-            segments.map((segment, index) => (
-              <div
-                key={index}
-                style={getWordStyle(index)}
-                className="gct-word-box"
-                onClick={() => handleWordClick(index)}
-              >
-                {segment}
+        <textarea
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
+          placeholder="请在这里输入你改正后的句子..."
+          className="w-full border border-gray-300 rounded-xl p-3 text-lg focus:outline-none focus:ring-2 focus:ring-pink-400 resize-none"
+          rows={3}
+        />
+
+        {!showAnswer ? (
+          <button
+            onClick={handleCheck}
+            className="mt-4 bg-pink-500 text-white px-6 py-2 rounded-full text-lg font-semibold hover:bg-pink-600 transition flex items-center justify-center gap-2 mx-auto"
+          >
+            <FaCheck /> 检查
+          </button>
+        ) : (
+          <>
+            {userInput.trim() === correctAnswer.trim() ? (
+              <div className="mt-4 bg-green-50 border border-green-300 rounded-xl p-3 text-green-800 text-lg animate-bounce">
+                ✅ 太棒了！你答对了！
               </div>
-            ))
-          ) : (
-            <div style={{ color: '#64748b', fontSize: '1rem' }}>暂无内容</div>
-          )}
-        </div>
-
-        <div style={styles.buttonContainer}>
-          {!isSubmitted ? (
+            ) : (
+              <div className="mt-4 bg-yellow-50 border border-yellow-300 rounded-xl p-3 text-yellow-800 text-lg">
+                正确答案：{correctAnswer}
+              </div>
+            )}
             <button
-              style={styles.submitButton}
-              className="submit-btn"
-              onClick={handleSubmit}
-              disabled={selectedIndices.length === 0}
+              onClick={handleRetry}
+              className="mt-3 bg-gray-400 text-white px-5 py-2 rounded-full flex items-center justify-center gap-2 mx-auto hover:bg-gray-500 transition"
             >
-              检查答案
+              <FaRedo /> 再试一次
             </button>
-          ) : (
-            <>
-              <div
-                style={{
-                  ...styles.feedback,
-                  ...(isCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect)
-                }}
-              >
-                {isCorrect ? (
-                  <>
-                    <FaCheck /> 完全正确！
-                  </>
-                ) : (
-                  <>
-                    <FaTimes /> 再想想看！
-                  </>
-                )}
-              </div>
-
-              {!isCorrect && corrections?.length > 0 && (
-                <div style={styles.correctionBox}>
-                  <FaWandMagicSparkles
-                    style={{ marginRight: '8px', color: '#0ea5e9', flexShrink: 0 }}
-                  />
-                  <span>
-                    <strong>修改建议：</strong>
-                    {corrections.map((c, i) => (
-                      <span key={i}>
-                        {i > 0 && '；'} 第 {c.index + 1} 个部分应为「
-                        <strong>{c.correct}</strong>」
-                      </span>
-                    ))}
-                  </span>
-                </div>
-              )}
-
-              {explanation && (
-                <div style={styles.explanationBox}>
-                  <FaLightbulb
-                    style={{ marginRight: '8px', color: '#f59e0b', flexShrink: 0 }}
-                  />
-                  <span>
-                    <strong>解析：</strong> {explanation}
-                  </span>
-                </div>
-              )}
-
-              <button
-                style={{ ...styles.submitButton, backgroundColor: '#64748b' }}
-                className="submit-btn"
-                onClick={handleReset}
-              >
-                <FaRedo /> 再试一次
-              </button>
-            </>
-          )}
-        </div>
+          </>
+        )}
       </div>
-    </>
-  );
-};
+    </div>
+  )
+}
 
-export default GaiCuoTi;
+export default GaiCuoTi
