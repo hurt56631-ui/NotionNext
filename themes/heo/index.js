@@ -319,11 +319,11 @@ const LayoutIndex = props => {
   
   // ✅ 滚动与吸顶相关的状态和引用
   const scrollableContainerRef = useRef(null);
-  const staticHeaderRef = useRef(null); // 引用静态头部以获取其高度
+  const stickySentinelRef = useRef(null); // 用于触发吸顶的“哨兵”
   const lastScrollY = useRef(0);
   const ticking = useRef(false);
-  const [isStickyActive, setIsStickyActive] = useState(false);
-  const [isNavVisible, setIsNavVisible] = useState(true);
+  const [isStickyActive, setIsStickyActive] = useState(false); // 控制是否激活吸顶模式
+  const [isNavVisible, setIsNavVisible] = useState(true); // 控制吸顶后是否可见
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -369,50 +369,53 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
-  // ✅ 最终版滚动监听逻辑
+  // ✅ 整合了 IntersectionObserver 和滚动监听的最终版 useEffect
   useEffect(() => {
     const container = scrollableContainerRef.current;
-    const staticHeader = staticHeaderRef.current;
-    if (!container || !staticHeader) return;
-    
-    // 获取静态头部的高度作为吸顶触发点
-    const stickyTriggerPoint = staticHeader.offsetTop + staticHeader.offsetHeight;
+    if (!container) return;
 
+    // 滚动方向判断逻辑
+    const threshold = 10;
     const handleScroll = () => {
-      const currentY = container.scrollTop;
-
-      // 1. 判断是否激活吸顶模式
-      if (currentY >= stickyTriggerPoint) {
-        if (!isStickyActive) setIsStickyActive(true);
-      } else {
-        if (isStickyActive) setIsStickyActive(false);
+      // 只有在吸顶激活后才判断方向
+      if (!isStickyActive) {
+          lastScrollY.current = container.scrollTop; // 持续更新位置
+          return;
       }
       
-      // 2. 在吸顶模式下，判断显示/隐藏
-      if (isStickyActive) {
-          if (!ticking.current) {
-            window.requestAnimationFrame(() => {
-              const diff = currentY - lastScrollY.current;
-              const threshold = 10;
-              if (Math.abs(diff) > threshold) {
-                if (diff > 0) {
-                  setIsNavVisible(false); // 向下滚，隐藏
-                } else {
-                  setIsNavVisible(true); // 向上滚，显示
-                }
-              }
-              lastScrollY.current = currentY;
-              ticking.current = false;
-            });
-            ticking.current = true;
+      const currentY = container.scrollTop;
+      
+      if (!ticking.current) {
+        window.requestAnimationFrame(() => {
+          const diff = currentY - lastScrollY.current;
+          if (Math.abs(diff) > threshold) {
+            if (diff > 0) {
+              setIsNavVisible(false); // 手指上滑，隐藏
+            } else {
+              setIsNavVisible(true); // 手指下拉，显示
+            }
           }
-      } else {
-        // 非吸顶模式下，始终保持可见（无平移）
-        setIsNavVisible(true);
+          lastScrollY.current = currentY;
+          ticking.current = false;
+        });
+        ticking.current = true;
       }
     };
-    
     container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // 吸顶触发逻辑
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            setIsStickyActive(!entry.isIntersecting);
+            if(entry.isIntersecting) {
+              setIsNavVisible(true);
+            }
+        },
+        // 当哨兵元素的顶部刚好离开视口时触发
+        { rootMargin: '0px', threshold: 0 }
+    );
+    const currentSentinel = stickySentinelRef.current;
+    if (currentSentinel) observer.observe(currentSentinel);
     
     // 其他逻辑 (保持不变)
     const handlePopState = () => {
@@ -431,6 +434,7 @@ const LayoutIndex = props => {
 
     return () => { 
         container.removeEventListener('scroll', handleScroll);
+        if (currentSentinel) observer.unobserve(currentSentinel);
         window.removeEventListener('popstate', handlePopState);
     };
   }, [isStickyActive]); // 依赖 isStickyActive
@@ -512,13 +516,19 @@ const LayoutIndex = props => {
                 <div className='h-[40vh] flex-shrink-0' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     
-                    {/* ✅ 静态头部和分类栏的容器 */}
-                    <div ref={staticHeaderRef} className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
-                       <div className='pt-6 px-4 mb-4'><GlosbeSearchCard /></div>
-                       <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
-                       
-                       {/* ✅ 分类栏的占位符版本，当不吸顶时显示 */}
-                       <div className={`${isStickyActive ? 'invisible' : ''} border-b border-gray-200 dark:border-gray-700`}>
+                    {/* ✅ 统一的浅紫色背景容器 */}
+                    <div className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
+                        {/* 静态头部 */}
+                        <div className='pt-6'>
+                           <div className='px-4 mb-6'><GlosbeSearchCard /></div>
+                           <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
+                        </div>
+
+                        {/* ✅ 吸顶哨兵：放在静态内容和分类栏之间 */}
+                        <div ref={stickySentinelRef}></div>
+
+                        {/* ✅ 分类栏的占位符版本，当不吸顶时显示 */}
+                        <div className={`${isStickyActive ? 'invisible' : ''} border-b border-violet-200 dark:border-gray-700`}>
                             <div className='flex justify-around'>
                                {tabs.map(tab => (
                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -531,9 +541,9 @@ const LayoutIndex = props => {
                        </div>
                     </div>
 
-                    {/* ✅ 吸顶分类栏的浮动版本，仅在 isStickyActive 为 true 时有意义 */}
+                    {/* ✅ 吸顶分类栏的浮动版本 */}
                     <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed w-full top-0 z-30' : 'hidden'} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
+                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-violet-200 dark:border-gray-700'>
                             <div className='flex justify-around max-w-[86rem] mx-auto'>
                                 {tabs.map(tab => (
                                 <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
