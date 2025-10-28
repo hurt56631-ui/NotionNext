@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat } from 'lucide-react';
+import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react'; // Zap for Fast Mode
 
-// ✅ 重构 Prompt 函数，根据推理模式返回不同内容
-const getAIPrompt = (word, fromLang, toLang, isInferenceMode) => {
-    if (isInferenceMode) {
-        return `
+// 只有一个版本的 Prompt，不再需要判断推理模式
+const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
 请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
 📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
@@ -20,44 +18,41 @@ const getAIPrompt = (word, fromLang, toLang, isInferenceMode) => {
 *   **[此处为加粗的${toLang}翻译]**
 *   ${fromLang}意思
 `;
-    }
-    // 非推理模式下的简洁 Prompt
-    return `请将以下 ${fromLang} 内容翻译成 ${toLang}，并严格按照下面的格式提供结果，不要有任何多余的解释或标题：\n\n"${word}"\n\n📖 **翻译结果**\n*   **[此处为加粗的翻译]**\n*   ${fromLang}意思`;
-};
 
 
 const GlosbeSearchCard = () => {
     const [word, setWord] = useState('');
     const [searchDirection, setSearchDirection] = useState('my2zh');
     const [isListening, setIsListening] = useState(false);
-    const [useAI, setUseAI] = useState(false);
+    const [useAI, setUseAI] = useState(true); // 默认开启 AI
     const [isAISearching, setIsAISearching] = useState(false);
     const [aiResults, setAiResults] = useState([]);
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [useInference, setUseInference] = useState(false); // ✅ 新增：推理模式开关状态
 
-    // ✅ 更新默认模型和第三方地址
+    // ✅ 最终版 API 设置
     const [apiSettings, setApiSettings] = useState({
         url: 'https://open-gemini-api.deno.dev/v1/chat/completions',
         model: 'gemini-2.5-flash',
         key: '',
         useThirdParty: false,
         thirdPartyUrl: 'https://gy.zenscaleai.com/v1',
+        useFastMode: true, // ✅ 新增：快速模式开关，默认开启
     });
 
     const recognitionRef = useRef(null);
     const inputRef = useRef(null);
 
     useEffect(() => {
-        const savedSettings = localStorage.getItem('aiApiSettings_v5');
+        // 使用新 key 'aiApiSettings_v6'
+        const savedSettings = localStorage.getItem('aiApiSettings_v6');
         if (savedSettings) {
             setApiSettings(prevSettings => ({ ...prevSettings, ...JSON.parse(savedSettings) }));
         }
     }, []);
 
     const handleSaveSettings = () => {
-        localStorage.setItem('aiApiSettings_v5', JSON.stringify(apiSettings));
+        localStorage.setItem('aiApiSettings_v6', JSON.stringify(apiSettings));
         setSettingsOpen(false);
         alert('设置已保存！');
     };
@@ -96,8 +91,10 @@ const GlosbeSearchCard = () => {
 
         const fromLang = searchDirection === 'my2zh' ? '缅甸语' : '中文';
         const toLang = searchDirection === 'my2zh' ? '中文' : '缅甸语';
-        // ✅ 传递推理模式状态给 Prompt 函数
-        const prompt = getAIPrompt(trimmedWord, fromLang, toLang, useInference);
+        const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
+        
+        // ✅ 根据快速模式设置 temperature
+        const temperature = apiSettings.useFastMode ? 0 : 0.7;
 
         try {
             const response = await fetch(apiUrl, {
@@ -109,6 +106,7 @@ const GlosbeSearchCard = () => {
                 body: JSON.stringify({
                     model: apiModel,
                     messages: [{ role: 'user', content: prompt }],
+                    temperature: temperature, // ✅ 将 temperature 参数加入请求
                 }),
             });
 
@@ -206,11 +204,12 @@ const GlosbeSearchCard = () => {
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">AI翻译</span>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Glosbe 翻译</span>
                     <label htmlFor="ai-toggle" className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="ai-toggle" className="sr-only peer" checked={useAI} onChange={() => setUseAI(!useAI)} />
                         <div className="w-11 h-6 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-cyan-300 dark:peer-focus:ring-cyan-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-cyan-500"></div>
                     </label>
+                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">AI 翻译</span>
                 </div>
                 <button onClick={() => setSettingsOpen(!settingsOpen)} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="API设置">
                     <Settings size={20} />
@@ -224,6 +223,17 @@ const GlosbeSearchCard = () => {
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
                     <div className="space-y-3">
+                        {/* ✅ 新增：快速模式开关 */}
+                        <div className="flex items-center justify-between">
+                            <label htmlFor="fast-mode-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                <Zap size={14} /> 快速模式 (Temperature: 0)
+                            </label>
+                            <label htmlFor="fast-mode-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="fast-mode-toggle" className="sr-only peer" checked={apiSettings.useFastMode} onChange={(e) => setApiSettings({...apiSettings, useFastMode: e.target.checked})} />
+                                <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                            </label>
+                        </div>
+                        
                         <div className="flex items-center justify-between">
                             <label htmlFor="third-party-toggle" className="text-xs font-medium text-gray-600 dark:text-gray-300">使用第三方 OpenAI 兼容地址</label>
                             <label htmlFor="third-party-toggle" className="relative inline-flex items-center cursor-pointer">
@@ -293,12 +303,6 @@ const GlosbeSearchCard = () => {
                         <ArrowLeftRight size={20} />
                     </button>
                     <span>{toLangText}</span>
-                    {/* ✅ 替换 Globe 图标为 Bot，并绑定推理模式开关功能 */}
-                    { useAI &&
-                        <button onClick={() => setUseInference(!useInference)} title="切换推理模式" className={`p-2 rounded-full transition-colors ${useInference ? 'bg-violet-200 text-violet-600 dark:bg-violet-800/50 dark:text-violet-300' : 'hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                            <Bot size={20} />
-                        </button>
-                    }
                 </div>
 
                 <button
@@ -325,7 +329,6 @@ const GlosbeSearchCard = () => {
                     {aiResults.length > 0 && (
                         <div className="space-y-3">
                         {aiResults.map((result, index) => (
-                          // ✅ 修改 AI 结果卡片颜色为紫色系
                           <div key={index}  className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
                             <p className="text-base font-semibold text-gray-800 dark:text-white">
                               {result.translation}
