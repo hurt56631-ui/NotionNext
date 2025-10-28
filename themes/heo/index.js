@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已集成精确吸顶逻辑与所有优化
+// themes/heo/index.js  <-- 最终修复完整版：已采用JS精控吸顶，彻底解决覆盖与线条问题
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -319,11 +319,11 @@ const LayoutIndex = props => {
   
   // ✅ 滚动与吸顶相关的状态和引用
   const scrollableContainerRef = useRef(null);
-  const stickySentinelRef = useRef(null); // 用于触发吸顶的“哨兵”
+  const staticHeaderRef = useRef(null); // 引用静态头部以获取其高度
   const lastScrollY = useRef(0);
   const ticking = useRef(false);
-  const [isStickyActive, setIsStickyActive] = useState(false); // 控制是否激活吸顶模式
-  const [isNavVisible, setIsNavVisible] = useState(true); // 控制吸顶后是否可见
+  const [isStickyActive, setIsStickyActive] = useState(false);
+  const [isNavVisible, setIsNavVisible] = useState(true);
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -369,49 +369,52 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
-  // ✅ 整合了 IntersectionObserver 和滚动监听的最终版 useEffect
+  // ✅ 最终版滚动监听逻辑
   useEffect(() => {
     const container = scrollableContainerRef.current;
-    if (!container) return;
+    const staticHeader = staticHeaderRef.current;
+    if (!container || !staticHeader) return;
+    
+    // 获取静态头部的高度作为吸顶触发点
+    const stickyTriggerPoint = staticHeader.offsetTop + staticHeader.offsetHeight;
 
-    // 滚动方向判断逻辑
-    const threshold = 10;
     const handleScroll = () => {
-      if (!isStickyActive) return; // 只有在吸顶激活后才判断方向
       const currentY = container.scrollTop;
+
+      // 1. 判断是否激活吸顶模式
+      if (currentY >= stickyTriggerPoint) {
+        if (!isStickyActive) setIsStickyActive(true);
+      } else {
+        if (isStickyActive) setIsStickyActive(false);
+      }
       
-      if (!ticking.current) {
-        window.requestAnimationFrame(() => {
-          const diff = currentY - lastScrollY.current;
-          if (Math.abs(diff) > threshold) {
-            if (diff > 0) {
-              setIsNavVisible(false);
-            } else {
-              setIsNavVisible(true);
-            }
+      // 2. 在吸顶模式下，判断显示/隐藏
+      if (isStickyActive) {
+          if (!ticking.current) {
+            window.requestAnimationFrame(() => {
+              const diff = currentY - lastScrollY.current;
+              const threshold = 10;
+              if (Math.abs(diff) > threshold) {
+                if (diff > 0) {
+                  setIsNavVisible(false); // 向下滚，隐藏
+                } else {
+                  setIsNavVisible(true); // 向上滚，显示
+                }
+              }
+              lastScrollY.current = currentY;
+              ticking.current = false;
+            });
+            ticking.current = true;
           }
-          lastScrollY.current = currentY;
-          ticking.current = false;
-        });
-        ticking.current = true;
+      } else {
+        // 非吸顶模式下，始终保持可见（无平移）
+        setIsNavVisible(true);
       }
     };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-
-    // 吸顶触发逻辑
-    const observer = new IntersectionObserver(
-        ([entry]) => {
-            setIsStickyActive(!entry.isIntersecting);
-            if(entry.isIntersecting) {
-              setIsNavVisible(true); // 回到非吸顶状态时，重置为可见
-            }
-        },
-        { rootMargin: '0px', threshold: 0 }
-    );
-    const currentSentinel = stickySentinelRef.current;
-    if (currentSentinel) observer.observe(currentSentinel);
     
-    // 其他逻辑
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // 其他逻辑 (保持不变)
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -428,10 +431,9 @@ const LayoutIndex = props => {
 
     return () => { 
         container.removeEventListener('scroll', handleScroll);
-        if (currentSentinel) observer.unobserve(currentSentinel);
         window.removeEventListener('popstate', handlePopState);
     };
-  }, [isStickyActive]); // 依赖 isStickyActive 以便在状态改变时重新评估
+  }, [isStickyActive]); // 依赖 isStickyActive
 
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
@@ -510,19 +512,29 @@ const LayoutIndex = props => {
                 <div className='h-[40vh] flex-shrink-0' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     
-                    {/* ✅ 静态头部：包含搜索和操作按钮，会随页面滚动 */}
-                    <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
-                       <div className='px-4 mb-4'><GlosbeSearchCard /></div>
+                    {/* ✅ 静态头部和分类栏的容器 */}
+                    <div ref={staticHeaderRef} className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
+                       <div className='pt-6 px-4 mb-4'><GlosbeSearchCard /></div>
                        <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
+                       
+                       {/* ✅ 分类栏的占位符版本，当不吸顶时显示 */}
+                       <div className={`${isStickyActive ? 'invisible' : ''} border-b border-gray-200 dark:border-gray-700`}>
+                            <div className='flex justify-around'>
+                               {tabs.map(tab => (
+                               <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                   {tab.icon}
+                                   <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+                                   <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                               </button>
+                               ))}
+                           </div>
+                       </div>
                     </div>
 
-                    {/* ✅ 吸顶哨兵：一个看不见的元素，用于触发吸顶 */}
-                    <div ref={stickySentinelRef} className="h-0 relative -top-1"></div>
-                    
-                    {/* ✅ 吸顶分类栏 */}
-                    <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed top-0 left-0 right-0 z-20' : ''} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        <div className={`bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg ${isStickyActive ? '' : 'border-t'} border-b border-gray-200 dark:border-gray-700`}>
-                            <div className='flex justify-around'>
+                    {/* ✅ 吸顶分类栏的浮动版本，仅在 isStickyActive 为 true 时有意义 */}
+                    <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed w-full top-0 z-30' : 'hidden'} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
+                            <div className='flex justify-around max-w-[86rem] mx-auto'>
                                 {tabs.map(tab => (
                                 <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
                                     {tab.icon}
@@ -654,7 +666,7 @@ const LayoutSlug = props => {
   }, [])
 
   const commentEnable =
-    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALine_SERVER_URL') ||
+    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') ||
     siteConfig('COMMENT_VALINE_APP_ID') || siteConfig('COMMENT_GISCUS_REPO') ||
     siteConfig('COMMENT_CUSDIS_APP_ID') || siteConfig('COMMENT_UTTERRANCES_REPO') ||
     siteConfig('COMMENT_GITALK_CLIENT_ID') || siteConfig('COMMENT_WEBMENTION_ENABLE')
