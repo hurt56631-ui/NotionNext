@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已集成高级滚动逻辑与毛玻璃效果
+// themes/heo/index.js  <-- 最终修复完整版：已重构顶部结构、优化颜色与间距
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -318,13 +318,11 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
-  // ✅ 集成自您提供的优化代码的全部状态与引用
   const scrollableContainerRef = useRef(null);
   const lastScrollY = useRef(0);
   const ticking = useRef(false);
-  const [isNavVisible, setIsNavVisible] = useState(true); // 控制导航栏的显示和隐藏
+  const [isNavVisible, setIsNavVisible] = useState(true);
 
-  // 侧边栏状态 (保持不变)
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
@@ -332,13 +330,11 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  // 收藏卡片数据状态 (保持不变)
   const [sentenceCardData, setSentenceCardData] = useState(null);
   const [wordCardData, setWordCardData] = useState(null);
   const isSentenceFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
   const isWordFavoritesCardOpen = router.asPath.includes('#favorite-words');
 
-  // 收藏相关函数 (保持不变)
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
@@ -371,13 +367,11 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
-  // ✅ 集成并适配了您提供的优化版滚动逻辑
   useEffect(() => {
     const container = scrollableContainerRef.current;
     if (!container) return;
 
-    // 滚动逻辑
-    const threshold = 10; // 滚动阈值，避免轻微滑动导致抖动
+    const threshold = 10;
     const handleScroll = () => {
       const currentY = container.scrollTop;
       const maxScrollY = container.scrollHeight - container.clientHeight;
@@ -385,22 +379,17 @@ const LayoutIndex = props => {
       if (!ticking.current) {
         window.requestAnimationFrame(() => {
           const diff = currentY - lastScrollY.current;
-
-          // 阈值判断
           if (Math.abs(diff) > threshold) {
-            if (diff > 0) { // 手指上滑，内容向下滚动
-              setIsNavVisible(false); // 隐藏
-            } else { // 手指下拉，内容向上滚动
-              setIsNavVisible(true); // 显示
+            if (diff > 0) {
+              setIsNavVisible(false);
+            } else {
+              setIsNavVisible(true);
             }
             lastScrollY.current = currentY;
           }
-
-          // 边缘判断：滚动到接近顶部或底部时强制显示
           if (currentY < 50 || currentY >= maxScrollY - 50) {
             setIsNavVisible(true);
           }
-          
           ticking.current = false;
         });
         ticking.current = true;
@@ -409,7 +398,6 @@ const LayoutIndex = props => {
     
     container.addEventListener('scroll', handleScroll, { passive: true });
     
-    // 其他 Effect 逻辑 (保持不变)
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -430,7 +418,6 @@ const LayoutIndex = props => {
     };
   }, []);
 
-  // 侧边栏拖拽逻辑 (保持不变)
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
     if ((!isSidebarOpen && startX > 50)) return;
@@ -506,31 +493,35 @@ const LayoutIndex = props => {
 
             <div ref={scrollableContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[40vh] flex-shrink-0' />
-                {/* ✅ 新增：背景增加毛玻璃效果，调整透明度 */}
-                <div className='relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
-                    <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
-
-                    {/* ✅ 已应用您提供的优化版显示/隐藏逻辑 */}
-                    <div className={`sticky top-0 z-30 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        {/* ✅ 新增：导航栏本身增加毛玻璃和半透明效果 */}
-                        <div className='bg-white/70 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
-                            <div className='flex justify-around'>
-                                {tabs.map(tab => (
-                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {tab.icon}
-                                    <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-                                    <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                                </button>
-                                ))}
+                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
+                    
+                    {/* ✅ 重构后的内容区头部，集成了所有功能 */}
+                    <div className={`sticky top-0 z-20 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+                        {/* 统一的浅紫色背景 */}
+                        <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
+                            <div className='px-4'><GlosbeSearchCard /></div>
+                            <ActionButtons onOpenFavorites={handleOpenFavorites} />
+                            
+                            {/* 分类导航栏 */}
+                            <div className='bg-white/70 dark:bg-black/70 backdrop-blur-md border-b border-t border-gray-200 dark:border-gray-700'>
+                                <div className='flex justify-around'>
+                                    {tabs.map(tab => (
+                                    <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                        {tab.icon}
+                                        <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+                                        <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                    </button>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    <main className="min-h-[70vh]" {...contentSwipeHandlers}>
+                    {/* ✅ 主内容区，移除了不必要的内边距 */}
+                    <main {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                {/* ✅ 新增：pt-20 修复内容被吸顶导航栏遮挡的问题 */}
-                                <div className='p-4 pt-20'> 
+                                <div className='p-4'> 
                                     {tab.name === '文章' && <PostListComponent {...props} />}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
