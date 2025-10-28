@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已重构顶部结构、优化颜色与间距
+// themes/heo/index.js  <-- 最终修复完整版：已重构吸顶结构、优化颜色与间距
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -69,7 +69,6 @@ import BooksContentBlock from '@/components/BooksContentBlock'
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const ShortSentenceCard = dynamic(() => import('@/components/ShortSentenceCard'), { ssr: false })
-// ✅ 动态导入 WordCard 组件 (用于收藏单词)
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
 
@@ -230,7 +229,7 @@ const ActionButtons = ({ onOpenFavorites }) => {
     { icon: <BookText size={24} />, text: '收藏语法', type: 'grammar', color: 'from-gray-500 to-slate-500' },
   ];
   return (
-    <div className="grid grid-cols-3 gap-4 my-6 px-4">
+    <div className="grid grid-cols-3 gap-4 mb-6 px-4">
       {actions.map((action, index) => {
         const content = (
           <>
@@ -495,29 +494,29 @@ const LayoutIndex = props => {
                 <div className='h-[40vh] flex-shrink-0' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     
-                    {/* ✅ 重构后的内容区头部，集成了所有功能 */}
+                    {/* ✅ 静态头部：包含搜索和操作按钮，会随页面滚动 */}
+                    <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
+                       <div className='px-4'><GlosbeSearchCard /></div>
+                       <ActionButtons onOpenFavorites={handleOpenFavorites} />
+                    </div>
+
+                    {/* ✅ 吸顶分类栏：只包含分类，独立于上方内容 */}
                     <div className={`sticky top-0 z-20 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        {/* 统一的浅紫色背景 */}
-                        <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
-                            <div className='px-4'><GlosbeSearchCard /></div>
-                            <ActionButtons onOpenFavorites={handleOpenFavorites} />
-                            
-                            {/* 分类导航栏 */}
-                            <div className='bg-white/70 dark:bg-black/70 backdrop-blur-md border-b border-t border-gray-200 dark:border-gray-700'>
-                                <div className='flex justify-around'>
-                                    {tabs.map(tab => (
-                                    <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                        {tab.icon}
-                                        <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-                                        <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                                    </button>
-                                    ))}
-                                </div>
+                        {/* 背景色与上方头部一致，并带有毛玻璃效果 */}
+                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                            <div className='flex justify-around'>
+                                {tabs.map(tab => (
+                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {tab.icon}
+                                    <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+                                    <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                </button>
+                                ))}
                             </div>
                         </div>
                     </div>
                     
-                    {/* ✅ 主内容区，移除了不必要的内边距 */}
+                    {/* ✅ 主内容区 */}
                     <main {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
