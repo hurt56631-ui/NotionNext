@@ -40,10 +40,9 @@ const GlosbeSearchCard = () => {
     const recognitionRef = useRef(null);
     const textareaRef = useRef(null);
 
-    // Effect for auto-resizing textarea
     useEffect(() => {
         if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto'; // Reset height before calculating
+            textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         }
     }, [word]);
@@ -70,6 +69,7 @@ const GlosbeSearchCard = () => {
         window.open(glosbeUrl, '_blank');
     };
 
+    // ✅ 重构为流式处理函数，并使用正确的 thinking_budget_tokens
     const handleAiTranslate = async (text) => {
         const trimmedWord = (text || word).trim();
         if (!trimmedWord) return;
@@ -90,7 +90,7 @@ const GlosbeSearchCard = () => {
         }
 
         setIsAISearching(true);
-        setAiResults([]);
+        setAiResults(''); // 开始流式输出时，初始化为空字符串
         setAiError('');
 
         const fromLang = searchDirection === 'my2zh' ? '缅甸语' : '中文';
@@ -100,10 +100,10 @@ const GlosbeSearchCard = () => {
         const requestBody = {
             model: apiModel,
             messages: [{ role: 'user', content: prompt }],
-            generationConfig: {
-                thinkingConfig: {
-                    thinkingBudget: apiSettings.disableThinking ? 0 : 1024 
-                }
+            stream: true, // 开启流式传输
+            // ✅ 使用官方正确的字段名和结构
+            generation_config: {
+                thinking_budget_tokens: apiSettings.disableThinking ? 0 : 1024
             }
         };
 
@@ -122,18 +122,43 @@ const GlosbeSearchCard = () => {
                 throw new Error(`API请求失败: ${response.status} - ${errorBody}`);
             }
 
-            const data = await response.json();
-            const responseText = data.choices?.[0]?.message?.content;
-            if (!responseText) throw new Error('API返回了非预期的格式。');
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
 
-            const parsedResults = responseText.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+                
+                for (const line of lines) {
+                    const jsonStr = line.replace(/^data: /, '');
+                    if (jsonStr.includes('[DONE]')) continue;
+                    
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        const delta = parsed.choices?.[0]?.delta?.content || '';
+                        if (delta) {
+                            fullResponse += delta;
+                            setAiResults(fullResponse); // 实时更新UI，实现打字机效果
+                        }
+                    } catch (e) {
+                        // console.error('Error parsing stream chunk:', jsonStr);
+                    }
+                }
+            }
+            
+            // ✅ 流结束后，解析完整文本为卡片格式
+            const parsedResults = fullResponse.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
                 const lines = part.trim().split('\n');
                 const translation = lines[1]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
                 const meaning = lines[2]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
                 return { translation, meaning };
             });
-
             setAiResults(parsedResults);
+
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
@@ -166,10 +191,8 @@ const GlosbeSearchCard = () => {
         }
     }, [searchDirection, useAI, apiSettings]);
 
-    // ✅ 修改：切换方向时不再清空输入框
     const toggleDirection = () => {
         setSearchDirection(prev => (prev === 'my2zh' ? 'zh2my' : 'my2zh'));
-        // 清空旧的翻译结果
         setAiResults([]);
         setAiError('');
     };
@@ -302,7 +325,6 @@ const GlosbeSearchCard = () => {
             <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-base font-semibold text-gray-700 dark:text-gray-200">
                     <span>{fromLangText}</span>
-                    {/* ✅ 恢复手动切换按钮 */}
                     <button onClick={toggleDirection} title="切换翻译方向" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-transform duration-300 active:scale-90">
                         <ArrowLeftRight size={20} />
                     </button>
@@ -318,10 +340,10 @@ const GlosbeSearchCard = () => {
             </div>
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
-                    {isAISearching && (
-                        <div className="text-center p-4">
-                            <Loader2 className="w-6 h-6 mx-auto animate-spin text-cyan-500" />
-                            <p className="mt-2 text-xs text-gray-500">AI翻译中...</p>
+                    {/* ✅ 根据 aiResults 的类型来决定如何渲染 */}
+                    {isAISearching && typeof aiResults === 'string' && (
+                        <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white">
+                            {aiResults}
                         </div>
                     )}
                     {aiError && (
@@ -329,7 +351,7 @@ const GlosbeSearchCard = () => {
                             {aiError}
                         </div>
                     )}
-                    {aiResults.length > 0 && (
+                    {Array.isArray(aiResults) && aiResults.length > 0 && (
                         <div className="space-y-3">
                         {aiResults.map((result, index) => (
                           <div key={index}  className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
