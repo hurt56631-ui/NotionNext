@@ -1,49 +1,40 @@
 // components/BooksContentBlock.js
-import React, { useMemo, useState } from 'react'
-import { ChevronRight, ChevronUp } from 'lucide-react'
+import React, { useMemo, useState } from 'react';
+import { ChevronRight, ChevronUp } from 'lucide-react';
 
-// --- 📘 单本书封面（保持不变） ---
+// --- 📘 全新的、更适合移动端的单本书卡片 ---
 const BookItem = ({ item }) => (
   <a
     href={item.readUrl}
     target="_blank"
     rel="noopener noreferrer"
-    className="group block"
+    className="group block space-y-3"
     title={item.title}
   >
-    <div className="flex flex-col items-center h-full">
-      {/* 书脊效果 */}
-      <div className="w-1 h-12 bg-gradient-to-b from-gray-600 to-gray-800 rounded-t-sm mx-auto mb-1 opacity-60"></div>
-      
-      {/* 书本容器 */}
-      <div className="relative w-full">
-        {/* 书本阴影 */}
-        <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 rounded-lg shadow-lg transform translate-y-1 -z-10"></div>
-        
-        {/* 书本主体 */}
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 p-1.5 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-          {/* 书封面 */}
-          <div className="relative aspect-[3/4] w-full overflow-hidden rounded">
-            <img
-              src={item.imageUrl}
-              alt={item.title}
-              className="w-full h-full object-cover rounded transition-transform duration-500 group-hover:scale-105"
-            />
-            {/* 光泽效果 */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          </div>
-        </div>
-      </div>
-      
-      {/* 书名 */}
-      <h3 className="mt-3 text-sm font-medium text-gray-800 dark:text-gray-200 text-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 line-clamp-2 px-1">
+    {/* 书本封面卡片 */}
+    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg shadow-lg transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+      <img
+        src={item.imageUrl}
+        alt={item.title}
+        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
+      {/* 光泽效果 */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-white/10 opacity-60 group-hover:opacity-30 transition-opacity duration-300"></div>
+    </div>
+    
+    {/* 书名和作者信息 */}
+    <div>
+      <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 line-clamp-2">
         {item.title}
       </h3>
+      {item.author && (
+         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.author}</p>
+      )}
     </div>
   </a>
 );
 
-// --- 📚 分类区域 (已修改书架部分) ---
+// --- 📚 重构后的分类区域 ---
 const BookCategorySection = ({ section }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const defaultShowCount = 4;
@@ -51,9 +42,10 @@ const BookCategorySection = ({ section }) => {
   const canExpand = section.items.length > defaultShowCount;
 
   return (
-    <div className="space-y-6">
+    // ✅ 新增：为每个分类区域添加优雅的渐变背景和圆角
+    <div className="space-y-6 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(199,210,254,0.3),rgba(255,255,255,0))] dark:bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(55,48,163,0.3),rgba(0,0,0,0))] rounded-2xl py-6">
       {/* 分类标题 */}
-      <div className="flex justify-between items-end px-4">
+      <div className="flex justify-between items-end px-4 sm:px-6">
         <div className="flex items-center space-x-3">
           <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-purple-600 rounded-full"></div>
           <h2 className="font-bold text-xl text-gray-900 dark:text-gray-100">
@@ -83,41 +75,25 @@ const BookCategorySection = ({ section }) => {
         )}
       </div>
 
-      {/* 书架区域 */}
-      <div className="relative">
-        {/* 书籍列表 */}
-        <div className="relative z-10 pb-6 px-6">
+      {/* 书籍列表区域 (已移除实体书架) */}
+      <div
+        onTouchStart={(e) => e.stopPropagation()}
+        className={
+          isExpanded
+            ? 'px-4 sm:px-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-8 transition-all'
+            : 'pl-4 sm:pl-6 flex gap-4 overflow-x-auto pb-4 no-scrollbar transition-all'
+        }
+      >
+        {displayedItems.map((item) => (
           <div
-            onTouchStart={(e) => e.stopPropagation()}
-            className={
-              isExpanded
-                ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 transition-all'
-                : 'flex gap-6 overflow-x-auto pb-6 no-scrollbar transition-all'
-            }
+            key={item.id}
+            className={isExpanded ? '' : 'flex-shrink-0 w-32 sm:w-36'}
           >
-            {displayedItems.map((item) => (
-              <div
-                key={item.id}
-                className={isExpanded ? '' : 'flex-shrink-0 w-32 sm:w-36 md:w-40'}
-              >
-                <BookItem item={item} />
-              </div>
-            ))}
+            <BookItem item={item} />
           </div>
-        </div>
-
-        {/* ✅ 核心修改：使用真实的图片作为书架，并移除所有装饰性 div */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none">
-          <img
-            // 我为您找到了一张高质量的真实书架图片，您可以直接使用
-            // 如果您想更换，只需替换下面的 src 链接即可
-            src="https://images.unsplash.com/photo-1542826438-c2d279252285?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-            alt="Wooden Bookshelf"
-            className="w-full h-full object-cover rounded-t-xl"
-          />
-           {/* 书架顶部添加一点阴影，让书本更有立体感 */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-transparent rounded-t-xl"></div>
-        </div>
+        ))}
+        {/* 在横向滚动时，在末尾添加一个透明元素以保证右边距 */}
+        {!isExpanded && <div className="flex-shrink-0 w-2 sm:w-4"></div>}
       </div>
     </div>
   );
@@ -147,7 +123,6 @@ const BooksContentBlock = ({ notionBooks }) => {
       </div>
     );
 
-  // ✅ 清理：移除了不再使用的 bg-wood-pattern 样式
   const HideScrollbarStyle = () => (
     <style jsx global>{`
       .no-scrollbar::-webkit-scrollbar {
@@ -162,7 +137,7 @@ const BooksContentBlock = ({ notionBooks }) => {
 
   return (
     <div className="bg-transparent py-8">
-      <div className="space-y-12 max-w-7xl mx-auto">
+      <div className="space-y-8 max-w-7xl mx-auto">
         <HideScrollbarStyle />
         {groupedBooks.map((section) => (
           <BookCategorySection key={section.category} section={section} />
