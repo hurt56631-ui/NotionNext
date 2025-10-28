@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react'; // Zap for Fast Mode
+import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// 只有一个版本的 Prompt，不再需要判断推理模式
+// Prompt 保持不变
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
 请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
@@ -24,7 +24,7 @@ const GlosbeSearchCard = () => {
     const [word, setWord] = useState('');
     const [searchDirection, setSearchDirection] = useState('my2zh');
     const [isListening, setIsListening] = useState(false);
-    const [useAI, setUseAI] = useState(true); // 默认开启 AI
+    const [useAI, setUseAI] = useState(true);
     const [isAISearching, setIsAISearching] = useState(false);
     const [aiResults, setAiResults] = useState([]);
     const [aiError, setAiError] = useState('');
@@ -33,26 +33,26 @@ const GlosbeSearchCard = () => {
     // ✅ 最终版 API 设置
     const [apiSettings, setApiSettings] = useState({
         url: 'https://open-gemini-api.deno.dev/v1/chat/completions',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-pro-flash',
         key: '',
         useThirdParty: false,
         thirdPartyUrl: 'https://gy.zenscaleai.com/v1',
-        useFastMode: true, // ✅ 新增：快速模式开关，默认开启
+        disableThinking: true, // ✅ 新增：关闭思考模式开关，默认开启 (即关闭思考)
     });
 
     const recognitionRef = useRef(null);
     const inputRef = useRef(null);
 
     useEffect(() => {
-        // 使用新 key 'aiApiSettings_v6'
-        const savedSettings = localStorage.getItem('aiApiSettings_v6');
+        // 使用新 key 'aiApiSettings_v7'
+        const savedSettings = localStorage.getItem('aiApiSettings_v7');
         if (savedSettings) {
             setApiSettings(prevSettings => ({ ...prevSettings, ...JSON.parse(savedSettings) }));
         }
     }, []);
 
     const handleSaveSettings = () => {
-        localStorage.setItem('aiApiSettings_v6', JSON.stringify(apiSettings));
+        localStorage.setItem('aiApiSettings_v7', JSON.stringify(apiSettings));
         setSettingsOpen(false);
         alert('设置已保存！');
     };
@@ -92,10 +92,21 @@ const GlosbeSearchCard = () => {
         const fromLang = searchDirection === 'my2zh' ? '缅甸语' : '中文';
         const toLang = searchDirection === 'my2zh' ? '中文' : '缅甸语';
         const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
-        
-        // ✅ 根据快速模式设置 temperature
-        const temperature = apiSettings.useFastMode ? 0 : 0.7;
 
+        // ✅ 构建符合官方文档的请求体
+        const requestBody = {
+            model: apiModel,
+            messages: [{ role: 'user', content: prompt }],
+            // 根据开关状态添加 tools 配置
+            tools: [
+                {
+                    "pen_thinking": {
+                        "enable_thinking": !apiSettings.disableThinking
+                    }
+                }
+            ]
+        };
+        
         try {
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -103,11 +114,7 @@ const GlosbeSearchCard = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiSettings.key}`,
                 },
-                body: JSON.stringify({
-                    model: apiModel,
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: temperature, // ✅ 将 temperature 参数加入请求
-                }),
+                body: JSON.stringify(requestBody),
             });
 
             if (!response.ok) {
@@ -148,10 +155,7 @@ const GlosbeSearchCard = () => {
             recognition.interimResults = false;
             recognition.onstart = () => setIsListening(true);
             recognition.onend = () => setIsListening(false);
-            recognition.onerror = (event) => {
-                console.error('语音识别错误:', event.error);
-                setIsListening(false);
-            };
+            recognition.onerror = (event) => console.error('语音识别错误:', event.error);
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 setWord(transcript);
@@ -174,14 +178,13 @@ const GlosbeSearchCard = () => {
             alert('抱歉，您的浏览器不支持语音识别。');
             return;
         }
-        if (isListening) {
-            recognitionRef.current.stop();
-        } else {
+        if (isListening) recognitionRef.current.stop();
+        else {
             recognitionRef.current.lang = searchDirection === 'my2zh' ? 'my-MM' : 'zh-CN';
             recognitionRef.current.start();
         }
     };
-
+    
     const handleCopy = (text) => navigator.clipboard.writeText(text);
     const handleSpeak = (textToSpeak) => { 
         const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
@@ -223,13 +226,13 @@ const GlosbeSearchCard = () => {
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
                     <div className="space-y-3">
-                        {/* ✅ 新增：快速模式开关 */}
+                        {/* ✅ 新增：关闭思考模式开关 */}
                         <div className="flex items-center justify-between">
-                            <label htmlFor="fast-mode-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                                <Zap size={14} /> 快速模式 (Temperature: 0)
+                            <label htmlFor="thinking-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                <Bot size={14} /> 关闭思考模式
                             </label>
-                            <label htmlFor="fast-mode-toggle" className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="fast-mode-toggle" className="sr-only peer" checked={apiSettings.useFastMode} onChange={(e) => setApiSettings({...apiSettings, useFastMode: e.target.checked})} />
+                            <label htmlFor="thinking-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="thinking-toggle" className="sr-only peer" checked={apiSettings.disableThinking} onChange={(e) => setApiSettings({...apiSettings, disableThinking: e.target.checked})} />
                                 <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
                             </label>
                         </div>
@@ -243,7 +246,7 @@ const GlosbeSearchCard = () => {
                         </div>
                         {apiSettings.useThirdParty ? (
                              <div>
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">第三方兼容地址 (例如: https://api.example.com/v1)</label>
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">第三方兼容地址</label>
                                 <input type="text" value={apiSettings.thirdPartyUrl} onChange={(e) => setApiSettings({...apiSettings, thirdPartyUrl: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
                              </div>
                         ) : (
@@ -304,7 +307,6 @@ const GlosbeSearchCard = () => {
                     </button>
                     <span>{toLangText}</span>
                 </div>
-
                 <button
                     onClick={handleSearch}
                     disabled={isAISearching || !word.trim()}
