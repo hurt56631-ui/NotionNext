@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已扩大侧边栏激活范围
+// themes/heo/index.js  <-- 最终修复完整版：已解决滑动冲突问题
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -323,6 +323,7 @@ const LayoutIndex = props => {
   const ticking = useRef(false);
   const [isStickyActive, setIsStickyActive] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
+  const mainContentRef = useRef(null); // ✅ 新增：为 main 内容区创建 ref
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -432,12 +433,16 @@ const LayoutIndex = props => {
     };
   }, [isStickyActive]);
 
-  // ✅ 已修改：扩大侧边栏拖拽激活范围
+  // ✅ 已修改：解决手势冲突
   const handleTouchStart = (e) => {
+    // 如果触摸点在主内容区内，则不触发侧边栏逻辑，让内容区的滑动优先
+    if (!isSidebarOpen && mainContentRef.current && mainContentRef.current.contains(e.target)) {
+        return;
+    }
+
     const startX = e.touches[0].clientX;
     const screenWidth = window.innerWidth;
     
-    // 如果触摸点在屏幕左侧 40% 范围内，则允许拖拽
     if (!isSidebarOpen && startX > screenWidth * 0.4) return;
 
     touchStartX.current = startX;
@@ -549,7 +554,8 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    <main {...contentSwipeHandlers}>
+                    {/* ✅ 已修改：为 main 添加 ref */}
+                    <main ref={mainContentRef} {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'> 
