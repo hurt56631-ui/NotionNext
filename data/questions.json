@@ -1,0 +1,30 @@
+[
+  {
+    "id": "GCT001",
+    "title": "找出并改正句子中的错别字",
+    "sentence": "他是一位非常出名的做家。",
+    "correctAnswers": [9],
+    "corrections": [
+      { "index": 9, "correct": "作" }
+    ],
+    "explanation": "“做家”通常是指进行具体实物创造的人，而“作家”是指专门从事文学创作的作者。这里应该使用“作家”。"
+  },
+  {
+    "id": "GCT002",
+    "title": "找出句子中的语病",
+    "sentence": "我昨天买了水果，有苹果、香蕉、和西瓜。",
+    "correctAnswers": [11],
+    "corrections": [
+      { "index": 11, "correct": "、" }
+    ],
+    "explanation": "中文标点符号中，顿号“、”后面不应该紧跟“和”。可以直接用顿号分隔所有并列项，或者在最后两项之间只用“和”。"
+  },
+  {
+    "id": "GCT003",
+    "title": "找出并改正句子中的错别字",
+    "sentence": "这件衣服的布料非常舒服，穿上很合身。",
+    "correctAnswers": [],
+    "corrections": [],
+    "explanation": "这个句子没有错别字。"
+  }
+]
