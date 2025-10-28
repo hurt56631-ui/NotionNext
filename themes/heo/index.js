@@ -452,7 +452,7 @@ const LayoutIndex = props => {
               setActiveTab(tabs[currentIndex - 1].name);
           }
       },
-      disabled: !isCategoryBarSticky || isDragging,
+      disabled: !isCategoryBarSticky,
       preventDefaultTouchmoveEvent: true,
       trackMouse: true,
       delta: 50
@@ -504,7 +504,7 @@ const LayoutIndex = props => {
                 <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
 
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
