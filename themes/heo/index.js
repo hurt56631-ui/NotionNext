@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：将 allWords 传递给 HSK 组件并添加收藏单词功能
+// themes/heo/index.js  <-- 最终修复完整版：已集成高级滚动逻辑与毛玻璃效果
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -318,14 +318,11 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
-  // 用于判断分类栏是否应该进入“可吸顶”状态
-  const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
-  const sentinelRef = useRef(null);
-
-  // ✅ 新增：用于判断滚动方向
+  // ✅ 集成自您提供的优化代码的全部状态与引用
   const scrollableContainerRef = useRef(null);
   const lastScrollY = useRef(0);
-  const [scrollDirection, setScrollDirection] = useState('down');
+  const ticking = useRef(false);
+  const [isNavVisible, setIsNavVisible] = useState(true); // 控制导航栏的显示和隐藏
 
   // 侧边栏状态 (保持不变)
   const sidebarWidth = 288;
@@ -374,9 +371,45 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
-
+  // ✅ 集成并适配了您提供的优化版滚动逻辑
   useEffect(() => {
-    // 哈希变化监听 (保持不变)
+    const container = scrollableContainerRef.current;
+    if (!container) return;
+
+    // 滚动逻辑
+    const threshold = 10; // 滚动阈值，避免轻微滑动导致抖动
+    const handleScroll = () => {
+      const currentY = container.scrollTop;
+      const maxScrollY = container.scrollHeight - container.clientHeight;
+
+      if (!ticking.current) {
+        window.requestAnimationFrame(() => {
+          const diff = currentY - lastScrollY.current;
+
+          // 阈值判断
+          if (Math.abs(diff) > threshold) {
+            if (diff > 0) { // 手指上滑，内容向下滚动
+              setIsNavVisible(false); // 隐藏
+            } else { // 手指下拉，内容向上滚动
+              setIsNavVisible(true); // 显示
+            }
+            lastScrollY.current = currentY;
+          }
+
+          // 边缘判断：滚动到接近顶部或底部时强制显示
+          if (currentY < 50 || currentY >= maxScrollY - 50) {
+            setIsNavVisible(true);
+          }
+          
+          ticking.current = false;
+        });
+        ticking.current = true;
+      }
+    };
+    
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // 其他 Effect 逻辑 (保持不变)
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -385,43 +418,15 @@ const LayoutIndex = props => {
       }
     };
     window.addEventListener('popstate', handlePopState);
-
-    // 背景图设置 (保持不变)
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    // IntersectionObserver 用于判断是否滚过背景图区域
-    const observer = new IntersectionObserver(
-        ([entry]) => setIsCategoryBarSticky(!entry.isIntersecting),
-        { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
-    );
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) observer.observe(currentSentinel);
-
-    // ✅ 新增：滚动方向判断的事件监听
-    const container = scrollableContainerRef.current;
-    const handleScroll = () => {
-        const currentScrollY = container.scrollTop;
-        if (currentScrollY > lastScrollY.current) { // 阈值可以根据需要调整
-            setScrollDirection('down');
-        } else if (currentScrollY < lastScrollY.current) {
-            setScrollDirection('up');
-        }
-        lastScrollY.current = currentScrollY < 0 ? 0 : currentScrollY;
-    };
-    if (container) {
-        container.addEventListener('scroll', handleScroll, { passive: true });
-    }
-
     return () => { 
-        if (currentSentinel) observer.unobserve(currentSentinel); 
+        container.removeEventListener('scroll', handleScroll);
         window.removeEventListener('popstate', handlePopState);
-        if (container) {
-            container.removeEventListener('scroll', handleScroll);
-        }
     };
   }, []);
 
@@ -454,7 +459,6 @@ const LayoutIndex = props => {
     }
   };
 
-  // 内容区域滑动切换 Tab (保持不变)
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -464,7 +468,7 @@ const LayoutIndex = props => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
           if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
       },
-      disabled: !isCategoryBarSticky || isDragging,
+      disabled: isDragging,
       preventDefaultTouchmoveEvent: true,
       trackMouse: true,
       delta: 50
@@ -488,7 +492,6 @@ const LayoutIndex = props => {
                 <i className="fas fa-bars text-xl"></i>
             </button>
             
-            {/* ✅ 修改：顶部背景图区域高度从 45vh 改为 40vh */}
             <div className='absolute top-0 left-0 right-0 h-[40vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
@@ -501,31 +504,33 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            {/* ✅ 修改：添加 ref={scrollableContainerRef} 以便监听滚动 */}
             <div ref={scrollableContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                {/* ✅ 修改：占位区域高度从 45vh 改为 40vh */}
-                <div ref={sentinelRef} className='h-[40vh] flex-shrink-0' />
-                {/* ✅ 修改：内容区域最小高度从 55vh 改为 60vh */}
-                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
+                <div className='h-[40vh] flex-shrink-0' />
+                {/* ✅ 新增：背景增加毛玻璃效果，调整透明度 */}
+                <div className='relative bg-white/90 dark:bg-gray-900/90 backdrop-blur-lg rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
 
-                    {/* ✅ 修改：应用动态吸顶效果 */}
-                    <div className={`sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${isCategoryBarSticky && scrollDirection === 'up' ? '-translate-y-full' : 'translate-y-0'}`}>
-                        <div className='flex justify-around'>
-                            {tabs.map(tab => (
-                            <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                {tab.icon}
-                                <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-                                <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                            </button>
-                            ))}
+                    {/* ✅ 已应用您提供的优化版显示/隐藏逻辑 */}
+                    <div className={`sticky top-0 z-30 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+                        {/* ✅ 新增：导航栏本身增加毛玻璃和半透明效果 */}
+                        <div className='bg-white/70 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
+                            <div className='flex justify-around'>
+                                {tabs.map(tab => (
+                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {tab.icon}
+                                    <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+                                    <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+                                </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                     
                     <main className="min-h-[70vh]" {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                <div className='p-4'>
+                                {/* ✅ 新增：pt-20 修复内容被吸顶导航栏遮挡的问题 */}
+                                <div className='p-4 pt-20'> 
                                     {tab.name === '文章' && <PostListComponent {...props} />}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
