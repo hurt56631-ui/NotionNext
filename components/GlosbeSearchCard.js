@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// Prompt 保持不变
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
 请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
@@ -19,9 +18,6 @@ const getAIPrompt = (word, fromLang, toLang) => `
 *   ${fromLang}意思
 `;
 
-// ✅ 新增：语言检测辅助函数
-const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(text);
-
 const GlosbeSearchCard = () => {
     const [word, setWord] = useState('');
     const [searchDirection, setSearchDirection] = useState('my2zh');
@@ -34,7 +30,7 @@ const GlosbeSearchCard = () => {
 
     const [apiSettings, setApiSettings] = useState({
         url: 'https://open-gemini-api.deno.dev/v1/chat/completions',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-pro-flash',
         key: '',
         useThirdParty: false,
         thirdPartyUrl: 'https://gy.zenscaleai.com/v1',
@@ -42,23 +38,15 @@ const GlosbeSearchCard = () => {
     });
 
     const recognitionRef = useRef(null);
-    const textareaRef = useRef(null); // ✅ 使用 textarea 的 ref
+    const textareaRef = useRef(null);
 
-    // ✅ Effect for auto-resizing textarea
+    // Effect for auto-resizing textarea
     useEffect(() => {
         if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto'; // Reset height
+            textareaRef.current.style.height = 'auto'; // Reset height before calculating
             textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         }
-    }, [word]); // Re-run when word changes
-
-    // ✅ Effect for auto-detecting language
-    useEffect(() => {
-        const detectedDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
-        if (detectedDirection !== searchDirection) {
-            setSearchDirection(detectedDirection);
-        }
-    }, [word]); // Re-run when word changes
+    }, [word]);
 
     useEffect(() => {
         const savedSettings = localStorage.getItem('aiApiSettings_v8');
@@ -76,10 +64,7 @@ const GlosbeSearchCard = () => {
     const handleLegacySearch = (searchText) => {
         const textToSearch = (searchText || word).trim();
         if (!textToSearch) return;
-        
-        const direction = containsChinese(textToSearch) ? 'zh2my' : 'my2zh';
-        
-        const glosbeUrl = direction === 'my2zh'
+        const glosbeUrl = searchDirection === 'my2zh'
             ? `https://glosbe.com/my/zh/${encodeURIComponent(textToSearch)}`
             : `https://glosbe.com/zh/my/${encodeURIComponent(textToSearch)}`;
         window.open(glosbeUrl, '_blank');
@@ -108,10 +93,8 @@ const GlosbeSearchCard = () => {
         setAiResults([]);
         setAiError('');
 
-        // ✅ 实时确定翻译方向
-        const currentDirection = containsChinese(trimmedWord) ? 'zh2my' : 'my2zh';
-        const fromLang = currentDirection === 'my2zh' ? '缅甸语' : '中文';
-        const toLang = currentDirection === 'my2zh' ? '中文' : '缅甸语';
+        const fromLang = searchDirection === 'my2zh' ? '缅甸语' : '中文';
+        const toLang = searchDirection === 'my2zh' ? '中文' : '缅甸语';
         const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
 
         const requestBody = {
@@ -176,16 +159,20 @@ const GlosbeSearchCard = () => {
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 setWord(transcript);
-                
-                const detectedDirection = containsChinese(transcript) ? 'zh2my' : 'my2zh';
-                setSearchDirection(detectedDirection);
-                
                 if (useAI) handleAiTranslate(transcript);
                 else handleLegacySearch(transcript);
             };
             recognitionRef.current = recognition;
         }
-    }, [useAI, apiSettings]); // searchDirection 不再是依赖
+    }, [searchDirection, useAI, apiSettings]);
+
+    // ✅ 修改：切换方向时不再清空输入框
+    const toggleDirection = () => {
+        setSearchDirection(prev => (prev === 'my2zh' ? 'zh2my' : 'my2zh'));
+        // 清空旧的翻译结果
+        setAiResults([]);
+        setAiError('');
+    };
 
     const toggleListening = () => {
         if (!recognitionRef.current) {
@@ -194,7 +181,6 @@ const GlosbeSearchCard = () => {
         }
         if (isListening) recognitionRef.current.stop();
         else {
-            // ✅ 语音识别时，可以先默认一个方向，识别后再自动判断
             recognitionRef.current.lang = searchDirection === 'my2zh' ? 'my-MM' : 'zh-CN';
             recognitionRef.current.start();
         }
@@ -207,8 +193,7 @@ const GlosbeSearchCard = () => {
         new Audio(url).play(); 
     };
     const handleBackTranslate = (text) => { 
-        const newDirection = containsChinese(text) ? 'zh2my' : 'my2zh';
-        setSearchDirection(newDirection);
+        setSearchDirection(prev => (prev === 'my2zh' ? 'zh2my' : 'my2zh'));
         setWord(text); 
         if (useAI) {
             setTimeout(() => handleAiTranslate(text), 50);
@@ -217,6 +202,7 @@ const GlosbeSearchCard = () => {
 
     const fromLangText = searchDirection === 'my2zh' ? '缅甸语' : '中文';
     const toLangText = searchDirection === 'my2zh' ? '中文' : '缅甸语';
+    const placeholderText = `输入${fromLangText}...`;
 
     return (
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
@@ -287,10 +273,9 @@ const GlosbeSearchCard = () => {
                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <Search className="w-5 h-5 text-gray-400" />
                 </div>
-                {/* ✅ 替换为 textarea */}
                 <textarea
                     ref={textareaRef}
-                    rows="1" // Start with one row
+                    rows="1"
                     value={word}
                     onChange={(e) => setWord(e.target.value)}
                     onKeyDown={(e) => {
@@ -299,7 +284,7 @@ const GlosbeSearchCard = () => {
                             handleSearch();
                         }
                     }}
-                    placeholder="输入要翻译的内容..."
+                    placeholder={placeholderText}
                     className="w-full pl-12 pr-14 py-3 text-base text-gray-900 dark:text-gray-100 bg-gray-100/60 dark:bg-gray-900/60 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-300 resize-none overflow-hidden"
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -315,10 +300,12 @@ const GlosbeSearchCard = () => {
                 </div>
             </div>
             <div className="flex items-center justify-between mt-4">
-                {/* ✅ 移除手动切换按钮，改为自动显示当前翻译方向 */}
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-2 text-base font-semibold text-gray-700 dark:text-gray-200">
                     <span>{fromLangText}</span>
-                    <ArrowLeftRight size={16} />
+                    {/* ✅ 恢复手动切换按钮 */}
+                    <button onClick={toggleDirection} title="切换翻译方向" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-transform duration-300 active:scale-90">
+                        <ArrowLeftRight size={20} />
+                    </button>
                     <span>{toLangText}</span>
                 </div>
                 <button
