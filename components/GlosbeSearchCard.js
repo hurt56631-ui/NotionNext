@@ -29,10 +29,14 @@ const GlosbeSearchCard = () => {
     const [aiResults, setAiResults] = useState([]);
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false); // 设置窗口的可见性
+    
+    // ✅ 新增：在设置中加入 useThirdParty 状态，并更新默认模型
     const [apiSettings, setApiSettings] = useState({
         url: 'https://open-gemini-api.deno.dev/v1/chat/completions',
-        model: 'gemini-pro',
+        model: 'gemini-pro-flash', // ✅ 默认模型更新为 gemini-pro-flash
         key: '',
+        useThirdParty: false, // ✅ 新增第三方兼容地址开关
+        thirdPartyUrl: '', // ✅ 新增第三方地址输入框
     });
 
     const recognitionRef = useRef(null);
@@ -40,15 +44,17 @@ const GlosbeSearchCard = () => {
 
     // 从 localStorage 加载设置
     useEffect(() => {
-        const savedSettings = localStorage.getItem('aiApiSettings_v4');
+        // 使用新 key 'aiApiSettings_v5' 以确保新设置生效
+        const savedSettings = localStorage.getItem('aiApiSettings_v5');
         if (savedSettings) {
-            setApiSettings(JSON.parse(savedSettings));
+            // 合并加载的设置和默认设置，以防旧设置中缺少新字段
+            setApiSettings(prevSettings => ({ ...prevSettings, ...JSON.parse(savedSettings) }));
         }
     }, []);
 
     // 保存设置到 localStorage
     const handleSaveSettings = () => {
-        localStorage.setItem('aiApiSettings_v4', JSON.stringify(apiSettings));
+        localStorage.setItem('aiApiSettings_v5', JSON.stringify(apiSettings));
         setSettingsOpen(false); // 关闭设置窗口
         alert('设置已保存！');
     };
@@ -73,6 +79,21 @@ const GlosbeSearchCard = () => {
             setAiError('请点击设置图标，填写API密钥。');
             return;
         }
+        
+        // ✅ 新增：根据开关判断 API 地址和模型
+        let apiUrl = apiSettings.url;
+        let apiModel = apiSettings.model;
+        
+        if (apiSettings.useThirdParty) {
+            if (!apiSettings.thirdPartyUrl) {
+                setAiError('请在设置中填写第三方 OpenAI 兼容地址。');
+                return;
+            }
+            // 自动拼接 /v1/chat/completions
+            apiUrl = `${apiSettings.thirdPartyUrl.replace(/\/$/, '')}/v1/chat/completions`;
+            // 当使用第三方时，模型固定或可选择，这里我们依然使用设置中的模型
+            apiModel = apiSettings.model;
+        }
 
         setIsAISearching(true);
         setAiResults([]);
@@ -83,14 +104,14 @@ const GlosbeSearchCard = () => {
         const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
 
         try {
-            const response = await fetch(apiSettings.url, {
+            const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${apiSettings.key}`,
                 },
                 body: JSON.stringify({
-                    model: apiSettings.model,
+                    model: apiModel,
                     messages: [{ role: 'user', content: prompt }],
                 }),
             });
@@ -106,7 +127,6 @@ const GlosbeSearchCard = () => {
             if (!responseText) {
                 throw new Error('API返回了非预期的格式。');
             }
-             // --- 核心修改: 解析原始Prompt格式，并移除[] ---
             const parsedResults = responseText.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
                 const lines = part.trim().split('\n');
                 const translation = lines[1]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
@@ -149,7 +169,6 @@ const GlosbeSearchCard = () => {
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 setWord(transcript);
-                // 使用回调确保在状态更新后执行搜索
                 if (useAI) {
                     handleAiTranslate(transcript);
                 } else {
@@ -158,7 +177,7 @@ const GlosbeSearchCard = () => {
             };
             recognitionRef.current = recognition;
         }
-    }, [searchDirection, useAI, apiSettings]); // 依赖项加入useAI和apiSettings
+    }, [searchDirection, useAI, apiSettings]);
 
     // 切换翻译方向
     const toggleDirection = () => {
@@ -185,7 +204,6 @@ const GlosbeSearchCard = () => {
     // --- AI 结果卡片操作 ---
     const handleCopy = (text) => navigator.clipboard.writeText(text);
     const handleSpeak = (textToSpeak) => { 
-        // Note: You might want to use different voices for different target languages.
         const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${lang}&r=-20`; 
         new Audio(url).play(); 
@@ -194,13 +212,11 @@ const GlosbeSearchCard = () => {
         toggleDirection(); 
         setTimeout(() => { 
             setWord(text); 
-            // Trigger AI translation directly after setting the word
             if (useAI) { 
                  handleAiTranslate(text); 
             }
         }, 100); 
     }
-
 
     const fromLangText = searchDirection === 'my2zh' ? '缅甸语' : '中文';
     const toLangText = searchDirection === 'my2zh' ? '中文' : '缅甸语';
@@ -209,7 +225,6 @@ const GlosbeSearchCard = () => {
     return (
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
 
-            {/* AI 开关和设置按钮 */}
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">AI翻译</span>
@@ -223,7 +238,6 @@ const GlosbeSearchCard = () => {
                 </button>
             </div>
 
-            {/* 设置窗口 */}
             {settingsOpen && (
                 <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg">
                     <div className="flex justify-between items-center mb-3">
@@ -231,10 +245,28 @@ const GlosbeSearchCard = () => {
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
                     <div className="space-y-3">
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-300">接口地址</label>
-                            <input type="text" value={apiSettings.url} onChange={(e) => setApiSettings({...apiSettings, url: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+                        {/* ✅ 新增：第三方兼容地址开关 */}
+                        <div className="flex items-center justify-between">
+                            <label htmlFor="third-party-toggle" className="text-xs font-medium text-gray-600 dark:text-gray-300">使用第三方 OpenAI 兼容地址</label>
+                            <label htmlFor="third-party-toggle" className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="third-party-toggle" className="sr-only peer" checked={apiSettings.useThirdParty} onChange={(e) => setApiSettings({...apiSettings, useThirdParty: e.target.checked})} />
+                                <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
+                            </label>
                         </div>
+
+                        {/* ✅ 根据开关显示不同设置 */}
+                        {apiSettings.useThirdParty ? (
+                             <div>
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">第三方兼容地址 (例如: https://api.example.com)</label>
+                                <input type="text" value={apiSettings.thirdPartyUrl} onChange={(e) => setApiSettings({...apiSettings, thirdPartyUrl: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+                             </div>
+                        ) : (
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Gemini 接口地址</label>
+                                <input type="text" value={apiSettings.url} onChange={(e) => setApiSettings({...apiSettings, url: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+                            </div>
+                        )}
+                        
                         <div>
                             <label className="text-xs font-medium text-gray-600 dark:text-gray-300">模型</label>
                             <input type="text" value={apiSettings.model} onChange={(e) => setApiSettings({...apiSettings, model: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
@@ -250,7 +282,6 @@ const GlosbeSearchCard = () => {
                 </div>
             )}
 
-            {/* 输入区域 */}
             <div className="relative">
                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <Search className="w-5 h-5 text-gray-400" />
@@ -281,9 +312,7 @@ const GlosbeSearchCard = () => {
                     </button>
                 </div>
             </div>
-
-
-            {/* 语言切换和查询按钮 */}
+            
             <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-base font-semibold text-gray-700 dark:text-gray-200">
                     <span>{fromLangText}</span>
@@ -307,7 +336,6 @@ const GlosbeSearchCard = () => {
                 </button>
             </div>
 
-            {/* AI 翻译结果区域 */}
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
                     {isAISearching && (
