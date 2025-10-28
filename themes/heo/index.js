@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已重构吸顶结构、优化颜色与间距
+// themes/heo/index.js  <-- 最终修复完整版：已集成精确吸顶逻辑与所有优化
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -317,10 +317,13 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
+  // ✅ 滚动与吸顶相关的状态和引用
   const scrollableContainerRef = useRef(null);
+  const stickySentinelRef = useRef(null); // 用于触发吸顶的“哨兵”
   const lastScrollY = useRef(0);
   const ticking = useRef(false);
-  const [isNavVisible, setIsNavVisible] = useState(true);
+  const [isStickyActive, setIsStickyActive] = useState(false); // 控制是否激活吸顶模式
+  const [isNavVisible, setIsNavVisible] = useState(true); // 控制吸顶后是否可见
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -366,15 +369,17 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
+  // ✅ 整合了 IntersectionObserver 和滚动监听的最终版 useEffect
   useEffect(() => {
     const container = scrollableContainerRef.current;
     if (!container) return;
 
+    // 滚动方向判断逻辑
     const threshold = 10;
     const handleScroll = () => {
+      if (!isStickyActive) return; // 只有在吸顶激活后才判断方向
       const currentY = container.scrollTop;
-      const maxScrollY = container.scrollHeight - container.clientHeight;
-
+      
       if (!ticking.current) {
         window.requestAnimationFrame(() => {
           const diff = currentY - lastScrollY.current;
@@ -384,19 +389,29 @@ const LayoutIndex = props => {
             } else {
               setIsNavVisible(true);
             }
-            lastScrollY.current = currentY;
           }
-          if (currentY < 50 || currentY >= maxScrollY - 50) {
-            setIsNavVisible(true);
-          }
+          lastScrollY.current = currentY;
           ticking.current = false;
         });
         ticking.current = true;
       }
     };
-    
     container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // 吸顶触发逻辑
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            setIsStickyActive(!entry.isIntersecting);
+            if(entry.isIntersecting) {
+              setIsNavVisible(true); // 回到非吸顶状态时，重置为可见
+            }
+        },
+        { rootMargin: '0px', threshold: 0 }
+    );
+    const currentSentinel = stickySentinelRef.current;
+    if (currentSentinel) observer.observe(currentSentinel);
     
+    // 其他逻辑
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -413,9 +428,10 @@ const LayoutIndex = props => {
 
     return () => { 
         container.removeEventListener('scroll', handleScroll);
+        if (currentSentinel) observer.unobserve(currentSentinel);
         window.removeEventListener('popstate', handlePopState);
     };
-  }, []);
+  }, [isStickyActive]); // 依赖 isStickyActive 以便在状态改变时重新评估
 
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
@@ -497,13 +513,15 @@ const LayoutIndex = props => {
                     {/* ✅ 静态头部：包含搜索和操作按钮，会随页面滚动 */}
                     <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
                        <div className='px-4 mb-4'><GlosbeSearchCard /></div>
-                       <ActionButtons onOpenFavorites={handleOpenFavorites} />
+                       <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
                     </div>
 
-                    {/* ✅ 吸顶分类栏：只包含分类，独立于上方内容 */}
-                    <div className={`sticky top-0 z-20 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        {/* 背景色与上方头部一致，并带有毛玻璃效果, 移除了 border-t */}
-                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
+                    {/* ✅ 吸顶哨兵：一个看不见的元素，用于触发吸顶 */}
+                    <div ref={stickySentinelRef} className="h-0 relative -top-1"></div>
+                    
+                    {/* ✅ 吸顶分类栏 */}
+                    <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed top-0 left-0 right-0 z-20' : ''} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
+                        <div className={`bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg ${isStickyActive ? '' : 'border-t'} border-b border-gray-200 dark:border-gray-700`}>
                             <div className='flex justify-around'>
                                 {tabs.map(tab => (
                                 <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -636,7 +654,7 @@ const LayoutSlug = props => {
   }, [])
 
   const commentEnable =
-    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') ||
+    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALine_SERVER_URL') ||
     siteConfig('COMMENT_VALINE_APP_ID') || siteConfig('COMMENT_GISCUS_REPO') ||
     siteConfig('COMMENT_CUSDIS_APP_ID') || siteConfig('COMMENT_UTTERRANCES_REPO') ||
     siteConfig('COMMENT_GITALK_CLIENT_ID') || siteConfig('COMMENT_WEBMENTION_ENABLE')
