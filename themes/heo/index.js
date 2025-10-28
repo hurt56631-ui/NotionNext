@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已采用JS精控吸顶，彻底解决覆盖与线条问题
+// themes/heo/index.js  <-- 最终修复完整版：已扩大侧边栏激活范围
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -317,13 +317,12 @@ const LayoutIndex = props => {
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
-  // ✅ 滚动与吸顶相关的状态和引用
   const scrollableContainerRef = useRef(null);
-  const stickySentinelRef = useRef(null); // 用于触发吸顶的“哨兵”
+  const stickySentinelRef = useRef(null);
   const lastScrollY = useRef(0);
   const ticking = useRef(false);
-  const [isStickyActive, setIsStickyActive] = useState(false); // 控制是否激活吸顶模式
-  const [isNavVisible, setIsNavVisible] = useState(true); // 控制吸顶后是否可见
+  const [isStickyActive, setIsStickyActive] = useState(false);
+  const [isNavVisible, setIsNavVisible] = useState(true);
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -369,17 +368,14 @@ const LayoutIndex = props => {
     }
   }, [router]);
 
-  // ✅ 整合了 IntersectionObserver 和滚动监听的最终版 useEffect
   useEffect(() => {
     const container = scrollableContainerRef.current;
     if (!container) return;
 
-    // 滚动方向判断逻辑
     const threshold = 10;
     const handleScroll = () => {
-      // 只有在吸顶激活后才判断方向
       if (!isStickyActive) {
-          lastScrollY.current = container.scrollTop; // 持续更新位置
+          lastScrollY.current = container.scrollTop;
           return;
       }
       
@@ -390,9 +386,9 @@ const LayoutIndex = props => {
           const diff = currentY - lastScrollY.current;
           if (Math.abs(diff) > threshold) {
             if (diff > 0) {
-              setIsNavVisible(false); // 手指上滑，隐藏
+              setIsNavVisible(false);
             } else {
-              setIsNavVisible(true); // 手指下拉，显示
+              setIsNavVisible(true);
             }
           }
           lastScrollY.current = currentY;
@@ -403,7 +399,6 @@ const LayoutIndex = props => {
     };
     container.addEventListener('scroll', handleScroll, { passive: true });
 
-    // 吸顶触发逻辑
     const observer = new IntersectionObserver(
         ([entry]) => {
             setIsStickyActive(!entry.isIntersecting);
@@ -411,13 +406,11 @@ const LayoutIndex = props => {
               setIsNavVisible(true);
             }
         },
-        // 当哨兵元素的顶部刚好离开视口时触发
         { rootMargin: '0px', threshold: 0 }
     );
     const currentSentinel = stickySentinelRef.current;
     if (currentSentinel) observer.observe(currentSentinel);
     
-    // 其他逻辑 (保持不变)
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -437,11 +430,16 @@ const LayoutIndex = props => {
         if (currentSentinel) observer.unobserve(currentSentinel);
         window.removeEventListener('popstate', handlePopState);
     };
-  }, [isStickyActive]); // 依赖 isStickyActive
+  }, [isStickyActive]);
 
+  // ✅ 已修改：扩大侧边栏拖拽激活范围
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
-    if ((!isSidebarOpen && startX > 50)) return;
+    const screenWidth = window.innerWidth;
+    
+    // 如果触摸点在屏幕左侧 40% 范围内，则允许拖拽
+    if (!isSidebarOpen && startX > screenWidth * 0.4) return;
+
     touchStartX.current = startX;
     currentSidebarX.current = sidebarX;
     setIsDragging(true);
@@ -516,18 +514,14 @@ const LayoutIndex = props => {
                 <div className='h-[40vh] flex-shrink-0' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     
-                    {/* ✅ 统一的浅紫色背景容器 */}
                     <div className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
-                        {/* 静态头部 */}
                         <div className='pt-6'>
                            <div className='px-4 mb-6'><GlosbeSearchCard /></div>
                            <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
                         </div>
 
-                        {/* ✅ 吸顶哨兵：放在静态内容和分类栏之间 */}
                         <div ref={stickySentinelRef}></div>
 
-                        {/* ✅ 分类栏的占位符版本，当不吸顶时显示 */}
                         <div className={`${isStickyActive ? 'invisible' : ''} border-b border-violet-200 dark:border-gray-700`}>
                             <div className='flex justify-around'>
                                {tabs.map(tab => (
@@ -541,7 +535,6 @@ const LayoutIndex = props => {
                        </div>
                     </div>
 
-                    {/* ✅ 吸顶分类栏的浮动版本 */}
                     <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed w-full top-0 z-30' : 'hidden'} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
                         <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-violet-200 dark:border-gray-700'>
                             <div className='flex justify-around max-w-[86rem] mx-auto'>
@@ -556,7 +549,6 @@ const LayoutIndex = props => {
                         </div>
                     </div>
                     
-                    {/* ✅ 主内容区 */}
                     <main {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
@@ -576,7 +568,6 @@ const LayoutIndex = props => {
             <BottomNavBar />
         </div>
 
-        {/* 收藏组件 (保持不变) */}
         <ShortSentenceCard
             sentences={sentenceCardData || []}
             isOpen={isSentenceFavoritesCardOpen}
