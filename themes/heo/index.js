@@ -218,7 +218,7 @@ const BottomNavBar = () => {
 };
 
 // =================================================================================
-// ====================== 快捷操作按钮组件 (已修改) ========================
+// ====================== 快捷操作按钮组件 (保持不变) ========================
 // =================================================================================
 const ActionButtons = ({ onOpenFavorites }) => {
   const actions = [
@@ -260,7 +260,7 @@ const ActionButtons = ({ onOpenFavorites }) => {
 
 
 // =================================================================================
-// ====================== IndexedDB 辅助函数 (已修改) ========================
+// ====================== IndexedDB 辅助函数 (保持不变) ========================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const SENTENCE_STORE_NAME = 'favoriteSentences';
@@ -276,7 +276,6 @@ function openDB() {
       if (!db.objectStoreNames.contains(SENTENCE_STORE_NAME)) {
         db.createObjectStore(SENTENCE_STORE_NAME, { keyPath: 'id' });
       }
-      // ✅ 新增：创建单词收藏存储
       if (!db.objectStoreNames.contains(WORD_STORE_NAME)) {
         db.createObjectStore(WORD_STORE_NAME, { keyPath: 'id' });
       }
@@ -302,12 +301,11 @@ async function getAllFavorites(storeName) {
 
 
 /**
- * 首页 - 终极融合版 (已应用路由哈希方案)
+ * 首页 - 终极融合版 (已应用所有修改)
  */
 const LayoutIndex = props => {
   const router = useRouter(); 
-  // 引入 HSK 单词数据，用于传递给 HskContentBlock
-  const { books, speakingCourses, sentenceCards, allWords } = props 
+  const { books, speakingCourses, sentenceCards, allWords } = props;
 
   const tabs = [
     { name: '文章', icon: <Newspaper size={22} /> },
@@ -316,11 +314,20 @@ const LayoutIndex = props => {
     { name: '练习', icon: <ClipboardCheck size={22} /> },
     { name: '书籍', icon: <BookOpen size={22} /> }
   ];
+  
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
+  
+  // 用于判断分类栏是否应该进入“可吸顶”状态
   const [isCategoryBarSticky, setIsCategoryBarSticky] = useState(false);
   const sentinelRef = useRef(null);
 
+  // ✅ 新增：用于判断滚动方向
+  const scrollableContainerRef = useRef(null);
+  const lastScrollY = useRef(0);
+  const [scrollDirection, setScrollDirection] = useState('down');
+
+  // 侧边栏状态 (保持不变)
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
@@ -328,36 +335,28 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  // 收藏卡片数据状态
-  const [sentenceCardData, setSentenceCardData] = useState(null); // 用于收藏短句
-  const [wordCardData, setWordCardData] = useState(null); // 用于收藏单词
-
+  // 收藏卡片数据状态 (保持不变)
+  const [sentenceCardData, setSentenceCardData] = useState(null);
+  const [wordCardData, setWordCardData] = useState(null);
   const isSentenceFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
   const isWordFavoritesCardOpen = router.asPath.includes('#favorite-words');
 
+  // 收藏相关函数 (保持不变)
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
         if (sentences && sentences.length > 0) {
-            // 映射到 ShortSentenceCard 所需的结构: {id, sentence, translation, pinyin, imageUrl}
-            setSentenceCardData(sentences.map(s => ({
-                id: s.id,
-                sentence: s.chinese,
-                translation: s.burmese,
-                pinyin: s.pinyin,
-                imageUrl: s.imageUrl
-            })));
-            setWordCardData(null); // 确保只打开一个
+            setSentenceCardData(sentences.map(s => ({ id: s.id, sentence: s.chinese, translation: s.burmese, pinyin: s.pinyin, imageUrl: s.imageUrl })));
+            setWordCardData(null);
             router.push(router.asPath + '#favorite-sentences', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何短句。');
         }
     } else if (type === 'words') {
-        const words = await getAllFavorites(WORD_STORE_NAME); // 获取单词收藏
+        const words = await getAllFavorites(WORD_STORE_NAME);
         if (words && words.length > 0) {
-            // 映射到 WordCard 所需的结构: {id, chinese, burmese, pinyin, imageUrl}
             setWordCardData(words);
-            setSentenceCardData(null); // 确保只打开一个
+            setSentenceCardData(null);
             router.push(router.asPath + '#favorite-words', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何单词。');
@@ -370,7 +369,6 @@ const LayoutIndex = props => {
   const handleCloseFavorites = useCallback(() => {
     setSentenceCardData(null);
     setWordCardData(null);
-    // 自动回退，移除 hash
     if (window.location.hash.includes('#favorite')) {
         router.back();
     }
@@ -378,7 +376,7 @@ const LayoutIndex = props => {
 
 
   useEffect(() => {
-    // 监听哈希变化，处理浏览器后退
+    // 哈希变化监听 (保持不变)
     const handlePopState = () => {
       const hash = window.location.hash;
       if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
@@ -388,30 +386,49 @@ const LayoutIndex = props => {
     };
     window.addEventListener('popstate', handlePopState);
 
+    // 背景图设置 (保持不变)
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
+    // IntersectionObserver 用于判断是否滚过背景图区域
     const observer = new IntersectionObserver(
         ([entry]) => setIsCategoryBarSticky(!entry.isIntersecting),
         { root: null, threshold: 1.0, rootMargin: '-1px 0px 0px 0px' }
     );
-
     const currentSentinel = sentinelRef.current;
     if (currentSentinel) observer.observe(currentSentinel);
+
+    // ✅ 新增：滚动方向判断的事件监听
+    const container = scrollableContainerRef.current;
+    const handleScroll = () => {
+        const currentScrollY = container.scrollTop;
+        if (currentScrollY > lastScrollY.current) { // 阈值可以根据需要调整
+            setScrollDirection('down');
+        } else if (currentScrollY < lastScrollY.current) {
+            setScrollDirection('up');
+        }
+        lastScrollY.current = currentScrollY < 0 ? 0 : currentScrollY;
+    };
+    if (container) {
+        container.addEventListener('scroll', handleScroll, { passive: true });
+    }
+
     return () => { 
         if (currentSentinel) observer.unobserve(currentSentinel); 
         window.removeEventListener('popstate', handlePopState);
+        if (container) {
+            container.removeEventListener('scroll', handleScroll);
+        }
     };
   }, []);
 
-  // ... (侧边栏拖拽逻辑保持不变)
+  // 侧边栏拖拽逻辑 (保持不变)
   const handleTouchStart = (e) => {
     const startX = e.touches[0].clientX;
     if ((!isSidebarOpen && startX > 50)) return;
-
     touchStartX.current = startX;
     currentSidebarX.current = sidebarX;
     setIsDragging(true);
@@ -421,7 +438,6 @@ const LayoutIndex = props => {
     if (!isDragging || touchStartX.current === null) return;
     const currentX = e.touches[0].clientX;
     const deltaX = currentX - touchStartX.current;
-
     let newX = currentSidebarX.current + deltaX;
     newX = Math.max(-sidebarWidth, Math.min(newX, 0));
     setSidebarX(newX);
@@ -431,7 +447,6 @@ const LayoutIndex = props => {
     if (!isDragging || touchStartX.current === null) return;
     setIsDragging(false);
     touchStartX.current = null;
-
     if (sidebarX < -sidebarWidth / 2) {
         closeSidebar();
     } else {
@@ -439,20 +454,17 @@ const LayoutIndex = props => {
     }
   };
 
+  // 内容区域滑动切换 Tab (保持不变)
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
-          if (currentIndex < tabs.length - 1) {
-              setActiveTab(tabs[currentIndex + 1].name);
-          }
+          if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
       },
       onSwipedRight: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
-          if (currentIndex > 0) {
-              setActiveTab(tabs[currentIndex - 1].name);
-          }
+          if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
       },
-      disabled: !isCategoryBarSticky,
+      disabled: !isCategoryBarSticky || isDragging,
       preventDefaultTouchmoveEvent: true,
       trackMouse: true,
       delta: 50
@@ -460,34 +472,24 @@ const LayoutIndex = props => {
 
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
-
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
         <CustomScrollbarStyle />
-        
         <HomeSidebar isOpen={isSidebarOpen} onClose={closeSidebar} sidebarX={sidebarX} isDragging={isDragging} />
 
-        <div
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className='relative flex-grow w-full h-full'
-        >
+        <div onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} className='relative flex-grow w-full h-full'>
             <div className='absolute inset-0 z-0 bg-cover bg-center' style={{ backgroundImage: `url(${backgroundUrl})` }} />
             <div className='absolute inset-0 bg-black/20'></div>
 
-            <button
-                onClick={openSidebar}
-                className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors"
-                aria-label="打开菜单"
-            >
+            <button onClick={openSidebar} className="absolute top-4 left-4 z-30 p-2 text-white bg-black/20 rounded-full hover:bg-black/40 transition-colors" aria-label="打开菜单">
                 <i className="fas fa-bars text-xl"></i>
             </button>
             
-            <div className='absolute top-0 left-0 right-0 h-[45vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
+            {/* ✅ 修改：顶部背景图区域高度从 45vh 改为 40vh */}
+            <div className='absolute top-0 left-0 right-0 h-[40vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.7)' }}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
@@ -499,12 +501,16 @@ const LayoutIndex = props => {
                 </div>
             </div>
 
-            <div className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
-                <div ref={sentinelRef} className='h-[45vh] flex-shrink-0' />
-                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(55vh+1px)]'>
+            {/* ✅ 修改：添加 ref={scrollableContainerRef} 以便监听滚动 */}
+            <div ref={scrollableContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
+                {/* ✅ 修改：占位区域高度从 45vh 改为 40vh */}
+                <div ref={sentinelRef} className='h-[40vh] flex-shrink-0' />
+                {/* ✅ 修改：内容区域最小高度从 55vh 改为 60vh */}
+                <div className='relative bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     <div className='p-4 pt-6'><GlosbeSearchCard /><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
 
-                    <div className='sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
+                    {/* ✅ 修改：应用动态吸顶效果 */}
+                    <div className={`sticky top-0 z-30 bg-white/80 dark:bg-black/70 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${isCategoryBarSticky && scrollDirection === 'up' ? '-translate-y-full' : 'translate-y-0'}`}>
                         <div className='flex justify-around'>
                             {tabs.map(tab => (
                             <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
@@ -521,10 +527,7 @@ const LayoutIndex = props => {
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'>
                                     {tab.name === '文章' && <PostListComponent {...props} />}
-                                    
-                                    {/* ✅ HSK 组件现在接收 allWords 属性 */}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
-                                    
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
                                     {tab.name === '练习' && <PracticeContentBlock />}
                                     {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
@@ -538,15 +541,13 @@ const LayoutIndex = props => {
             <BottomNavBar />
         </div>
 
-        {/* 收藏短句组件 (使用 ShortSentenceCard) */}
+        {/* 收藏组件 (保持不变) */}
         <ShortSentenceCard
             sentences={sentenceCardData || []}
             isOpen={isSentenceFavoritesCardOpen}
             onClose={handleCloseFavorites}
             progressKey="favorites-sentences" 
         />
-        
-        {/* ✅ 收藏单词组件 (使用 WordCard) */}
         <WordCard
             words={wordCardData || []}
             isOpen={isWordFavoritesCardOpen}
