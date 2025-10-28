@@ -229,7 +229,7 @@ const ActionButtons = ({ onOpenFavorites }) => {
     { icon: <BookText size={24} />, text: '收藏语法', type: 'grammar', color: 'from-gray-500 to-slate-500' },
   ];
   return (
-    <div className="grid grid-cols-3 gap-4 mb-6 px-4">
+    <div className="grid grid-cols-3 gap-4 px-4">
       {actions.map((action, index) => {
         const content = (
           <>
@@ -496,14 +496,14 @@ const LayoutIndex = props => {
                     
                     {/* ✅ 静态头部：包含搜索和操作按钮，会随页面滚动 */}
                     <div className='bg-violet-50 dark:bg-gray-800 pt-6 rounded-t-2xl'>
-                       <div className='px-4'><GlosbeSearchCard /></div>
+                       <div className='px-4 mb-4'><GlosbeSearchCard /></div>
                        <ActionButtons onOpenFavorites={handleOpenFavorites} />
                     </div>
 
                     {/* ✅ 吸顶分类栏：只包含分类，独立于上方内容 */}
                     <div className={`sticky top-0 z-20 transition-transform duration-300 ease-in-out ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
-                        {/* 背景色与上方头部一致，并带有毛玻璃效果 */}
-                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-t border-gray-200 dark:border-gray-700'>
+                        {/* 背景色与上方头部一致，并带有毛玻璃效果, 移除了 border-t */}
+                        <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700'>
                             <div className='flex justify-around'>
                                 {tabs.map(tab => (
                                 <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
