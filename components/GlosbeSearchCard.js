@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 
-// 语言配置文件
+// ✅ 语言配置文件
 const LANGUAGES = [
     { name: '中文', code: 'zh-CN', speechCode: 'zh-CN', ttsCode: 'zh-CN-XiaochenMultilingualNeural' },
     { name: '缅甸语', code: 'my-MM', speechCode: 'my-MM', ttsCode: 'my-MM-NilarNeural' },
@@ -15,7 +15,7 @@ const LANGUAGES = [
     { name: 'Deutsch', code: 'de-DE', speechCode: 'de-DE', ttsCode: 'de-DE-KatjaNeural' },
 ];
 
-// 高准确率提示词
+// ✅ 集成最终版“高准确率提示词”
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}：
 “${word}”
@@ -92,7 +92,7 @@ const GlosbeSearchCard = () => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showFromLangMenu, setShowFromLangMenu] = useState(false);
     const [showToLangMenu, setShowToLangMenu] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false); // ✅ 新增：折叠/展开状态
 
     const [apiSettings, setApiSettings] = useState({
         model: 'gemini-pro-flash',
@@ -158,9 +158,8 @@ const GlosbeSearchCard = () => {
         setIsAISearching(true);
         setAiResults('');
         setAiError('');
-        setIsExpanded(false);
+        setIsExpanded(false); // ✅ 每次新翻译都默认折叠
 
-        // ✅ 关键修复：为不同接口构建不同的请求体
         if (apiSettings.useThirdParty) {
             apiUrl = `${apiSettings.thirdPartyUrl.replace(/\/$/, '')}/chat/completions`;
             requestBody = {
@@ -168,7 +167,6 @@ const GlosbeSearchCard = () => {
                 messages: [{ role: 'user', content: prompt }],
                 stream: true,
             };
-            // 只有第三方兼容接口才尝试发送 generation_config
             if (apiSettings.disableThinking) {
                  requestBody.generation_config = {
                      thinking_budget_tokens: 0
@@ -176,7 +174,6 @@ const GlosbeSearchCard = () => {
             }
         } else {
             apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${apiSettings.model}:streamGenerateContent?key=${apiSettings.key}`;
-            // 官方 Gemini 接口不支持 thinking_budget_tokens，使用正确的 body 结构
             requestBody = {
                 contents: [{ parts: [{ text: prompt }] }],
             };
@@ -206,11 +203,9 @@ const GlosbeSearchCard = () => {
                 for (const jsonStr of jsonChunks) {
                     try {
                         const parsed = JSON.parse(jsonStr);
-                        // 动态处理两种 API 的响应格式
                         const delta = parsed.candidates?.[0]?.content?.parts?.[0]?.text || parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullResponse += delta;
-                            setAiResults(fullResponse);
                         }
                     } catch (e) { /* Ignore */ }
                 }
@@ -282,7 +277,7 @@ const GlosbeSearchCard = () => {
         setAiError('');
     };
 
-    const displayedResults = isExpanded ? aiResults : (Array.isArray(aiResults) ? aiResults.slice(0, 1) : aiResults);
+    const displayedResults = isExpanded ? aiResults : (Array.isArray(aiResults) ? aiResults.slice(0, 1) : []);
 
     return (
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
@@ -395,9 +390,12 @@ const GlosbeSearchCard = () => {
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
                     {isAISearching && (
-                        <div className="text-center p-4">
-                            <Loader2 className="w-6 h-6 mx-auto animate-spin text-cyan-500" />
-                            <p className="mt-2 text-xs text-gray-500">AI 正在翻译...</p>
+                        <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
+                            <div className="flex justify-center items-center">
+                                <Loader2 className="w-6 h-6 mx-auto animate-spin text-cyan-500" />
+                                <p className="ml-2 text-sm text-gray-500">AI 正在翻译...</p>
+                            </div>
+                            {typeof aiResults === 'string' && <div className="mt-4 whitespace-pre-wrap text-left font-semibold text-gray-800 dark:text-white">{aiResults}</div>}
                         </div>
                     )}
                     {aiError && (<div className="p-3 rounded-lg bg-red-100 dark:bg-red-800/20 text-red-700 dark:text-red-300 text-sm">{aiError}</div>)}
