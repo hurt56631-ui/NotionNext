@@ -1,29 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// ✅ 优化后的 Prompt，增强了对不同模型的兼容性
+// ✅ 恢复您最初提供的、效果最好的 Prompt
 const getAIPrompt = (word, fromLang, toLang) => `
-You are an expert translator. Translate the following ${fromLang} text to ${toLang}.
-Your task is to provide four distinct translation styles. For each style, you MUST provide both the translation and the original ${fromLang} meaning.
-
-Text to translate: "${word}"
-
-Please follow this format EXACTLY, without any extra explanations or titles:
-📖 **Style 1: Natural & Direct**
-*   **[Your ${toLang} translation here]**
-*   ${fromLang}: ${word}
-
-💬 **Style 2: Colloquial & Casual**
-*   **[Your ${toLang} translation here]**
-*   ${fromLang}: ${word}
-
-💡 **Style 3: Idiomatic & Fluent**
-*   **[Your ${toLang} translation here]**
-*   ${fromLang}: ${word}
-
-🐼 **Style 4: Simple & Clear**
-*   **[Your ${toLang} translation here]**
-*   ${fromLang}: ${word}
+请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
+请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
+📖 **自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
+*   **[此处为加粗的${toLang}翻译]**
+*   ${fromLang}意思
+💬 **口语版**，采用${toLang === '缅甸语' ? '缅甸' : '中国'}年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕跡:
+*   **[此处为加粗的${toLang}翻译]**
+*   ${fromLang}意思
+💡 **自然意译版**，遵循${toLang}的思维方式和表达习惯进行翻译，确保语句流畅地道，适当口语化:
+*   **[此处为加粗的${toLang}翻译]**
+*   ${fromLang}意思
+🐼 **通顺意译**，将句子翻译成符合${toLang === '缅甸语' ? '缅甸人' : '中国人'}日常表达习惯的、流畅自然的${toLang}。
+*   **[此处为加粗的${toLang}翻译]**
+*   ${fromLang}意思
 `;
 
 // 语言检测辅助函数
@@ -51,7 +44,6 @@ const GlosbeSearchCard = () => {
     const recognitionRef = useRef(null);
     const textareaRef = useRef(null);
 
-    // 自动扩展输入框高度
     useEffect(() => {
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
@@ -59,7 +51,6 @@ const GlosbeSearchCard = () => {
         }
     }, [word]);
 
-    // 自动检测语言方向
     useEffect(() => {
         const detectedDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
         if (detectedDirection !== searchDirection) {
@@ -67,16 +58,15 @@ const GlosbeSearchCard = () => {
         }
     }, [word]);
 
-    // 加载设置
     useEffect(() => {
-        const savedSettings = localStorage.getItem('aiApiSettings_v9'); // Use a new key for the updated settings
+        const savedSettings = localStorage.getItem('aiApiSettings_v8');
         if (savedSettings) {
             setApiSettings(prevSettings => ({ ...prevSettings, ...JSON.parse(savedSettings) }));
         }
     }, []);
 
     const handleSaveSettings = () => {
-        localStorage.setItem('aiApiSettings_v9', JSON.stringify(apiSettings));
+        localStorage.setItem('aiApiSettings_v8', JSON.stringify(apiSettings));
         setSettingsOpen(false);
         alert('设置已保存！');
     };
@@ -91,7 +81,6 @@ const GlosbeSearchCard = () => {
         window.open(glosbeUrl, '_blank');
     };
 
-    // AI 翻译主函数（流式）
     const handleAiTranslate = async (text) => {
         const trimmedWord = (text || word).trim();
         if (!trimmedWord) return;
@@ -112,12 +101,12 @@ const GlosbeSearchCard = () => {
         }
 
         setIsAISearching(true);
-        setAiResults(''); // 初始化为空字符串以接收流式数据
+        setAiResults([]); // 开始时清空结果
         setAiError('');
 
         const currentDirection = containsChinese(trimmedWord) ? 'zh2my' : 'my2zh';
-        const fromLang = currentDirection === 'my2zh' ? 'Burmese' : 'Chinese';
-        const toLang = currentDirection === 'my2zh' ? 'Chinese' : 'Burmese';
+        const fromLang = currentDirection === 'my2zh' ? '缅甸语' : '中文';
+        const toLang = currentDirection === 'my2zh' ? '中文' : '缅甸语';
         const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
 
         const requestBody = {
@@ -145,6 +134,7 @@ const GlosbeSearchCard = () => {
             const decoder = new TextDecoder();
             let fullResponse = '';
 
+            // 在流式传输期间不更新UI，只累积文本
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -158,31 +148,33 @@ const GlosbeSearchCard = () => {
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullResponse += delta;
-                            setAiResults(fullResponse);
                         }
-                    } catch (e) { /* Ignore parsing errors for empty chunks */ }
+                    } catch (e) { /* Ignore parsing errors */ }
                 }
             }
             
+            // ✅ 流结束后，一次性解析并更新UI
             const parsedResults = fullResponse.split(/📖|💬|💡|🐼/).filter(p => p.trim()).map(part => {
                 const lines = part.trim().split('\n');
                 const translation = lines[1]?.replace(/\*+|\[|\]|-/g, '').trim() || '';
-                const meaning = lines.find(l => l.includes(`${fromLang}:`))?.replace(/\*+|\[|\]|-/g, '').trim() || '';
+                const meaning = lines[2]?.replace(/\*+|\[|\]|-/g, '').trim() || ''; // 恢复对第三行的解析
                 return { translation, meaning };
             });
-            setAiResults(parsedResults);
+
+            // 过滤掉没有有效回译的结果
+            const validResults = parsedResults.filter(r => r.translation && r.meaning);
+
+            if (validResults.length === 0) {
+                throw new Error("AI未能按预期格式返回翻译和回译。");
+            }
+
+            setAiResults(validResults);
+
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
         } finally {
             setIsAISearching(false);
-        }
-    };
-    
-    // ✅ 新增：重新生成函数
-    const handleRegenerate = () => {
-        if (word.trim()) {
-            handleAiTranslate(word);
         }
     };
     
@@ -210,6 +202,9 @@ const GlosbeSearchCard = () => {
         }
     }, [useAI, apiSettings]);
 
+    // ✅ 手动切换方向功能已移除，此函数不再需要
+    // const toggleDirection = () => { ... };
+
     const toggleListening = () => {
         if (!recognitionRef.current) {
             alert('抱歉，您的浏览器不支持语音识别。');
@@ -222,7 +217,7 @@ const GlosbeSearchCard = () => {
             recognitionRef.current.start();
         }
     };
-
+    
     const handleCopy = (text) => navigator.clipboard.writeText(text);
     const handleSpeak = (textToSpeak) => { 
         const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
@@ -349,18 +344,11 @@ const GlosbeSearchCard = () => {
             </div>
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
-                    {/* ✅ 新增：重新生成按钮 */}
-                    {(aiResults.length > 0 || (typeof aiResults === 'string' && aiResults)) && !isAISearching && (
-                        <div className="flex justify-end mb-2">
-                            <button onClick={handleRegenerate} title="重新生成" className="p-1.5 rounded-full text-gray-500 hover:bg-violet-100 dark:hover:bg-gray-700 transition-colors">
-                                <Repeat size={16}/>
-                            </button>
-                        </div>
-                    )}
-
-                    {isAISearching && typeof aiResults === 'string' && (
-                        <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white">
-                            {aiResults}
+                    {/* ✅ 优化：仅在搜索中且结果为空时显示加载动画 */}
+                    {isAISearching && aiResults.length === 0 && (
+                        <div className="text-center p-4">
+                            <Loader2 className="w-6 h-6 mx-auto animate-spin text-cyan-500" />
+                            <p className="mt-2 text-xs text-gray-500">AI 正在思考...</p>
                         </div>
                     )}
                     {aiError && (
@@ -368,7 +356,7 @@ const GlosbeSearchCard = () => {
                             {aiError}
                         </div>
                     )}
-                    {Array.isArray(aiResults) && aiResults.length > 0 && (
+                    {aiResults.length > 0 && (
                         <div className="space-y-3">
                         {aiResults.map((result, index) => (
                           <div key={index}  className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
