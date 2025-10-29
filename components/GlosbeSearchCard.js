@@ -206,6 +206,7 @@ const GlosbeSearchCard = () => {
                 for (const jsonStr of jsonChunks) {
                     try {
                         const parsed = JSON.parse(jsonStr);
+                        // 动态处理两种 API 的响应格式
                         const delta = parsed.candidates?.[0]?.content?.parts?.[0]?.text || parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullResponse += delta;
@@ -283,7 +284,6 @@ const GlosbeSearchCard = () => {
 
     const displayedResults = isExpanded ? aiResults : (Array.isArray(aiResults) ? aiResults.slice(0, 1) : aiResults);
 
-    // ... The rest of the JSX remains exactly the same as the previous correct version ...
     return (
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
             <div className="flex justify-between items-center mb-4">
