@@ -1,5 +1,5 @@
 // components/Tixing/LianXianTi.js (V16 - 单文件版本，样式内联)
-import React, a{ useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Howl } from 'howler';
 import confetti from 'canvas-confetti';
 import { pinyin } from 'pinyin-pro';
