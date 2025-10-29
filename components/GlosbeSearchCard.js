@@ -113,7 +113,7 @@ const GlosbeSearchCard = () => {
             textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         }
     }, [word]);
-
+    
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (fromMenuRef.current && !fromMenuRef.current.contains(event.target)) setShowFromLangMenu(false);
@@ -155,6 +155,12 @@ const GlosbeSearchCard = () => {
         let requestBody;
         const prompt = getAIPrompt(trimmedWord, fromLang.name, toLang.name);
 
+        setIsAISearching(true);
+        setAiResults('');
+        setAiError('');
+        setIsExpanded(false);
+
+        // ✅ 关键修复：为不同接口构建不同的请求体
         if (apiSettings.useThirdParty) {
             apiUrl = `${apiSettings.thirdPartyUrl.replace(/\/$/, '')}/chat/completions`;
             requestBody = {
@@ -162,21 +168,20 @@ const GlosbeSearchCard = () => {
                 messages: [{ role: 'user', content: prompt }],
                 stream: true,
             };
+            // 只有第三方兼容接口才尝试发送 generation_config
+            if (apiSettings.disableThinking) {
+                 requestBody.generation_config = {
+                     thinking_budget_tokens: 0
+                 };
+            }
         } else {
             apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${apiSettings.model}:streamGenerateContent?key=${apiSettings.key}`;
+            // 官方 Gemini 接口不支持 thinking_budget_tokens，使用正确的 body 结构
             requestBody = {
                 contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                    // thinking_budget_tokens is not a standard Gemini API param via this endpoint
-                }
             };
         }
         
-        setIsAISearching(true);
-        setAiResults('');
-        setAiError('');
-        setIsExpanded(false);
-
         try {
             const response = await fetch(apiUrl, {
                 method: 'POST',
@@ -278,9 +283,9 @@ const GlosbeSearchCard = () => {
 
     const displayedResults = isExpanded ? aiResults : (Array.isArray(aiResults) ? aiResults.slice(0, 1) : aiResults);
 
+    // ... The rest of the JSX remains exactly the same as the previous correct version ...
     return (
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
-            {/* ✅ 恢复顶栏 div */}
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Glosbe</span>
@@ -301,11 +306,10 @@ const GlosbeSearchCard = () => {
                         <h3 className="text-md font-semibold text-gray-800 dark:text-white">API 设置</h3>
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
-                    {/* Settings content remains the same */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <label htmlFor="thinking-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                                <Bot size={14} /> 关闭思考模式
+                                <Bot size={14} /> 关闭思考模式 (第三方)
                             </label>
                             <label htmlFor="thinking-toggle" className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" id="thinking-toggle" className="sr-only peer" checked={apiSettings.disableThinking} onChange={(e) => setApiSettings({...apiSettings, disableThinking: e.target.checked})} />
@@ -326,8 +330,8 @@ const GlosbeSearchCard = () => {
                              </div>
                         ) : (
                             <div>
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Gemini 接口地址</label>
-                                <input type="text" value={apiSettings.url} onChange={(e) => setApiSettings({...apiSettings, url: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md"/>
+                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Gemini 接口地址 (官方)</label>
+                                <input disabled type="text" value={`https://generativelanguage.googleapis.com/...`} className="w-full mt-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border rounded-md"/>
                             </div>
                         )}
                         <div>
