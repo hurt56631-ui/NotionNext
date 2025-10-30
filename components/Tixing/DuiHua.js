@@ -54,7 +54,7 @@ const DuiHua = (props) => {
     const speakerKeys = Object.keys(characters);
     const speakerAKey = speakerKeys[0];
 
-    // 自动滚动
+    // 历史记录自动滚动到底部
     useEffect(() => {
         if (transcriptRef.current) {
             transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
@@ -67,8 +67,6 @@ const DuiHua = (props) => {
             return;
         }
         setCurrentLineIndex(index);
-
-        // 更新历史
         if (!transcript.some(t => t.index === index)) {
             setTranscript(prev => [...prev, { ...dialogue[index], index }]);
         }
@@ -88,24 +86,26 @@ const DuiHua = (props) => {
         }
     };
 
+    // **关键修复**: 优化播放/暂停逻辑
     const handlePlayPause = () => {
         clearTimeout(timeoutRef.current);
-        if (isPlaying) {
-            setIsPlaying(false);
-            audioRef.current?.pause();
-        } else {
-            setIsPlaying(true);
-            let nextIndex = currentLineIndex;
-            if (nextIndex === null || nextIndex >= dialogue.length - 1) {
-                nextIndex = 0;
-                setTranscript([]);
-            } else if (audioRef.current?.paused) {
+        const newIsPlaying = !isPlaying;
+        setIsPlaying(newIsPlaying);
+        
+        if (newIsPlaying) {
+            // 开始播放
+            if (audioRef.current && audioRef.current.paused) {
+                // 从暂停状态恢复
                 audioRef.current.play();
-                return;
             } else {
-                nextIndex++;
+                // 否则，根据情况开始新的播放
+                const nextIndex = currentLineIndex === null || currentLineIndex >= dialogue.length - 1 ? 0 : currentLineIndex + 1;
+                if (nextIndex === 0) setTranscript([]); // 从头开始则清空历史
+                playLine(nextIndex);
             }
-            playLine(nextIndex);
+        } else {
+            // 暂停播放
+            audioRef.current?.pause();
         }
     };
 
@@ -116,20 +116,26 @@ const DuiHua = (props) => {
 
     const handleStoryEnd = () => {
         setIsPlaying(false);
-        setCurrentLineIndex(null);
+        // 保留最后一句的上下文，不清空 currentLineIndex
     };
-
+    
+    // **交互增强**: 点击历史记录时，暂停自动播放
     const handleTranscriptClick = (index) => {
-        setCurrentLineIndex(index);
-        playLine(index, true);
+        clearTimeout(timeoutRef.current);
+        setIsPlaying(false); // 暂停自动播放
+        audioRef.current?.pause();
+        playLine(index, true); // 只播放点击的这一句
     };
 
+    // 自动播放与清理
     useEffect(() => {
         dialogue.forEach(line => getTTSAudio(line.hanzi, characters[line.speaker]?.voice));
+        // 延迟1秒自动开始播放
         timeoutRef.current = setTimeout(() => {
             if (!isPlaying) handlePlayPause();
         }, 1000);
-        return () => {
+        
+        return () => { // 组件卸载时清理
             clearTimeout(timeoutRef.current);
             if (audioRef.current) audioRef.current.pause();
         };
@@ -149,7 +155,7 @@ const DuiHua = (props) => {
                     animation: fadeInUp 0.4s ease-out; 
                 }
                 .transcript-item.active { 
-                    background-color: rgba(59, 130, 246, 0.4); 
+                    background-color: rgba(59, 130, 246, 0.4) !important;
                 }
             `}</style>
 
@@ -166,15 +172,13 @@ const DuiHua = (props) => {
                                 className={`transcript-item ${currentLineIndex === line.index ? 'active' : ''}`}
                                 style={{
                                     ...styles.transcriptLine,
-                                    textAlign: line.speaker === speakerAKey ? 'left' : 'right',
+                                    justifyContent: line.speaker === speakerAKey ? 'flex-start' : 'flex-end',
                                 }}
                                 onClick={() => handleTranscriptClick(line.index)}
                             >
                                 <div style={{
                                     ...styles.transcriptBubble,
                                     backgroundColor: line.speaker === speakerAKey ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.15)',
-                                    borderRadius: '12px',
-                                    padding: '8px 14px',
                                 }}>
                                     <span style={styles.transcriptHanzi}>{line.hanzi}</span>
                                     <span style={{
@@ -208,10 +212,10 @@ const DuiHua = (props) => {
                     </div>
                 )}
 
-                {/* 新增：字幕区（位于历史区下方） */}
+                {/* 字幕区 */}
                 <div style={styles.subtitleArea}>
                     <p style={styles.translationText}>
-                        {currentLine?.myanmar || '点击播放开始学习...'}
+                        {currentLine?.myanmar || '...'}
                     </p>
                 </div>
 
@@ -229,11 +233,12 @@ const DuiHua = (props) => {
     );
 };
 
-// --- 样式 ---
+// --- 样式表 ---
 const styles = {
     loadingOrError: {
         textAlign: 'center',
         padding: '40px',
+        fontFamily: 'system-ui, sans-serif',
         color: '#7f1d1d',
         backgroundColor: '#fef2f2',
         borderRadius: '12px'
@@ -269,25 +274,29 @@ const styles = {
         zIndex: 2,
         flex: '0 0 40%',
         padding: '12px 18px',
-        overflowY: 'auto',
-        backdropFilter: 'blur(6px)',
+        overflow: 'hidden', // 隐藏滚动条
+        display: 'flex', // 用于滚动到底部
+        flexDirection: 'column-reverse', // 让内容从底部开始
     },
     transcriptContainer: {
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        color: 'white'
+        color: 'white',
+        overflowY: 'auto', // 仅当内容超出时显示滚动条
     },
     transcriptLine: {
         display: 'flex',
-        justifyContent: 'space-between',
         cursor: 'pointer',
-        transition: 'background 0.3s ease'
+        transition: 'background 0.3s ease',
+        padding: '2px'
     },
     transcriptBubble: {
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '10px'
+        gap: '10px',
+        borderRadius: '12px',
+        padding: '8px 14px',
     },
     transcriptHanzi: {
         fontSize: '1rem',
@@ -298,11 +307,12 @@ const styles = {
         opacity: 0.8
     },
     middleArea: {
+        position: 'relative',
         zIndex: 3,
-        flex: '1 0 auto',
+        flex: '1 1 auto',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        padding: '0 20px',
     },
     currentBubble: {
         padding: '16px 22px',
@@ -312,6 +322,7 @@ const styles = {
         textAlign: 'center'
     },
     subtitleArea: {
+        position: 'relative',
         zIndex: 3,
         flex: '0 0 auto',
         padding: '10px',
@@ -325,6 +336,7 @@ const styles = {
         margin: 0
     },
     controlsArea: {
+        position: 'relative',
         zIndex: 3,
         flex: '0 0 auto',
         padding: '14px',
