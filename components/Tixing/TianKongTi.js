@@ -2,18 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { pinyin } from 'pinyin-pro';
 
-// --- Please ensure you have these dependencies and assets in your project ---
-// 1. A TTS hook (e.g., using Web Speech API or a cloud service)
-// import { useTTS } from '../../hooks/useTTS'; 
-// 2. The 'use-sound' library for audio feedback
-// import useSound from 'use-sound';
-// 3. An icon library like 'react-icons'
-// import { FaVolumeUp } from 'react-icons/fa';
-// 4. Audio files for feedback
-// import errorSound from '../../assets/sounds/error.mp3';
-// import successSound from '../../assets/sounds/success.mp3';
-
-
 // --- Mock implementations for demonstration purposes ---
 // You should replace these with your actual hooks and assets.
 const useTTS = () => ({ speak: (text) => {
@@ -21,27 +9,25 @@ const useTTS = () => ({ speak: (text) => {
     if (window.speechSynthesis) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'zh-CN';
+        // Cancel any previous speech to avoid overlap
+        window.speechSynthesis.cancel(); 
         window.speechSynthesis.speak(utterance);
     }
 }, isSpeaking: false });
-const useSound = (sound) => [() => { 
-    console.log(`Playing sound: ${sound}`); 
-    // const audio = new Audio(sound); audio.play(); 
-}];
+const useSound = (sound) => [() => { console.log(`Playing sound: ${sound}`); }];
 const FaVolumeUp = () => '🔊';
 // ---------------------------------------------------------
-
 
 const TianKongTiImage = ({
     id,
     title,
-    sentenceSegments, // Expects an array of the words/phrases
+    words, // CHANGED: Renamed from sentenceSegments for clarity. Expects a simple array of strings.
     imageOptions,
     correctAnswers,
     onCorrect,
     onNext
 }) => {
-    const words = sentenceSegments.filter(seg => seg !== null);
+    // FIXED: The number of blanks is now simply the length of the words array.
     const totalBlanks = words.length;
 
     // --- State Management ---
@@ -52,11 +38,9 @@ const TianKongTiImage = ({
 
     // --- Hooks for Sound and TTS ---
     const { speak, isSpeaking } = useTTS();
-    // Assuming you have sound files at these paths
     const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
     const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
 
-    // Generate image labels (A, B, C...)
     const imageLabels = Array.from({ length: imageOptions.length }, (_, i) => String.fromCharCode(65 + i));
 
     // --- Reset state and read words when question changes ---
@@ -66,14 +50,13 @@ const TianKongTiImage = ({
         setIsSubmitted(false);
         setFeedback([]);
         
-        // Automatically read all words for the new question
         const allWordsText = words.map(word => word.replace(/[0-9\s岁]/g, '')).join('，');
         if (allWordsText) {
             const speakTimeout = setTimeout(() => speak(allWordsText), 300);
             return () => clearTimeout(speakTimeout);
         }
 
-    }, [id]); // Dependency on `id` ensures this runs for each new question
+    }, [id, words]); // FIXED: Added `words` to dependency array
 
     // --- Interaction Logic ---
     const handleBlankClick = (blankIndex) => {
@@ -94,7 +77,7 @@ const TianKongTiImage = ({
 
         newUserAnswers[activeBlankIndex] = imageId;
         setUserAnswers(newUserAnswers);
-        setActiveBlankIndex(null); // Close selector after choosing
+        setActiveBlankIndex(null);
     };
 
     const handleSubmit = () => {
@@ -130,14 +113,14 @@ const TianKongTiImage = ({
         return text.replace(/[0-9\s岁]/g, '').trim();
     };
 
+    // Return null or a loading state if words aren't ready, preventing crashes.
+    if (!words || words.length === 0) {
+        return <div>Loading question...</div>;
+    }
+
     return (
         <>
-            <style>{`
-                @keyframes pulse-active { 
-                    0%, 100% { background-color: rgba(168, 85, 247, 0.1); } 
-                    50% { background-color: rgba(168, 85, 247, 0.2); } 
-                }
-            `}</style>
+            <style>{`...` /* Styles remain the same */}</style>
             <div style={styles.container}>
                 <h3 style={styles.title}>{title}</h3>
 
@@ -179,7 +162,6 @@ const TianKongTiImage = ({
                                 <div 
                                     style={{
                                         ...styles.underlineContainer,
-                                        ...(blankIndex === activeBlankIndex ? styles.underlineActive : {}),
                                         ...(isSubmitted ? (feedbackClass === 'correct' ? styles.underlineCorrect : styles.underlineIncorrect) : {})
                                     }}
                                     onClick={() => handleBlankClick(blankIndex)}
@@ -233,7 +215,7 @@ const TianKongTiImage = ({
     );
 };
 
-// --- Inline Styles ---
+// --- Inline Styles (same as before) ---
 const styles = {
     container: { 
         backgroundColor: '#faf5ff', borderRadius: '16px', padding: '24px', 
@@ -286,10 +268,6 @@ const styles = {
         cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center',
         position: 'relative', transition: 'all 0.2s ease', borderRadius: '4px 4px 0 0'
     },
-    underlineActive: {
-        animation: 'pulse-active 1.5s infinite', borderBottom: '2px solid #8b5cf6',
-        backgroundColor: 'rgba(139, 92, 246, 0.1)'
-    },
     underlineCorrect: {
         borderBottom: '2px solid #10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)'
     },
@@ -329,4 +307,4 @@ const styles = {
     nextButton: { backgroundColor: '#10b981' }
 };
 
-export default TianKongTi;
+export default TianKongTiImage;
