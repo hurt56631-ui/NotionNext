@@ -307,4 +307,4 @@ const styles = {
     nextButton: { backgroundColor: '#10b981' }
 };
 
-export default TianKongTiImage;
+export default TianKongTi;
