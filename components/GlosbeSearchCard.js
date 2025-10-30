@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// ✅ [修复] 强化回译指令，强制要求AI使用源语言进行回译，严禁使用英语。
+// ✅ 提示词部分保持不变，指令清晰，问题出在解析环节
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}：
 “${word}”
 
 请严格按照以下格式输出多个风格版本。
-所有翻译必须 首先准确表达原文的核心意思，在任何情况下都不得添加、删减或改变语义。
+所有翻译必须 首先准确表达原文的核心意思，在任何情况下都不得添加、减删或改变语义。
 不要输出任何额外解释、备注或说明。
 
 ---
@@ -41,51 +41,59 @@ const getAIPrompt = (word, fromLang, toLang) => `
 ---
 
 **文学润色版**:
-在精准传达原意的基础上，运用更丰富、更具表现力的词汇和句式进行优化，使表达更显文采和感染力，适合书面语或正式场合。
+先理解原文意思，然后进行润色再翻译成地道的口语，就像朋友间聊天。
 *   **[${toLang}翻译]**
 *   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 `;
 
 
-// ✅ [优化] 重构解析函数，使其更健壮、更高效，优先使用 '---' 作为分隔符
+// ✅ [关键修复] 全面重构解析函数，增强对AI响应格式变化的容错能力
 const parseAIResponse = (responseText) => {
     if (!responseText) return [];
 
-    // 基于Prompt中要求的'---'进行分割，这是最可靠的方式
+    // 1. 使用最可靠的 `---` 作为分隔符
     const blocks = responseText.trim().split(/\n---\n/);
     const results = [];
 
     for (const block of blocks) {
-        // 使用更精确的正则表达式一次性捕获所有需要的信息
-        const titleMatch = block.match(/\*\*(.*?)\*\*:/);
-        const translationMatch = block.match(/\*\s+\*\*([\s\S]*?)\*\*/); // 匹配多行翻译
-        const meaningMatch = block.match(/回译:\s*\[(.*?)\]/);
+        // 2. 对每个块使用更灵活、容错性更高的正则表达式
+        
+        // 匹配标题，例如 "**自然直译版**:"
+        const titleMatch = block.match(/^\s*\*\*(.*?)\*\*:/m);
+        
+        // 匹配翻译内容，例如 "*   **Hello**"。[\s\S] 用于匹配包括换行符在内的任何字符
+        const translationMatch = block.match(/\*\s+\*\*([\s\S]*?)\*\*/);
+        
+        // 匹配回译内容，例如 "* 回译: [Hello]" 或 "回译: Hello"。
+        // 这是最核心的修复：通过 `\[?` 和 `\]?` 使方括号变为可选，并用 `([\s\S]+)` 捕获括号内外所有非空内容。
+        const meaningMatch = block.match(/(?:回译|Back-translation)\s*:\s*\[?([\s\S]+)/m);
 
-        if (titleMatch && translationMatch && meaningMatch) {
-            results.push({
-                title: titleMatch[1].trim(),
-                translation: translationMatch[1].trim(),
-                meaning: `回译: ${meaningMatch[1].trim()}`,
+        if (titleMatch && titleMatch[1] && 
+            translationMatch && translationMatch[1] &&
+            meaningMatch && meaningMatch[1]) {
+            
+            const title = titleMatch[1].trim();
+            const translation = translationMatch[1].trim();
+            // 清理可能捕获到的多余字符，比如末尾的右方括号
+            const meaningText = meaningMatch[1].trim().replace(/\]$/, '').trim();
+
+            // 确保所有部分都有实际内容后再添加
+            if (title && translation && meaningText) {
+                 results.push({
+                    title: title,
+                    translation: translation,
+                    meaning: `回译: ${meaningText}`,
+                });
+            }
+        } else {
+            // 如果解析失败，在开发者控制台打印日志以供调试
+            console.warn("未能完整解析AI响应块，原始数据:", {
+                block: `"${block}"`, // 加引号防止首尾空白被忽略
+                titleFound: !!titleMatch,
+                translationFound: !!translationMatch,
+                meaningFound: !!meaningMatch
             });
         }
-    }
-    
-    // 如果主要解析逻辑失败，则启动备用方案（适用于格式不完全匹配的情况）
-    if (results.length === 0 && responseText.includes('**')) {
-         const sections = responseText.split(/\*\*(.*?)\*\*:/).slice(1);
-         for(let i = 0; i < sections.length; i+=2) {
-             const title = sections[i].trim();
-             const content = sections[i+1];
-             const translationMatch = content.match(/\*\s+\*\*([\s\S]*?)\*\*/);
-             const meaningMatch = content.match(/回译:\s*\[?(.*?)\]?/);
-             if (translationMatch && meaningMatch) {
-                 results.push({
-                     title: title,
-                     translation: translationMatch[1].trim(),
-                     meaning: `回译: ${meaningMatch[1].trim()}`,
-                 });
-             }
-         }
     }
 
     return results;
@@ -102,9 +110,8 @@ const GlosbeSearchCard = () => {
     const [useAI, setUseAI] = useState(true);
     const [isAISearching, setIsAISearching] = useState(false);
     
-    // [优化] 分离流式文本和最终解析结果的状态，使逻辑更清晰
-    const [streamingText, setStreamingText] = useState(''); // 用于存储和显示流式响应的原始文本
-    const [aiResults, setAiResults] = useState([]); // 用于存储最终解析好的结果数组
+    const [streamingText, setStreamingText] = useState('');
+    const [aiResults, setAiResults] = useState([]);
     
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -232,12 +239,13 @@ const GlosbeSearchCard = () => {
             }
             
             const validResults = parseAIResponse(fullResponse);
-            if (validResults.length === 0) {
+            if (validResults.length === 0 && fullResponse) { // 增加 fullResponse 判断
                 console.error("解析失败，原始输出: ", fullResponse);
-                throw new Error("AI未能按预期格式返回翻译和回译。");
+                setAiError("AI未能按预期格式返回翻译，或返回内容为空。");
+            } else {
+                 setAiResults(validResults);
             }
 
-            setAiResults(validResults);
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
