@@ -1,104 +1,73 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// ✅ 提示词部分保持不变，指令清晰，问题出在解析环节
+// ✅ 恢复您最初的中文 Prompt，并移除表情符号
 const getAIPrompt = (word, fromLang, toLang) => `
-请将以下 ${fromLang} 内容翻译成 ${toLang}：
-“${word}”
+请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
+请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
 
-请严格按照以下格式输出多个风格版本。
-所有翻译必须 首先准确表达原文的核心意思，在任何情况下都不得添加、减删或改变语义。
-不要输出任何额外解释、备注或说明。
+**自然直译版**，在保留原文结构和含义的基础上，让译文符合目标语言的表达习惯，读起来流畅自然，不生硬。
+*   **[此处为加粗的${toLang}翻译]**
+*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 
----
+**口语版**，采用${toLang === '缅甸语' ? '缅甸' : '中国'}年轻人日常社交中的常用语和流行说法，风格自然亲切，避免书面语和机器翻译痕跡。
+*   **[此处为加粗的${toLang}翻译]**
+*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 
-**自然直译版**:
-在完全忠实保留原文结构和语义的前提下，使译文符合${toLang}的语法习惯，读起来自然但不改动意思。
-*   **[${toLang}翻译]**
-*   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
+**自然意译版**，遵循${toLang}母语者的思维方式和表达习惯进行意译，使句子听起来自然真实，但绝不偏离原意。
+*   **[此处为加粗的${toLang}翻译]**
+*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 
----
-
-**自然流畅版**:
-在意思不变的情况下，稍作调整，使译文更贴近${toLang}日常表达，语气顺畅自然。
-*   **[${toLang}翻译]**
-*   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
-
----
-
-**口语版**:
-使用${toLang === '缅甸语' ? '缅甸' : '中国'}年轻人日常生活中常说的自然表达方式，语气轻松但仍保持原意准确。
-*   **[${toLang}翻译]**
-*   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
-
----
-
-**地道表达版**:
-遵循${toLang}母语者的思维方式和表达习惯进行意译，使句子听起来自然真实，但绝不偏离原意。
-*   **[${toLang}翻译]**
-*   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
-
----
-
-**文学润色版**:
-先理解原文意思，然后进行润色再翻译成地道的口语，就像朋友间聊天。
-*   **[${toLang}翻译]**
-*   回译: [请将上方的 ${toLang} 翻译结果，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
+**通顺意译**，将句子翻译成符合${toLang === '缅甸语' ? '缅甸人' : '中国人'}日常表达习惯的、流畅自然的${toLang}。
+*   **[此处为加粗的${toLang}翻译]**
+*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 `;
 
-
-// ✅ [关键修复] 全面重构解析函数，增强对AI响应格式变化的容错能力
+// ✅ 增强版、高容错的解析函数
 const parseAIResponse = (responseText) => {
     if (!responseText) return [];
+    
+    // 使用更灵活的正则表达式匹配每个翻译块（无论有无表情符号）
+    const translationBlocks = responseText.split(/\*\*.*?\*\*.*?\n/g).slice(1);
+    const titles = responseText.match(/\*\*(.*?)\*\*/g);
 
-    // 1. 使用最可靠的 `---` 作为分隔符
-    const blocks = responseText.trim().split(/\n---\n/);
+    if (!translationBlocks || !titles || translationBlocks.length === 0) return [];
+    
     const results = [];
+    translationBlocks.forEach((block, index) => {
+        const lines = block.trim().split('\n');
+        const translationLine = lines.find(line => line.includes('*') && !line.includes('回译'));
+        const meaningLine = lines.find(line => line.includes('回译:'));
 
-    for (const block of blocks) {
-        // 2. 对每个块使用更灵活、容错性更高的正则表达式
-        
-        // 匹配标题，例如 "**自然直译版**:"
-        const titleMatch = block.match(/^\s*\*\*(.*?)\*\*:/m);
-        
-        // 匹配翻译内容，例如 "*   **Hello**"。[\s\S] 用于匹配包括换行符在内的任何字符
-        const translationMatch = block.match(/\*\s+\*\*([\s\S]*?)\*\*/);
-        
-        // 匹配回译内容，例如 "* 回译: [Hello]" 或 "回译: Hello"。
-        // 这是最核心的修复：通过 `\[?` 和 `\]?` 使方括号变为可选，并用 `([\s\S]+)` 捕获括号内外所有非空内容。
-        const meaningMatch = block.match(/(?:回译|Back-translation)\s*:\s*\[?([\s\S]+)/m);
-
-        if (titleMatch && titleMatch[1] && 
-            translationMatch && translationMatch[1] &&
-            meaningMatch && meaningMatch[1]) {
-            
-            const title = titleMatch[1].trim();
-            const translation = translationMatch[1].trim();
-            // 清理可能捕获到的多余字符，比如末尾的右方括号
-            const meaningText = meaningMatch[1].trim().replace(/\]$/, '').trim();
-
-            // 确保所有部分都有实际内容后再添加
-            if (title && translation && meaningText) {
-                 results.push({
-                    title: title,
-                    translation: translation,
-                    meaning: `回译: ${meaningText}`,
-                });
-            }
-        } else {
-            // 如果解析失败，在开发者控制台打印日志以供调试
-            console.warn("未能完整解析AI响应块，原始数据:", {
-                block: `"${block}"`, // 加引号防止首尾空白被忽略
-                titleFound: !!titleMatch,
-                translationFound: !!translationMatch,
-                meaningFound: !!meaningMatch
+        if (translationLine && meaningLine) {
+            results.push({
+                // 提取标题，去除**
+                title: titles[index]?.replace(/\*/g, '').trim(),
+                translation: translationLine.replace(/\*|\[|\]|-/g, '').trim(),
+                meaning: meaningLine.trim(),
             });
         }
+    });
+
+    // 如果上述解析失败，尝试备用方案
+    if (results.length === 0) {
+        const sections = responseText.split(/\n\s*\n/);
+        sections.forEach(section => {
+             const titleMatch = section.match(/\*\*(.*?)\*\*/);
+             const translationMatch = section.match(/\*\s+\*\*(.*?)\*\*/);
+             const meaningMatch = section.match(/回译:\s*(.*)/);
+             if(titleMatch && translationMatch && meaningMatch) {
+                 results.push({
+                     title: titleMatch[1].trim(),
+                     translation: translationMatch[1].trim(),
+                     meaning: `回译: ${meaningMatch[1].trim()}`
+                 })
+             }
+        });
     }
 
     return results;
 };
-
 
 // 语言检测辅助函数
 const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(text);
@@ -109,10 +78,7 @@ const GlosbeSearchCard = () => {
     const [isListening, setIsListening] = useState(false);
     const [useAI, setUseAI] = useState(true);
     const [isAISearching, setIsAISearching] = useState(false);
-    
-    const [streamingText, setStreamingText] = useState('');
     const [aiResults, setAiResults] = useState([]);
-    
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -185,8 +151,7 @@ const GlosbeSearchCard = () => {
         }
 
         setIsAISearching(true);
-        setAiResults([]);
-        setStreamingText('');
+        setAiResults('');
         setAiError('');
 
         const currentDirection = containsChinese(trimmedWord) ? 'zh2my' : 'my2zh';
@@ -232,26 +197,24 @@ const GlosbeSearchCard = () => {
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullResponse += delta;
-                            setStreamingText(fullResponse);
+                            setAiResults(fullResponse);
                         }
                     } catch (e) { /* Ignore */ }
                 }
             }
             
             const validResults = parseAIResponse(fullResponse);
-            if (validResults.length === 0 && fullResponse) { // 增加 fullResponse 判断
+            if (validResults.length === 0) {
                 console.error("解析失败，原始输出: ", fullResponse);
-                setAiError("AI未能按预期格式返回翻译，或返回内容为空。");
-            } else {
-                 setAiResults(validResults);
+                throw new Error("AI未能按预期格式返回翻译和回译。");
             }
 
+            setAiResults(validResults);
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
         } finally {
             setIsAISearching(false);
-            setStreamingText('');
         }
     };
     
@@ -418,9 +381,9 @@ const GlosbeSearchCard = () => {
             </div>
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
-                    {isAISearching && streamingText && (
+                    {isAISearching && typeof aiResults === 'string' && (
                         <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white">
-                            {streamingText}
+                            {aiResults}
                             <Loader2 className="inline-block w-4 h-4 ml-2 animate-spin text-cyan-500" />
                         </div>
                     )}
@@ -429,7 +392,7 @@ const GlosbeSearchCard = () => {
                             {aiError}
                         </div>
                     )}
-                    {!isAISearching && aiResults.length > 0 && (
+                    {Array.isArray(aiResults) && aiResults.length > 0 && (
                         <div className="space-y-3">
                         {aiResults.map((result, index) => (
                           <div key={index}  className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
