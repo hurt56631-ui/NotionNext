@@ -1,6 +1,6 @@
 // components/Tixing/DuiHua.js
 import React, { useState, useEffect, useRef } from 'react';
-import { FaPlay, FaPause, FaTimes } from 'react-icons/fa';
+import { FaPlay, FaPause, FaRedo, FaTimes, FaVolumeUp } from 'react-icons/fa';
 
 // --- TTS 引擎 (无需改动) ---
 let ttsCache = new Map();
@@ -30,15 +30,18 @@ const playTTS = async (text, voice) => {
     return audio;
 };
 
+// ========================================================================
+//                           主组件
+// ========================================================================
 const DuiHua = (props) => {
+    // 智能数据处理，防止因数据加载延迟导致崩溃
     const data = props.data && props.data.dialogue ? props.data : props;
     const [isFullScreen, setIsFullScreen] = useState(false);
 
     if (!data || !data.dialogue || !data.characters) {
-        return null;
+        return null; // 如果数据无效，不渲染任何内容
     }
 
-    // 内部全屏组件
     const FullScreenDialogue = ({ onClose }) => {
         const { id, title, imageSrc, characters, dialogue } = data;
         const [currentLineIndex, setCurrentLineIndex] = useState(null);
@@ -46,28 +49,23 @@ const DuiHua = (props) => {
         const [transcript, setTranscript] = useState([]);
         const audioRef = useRef(null);
         const timeoutRef = useRef(null);
-        
-        // 定义说话者A和B的key
+
+        // 获取角色A和B的key，用于区分左右
         const speakerKeys = Object.keys(characters);
         const speakerAKey = speakerKeys[0];
-        const speakerBKey = speakerKeys[1];
 
-
+        // 自动播放与清理
         useEffect(() => {
-            dialogue.forEach(line => {
-                const voice = characters[line.speaker]?.voice;
-                getTTSAudio(line.hanzi, voice);
-            });
-            handlePlayPause();
-            // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [id]);
+            dialogue.forEach(line => getTTSAudio(line.hanzi, characters[line.speaker]?.voice));
+            // 进入全屏后，延迟半秒自动开始播放
+            timeoutRef.current = setTimeout(() => handlePlayPause(), 500);
 
-        useEffect(() => {
-            return () => {
+            return () => { // 组件卸载时清理
                 clearTimeout(timeoutRef.current);
                 audioRef.current?.pause();
-            }
-        }, []);
+            };
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [id]);
 
         const playLine = async (index, isRepeating = false) => {
             if (index >= dialogue.length) {
@@ -75,6 +73,7 @@ const DuiHua = (props) => {
                 return;
             }
             setCurrentLineIndex(index);
+            // 如果历史记录里没有，就添加进去
             if (!transcript.some(t => t.index === index)) {
                 setTranscript(prev => [...prev, { ...dialogue[index], index }]);
             }
@@ -86,7 +85,7 @@ const DuiHua = (props) => {
             if (audioRef.current) {
                 audioRef.current.onended = () => {
                     if (isPlaying && !isRepeating) {
-                        timeoutRef.current = setTimeout(() => playLine(index + 1), 800);
+                        timeoutRef.current = setTimeout(() => playLine(index + 1), 800); // 自然停顿
                     }
                 };
             } else if (isPlaying && !isRepeating) {
@@ -103,18 +102,18 @@ const DuiHua = (props) => {
                 setIsPlaying(true);
                 let nextIndex = currentLineIndex;
                 if (nextIndex === null || nextIndex >= dialogue.length - 1) {
-                    nextIndex = 0;
+                    nextIndex = 0; // 从头开始
                     setTranscript([]);
                 } else if (!audioRef.current || audioRef.current.paused) {
-                    // Resume from current
+                    // 从暂停处继续
                 } else {
-                    nextIndex++;
+                    nextIndex++; // 播放下一行
                 }
                 playLine(nextIndex);
             }
         };
 
-        const handleBubbleClick = () => {
+        const handleRepeat = () => {
             if (currentLineIndex === null) return;
             playLine(currentLineIndex, true); 
         };
@@ -123,19 +122,21 @@ const DuiHua = (props) => {
             setIsPlaying(false);
             timeoutRef.current = setTimeout(() => setCurrentLineIndex(null), 1500);
         };
-        
+
         const currentLine = currentLineIndex !== null ? dialogue[currentLineIndex] : null;
 
         return (
             <>
                 <style>{`
+                    /* CSS动画和气泡尾巴样式 */
                     @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
                     @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
-                    .fade-in { animation: fadeIn 0.5s ease-out forwards; }
-                    .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-                    .bubble { position: relative; }
-                    .bubble-a::after { content: ''; position: absolute; left: -10px; bottom: 8px; width: 0; height: 0; border: 12px solid transparent; border-right-color: #3b82f6; border-left: 0; }
-                    .bubble-b::after { content: ''; position: absolute; right: -10px; bottom: 8px; width: 0; height: 0; border: 12px solid transparent; border-left-color: #f9fafb; border-right: 0; }
+                    .bubble-container { position: absolute; width: 100%; bottom: 120px; display: flex; padding: 0 5%; box-sizing: border-box; animation: fadeInUp 0.5s ease-out forwards; }
+                    .bubble { position: relative; max-width: 65%; padding: 14px 22px; border-radius: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+                    .bubble-a { background-color: #3b82f6; color: white; border-bottom-left-radius: 5px; margin-right: auto; }
+                    .bubble-b { background-color: #f9fafb; color: #1f2937; border-bottom-right-radius: 5px; margin-left: auto; }
+                    .bubble-a::after { content: ''; position: absolute; left: -10px; bottom: 6px; width: 0; height: 0; border: 12px solid transparent; border-right-color: #3b82f6; border-left: 0; }
+                    .bubble-b::after { content: ''; position: absolute; right: -10px; bottom: 6px; width: 0; height: 0; border: 12px solid transparent; border-left-color: #f9fafb; border-right: 0; }
                 `}</style>
                 <div style={styles.fullScreenContainer} className="fade-in">
                     <img src={imageSrc} alt={title} style={styles.backgroundImage} />
@@ -144,22 +145,18 @@ const DuiHua = (props) => {
 
                     <div style={styles.transcriptContainer}>
                         {transcript.map((line, tIndex) => (
-                            <div key={tIndex} style={styles.transcriptLine}>
-                                <span style={{color: line.speaker === speakerAKey ? '#93c5fd' : '#fcd34d'}}>
-                                    {characters[line.speaker]?.name || line.speaker}:
-                                </span>
+                            <div key={tIndex} style={{...styles.transcriptLine, textAlign: line.speaker === speakerAKey ? 'left' : 'right'}}>
                                 <span>{line.hanzi}</span>
+                                <span style={{color: line.speaker === speakerAKey ? '#93c5fd' : '#fcd34d'}}>
+                                    &nbsp;- {characters[line.speaker]?.name}
+                                </span>
                             </div>
                         ))}
                     </div>
 
                     {currentLine && (
-                        <div style={styles.mainBubbleArea} className="fade-in-up">
-                            <div 
-                                className={`bubble ${currentLine.speaker === speakerBKey ? 'bubble-b' : 'bubble-a'}`}
-                                style={{...styles.bubble, ...(currentLine.speaker === speakerBKey ? styles.bubbleB : styles.bubbleA)}}
-                                onClick={handleBubbleClick}
-                            >
+                        <div className="bubble-container">
+                            <div className={`bubble ${currentLine.speaker === speakerAKey ? 'bubble-a' : 'bubble-b'}`} onClick={handleRepeat}>
                                 <p style={styles.pinyin}>{currentLine.pinyin}</p>
                                 <p style={styles.hanzi}>{currentLine.hanzi}</p>
                             </div>
@@ -167,13 +164,12 @@ const DuiHua = (props) => {
                     )}
 
                     <div style={styles.footer}>
-                        <button onClick={handlePlayPause} style={styles.playButton} aria-label="播放/暂停">
-                            {isPlaying ? <FaPause /> : <FaPlay />}
-                        </button>
                         <div style={styles.translationArea}>
-                            <p style={styles.translationText}>
-                                {currentLine?.myanmar || '點擊 ▶️ 開始對話'}
-                            </p>
+                            <p style={styles.translationText}>{currentLine?.myanmar || '...'}</p>
+                        </div>
+                        <div style={styles.controls}>
+                            <button onClick={handlePlayPause} style={styles.controlButton} aria-label="播放/暂停">{isPlaying ? <FaPause /> : <FaPlay />}</button>
+                            <button onClick={handleRepeat} style={styles.controlButton} aria-label="重复"><FaRedo /></button>
                         </div>
                     </div>
                 </div>
@@ -191,9 +187,23 @@ const DuiHua = (props) => {
     );
 };
 
-// --- 样式表 (无需改动) ---
-const styles = { /* ... */ };
-// (样式表代码与上一版完全相同，为简洁此处省略)
-// ...
+// --- 样式表 ---
+const styles = {
+    triggerButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '16px', borderRadius: '12px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease' },
+    loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
+    fullScreenContainer: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column' },
+    backgroundImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' },
+    overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.8) 100%)' },
+    closeButton: { position: 'absolute', top: '20px', right: '20px', background: 'rgba(0,0,0,0.4)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, fontSize: '1.2rem' },
+    transcriptContainer: { position: 'absolute', top: '20px', left: '20px', right: '20px', padding: '16px', maxHeight: '40%', overflowY: 'auto', zIndex: 5, color: 'white', textShadow: '0 1px 3px rgba(0,0,0,0.8)', fontSize: '1rem' },
+    transcriptLine: { marginBottom: '8px', opacity: 0.9 },
+    pinyin: { margin: '0 0 4px 0', opacity: 0.7, fontSize: '1rem' },
+    hanzi: { margin: 0, fontSize: '1.6rem', fontWeight: 'bold' },
+    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', zIndex: 5 },
+    translationArea: { flex: 1, textAlign: 'left' },
+    translationText: { color: 'white', fontSize: '1.2rem', margin: 0, textShadow: '0 1px 2px rgba(0,0,0,0.5)' },
+    controls: { display: 'flex', gap: '16px' },
+    controlButton: { background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '1.1rem' }
+};
 
 export default DuiHua;
