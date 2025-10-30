@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause, FaUserFriends } from 'react-icons/fa';
 
-// --- TTS & Sound Engine (from your proven components) ---
+// --- TTS & Sound Engine (No changes needed here) ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice) => {
     if (!text || !voice) return null;
@@ -32,16 +32,21 @@ const playTTS = async (text, voice) => {
 };
 // -----------------------------------------------------------
 
-const DuiHua = ({ data }) => {
+const DuiHua = (props) => {
     // ========================================================================
-    // BULLETPROOF GUARD: This is the most critical fix.
-    // If data hasn't loaded yet, display a loading message instead of crashing.
+    // THE ULTIMATE FIX: This makes the component "smarter".
+    // It checks if props are nested under `props.data` OR if they are at the top level.
+    // This resolves the "data is undefined" issue regardless of the system's convention.
     // ========================================================================
+    const data = props.data && props.data.dialogue ? props.data : props;
+
+    // Now, we perform the check on the normalized 'data' variable.
     if (!data || !data.dialogue || !data.characters) {
-        return <div style={styles.loadingOrError}>正在加载对话数据... (如果长时间显示，请检查!include指令)</div>;
+        return <div style={styles.loadingOrError}>正在加载对话数据... (如果长时间显示，请检查!include指令的JSON格式)</div>;
     }
 
     const { 
+        id,
         title = "对话", 
         imageSrc, 
         characters = {}, 
@@ -55,17 +60,19 @@ const DuiHua = ({ data }) => {
     const currentAudio = useRef(null);
     const lineRefs = useRef([]);
 
-    // Preload all necessary TTS audio files when the component mounts or data changes.
+    // This effect now depends on `id` to correctly reset and preload for a new question.
     useEffect(() => {
         dialogue.forEach(line => {
             const voice = characters[line.speaker]?.voice;
             getTTSAudio(line.hanzi, voice);
         });
-    }, [data]);
+        // Reset state for new question
+        setCurrentLine(null);
+        setIsPlayingAll(false);
+    }, [id]);
 
     const playLine = async (index) => {
         currentAudio.current?.pause();
-
         const line = dialogue[index];
         const speakerInfo = characters[line.speaker];
         
@@ -80,6 +87,9 @@ const DuiHua = ({ data }) => {
         currentAudio.current = audio;
         if (audio) {
             audio.onended = () => handleAudioEnd(index);
+        } else {
+            // If audio fails to load, still proceed in play-all mode
+            if (isPlayingAll) handleAudioEnd(index);
         }
     };
     
@@ -122,18 +132,14 @@ const DuiHua = ({ data }) => {
                 <h3 style={styles.title}>{title}</h3>
                 {imageSrc && <img src={imageSrc} alt={title} style={styles.sceneImage} />}
             </div>
-
             <div style={styles.mainContent}>
                 <div style={styles.characterPanel}>
                     <img src={characters.A?.imageSrc} alt={characters.A?.name} style={{...styles.avatar, ...(activeSpeaker === 'A' ? styles.avatarActive : {})}}/>
                     <div style={styles.characterName}>{characters.A?.name}</div>
                 </div>
-
                 <div style={styles.dialogueArea}>
                      <div style={styles.controls}>
-                        <button onClick={handlePlayAll} style={styles.playAllButton}>
-                            {isPlayingAll ? <FaPause /> : <FaPlay />} {isPlayingAll ? '暂停' : '全部播放'}
-                        </button>
+                        <button onClick={handlePlayAll} style={styles.playAllButton}>{isPlayingAll ? <FaPause /> : <FaPlay />} {isPlayingAll ? '暂停' : '全部播放'}</button>
                         <div style={styles.rolePlayControls}>
                             <span>角色扮演:</span>
                             <button onClick={() => setRolePlayMode(null)} style={{...styles.roleButton, ...(rolePlayMode === null ? styles.roleButtonActive : {})}}><FaUserFriends /> 旁听</button>
@@ -156,7 +162,6 @@ const DuiHua = ({ data }) => {
                         })}
                     </div>
                 </div>
-                
                 <div style={styles.characterPanel}>
                     <img src={characters.B?.imageSrc} alt={characters.B?.name} style={{...styles.avatar, ...(activeSpeaker === 'B' ? styles.avatarActive : {})}}/>
                     <div style={styles.characterName}>{characters.B?.name}</div>
@@ -166,7 +171,7 @@ const DuiHua = ({ data }) => {
     );
 };
 
-// --- Styles ---
+// --- Styles (Unchanged) ---
 const styles = {
     loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
     container: { backgroundColor: '#f8fafc', borderRadius: '24px', padding: '24px', fontFamily: 'system-ui, sans-serif', maxWidth: '1100px', margin: '2rem auto', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' },
