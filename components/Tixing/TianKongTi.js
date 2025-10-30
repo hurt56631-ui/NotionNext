@@ -1,5 +1,6 @@
-// components/Tixing/TianKongTiImage.js
+// components/Tixing/TianKongTi.js
 import React, { useState, useEffect, useCallback } from 'react';
+import { pinyin } from 'pinyin-pro';
 
 // --- SVG 图标 ---
 const SpeakerIcon = ({ isSpeaking }) => (
@@ -29,6 +30,9 @@ const TianKongTiImage = ({
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [feedback, setFeedback] = useState([]);
     const [isSpeaking, setIsSpeaking] = useState(false);
+
+    // 生成图片标签 A-F
+    const imageLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     // --- Reset state when question changes ---
     useEffect(() => {
@@ -104,6 +108,11 @@ const TianKongTiImage = ({
         setFeedback([]);
     }
 
+    // --- 生成拼音 ---
+    const getPinyin = (text) => {
+        return pinyin(text, { toneType: 'symbol' });
+    };
+
     // --- Rendering ---
     const renderBlanks = () => {
         let blankCounter = -1;
@@ -113,7 +122,7 @@ const TianKongTiImage = ({
                 const currentBlankIndex = blankCounter;
                 const answerId = userAnswers[currentBlankIndex];
                 const image = imageOptions.find(opt => opt.id === answerId);
-                const feedbackClass = feedback[currentBlankIndex]; // 'correct' or 'incorrect'
+                const feedbackClass = feedback[currentBlankIndex];
 
                 let blankStyle = { ...styles.blank };
                 if(currentBlankIndex === activeBlankIndex && !isSubmitted) {
@@ -125,7 +134,12 @@ const TianKongTiImage = ({
 
                 return (
                     <div key={index} style={blankStyle} onClick={() => handleBlankClick(currentBlankIndex)}>
-                        {image && <img src={image.src} alt={image.word} style={styles.filledImage} />}
+                        {image && (
+                            <div style={styles.filledContent}>
+                                <div style={styles.imageLabel}>{imageLabels[imageOptions.findIndex(opt => opt.id === image.id)]}</div>
+                                <img src={image.src} alt={image.word} style={styles.filledImage} />
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -147,21 +161,58 @@ const TianKongTiImage = ({
                     {title}
                 </h3>
 
-                <div style={styles.sentenceContainer}>
-                    {renderBlanks()}
-                </div>
-
+                {/* 图片网格 - 2行3列 */}
                 <div style={styles.imageGrid}>
-                    {imageOptions.map(opt => (
+                    {imageOptions.map((opt, index) => (
                         <div 
                             key={opt.id} 
-                            style={{...styles.imageContainer, ...(userAnswers.includes(opt.id) ? styles.imageUsed : {})}}
+                            style={{
+                                ...styles.imageContainer, 
+                                ...(userAnswers.includes(opt.id) ? styles.imageUsed : {})
+                            }}
                             onClick={() => handleImageClick(opt)}
                         >
+                            <div style={styles.imageLabel}>{imageLabels[index]}</div>
                             <img src={opt.src} alt={opt.word} style={styles.image} />
-                            <span style={styles.imageWord}>{opt.word}</span>
                         </div>
                     ))}
+                </div>
+
+                {/* 填空区域 - 2行3列 */}
+                <div style={styles.blanksGrid}>
+                    {sentenceSegments.filter(seg => seg !== null).map((segment, index) => {
+                        const blankIndex = Math.floor(index / 2) * 3 + (index % 2);
+                        const answerId = userAnswers[blankIndex];
+                        const image = imageOptions.find(opt => opt.id === answerId);
+                        const feedbackClass = feedback[blankIndex];
+
+                        let blankStyle = { ...styles.blank };
+                        if(blankIndex === activeBlankIndex && !isSubmitted) {
+                            blankStyle = {...blankStyle, ...styles.blankActive};
+                        }
+                        if(isSubmitted) {
+                            blankStyle = {...blankStyle, ...(feedbackClass === 'correct' ? styles.blankCorrect : styles.blankIncorrect)};
+                        }
+
+                        return (
+                            <div key={index} style={styles.blanksItem}>
+                                <div style={styles.wordWithPinyin}>
+                                    <div style={styles.chineseText}>{segment}</div>
+                                    <div style={styles.pinyinText}>{getPinyin(segment.replace(/\d+\s*/g, ''))}</div>
+                                </div>
+                                <div 
+                                    style={blankStyle} 
+                                    onClick={() => handleBlankClick(blankIndex)}
+                                >
+                                    {image && (
+                                        <div style={styles.filledContent}>
+                                            <div style={styles.filledLabel}>{imageLabels[imageOptions.findIndex(opt => opt.id === image.id)]}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
 
                 <div style={styles.buttonContainer}>
@@ -178,24 +229,160 @@ const TianKongTiImage = ({
 
 // --- 内联样式 ---
 const styles = {
-    container: { backgroundColor: '#f8fafc', borderRadius: '16px', padding: '24px', fontFamily: 'system-ui, sans-serif', maxWidth: '700px', margin: '2rem auto', border: '1px solid #e2e8f0' },
-    title: { fontSize: '1.5rem', fontWeight: 'bold', color: '#334155', textAlign: 'center', margin: '0 0 24px 0' },
+    container: { 
+        backgroundColor: '#f8fafc', 
+        borderRadius: '16px', 
+        padding: '24px', 
+        fontFamily: 'system-ui, sans-serif', 
+        maxWidth: '800px', 
+        margin: '2rem auto', 
+        border: '1px solid #e2e8f0' 
+    },
+    title: { 
+        fontSize: '1.5rem', 
+        fontWeight: 'bold', 
+        color: '#334155', 
+        textAlign: 'center', 
+        margin: '0 0 24px 0' 
+    },
     titleSpeaking: { color: '#3b82f6' },
-    sentenceContainer: { display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '24px', minHeight: '80px', fontSize: '1.8rem' },
-    sentenceText: { lineHeight: '2' },
-    blank: { width: '80px', height: '80px', border: '2px dashed #94a3b8', borderRadius: '8px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s ease' },
-    blankActive: { borderColor: '#3b82f6', animation: 'pulse-active-blank 1.5s infinite' },
-    blankCorrect: { borderColor: '#22c55e', backgroundColor: '#f0fdf4' },
-    blankIncorrect: { borderColor: '#ef4444', backgroundColor: '#fef2f2' },
-    filledImage: { width: '100%', height: '100%', objectFit: 'contain', padding: '5px' },
-    imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' },
-    imageContainer: { border: '2px solid #cbd5e1', borderRadius: '12px', padding: '8px', cursor: 'pointer', transition: 'all 0.2s ease', backgroundColor: 'white', textAlign: 'center' },
-    imageContainerHover: { transform: 'scale(1.05)', borderColor: '#3b82f6' },
-    imageUsed: { opacity: 0.4, pointerEvents: 'none', filter: 'grayscale(80%)' },
-    image: { width: '100%', height: '100px', objectFit: 'contain' },
-    imageWord: { marginTop: '4px', color: '#475569', fontWeight: '500' },
-    buttonContainer: { display: 'flex', justifyContent: 'center' },
-    submitButton: { width: '80%', padding: '14px', borderRadius: '10px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'background-color 0.2s ease' },
+    
+    // 图片网格样式
+    imageGrid: { 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(3, 1fr)', 
+        gap: '12px', 
+        marginBottom: '32px' 
+    },
+    imageContainer: { 
+        position: 'relative',
+        border: '2px solid #cbd5e1', 
+        borderRadius: '12px', 
+        padding: '12px', 
+        cursor: 'pointer', 
+        transition: 'all 0.2s ease', 
+        backgroundColor: 'white',
+        textAlign: 'center',
+        minHeight: '180px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    imageLabel: {
+        position: 'absolute',
+        top: '8px',
+        left: '8px',
+        backgroundColor: '#3b82f6',
+        color: 'white',
+        borderRadius: '50%',
+        width: '28px',
+        height: '28px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 'bold',
+        fontSize: '14px'
+    },
+    image: { 
+        width: '100%', 
+        height: '140px', 
+        objectFit: 'cover',
+        borderRadius: '8px'
+    },
+    imageUsed: { 
+        opacity: 0.4, 
+        pointerEvents: 'none', 
+        filter: 'grayscale(80%)' 
+    },
+    
+    // 填空网格样式
+    blanksGrid: {
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '20px',
+        marginBottom: '24px'
+    },
+    blanksItem: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px'
+    },
+    wordWithPinyin: {
+        textAlign: 'center'
+    },
+    chineseText: {
+        fontSize: '1.2rem',
+        fontWeight: 'bold',
+        color: '#334155',
+        marginBottom: '4px'
+    },
+    pinyinText: {
+        fontSize: '0.9rem',
+        color: '#64748b',
+        fontStyle: 'italic'
+    },
+    blank: { 
+        width: '60px', 
+        height: '60px', 
+        border: '2px dashed #94a3b8', 
+        borderRadius: '8px', 
+        cursor: 'pointer', 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        transition: 'all 0.2s ease',
+        backgroundColor: 'white'
+    },
+    blankActive: { 
+        borderColor: '#3b82f6', 
+        animation: 'pulse-active-blank 1.5s infinite' 
+    },
+    blankCorrect: { 
+        borderColor: '#22c55e', 
+        backgroundColor: '#f0fdf4' 
+    },
+    blankIncorrect: { 
+        borderColor: '#ef4444', 
+        backgroundColor: '#fef2f2' 
+    },
+    filledContent: {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    filledLabel: {
+        backgroundColor: '#3b82f6',
+        color: 'white',
+        borderRadius: '50%',
+        width: '32px',
+        height: '32px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 'bold',
+        fontSize: '14px'
+    },
+    
+    buttonContainer: { 
+        display: 'flex', 
+        justifyContent: 'center' 
+    },
+    submitButton: { 
+        width: '80%', 
+        padding: '14px', 
+        borderRadius: '10px', 
+        border: 'none', 
+        backgroundColor: '#3b82f6', 
+        color: 'white', 
+        fontSize: '1.2rem', 
+        fontWeight: 'bold', 
+        cursor: 'pointer', 
+        transition: 'background-color 0.2s ease' 
+    },
 };
 
 export default TianKongTiImage;
