@@ -1,17 +1,48 @@
 // components/Tixing/TianKongTi.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { pinyin } from 'pinyin-pro';
+
+// --- Please ensure you have these dependencies and assets in your project ---
+// 1. A TTS hook (e.g., using Web Speech API or a cloud service)
+// import { useTTS } from '../../hooks/useTTS'; 
+// 2. The 'use-sound' library for audio feedback
+// import useSound from 'use-sound';
+// 3. An icon library like 'react-icons'
+// import { FaVolumeUp } from 'react-icons/fa';
+// 4. Audio files for feedback
+// import errorSound from '../../assets/sounds/error.mp3';
+// import successSound from '../../assets/sounds/success.mp3';
+
+
+// --- Mock implementations for demonstration purposes ---
+// You should replace these with your actual hooks and assets.
+const useTTS = () => ({ speak: (text) => {
+    console.log(`Speaking: ${text}`);
+    if (window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-CN';
+        window.speechSynthesis.speak(utterance);
+    }
+}, isSpeaking: false });
+const useSound = (sound) => [() => { 
+    console.log(`Playing sound: ${sound}`); 
+    // const audio = new Audio(sound); audio.play(); 
+}];
+const FaVolumeUp = () => '🔊';
+// ---------------------------------------------------------
+
 
 const TianKongTiImage = ({
     id,
     title,
-    sentenceSegments,
+    sentenceSegments, // Expects an array of the words/phrases
     imageOptions,
     correctAnswers,
     onCorrect,
-    onNext // 新增：下一题回调
+    onNext
 }) => {
-    const totalBlanks = sentenceSegments.filter(seg => seg === null).length;
+    const words = sentenceSegments.filter(seg => seg !== null);
+    const totalBlanks = words.length;
 
     // --- State Management ---
     const [userAnswers, setUserAnswers] = useState(Array(totalBlanks).fill(null));
@@ -19,16 +50,30 @@ const TianKongTiImage = ({
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [feedback, setFeedback] = useState([]);
 
-    // 生成图片标签 A-F
-    const imageLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+    // --- Hooks for Sound and TTS ---
+    const { speak, isSpeaking } = useTTS();
+    // Assuming you have sound files at these paths
+    const [playError] = useSound('/sounds/error.mp3', { volume: 0.5 });
+    const [playSuccess] = useSound('/sounds/success.mp3', { volume: 0.5 });
 
-    // --- Reset state when question changes ---
+    // Generate image labels (A, B, C...)
+    const imageLabels = Array.from({ length: imageOptions.length }, (_, i) => String.fromCharCode(65 + i));
+
+    // --- Reset state and read words when question changes ---
     useEffect(() => {
         setUserAnswers(Array(totalBlanks).fill(null));
         setActiveBlankIndex(null);
         setIsSubmitted(false);
         setFeedback([]);
-    }, [id, totalBlanks]);
+        
+        // Automatically read all words for the new question
+        const allWordsText = words.map(word => word.replace(/[0-9\s岁]/g, '')).join('，');
+        if (allWordsText) {
+            const speakTimeout = setTimeout(() => speak(allWordsText), 300);
+            return () => clearTimeout(speakTimeout);
+        }
+
+    }, [id]); // Dependency on `id` ensures this runs for each new question
 
     // --- Interaction Logic ---
     const handleBlankClick = (blankIndex) => {
@@ -42,7 +87,6 @@ const TianKongTiImage = ({
         const imageId = imageOptions[imageIndex].id;
         const newUserAnswers = [...userAnswers];
         
-        // 如果图片已被其他空位使用，则清空那个空位
         const existingIndex = newUserAnswers.indexOf(imageId);
         if (existingIndex > -1) {
             newUserAnswers[existingIndex] = null;
@@ -50,7 +94,7 @@ const TianKongTiImage = ({
 
         newUserAnswers[activeBlankIndex] = imageId;
         setUserAnswers(newUserAnswers);
-        setActiveBlankIndex(null); // 选择后取消激活状态
+        setActiveBlankIndex(null); // Close selector after choosing
     };
 
     const handleSubmit = () => {
@@ -66,35 +110,24 @@ const TianKongTiImage = ({
         setIsSubmitted(true);
 
         const isAllCorrect = newFeedback.every(f => f === 'correct');
-        if (isAllCorrect && onCorrect) {
-            onCorrect();
+        if (isAllCorrect) {
+            playSuccess();
+            if (onCorrect) onCorrect();
+        } else {
+            playError();
         }
 
-        // 2秒后自动下一题
-        setTimeout(() => {
-            if (onNext) {
-                onNext();
-            }
-        }, 2000);
+        setTimeout(() => { if (onNext) onNext(); }, 2000);
     };
     
-    const handleReset = () => {
-        setUserAnswers(Array(totalBlanks).fill(null));
-        setActiveBlankIndex(null);
-        setIsSubmitted(false);
-        setFeedback([]);
-    }
-
-    // --- 生成拼音 ---
+    // --- Utility Functions ---
     const getPinyin = (text) => {
-        // 移除数字和空格，只提取汉字
         const chineseText = text.replace(/[0-9\s]/g, '');
         return pinyin(chineseText, { toneType: 'symbol' });
     };
 
-    // 提取纯文本（去掉数字）
     const getPureText = (text) => {
-        return text.replace(/[0-9]/g, '').trim();
+        return text.replace(/[0-9\s岁]/g, '').trim();
     };
 
     return (
@@ -108,97 +141,89 @@ const TianKongTiImage = ({
             <div style={styles.container}>
                 <h3 style={styles.title}>{title}</h3>
 
-                {/* 主内容区域 - 左右布局 */}
-                <div style={styles.mainContent}>
-                    {/* 左侧：图片区域 */}
-                    <div style={styles.imagesSection}>
-                        <div style={styles.imageGrid}>
-                            {imageOptions.map((opt, index) => (
-                                <div key={opt.id} style={styles.imageItem}>
-                                    <img 
-                                        src={opt.src} 
-                                        alt={opt.word} 
-                                        style={styles.image}
-                                    />
-                                    <div style={styles.imageLabel}>
-                                        {imageLabels[index]}
+                {/* Images Section */}
+                <div style={styles.imageGrid}>
+                    {imageOptions.map((opt, index) => (
+                        <div key={opt.id} style={styles.imageItem}>
+                            <img src={opt.src} alt={opt.word} style={styles.image} />
+                            <div style={styles.imageLabel}>{imageLabels[index]}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Blanks Section */}
+                <div style={styles.blanksGrid}>
+                    {words.map((segment, index) => {
+                        const blankIndex = index;
+                        const answerId = userAnswers[blankIndex];
+                        const imageIndex = imageOptions.findIndex(opt => opt.id === answerId);
+                        const feedbackClass = feedback[blankIndex];
+                        const pureText = getPureText(segment);
+
+                        return (
+                            <div key={index} style={styles.blankItem}>
+                                <div style={styles.wordWithPinyin}>
+                                    <div style={styles.pinyinText}>{getPinyin(segment)}</div>
+                                    <div style={styles.chineseTextContainer}>
+                                        <div style={styles.chineseText}>{segment}</div>
+                                        <button 
+                                            style={styles.ttsButton}
+                                            onClick={(e) => { e.stopPropagation(); speak(pureText); }}
+                                            disabled={isSpeaking}
+                                            aria-label={`Read ${pureText}`}
+                                        >
+                                            <FaVolumeUp />
+                                        </button>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* 右侧：填空区域 */}
-                    <div style={styles.blanksSection}>
-                        <div style={styles.blanksGrid}>
-                            {sentenceSegments.filter(seg => seg !== null).map((segment, index) => {
-                                const blankIndex = index;
-                                const answerId = userAnswers[blankIndex];
-                                const imageIndex = imageOptions.findIndex(opt => opt.id === answerId);
-                                const feedbackClass = feedback[blankIndex];
-                                const pureText = getPureText(segment);
-
+                                <div 
+                                    style={{
+                                        ...styles.underlineContainer,
+                                        ...(blankIndex === activeBlankIndex ? styles.underlineActive : {}),
+                                        ...(isSubmitted ? (feedbackClass === 'correct' ? styles.underlineCorrect : styles.underlineIncorrect) : {})
+                                    }}
+                                    onClick={() => handleBlankClick(blankIndex)}
+                                >
+                                    {answerId !== null && (
+                                        <span style={styles.answerLabel}>{imageLabels[imageIndex]}</span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                {/* Image Label Selector (Modal) */}
+                {activeBlankIndex !== null && (
+                    <div style={styles.labelSelector}>
+                        <div style={styles.selectorTitle}>请为 "{words[activeBlankIndex]}" 选择图片</div>
+                        <div style={styles.labelsGrid}>
+                            {imageLabels.map((label, index) => {
+                                const isUsed = userAnswers.includes(imageOptions[index].id);
                                 return (
-                                    <div key={index} style={styles.blankRow}>
-                                        <div style={styles.wordWithPinyin}>
-                                            <div style={styles.pinyinText}>
-                                                {getPinyin(segment)}
-                                            </div>
-                                            <div style={styles.chineseText}>
-                                                {pureText}
-                                            </div>
-                                        </div>
-                                        <div 
-                                            style={{
-                                                ...styles.underlineContainer,
-                                                ...(blankIndex === activeBlankIndex ? styles.underlineActive : {}),
-                                                ...(isSubmitted ? (
-                                                    feedbackClass === 'correct' ? styles.underlineCorrect : styles.underlineIncorrect
-                                                ) : {})
-                                            }}
-                                            onClick={() => handleBlankClick(blankIndex)}
-                                        >
-                                            {answerId && (
-                                                <span style={styles.answerLabel}>
-                                                    {imageLabels[imageIndex]}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                                    <button
+                                        key={label}
+                                        style={{...styles.labelButton, ...(isUsed ? styles.labelButtonUsed : {})}}
+                                        onClick={() => handleImageLabelClick(index)}
+                                        disabled={isUsed && userAnswers[activeBlankIndex] !== imageOptions[index].id}
+                                    >
+                                        {label}
+                                    </button>
                                 );
                             })}
                         </div>
-
-                        {/* 图片标签选择器 */}
-                        {activeBlankIndex !== null && (
-                            <div style={styles.labelSelector}>
-                                <div style={styles.selectorTitle}>选择图片标签：</div>
-                                <div style={styles.labelsGrid}>
-                                    {imageLabels.map((label, index) => (
-                                        <button
-                                            key={label}
-                                            style={styles.labelButton}
-                                            onClick={() => handleImageLabelClick(index)}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                         <button style={styles.closeSelectorButton} onClick={() => setActiveBlankIndex(null)}>关闭</button>
                     </div>
-                </div>
+                )}
+
 
                 <div style={styles.buttonContainer}>
                     {!isSubmitted ? (
-                        <button style={styles.submitButton} onClick={handleSubmit}>
+                        <button style={{...styles.submitButton, ...(userAnswers.some(a => a === null) ? styles.submitButtonDisabled : {})}} onClick={handleSubmit} disabled={userAnswers.some(a => a === null)}>
                             检查答案
                         </button>
                     ) : (
-                        <button 
-                            style={{...styles.submitButton, ...styles.nextButton}} 
-                            onClick={onNext}
-                        >
+                        <button style={{...styles.submitButton, ...styles.nextButton}} onClick={onNext}>
                             下一题 →
                         </button>
                     )}
@@ -208,202 +233,100 @@ const TianKongTiImage = ({
     );
 };
 
-// --- 内联样式 ---
+// --- Inline Styles ---
 const styles = {
     container: { 
-        backgroundColor: '#faf5ff', // 浅紫色背景
-        borderRadius: '16px', 
-        padding: '24px', 
-        fontFamily: 'system-ui, sans-serif', 
-        maxWidth: '900px', 
-        margin: '1rem auto', 
-        border: '1px solid #e9d5ff',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+        backgroundColor: '#faf5ff', borderRadius: '16px', padding: '24px', 
+        fontFamily: 'system-ui, sans-serif', maxWidth: '900px', margin: '1rem auto', 
+        border: '1px solid #e9d5ff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        display: 'flex', flexDirection: 'column', gap: '24px'
     },
     title: { 
-        fontSize: '1.5rem', 
-        fontWeight: 'bold', 
-        color: '#7e22ce', 
-        textAlign: 'center', 
-        margin: '0 0 30px 0',
-        textShadow: '0 1px 2px rgba(0,0,0,0.1)'
-    },
-    
-    // 主内容布局
-    mainContent: {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '30px',
-        alignItems: 'start'
-    },
-    
-    // 图片区域
-    imagesSection: {
-        display: 'flex',
-        flexDirection: 'column'
+        fontSize: '1.5rem', fontWeight: 'bold', color: '#7e22ce', 
+        textAlign: 'center', margin: '0', paddingBottom: '10px'
     },
     imageGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '12px'
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px'
     },
     imageItem: {
-        position: 'relative',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        aspectRatio: '4/3',
-        backgroundColor: '#ffffff',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        position: 'relative', borderRadius: '12px', overflow: 'hidden',
+        aspectRatio: '4/3', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
     },
-    image: {
-        width: '100%',
-        height: '100%',
-        objectFit: 'cover'
-    },
+    image: { width: '100%', height: '100%', objectFit: 'cover' },
     imageLabel: {
-        position: 'absolute',
-        top: '8px',
-        left: '8px',
-        backgroundColor: '#8b5cf6',
-        color: 'white',
-        borderRadius: '6px',
-        width: '28px',
-        height: '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 'bold',
-        fontSize: '14px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-    },
-    
-    // 填空区域
-    blanksSection: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '20px'
+        position: 'absolute', top: '8px', left: '8px', backgroundColor: 'rgba(139, 92, 246, 0.9)',
+        color: 'white', borderRadius: '6px', width: '28px', height: '28px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 'bold', fontSize: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
     },
     blanksGrid: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px'
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '20px', justifyContent: 'center'
     },
-    blankRow: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '15px',
-        padding: '8px 12px',
-        borderRadius: '8px',
-        backgroundColor: 'rgba(255,255,255,0.7)'
+    blankItem: {
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+        padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.8)',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.05)', minHeight: '120px', justifyContent: 'space-between'
     },
     wordWithPinyin: {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        minWidth: '100px'
+        display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
     },
     pinyinText: {
-        fontSize: '0.8rem',
-        color: '#dc2626',
-        marginBottom: '1px', // 减小拼音和汉字的间距
-        fontFamily: 'Arial, sans-serif',
-        lineHeight: '1.2'
+        fontSize: '0.9rem', color: '#6b7280', marginBottom: '4px',
+        fontFamily: 'Arial, sans-serif', lineHeight: '1.2'
     },
-    chineseText: {
-        fontSize: '1.1rem',
-        fontWeight: '600',
-        color: '#1f2937',
-        lineHeight: '1.2'
+    chineseTextContainer: { display: 'flex', alignItems: 'center', gap: '8px' },
+    chineseText: { fontSize: '1.5rem', fontWeight: '600', color: '#1f2937', lineHeight: '1.2' },
+    ttsButton: {
+        background: 'none', border: 'none', cursor: 'pointer', color: '#a855f7',
+        fontSize: '1.2rem', padding: '0', display: 'flex', alignItems: 'center'
     },
     underlineContainer: {
-        flex: 1,
-        minWidth: '80px',
-        height: '36px',
-        borderBottom: '2px solid #6b7280',
-        cursor: 'pointer',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative',
-        transition: 'all 0.2s ease'
+        width: '100%', maxWidth: '120px', height: '40px', borderBottom: '2px solid #9ca3af',
+        cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center',
+        position: 'relative', transition: 'all 0.2s ease', borderRadius: '4px 4px 0 0'
     },
     underlineActive: {
-        animation: 'pulse-active 1.5s infinite',
-        borderBottomColor: '#8b5cf6',
+        animation: 'pulse-active 1.5s infinite', borderBottom: '2px solid #8b5cf6',
         backgroundColor: 'rgba(139, 92, 246, 0.1)'
     },
     underlineCorrect: {
-        borderBottomColor: '#10b981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+        borderBottom: '2px solid #10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)'
     },
     underlineIncorrect: {
-        borderBottomColor: '#ef4444',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+        borderBottom: '2px solid #ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)'
     },
     answerLabel: {
-        backgroundColor: '#8b5cf6',
-        color: 'white',
-        borderRadius: '6px',
-        padding: '4px 12px',
-        fontSize: '1rem',
-        fontWeight: 'bold',
-        minWidth: '32px',
-        textAlign: 'center'
+        backgroundColor: '#8b5cf6', color: 'white', borderRadius: '6px',
+        padding: '4px 12px', fontSize: '1rem', fontWeight: 'bold'
     },
-    
-    // 标签选择器
     labelSelector: {
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        borderRadius: '12px',
-        padding: '16px',
-        border: '2px solid #8b5cf6'
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+        backgroundColor: 'white', borderRadius: '16px', padding: '24px',
+        border: '2px solid #8b5cf6', zIndex: 100, boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+        width: 'clamp(300px, 90vw, 400px)', display: 'flex', flexDirection: 'column', gap: '16px'
     },
-    selectorTitle: {
-        fontSize: '1rem',
-        fontWeight: '600',
-        color: '#7e22ce',
-        marginBottom: '12px',
-        textAlign: 'center'
-    },
-    labelsGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '8px'
-    },
+    selectorTitle: { fontSize: '1.1rem', fontWeight: '600', color: '#7e22ce', textAlign: 'center' },
+    labelsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' },
     labelButton: {
-        padding: '10px',
-        backgroundColor: '#8b5cf6',
-        color: 'white',
-        border: 'none',
-        borderRadius: '8px',
-        fontSize: '1.1rem',
-        fontWeight: 'bold',
-        cursor: 'pointer',
-        transition: 'all 0.2s ease'
+        padding: '12px', backgroundColor: '#8b5cf6', color: 'white', border: 'none',
+        borderRadius: '8px', fontSize: '1.2rem', fontWeight: 'bold',
+        cursor: 'pointer', transition: 'all 0.2s ease'
     },
-    
-    // 按钮区域
-    buttonContainer: { 
-        display: 'flex', 
-        justifyContent: 'center',
-        marginTop: '24px'
+    labelButtonUsed: { backgroundColor: '#d8b4fe', cursor: 'not-allowed', color: '#a78bfa' },
+    closeSelectorButton: {
+        marginTop: '10px', padding: '10px', backgroundColor: '#f3f4f6', color: '#4b5563',
+        border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '1rem',
+        fontWeight: '500', cursor: 'pointer'
     },
+    buttonContainer: { display: 'flex', justifyContent: 'center' },
     submitButton: { 
-        width: '200px', 
-        padding: '14px 28px', 
-        borderRadius: '10px', 
-        border: 'none', 
-        backgroundColor: '#8b5cf6', 
-        color: 'white', 
-        fontSize: '1.1rem', 
-        fontWeight: '600', 
-        cursor: 'pointer', 
-        transition: 'all 0.2s ease',
-        boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)'
+        width: '200px', padding: '14px 28px', borderRadius: '10px', border: 'none', 
+        backgroundColor: '#8b5cf6', color: 'white', fontSize: '1.1rem', fontWeight: '600', 
+        cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)'
     },
-    nextButton: {
-        backgroundColor: '#10b981'
-    }
+    submitButtonDisabled: { backgroundColor: '#c4b5fd', cursor: 'not-allowed' },
+    nextButton: { backgroundColor: '#10b981' }
 };
 
-export default TianKongTiImage;
+export default TianKongTi;
