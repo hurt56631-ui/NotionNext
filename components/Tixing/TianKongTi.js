@@ -2,18 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { pinyin } from 'pinyin-pro';
 
-// --- SVG 图标 ---
-const SpeakerIcon = ({ isSpeaking }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: '8px', color: '#475569', transition: 'color 0.2s' }}>
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-        {isSpeaking ? (
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" style={{ animation: 'pulse-wave 1.5s infinite ease-out' }}></path>
-        ) : (
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-        )}
-    </svg>
-);
-
 const TianKongTiImage = ({
     id,
     title,
@@ -29,7 +17,6 @@ const TianKongTiImage = ({
     const [activeBlankIndex, setActiveBlankIndex] = useState(0);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [feedback, setFeedback] = useState([]);
-    const [isSpeaking, setIsSpeaking] = useState(false);
 
     // 生成图片标签 A-F
     const imageLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -40,24 +27,7 @@ const TianKongTiImage = ({
         setActiveBlankIndex(0);
         setIsSubmitted(false);
         setFeedback([]);
-        window.speechSynthesis.cancel();
     }, [id, totalBlanks]);
-
-    // --- TTS Title Reading ---
-    const handleTitleClick = useCallback(() => {
-        if (!title || typeof window.speechSynthesis === 'undefined') return;
-        if (isSpeaking) {
-            window.speechSynthesis.cancel();
-            setIsSpeaking(false);
-            return;
-        }
-        const utterance = new SpeechSynthesisUtterance(title);
-        utterance.lang = 'zh-CN';
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => setIsSpeaking(false);
-        utterance.onerror = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-    }, [title, isSpeaking]);
 
     // --- Interaction Logic ---
     const handleBlankClick = (blankIndex) => {
@@ -110,58 +80,23 @@ const TianKongTiImage = ({
 
     // --- 生成拼音 ---
     const getPinyin = (text) => {
-        return pinyin(text, { toneType: 'symbol' });
-    };
-
-    // --- Rendering ---
-    const renderBlanks = () => {
-        let blankCounter = -1;
-        return sentenceSegments.map((segment, index) => {
-            if (segment === null) {
-                blankCounter++;
-                const currentBlankIndex = blankCounter;
-                const answerId = userAnswers[currentBlankIndex];
-                const image = imageOptions.find(opt => opt.id === answerId);
-                const feedbackClass = feedback[currentBlankIndex];
-
-                let blankStyle = { ...styles.blank };
-                if(currentBlankIndex === activeBlankIndex && !isSubmitted) {
-                    blankStyle = {...blankStyle, ...styles.blankActive};
-                }
-                if(isSubmitted) {
-                    blankStyle = {...blankStyle, ...(feedbackClass === 'correct' ? styles.blankCorrect : styles.blankIncorrect)};
-                }
-
-                return (
-                    <div key={index} style={blankStyle} onClick={() => handleBlankClick(currentBlankIndex)}>
-                        {image && (
-                            <div style={styles.filledContent}>
-                                <div style={styles.imageLabel}>{imageLabels[imageOptions.findIndex(opt => opt.id === image.id)]}</div>
-                                <img src={image.src} alt={image.word} style={styles.filledImage} />
-                            </div>
-                        )}
-                    </div>
-                );
-            }
-            return <span key={index} style={styles.sentenceText}>{segment}</span>;
-        });
+        // 移除数字和空格，只提取汉字
+        const chineseText = text.replace(/[0-9\s]/g, '');
+        return pinyin(chineseText, { toneType: 'symbol' });
     };
 
     return (
         <>
             <style>{`
-                @keyframes pulse-wave { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
-                @keyframes pulse-active-blank { 0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); } }
-                .title-clickable { cursor: pointer; transition: color 0.3s; }
-                .title-clickable:hover { color: #2563eb; }
+                @keyframes pulse-active-blank { 
+                    0%, 100% { background-color: rgba(59, 130, 246, 0.1); } 
+                    50% { background-color: rgba(59, 130, 246, 0.2); } 
+                }
             `}</style>
             <div style={styles.container}>
-                <h3 style={{ ...styles.title, ...(isSpeaking && styles.titleSpeaking) }} className="title-clickable" onClick={handleTitleClick}>
-                    <SpeakerIcon isSpeaking={isSpeaking} />
-                    {title}
-                </h3>
+                <h3 style={styles.title}>{title}</h3>
 
-                {/* 图片网格 - 2行3列 */}
+                {/* 图片网格 - 横屏2行3列 */}
                 <div style={styles.imageGrid}>
                     {imageOptions.map((opt, index) => (
                         <div 
@@ -178,41 +113,67 @@ const TianKongTiImage = ({
                     ))}
                 </div>
 
-                {/* 填空区域 - 2行3列 */}
-                <div style={styles.blanksGrid}>
-                    {sentenceSegments.filter(seg => seg !== null).map((segment, index) => {
-                        const blankIndex = Math.floor(index / 2) * 3 + (index % 2);
-                        const answerId = userAnswers[blankIndex];
-                        const image = imageOptions.find(opt => opt.id === answerId);
-                        const feedbackClass = feedback[blankIndex];
-
-                        let blankStyle = { ...styles.blank };
-                        if(blankIndex === activeBlankIndex && !isSubmitted) {
-                            blankStyle = {...blankStyle, ...styles.blankActive};
-                        }
-                        if(isSubmitted) {
-                            blankStyle = {...blankStyle, ...(feedbackClass === 'correct' ? styles.blankCorrect : styles.blankIncorrect)};
-                        }
-
-                        return (
-                            <div key={index} style={styles.blanksItem}>
+                {/* 填空区域 - 真正的下划线样式 */}
+                <div style={styles.blanksContainer}>
+                    <div style={styles.blanksRow}>
+                        {/* 第一行：1-3题 */}
+                        {[0, 1, 2].map((index) => (
+                            <div key={index} style={styles.blankItem}>
                                 <div style={styles.wordWithPinyin}>
-                                    <div style={styles.chineseText}>{segment}</div>
-                                    <div style={styles.pinyinText}>{getPinyin(segment.replace(/\d+\s*/g, ''))}</div>
+                                    <div style={styles.pinyinText}>
+                                        {getPinyin(sentenceSegments[index * 2])}
+                                    </div>
+                                    <div style={styles.chineseText}>
+                                        {sentenceSegments[index * 2]}
+                                    </div>
                                 </div>
                                 <div 
-                                    style={blankStyle} 
-                                    onClick={() => handleBlankClick(blankIndex)}
+                                    style={{
+                                        ...styles.underline,
+                                        ...(index === activeBlankIndex && !isSubmitted ? styles.underlineActive : {}),
+                                        ...(isSubmitted ? (feedback[index] === 'correct' ? styles.underlineCorrect : styles.underlineIncorrect) : {})
+                                    }} 
+                                    onClick={() => handleBlankClick(index)}
                                 >
-                                    {image && (
-                                        <div style={styles.filledContent}>
-                                            <div style={styles.filledLabel}>{imageLabels[imageOptions.findIndex(opt => opt.id === image.id)]}</div>
-                                        </div>
+                                    {userAnswers[index] && (
+                                        <span style={styles.answerLabel}>
+                                            {imageLabels[imageOptions.findIndex(opt => opt.id === userAnswers[index])]}
+                                        </span>
                                     )}
                                 </div>
                             </div>
-                        );
-                    })}
+                        ))}
+                    </div>
+                    
+                    <div style={styles.blanksRow}>
+                        {/* 第二行：4-6题 */}
+                        {[3, 4, 5].map((index) => (
+                            <div key={index} style={styles.blankItem}>
+                                <div style={styles.wordWithPinyin}>
+                                    <div style={styles.pinyinText}>
+                                        {getPinyin(sentenceSegments[index * 2])}
+                                    </div>
+                                    <div style={styles.chineseText}>
+                                        {sentenceSegments[index * 2]}
+                                    </div>
+                                </div>
+                                <div 
+                                    style={{
+                                        ...styles.underline,
+                                        ...(index === activeBlankIndex && !isSubmitted ? styles.underlineActive : {}),
+                                        ...(isSubmitted ? (feedback[index] === 'correct' ? styles.underlineCorrect : styles.underlineIncorrect) : {})
+                                    }} 
+                                    onClick={() => handleBlankClick(index)}
+                                >
+                                    {userAnswers[index] && (
+                                        <span style={styles.answerLabel}>
+                                            {imageLabels[imageOptions.findIndex(opt => opt.id === userAnswers[index])]}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div style={styles.buttonContainer}>
@@ -230,65 +191,64 @@ const TianKongTiImage = ({
 // --- 内联样式 ---
 const styles = {
     container: { 
-        backgroundColor: '#f8fafc', 
-        borderRadius: '16px', 
-        padding: '24px', 
+        backgroundColor: '#ffffff', 
+        borderRadius: '12px', 
+        padding: '20px', 
         fontFamily: 'system-ui, sans-serif', 
         maxWidth: '800px', 
-        margin: '2rem auto', 
-        border: '1px solid #e2e8f0' 
+        margin: '1rem auto', 
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
     },
     title: { 
-        fontSize: '1.5rem', 
+        fontSize: '1.4rem', 
         fontWeight: 'bold', 
-        color: '#334155', 
+        color: '#1f2937', 
         textAlign: 'center', 
         margin: '0 0 24px 0' 
     },
-    titleSpeaking: { color: '#3b82f6' },
     
-    // 图片网格样式
+    // 图片网格样式 - 横屏
     imageGrid: { 
         display: 'grid', 
         gridTemplateColumns: 'repeat(3, 1fr)', 
-        gap: '12px', 
-        marginBottom: '32px' 
+        gap: '10px', 
+        marginBottom: '30px' 
     },
     imageContainer: { 
         position: 'relative',
-        border: '2px solid #cbd5e1', 
-        borderRadius: '12px', 
-        padding: '12px', 
+        border: '2px solid #d1d5db', 
+        borderRadius: '10px', 
+        padding: '8px', 
         cursor: 'pointer', 
         transition: 'all 0.2s ease', 
         backgroundColor: 'white',
         textAlign: 'center',
-        minHeight: '180px',
+        aspectRatio: '4/3', // 横屏比例
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center'
     },
     imageLabel: {
         position: 'absolute',
-        top: '8px',
-        left: '8px',
+        top: '6px',
+        left: '6px',
         backgroundColor: '#3b82f6',
         color: 'white',
-        borderRadius: '50%',
-        width: '28px',
-        height: '28px',
+        borderRadius: '4px',
+        width: '24px',
+        height: '24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontWeight: 'bold',
-        fontSize: '14px'
+        fontSize: '12px'
     },
     image: { 
         width: '100%', 
-        height: '140px', 
+        height: '100%', 
         objectFit: 'cover',
-        borderRadius: '8px'
+        borderRadius: '6px'
     },
     imageUsed: { 
         opacity: 0.4, 
@@ -296,75 +256,66 @@ const styles = {
         filter: 'grayscale(80%)' 
     },
     
-    // 填空网格样式
-    blanksGrid: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '20px',
+    // 填空区域样式
+    blanksContainer: {
         marginBottom: '24px'
     },
-    blanksItem: {
+    blanksRow: {
+        display: 'flex',
+        justifyContent: 'space-around',
+        marginBottom: '20px'
+    },
+    blankItem: {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: '8px'
+        minWidth: '120px'
     },
     wordWithPinyin: {
-        textAlign: 'center'
-    },
-    chineseText: {
-        fontSize: '1.2rem',
-        fontWeight: 'bold',
-        color: '#334155',
-        marginBottom: '4px'
+        textAlign: 'center',
+        marginBottom: '8px'
     },
     pinyinText: {
-        fontSize: '0.9rem',
-        color: '#64748b',
-        fontStyle: 'italic'
+        fontSize: '0.85rem',
+        color: '#6b7280',
+        marginBottom: '2px', // 拼音和汉字间距小
+        fontFamily: 'Arial, sans-serif'
     },
-    blank: { 
-        width: '60px', 
-        height: '60px', 
-        border: '2px dashed #94a3b8', 
-        borderRadius: '8px', 
-        cursor: 'pointer', 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        transition: 'all 0.2s ease',
-        backgroundColor: 'white'
+    chineseText: {
+        fontSize: '1.1rem',
+        fontWeight: '600',
+        color: '#1f2937'
     },
-    blankActive: { 
-        borderColor: '#3b82f6', 
-        animation: 'pulse-active-blank 1.5s infinite' 
-    },
-    blankCorrect: { 
-        borderColor: '#22c55e', 
-        backgroundColor: '#f0fdf4' 
-    },
-    blankIncorrect: { 
-        borderColor: '#ef4444', 
-        backgroundColor: '#fef2f2' 
-    },
-    filledContent: {
-        width: '100%',
-        height: '100%',
+    underline: {
+        width: '60px',
+        height: '32px',
+        borderBottom: '2px solid #4b5563',
+        cursor: 'pointer',
         display: 'flex',
+        justifyContent: 'center',
         alignItems: 'center',
-        justifyContent: 'center'
+        position: 'relative',
+        marginTop: '4px'
     },
-    filledLabel: {
+    underlineActive: {
+        animation: 'pulse-active-blank 1.5s infinite',
+        borderBottomColor: '#3b82f6'
+    },
+    underlineCorrect: {
+        borderBottomColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+    },
+    underlineIncorrect: {
+        borderBottomColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+    },
+    answerLabel: {
         backgroundColor: '#3b82f6',
         color: 'white',
-        borderRadius: '50%',
-        width: '32px',
-        height: '32px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 'bold',
-        fontSize: '14px'
+        borderRadius: '4px',
+        padding: '2px 8px',
+        fontSize: '0.9rem',
+        fontWeight: 'bold'
     },
     
     buttonContainer: { 
@@ -372,14 +323,14 @@ const styles = {
         justifyContent: 'center' 
     },
     submitButton: { 
-        width: '80%', 
-        padding: '14px', 
-        borderRadius: '10px', 
+        width: '200px', 
+        padding: '12px 24px', 
+        borderRadius: '8px', 
         border: 'none', 
         backgroundColor: '#3b82f6', 
         color: 'white', 
-        fontSize: '1.2rem', 
-        fontWeight: 'bold', 
+        fontSize: '1.1rem', 
+        fontWeight: '600', 
         cursor: 'pointer', 
         transition: 'background-color 0.2s ease' 
     },
