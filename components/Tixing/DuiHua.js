@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause, FaRedo } from 'react-icons/fa';
 
-// --- TTS 引擎 (无需改动) ---
+// --- TTS 引擎 ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice) => {
     if (!text || !voice) return null;
@@ -16,28 +16,29 @@ const getTTSAudio = async (text, voice) => {
         const audio = new Audio(URL.createObjectURL(blob));
         ttsCache.set(cacheKey, audio);
         return audio;
-    } catch (e) { console.error(`Failed to get TTS for "${text}"`, e); return null; }
+    } catch (e) {
+        console.error(`Failed to get TTS for "${text}"`, e);
+        return null;
+    }
 };
 
 const playTTS = async (text, voice) => {
     const audio = await getTTSAudio(text, voice);
-    // 暂停所有其他正在播放的音频
-    ttsCache.forEach(cachedAudio => {
-        if (cachedAudio && !cachedAudio.paused) {
-            cachedAudio.pause();
-            cachedAudio.currentTime = 0;
+    // 停止其他音频
+    ttsCache.forEach(a => {
+        if (a && !a.paused) {
+            a.pause();
+            a.currentTime = 0;
         }
     });
     audio?.play();
     return audio;
 };
+
 // ========================================================================
 
 const DuiHua = (props) => {
-    // 智能数据处理，防止因数据加载延迟导致崩溃
     const data = props.data && props.data.dialogue ? props.data : props;
-
-    // 如果数据无效，显示加载提示
     if (!data || !data.dialogue || !data.characters) {
         return <div style={styles.loadingOrError}>正在加载对话数据...</div>;
     }
@@ -53,23 +54,21 @@ const DuiHua = (props) => {
     const speakerKeys = Object.keys(characters);
     const speakerAKey = speakerKeys[0];
 
-    // 自动滚动到底部
+    // 自动滚动
     useEffect(() => {
         if (transcriptRef.current) {
             transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
         }
     }, [transcript]);
 
-    // --- 核心播放逻辑 ---
     const playLine = async (index, isRepeating = false) => {
         if (index >= dialogue.length) {
             handleStoryEnd();
             return;
         }
-
         setCurrentLineIndex(index);
-        
-        // 如果历史记录里没有，就添加进去
+
+        // 更新历史
         if (!transcript.some(t => t.index === index)) {
             setTranscript(prev => [...prev, { ...dialogue[index], index }]);
         }
@@ -77,17 +76,15 @@ const DuiHua = (props) => {
         const line = dialogue[index];
         const voice = characters[line.speaker]?.voice;
         audioRef.current = await playTTS(line.hanzi, voice);
-        
+
         if (audioRef.current) {
             audioRef.current.onended = () => {
                 if (isPlaying && !isRepeating) {
-                    // 自然停顿后播放下一句
-                    timeoutRef.current = setTimeout(() => playLine(index + 1), 800);
+                    timeoutRef.current = setTimeout(() => playLine(index + 1), 700);
                 }
             };
         } else if (isPlaying && !isRepeating) {
-            // 如果音频加载失败，也继续流程
-            timeoutRef.current = setTimeout(() => playLine(index + 1), 800);
+            timeoutRef.current = setTimeout(() => playLine(index + 1), 700);
         }
     };
 
@@ -99,17 +96,14 @@ const DuiHua = (props) => {
         } else {
             setIsPlaying(true);
             let nextIndex = currentLineIndex;
-
             if (nextIndex === null || nextIndex >= dialogue.length - 1) {
-                // 如果是结尾或从未开始，则从头播放
                 nextIndex = 0;
-                setTranscript([]); // 重置历史
+                setTranscript([]);
             } else if (audioRef.current?.paused) {
-                // 如果是暂停状态，则继续播放当前音频
                 audioRef.current.play();
                 return;
             } else {
-                nextIndex++; // 否则播放下一行
+                nextIndex++;
             }
             playLine(nextIndex);
         }
@@ -125,76 +119,67 @@ const DuiHua = (props) => {
         setCurrentLineIndex(null);
     };
 
-    // 点击历史对话项重新播放
     const handleTranscriptClick = (index) => {
         setCurrentLineIndex(index);
         playLine(index, true);
     };
 
-    // 自动播放与清理
     useEffect(() => {
-        // 预加载所有TTS音频
         dialogue.forEach(line => getTTSAudio(line.hanzi, characters[line.speaker]?.voice));
-        
-        // 延迟1秒自动开始播放
         timeoutRef.current = setTimeout(() => {
-            if (!isPlaying) {
-                handlePlayPause();
-            }
+            if (!isPlaying) handlePlayPause();
         }, 1000);
-
         return () => {
             clearTimeout(timeoutRef.current);
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
+            if (audioRef.current) audioRef.current.pause();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
 
-    const currentLine = currentLineIndex !== null ? dialogue[currentLineLineIndex] : null;
+    const currentLine = currentLineIndex !== null ? dialogue[currentLineIndex] : null;
 
     return (
         <>
             <style>{`
-                /* CSS动画和气泡尾巴样式 */
-                @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
-                @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
-                .bubble-container { position: absolute; width: 100%; top: 50%; transform: translateY(-50%); display: flex; padding: 0 5%; box-sizing: border-box; animation: fadeInUp 0.5s ease-out forwards; }
-                .bubble { position: relative; max-width: 65%; padding: 14px 22px; border-radius: 20px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); cursor: pointer; transition: all 0.3s ease; }
-                .bubble:hover { transform: scale(1.02); }
-                .bubble-a { background-color: #3b82f6; color: white; border-bottom-left-radius: 5px; margin-right: auto; }
-                .bubble-b { background-color: #f9fafb; color: #1f2937; border-bottom-right-radius: 5px; margin-left: auto; }
-                .bubble-a::after { content: ''; position: absolute; left: -10px; bottom: 6px; width: 0; height: 0; border: 12px solid transparent; border-right-color: #3b82f6; border-left: 0; }
-                .bubble-b::after { content: ''; position: absolute; right: -10px; bottom: 6px; width: 0; height: 0; border: 12px solid transparent; border-left-color: #f9fafb; border-right: 0; }
-                
-                .transcript-item { cursor: pointer; transition: all 0.2s ease; }
-                .transcript-item:hover { background-color: rgba(255,255,255,0.1); }
-                .transcript-item.active { background-color: rgba(59, 130, 246, 0.3); }
+                @keyframes fadeInUp { 
+                    0% { opacity: 0; transform: translateY(15px); } 
+                    100% { opacity: 1; transform: translateY(0); } 
+                }
+                .bubble { 
+                    animation: fadeInUp 0.4s ease-out; 
+                }
+                .transcript-item.active { 
+                    background-color: rgba(59, 130, 246, 0.4); 
+                }
             `}</style>
-            <div style={styles.fullScreenContainer} className="fade-in">
+
+            <div style={styles.fullScreenContainer}>
                 <img src={imageSrc} alt={title} style={styles.backgroundImage} />
                 <div style={styles.overlay}></div>
 
-                {/* 顶部历史对话区域 */}
+                {/* 顶部历史区 */}
                 <div style={styles.topArea}>
                     <div style={styles.transcriptContainer} ref={transcriptRef}>
-                        {transcript.map((line) => (
-                            <div 
-                                key={line.index} 
+                        {transcript.map(line => (
+                            <div
+                                key={line.index}
                                 className={`transcript-item ${currentLineIndex === line.index ? 'active' : ''}`}
                                 style={{
-                                    ...styles.transcriptLine, 
+                                    ...styles.transcriptLine,
                                     textAlign: line.speaker === speakerAKey ? 'left' : 'right',
-                                    justifyContent: line.speaker === speakerAKey ? 'flex-start' : 'flex-end'
                                 }}
                                 onClick={() => handleTranscriptClick(line.index)}
                             >
-                                <div style={styles.transcriptBubble}>
+                                <div style={{
+                                    ...styles.transcriptBubble,
+                                    backgroundColor: line.speaker === speakerAKey ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.15)',
+                                    borderRadius: '12px',
+                                    padding: '8px 14px',
+                                }}>
                                     <span style={styles.transcriptHanzi}>{line.hanzi}</span>
                                     <span style={{
                                         ...styles.speakerName,
-                                        color: line.speaker === speakerAKey ? '#93c5fd' : '#fcd34d'
+                                        color: line.speaker === speakerAKey ? '#60a5fa' : '#fcd34d'
                                     }}>
                                         {characters[line.speaker]?.name}
                                     </span>
@@ -204,106 +189,105 @@ const DuiHua = (props) => {
                     </div>
                 </div>
 
-                {/* 中部当前对话气泡 */}
+                {/* 中部气泡显示 */}
                 {currentLine && (
-                    <div className="bubble-container">
-                        <div className={`bubble ${currentLine.speaker === speakerAKey ? 'bubble-a' : 'bubble-b'}`} onClick={handleRepeat}>
+                    <div style={styles.middleArea}>
+                        <div
+                            className="bubble"
+                            style={{
+                                ...styles.currentBubble,
+                                backgroundColor: currentLine.speaker === speakerAKey ? '#3b82f6' : '#f9fafb',
+                                color: currentLine.speaker === speakerAKey ? '#fff' : '#1f2937',
+                                alignSelf: currentLine.speaker === speakerAKey ? 'flex-start' : 'flex-end'
+                            }}
+                            onClick={handleRepeat}
+                        >
                             <p style={styles.pinyin}>{currentLine.pinyin}</p>
                             <p style={styles.hanzi}>{currentLine.hanzi}</p>
                         </div>
                     </div>
                 )}
 
-                {/* 底部翻译和控制区域 */}
-                <div style={styles.bottomArea}>
-                    <div style={styles.translationArea}>
-                        <p style={styles.translationText}>
-                            {currentLine?.myanmar || '点击播放开始学习...'}
-                        </p>
-                    </div>
-                    <div style={styles.controls}>
-                        <button onClick={handlePlayPause} style={styles.controlButton} aria-label="播放/暂停">
-                            {isPlaying ? <FaPause /> : <FaPlay />}
-                        </button>
-                        <button onClick={handleRepeat} style={styles.controlButton} aria-label="重复">
-                            <FaRedo />
-                        </button>
-                    </div>
+                {/* 新增：字幕区（位于历史区下方） */}
+                <div style={styles.subtitleArea}>
+                    <p style={styles.translationText}>
+                        {currentLine?.myanmar || '点击播放开始学习...'}
+                    </p>
+                </div>
+
+                {/* 底部控制区 */}
+                <div style={styles.controlsArea}>
+                    <button onClick={handlePlayPause} style={styles.controlButton}>
+                        {isPlaying ? <FaPause /> : <FaPlay />}
+                    </button>
+                    <button onClick={handleRepeat} style={styles.controlButton}>
+                        <FaRedo />
+                    </button>
                 </div>
             </div>
         </>
     );
 };
 
-// --- 样式表 ---
+// --- 样式 ---
 const styles = {
-    loadingOrError: { 
-        textAlign: 'center', 
-        padding: '40px', 
-        fontFamily: 'system-ui, sans-serif', 
-        color: '#7f1d1d', 
-        backgroundColor: '#fef2f2', 
-        borderRadius: '12px' 
+    loadingOrError: {
+        textAlign: 'center',
+        padding: '40px',
+        color: '#7f1d1d',
+        backgroundColor: '#fef2f2',
+        borderRadius: '12px'
     },
-    fullScreenContainer: { 
-        position: 'relative', 
-        width: '100%', 
-        maxWidth: '960px', 
-        margin: '1rem auto', 
-        aspectRatio: '16 / 9', 
-        borderRadius: '20px', 
-        overflow: 'hidden', 
-        boxShadow: '0 10px 30px -10px rgba(0,0,0,0.4)', 
-        backgroundColor: '#111' 
+    fullScreenContainer: {
+        position: 'relative',
+        width: '100%',
+        maxWidth: '960px',
+        aspectRatio: '16 / 9',
+        margin: '1rem auto',
+        borderRadius: '18px',
+        overflow: 'hidden',
+        backgroundColor: '#111',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        display: 'flex',
+        flexDirection: 'column'
     },
-    backgroundImage: { 
-        position: 'absolute', 
-        top: 0, 
-        left: 0, 
-        width: '100%', 
-        height: '100%', 
-        objectFit: 'cover' 
+    backgroundImage: {
+        position: 'absolute',
+        top: 0, left: 0,
+        width: '100%', height: '100%',
+        objectFit: 'cover',
+        zIndex: 0
     },
-    overlay: { 
-        position: 'absolute', 
-        top: 0, 
-        left: 0, 
-        right: 0, 
-        bottom: 0, 
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.8) 100%)' 
+    overlay: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.8) 100%)',
+        zIndex: 1
     },
-    topArea: { 
-        position: 'absolute', 
-        top: 0, 
-        left: 0, 
-        right: 0, 
-        height: '30%', 
-        zIndex: 5, 
-        padding: '15px', 
-        backgroundColor: 'rgba(0,0,0,0.4)', 
-        backdropFilter: 'blur(8px)', 
-        borderBottom: '1px solid rgba(255,255,255,0.1)' 
+    topArea: {
+        position: 'relative',
+        zIndex: 2,
+        flex: '0 0 40%',
+        padding: '12px 18px',
+        overflowY: 'auto',
+        backdropFilter: 'blur(6px)',
     },
-    transcriptContainer: { 
-        height: '100%', 
-        overflowY: 'auto', 
-        color: 'white',
+    transcriptContainer: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px'
+        gap: '8px',
+        color: 'white'
     },
-    transcriptLine: { 
+    transcriptLine: {
         display: 'flex',
-        alignItems: 'center',
-        padding: '8px 12px',
-        borderRadius: '8px',
-        margin: 0
+        justifyContent: 'space-between',
+        cursor: 'pointer',
+        transition: 'background 0.3s ease'
     },
     transcriptBubble: {
-        display: 'flex',
+        display: 'inline-flex',
         alignItems: 'center',
-        gap: '12px',
-        maxWidth: '80%'
+        gap: '10px'
     },
     transcriptHanzi: {
         fontSize: '1rem',
@@ -313,58 +297,60 @@ const styles = {
         fontSize: '0.8rem',
         opacity: 0.8
     },
-    bottomArea: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 5,
-        padding: '20px',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        backdropFilter: 'blur(8px)',
-        borderTop: '1px solid rgba(255,255,255,0.1)'
+    middleArea: {
+        zIndex: 3,
+        flex: '1 0 auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
     },
-    translationArea: {
-        marginBottom: '15px',
+    currentBubble: {
+        padding: '16px 22px',
+        borderRadius: '18px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+        maxWidth: '80%',
         textAlign: 'center'
     },
-    translationText: { 
-        color: 'white', 
-        fontSize: '1.2rem', 
-        margin: 0, 
-        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-        minHeight: '1.5em'
+    subtitleArea: {
+        zIndex: 3,
+        flex: '0 0 auto',
+        padding: '10px',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(8px)',
+        textAlign: 'center'
     },
-    controls: {
+    translationText: {
+        color: 'white',
+        fontSize: '1.2rem',
+        margin: 0
+    },
+    controlsArea: {
+        zIndex: 3,
+        flex: '0 0 auto',
+        padding: '14px',
         display: 'flex',
         justifyContent: 'center',
-        gap: '20px'
+        gap: '20px',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderTop: '1px solid rgba(255,255,255,0.1)',
+        backdropFilter: 'blur(8px)'
     },
-    pinyin: { 
-        margin: '0 0 4px 0', 
-        opacity: 0.7, 
-        fontSize: '1rem' 
+    controlButton: {
+        background: 'rgba(255,255,255,0.2)',
+        color: 'white',
+        border: '1px solid rgba(255,255,255,0.3)',
+        borderRadius: '50%',
+        width: '50px',
+        height: '50px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        fontSize: '1.2rem',
+        transition: 'all 0.3s ease'
     },
-    hanzi: { 
-        margin: 0, 
-        fontSize: '1.6rem', 
-        fontWeight: 'bold' 
-    },
-    controlButton: { 
-        background: 'rgba(255,255,255,0.2)', 
-        color: 'white', 
-        border: '1px solid rgba(255,255,255,0.3)', 
-        borderRadius: '50%', 
-        width: '50px', 
-        height: '50px', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        cursor: 'pointer', 
-        fontSize: '1.1rem', 
-        backdropFilter: 'blur(5px)',
-        transition: 'all 0.2s ease'
-    }
+    pinyin: { margin: '0 0 5px 0', fontSize: '1rem', opacity: 0.8 },
+    hanzi: { margin: 0, fontSize: '1.6rem', fontWeight: 'bold' }
 };
 
 export default DuiHua;
