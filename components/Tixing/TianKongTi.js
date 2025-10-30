@@ -1,16 +1,15 @@
-// components/Ting/TianKongTiImage.js
+// components/Tixing/TianKongTi.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { pinyin } from 'pinyin-pro';
 import confetti from 'canvas-confetti';
 import { Howl } from 'howler';
 
-// --- Sound & TTS Engine (Adapted from your TingLiZhuJu.js) ---
+// --- Sound & TTS Engine ---
 let sounds = {
     correct: new Howl({ src: ['/sounds/correct.mp3'] }),
     incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 })
 };
 let ttsCache = new Map();
-
 const playSound = (name) => sounds[name]?.play();
 
 const getTTSAudio = async (text, voice = 'zh-CN-XiaoyouNeural') => {
@@ -32,7 +31,6 @@ const getTTSAudio = async (text, voice = 'zh-CN-XiaoyouNeural') => {
 
 const playTTS = async (text, voice) => {
     const audio = await getTTSAudio(text, voice);
-    // Stop any currently playing audio before starting a new one
     ttsCache.forEach(cachedAudio => {
         if (!cachedAudio.paused) {
             cachedAudio.pause();
@@ -43,16 +41,16 @@ const playTTS = async (text, voice) => {
 };
 // -----------------------------------------------------------
 
-
-const TianKongTiImage = ({
+// FIXED: Added default value `= {}` to props for robustness
+const TianKongTi = ({
     id,
     title,
-    words,
-    imageOptions,
-    correctAnswers,
+    words = [],
+    imageOptions = [],
+    correctAnswers = [],
     onCorrect,
     onNext
-}) => {
+} = {}) => {
     const totalBlanks = words.length;
 
     const [userAnswers, setUserAnswers] = useState(Array(totalBlanks).fill(null));
@@ -60,26 +58,26 @@ const TianKongTiImage = ({
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [feedback, setFeedback] = useState([]);
 
-    const imageLabels = useMemo(() => 
+    const imageLabels = useMemo(() =>
         Array.from({ length: imageOptions.length }, (_, i) => String.fromCharCode(65 + i)),
         [imageOptions.length]
     );
 
     const getPureText = (text) => text.replace(/[^a-zA-Z\u4e00-\u9fa5]/g, '').trim();
 
-    // --- Auto-read and preload on new question ---
     useEffect(() => {
+        // Guard clause for when data is not ready
+        if (!words || words.length === 0) return;
+
         setUserAnswers(Array(totalBlanks).fill(null));
         setActiveBlankIndex(null);
         setIsSubmitted(false);
         setFeedback([]);
         
-        const allWordsText = words.map(getPureText);
+        const allWordsText = words.map(getPureText).filter(Boolean);
         
-        // Preload all TTS audio
         allWordsText.forEach(text => getTTSAudio(text));
 
-        // Auto-read all words sequentially
         let currentIndex = 0;
         const playNext = async () => {
             if (currentIndex < allWordsText.length) {
@@ -87,8 +85,12 @@ const TianKongTiImage = ({
                 if (audio) {
                     audio.onended = playNext;
                     audio.play();
+                    currentIndex++;
+                } else {
+                    // if audio fails, still move on
+                    currentIndex++;
+                    playNext();
                 }
-                currentIndex++;
             }
         };
         
@@ -97,21 +99,13 @@ const TianKongTiImage = ({
 
     }, [id, words]);
 
-    // --- Interaction Logic ---
-    const handleBlankClick = (blankIndex) => {
-        if (isSubmitted) return;
-        setActiveBlankIndex(blankIndex);
-    };
-
+    const handleBlankClick = (blankIndex) => { if (!isSubmitted) setActiveBlankIndex(blankIndex); };
     const handleImageLabelClick = (imageIndex) => {
         if (isSubmitted || activeBlankIndex === null) return;
-
         const imageId = imageOptions[imageIndex].id;
         const newUserAnswers = [...userAnswers];
-        
         const existingIndex = newUserAnswers.indexOf(imageId);
         if (existingIndex > -1) newUserAnswers[existingIndex] = null;
-
         newUserAnswers[activeBlankIndex] = imageId;
         setUserAnswers(newUserAnswers);
         setActiveBlankIndex(null);
@@ -119,13 +113,9 @@ const TianKongTiImage = ({
 
     const handleSubmit = () => {
         if (userAnswers.some(answer => answer === null)) return;
-
-        const newFeedback = userAnswers.map((answer, index) => 
-            answer === correctAnswers[index] ? 'correct' : 'incorrect'
-        );
+        const newFeedback = userAnswers.map((answer, index) => answer === correctAnswers[index] ? 'correct' : 'incorrect');
         setFeedback(newFeedback);
         setIsSubmitted(true);
-
         const isAllCorrect = newFeedback.every(f => f === 'correct');
         if (isAllCorrect) {
             playSound('correct');
@@ -134,14 +124,18 @@ const TianKongTiImage = ({
         } else {
             playSound('incorrect');
         }
-        
         if (onNext) setTimeout(onNext, 2500);
     };
+
+    // Render a loading state if essential data is missing
+    if (!words || words.length === 0) {
+        return <div style={{textAlign: 'center', padding: '20px', color: '#666'}}>正在加载题目...</div>;
+    }
 
     return (
         <div style={styles.container}>
             <h3 style={styles.title}>{title}</h3>
-
+            {/* ... rest of the JSX is identical to the previous version ... */}
             <div style={styles.imageGrid}>
                 {imageOptions.map((opt, index) => (
                     <div key={opt.id} style={styles.imageItem}>
@@ -150,7 +144,6 @@ const TianKongTiImage = ({
                     </div>
                 ))}
             </div>
-
             <div style={styles.blanksGrid}>
                 {words.map((segment, index) => {
                     const answerId = userAnswers[index];
@@ -174,7 +167,6 @@ const TianKongTiImage = ({
                     );
                 })}
             </div>
-            
             {activeBlankIndex !== null && (
                 <div style={styles.labelSelectorOverlay} onClick={() => setActiveBlankIndex(null)}>
                     <div style={styles.labelSelector} onClick={e => e.stopPropagation()}>
@@ -195,7 +187,6 @@ const TianKongTiImage = ({
                     </div>
                 </div>
             )}
-
             <div style={styles.buttonContainer}>
                 {!isSubmitted ? (
                     <button 
@@ -211,7 +202,7 @@ const TianKongTiImage = ({
     );
 };
 
-// --- Styles (Heavily Modified for Compact Layout) ---
+// --- Styles ---
 const styles = {
     container: { backgroundColor: '#f8fafc', borderRadius: '16px', padding: '20px', fontFamily: 'system-ui, sans-serif', maxWidth: '800px', margin: '1rem auto', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '20px' },
     title: { fontSize: '1.3rem', fontWeight: '600', color: '#334155', textAlign: 'center', margin: 0 },
@@ -240,4 +231,5 @@ const styles = {
     nextButton: { backgroundColor: '#16a34a' }
 };
 
-export default TianKongTiImage;
+// FIXED: Changed component name to match your file structure.
+export default TianKongTi;
