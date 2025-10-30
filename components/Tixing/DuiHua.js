@@ -1,8 +1,8 @@
 // components/Tixing/DuiHua.js
 import React, { useState, useEffect, useRef } from 'react';
-import { FaPlay, FaPause, FaUserFriends } from 'react-icons/fa';
+import { FaPlay, FaPause } from 'react-icons/fa';
 
-// --- TTS & Sound Engine (No changes needed here) ---
+// --- TTS Engine (Unchanged, proven to work) ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice) => {
     if (!text || !voice) return null;
@@ -33,173 +33,150 @@ const playTTS = async (text, voice) => {
 // -----------------------------------------------------------
 
 const DuiHua = (props) => {
-    // ========================================================================
-    // THE ULTIMATE FIX: This makes the component "smarter".
-    // It checks if props are nested under `props.data` OR if they are at the top level.
-    // This resolves the "data is undefined" issue regardless of the system's convention.
-    // ========================================================================
+    // This smart data handling prevents crashes
     const data = props.data && props.data.dialogue ? props.data : props;
 
-    // Now, we perform the check on the normalized 'data' variable.
     if (!data || !data.dialogue || !data.characters) {
-        return <div style={styles.loadingOrError}>正在加载对话数据... (如果长时间显示，请检查!include指令的JSON格式)</div>;
+        return <div style={styles.loadingOrError}>正在加载对话数据...</div>;
     }
 
-    const { 
-        id,
-        title = "对话", 
-        imageSrc, 
-        characters = {}, 
-        dialogue = [] 
-    } = data;
-    
-    const [currentLine, setCurrentLine] = useState(null);
-    const [isPlayingAll, setIsPlayingAll] = useState(false);
-    const [rolePlayMode, setRolePlayMode] = useState(null);
-    
-    const currentAudio = useRef(null);
-    const lineRefs = useRef([]);
+    const { id, title, imageSrc, characters, dialogue } = data;
 
-    // This effect now depends on `id` to correctly reset and preload for a new question.
+    const [currentLineIndex, setCurrentLineIndex] = useState(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef(null);
+    const timeoutRef = useRef(null);
+
+    // Preload audio on mount
     useEffect(() => {
         dialogue.forEach(line => {
             const voice = characters[line.speaker]?.voice;
             getTTSAudio(line.hanzi, voice);
         });
-        // Reset state for new question
-        setCurrentLine(null);
-        setIsPlayingAll(false);
     }, [id]);
 
-    const playLine = async (index) => {
-        currentAudio.current?.pause();
-        const line = dialogue[index];
-        const speakerInfo = characters[line.speaker];
-        
-        if (rolePlayMode && line.speaker === rolePlayMode) {
-            setCurrentLine(index);
-            if (isPlayingAll) handleAudioEnd(index);
+    const playAudioForLine = async (index) => {
+        if (index >= dialogue.length) {
+            handleStoryEnd();
             return;
         }
 
-        setCurrentLine(index);
-        const audio = await playTTS(line.hanzi, speakerInfo?.voice);
-        currentAudio.current = audio;
-        if (audio) {
-            audio.onended = () => handleAudioEnd(index);
+        setCurrentLineIndex(index);
+        const line = dialogue[index];
+        const voice = characters[line.speaker]?.voice;
+
+        audioRef.current = await playTTS(line.hanzi, voice);
+        
+        if (audioRef.current) {
+            audioRef.current.onended = () => {
+                if (isPlaying) {
+                    // Natural pause before the next line
+                    timeoutRef.current = setTimeout(() => {
+                        playAudioForLine(index + 1);
+                    }, 800);
+                }
+            };
         } else {
-            // If audio fails to load, still proceed in play-all mode
-            if (isPlayingAll) handleAudioEnd(index);
-        }
-    };
-    
-    const handleAudioEnd = (playedIndex) => {
-        if (isPlayingAll) {
-            const nextIndex = playedIndex + 1;
-            if (nextIndex < dialogue.length) {
-                setTimeout(() => playLine(nextIndex), 400); 
-            } else {
-                setIsPlayingAll(false);
-                setCurrentLine(null);
+            // If audio fails, still move to the next line in play mode
+            if (isPlaying) {
+                 timeoutRef.current = setTimeout(() => {
+                    playAudioForLine(index + 1);
+                }, 800);
             }
-        } else {
-            setCurrentLine(null);
         }
     };
 
-    const handlePlayAll = () => {
-        if (isPlayingAll) {
-            currentAudio.current?.pause();
-            setIsPlayingAll(false);
-            setCurrentLine(null);
+    const handlePlayPause = () => {
+        // Clear any pending transitions
+        clearTimeout(timeoutRef.current);
+
+        if (isPlaying) {
+            setIsPlaying(false);
+            audioRef.current?.pause();
         } else {
-            setIsPlayingAll(true);
-            playLine(0);
+            setIsPlaying(true);
+            const nextIndex = currentLineIndex === null || currentLineIndex >= dialogue.length - 1 ? 0 : currentLineIndex + 1;
+            playAudioForLine(nextIndex);
         }
     };
-    
-    useEffect(() => {
-        if (currentLine !== null && lineRefs.current[currentLine]) {
-            lineRefs.current[currentLine].scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }, [currentLine]);
 
-    const activeSpeaker = currentLine !== null ? dialogue[currentLine]?.speaker : null;
+    const handleBubbleClick = () => {
+        if (currentLineIndex === null) return;
+        
+        // Stop autoplay and repeat the current line
+        setIsPlaying(false);
+        clearTimeout(timeoutRef.current);
+        audioRef.current?.pause();
+
+        playAudioForLine(currentLineIndex);
+    };
+
+    const handleStoryEnd = () => {
+        setIsPlaying(false);
+        setCurrentLineIndex(null);
+    };
+
+    const currentLine = currentLineIndex !== null ? dialogue[currentLineIndex] : null;
+    const activeSpeaker = currentLine?.speaker;
 
     return (
         <div style={styles.container}>
-            <div style={styles.header}>
-                <h3 style={styles.title}>{title}</h3>
-                {imageSrc && <img src={imageSrc} alt={title} style={styles.sceneImage} />}
-            </div>
-            <div style={styles.mainContent}>
-                <div style={styles.characterPanel}>
-                    <img src={characters.A?.imageSrc} alt={characters.A?.name} style={{...styles.avatar, ...(activeSpeaker === 'A' ? styles.avatarActive : {})}}/>
-                    <div style={styles.characterName}>{characters.A?.name}</div>
+            <div style={styles.sceneContainer}>
+                <img src={imageSrc} alt={title} style={styles.backgroundImage} />
+                <div style={styles.overlay}></div>
+
+                <div style={styles.characterA}>
+                    <img src={characters.A?.imageSrc} alt={characters.A?.name} style={{...styles.avatar, ...(activeSpeaker === 'A' ? styles.avatarActive : {})}} />
                 </div>
-                <div style={styles.dialogueArea}>
-                     <div style={styles.controls}>
-                        <button onClick={handlePlayAll} style={styles.playAllButton}>{isPlayingAll ? <FaPause /> : <FaPlay />} {isPlayingAll ? '暂停' : '全部播放'}</button>
-                        <div style={styles.rolePlayControls}>
-                            <span>角色扮演:</span>
-                            <button onClick={() => setRolePlayMode(null)} style={{...styles.roleButton, ...(rolePlayMode === null ? styles.roleButtonActive : {})}}><FaUserFriends /> 旁听</button>
-                            <button onClick={() => setRolePlayMode('B')} style={{...styles.roleButton, ...(rolePlayMode === 'B' ? styles.roleButtonActive : {})}}>我是 {characters.A?.name}</button>
-                            <button onClick={() => setRolePlayMode('A')} style={{...styles.roleButton, ...(rolePlayMode === 'A' ? styles.roleButtonActive : {})}}>我是 {characters.B?.name}</button>
+                <div style={styles.characterB}>
+                    <img src={characters.B?.imageSrc} alt={characters.B?.name} style={{...styles.avatar, ...(activeSpeaker === 'B' ? styles.avatarActive : {})}} />
+                </div>
+
+                {currentLine && (
+                    <div style={{...styles.bubbleContainer, ...(activeSpeaker === 'B' ? styles.bubbleContainerB : {})}} onClick={handleBubbleClick}>
+                        <div style={{...styles.bubble, ...(activeSpeaker === 'B' ? styles.bubbleB : {})}}>
+                            <p style={styles.pinyin}>{currentLine.pinyin}</p>
+                            <p style={styles.hanzi}>{currentLine.hanzi}</p>
                         </div>
                     </div>
-                    <div style={styles.dialogueLines}>
-                        {dialogue.map((line, index) => {
-                            const isSpeakerA = line.speaker === 'A';
-                            return (
-                                <div key={index} ref={el => lineRefs.current[index] = el} style={{...styles.lineWrapper, ...(isSpeakerA ? styles.lineWrapperA : styles.lineWrapperB)}} onClick={() => playLine(index)}>
-                                    <div style={{...styles.lineBubble, ...(isSpeakerA ? styles.lineBubbleA : styles.lineBubbleB), ...(currentLine === index ? styles.lineBubbleActive : {})}}>
-                                        <p style={styles.pinyin}>{line.pinyin}</p>
-                                        <p style={styles.hanzi}>{line.hanzi}</p>
-                                        {line.myanmar && <p style={styles.myanmarText}>{line.myanmar}</p>}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-                <div style={styles.characterPanel}>
-                    <img src={characters.B?.imageSrc} alt={characters.B?.name} style={{...styles.avatar, ...(activeSpeaker === 'B' ? styles.avatarActive : {})}}/>
-                    <div style={styles.characterName}>{characters.B?.name}</div>
+                )}
+            </div>
+
+            <div style={styles.controlsAndTranslation}>
+                <button onClick={handlePlayPause} style={styles.playButton}>
+                    {isPlaying ? <FaPause size={20} /> : <FaPlay size={20} />}
+                </button>
+                <div style={styles.translationArea}>
+                    <p style={styles.translationText}>
+                        {currentLine?.myanmar || '點擊 ▶️ 開始對話'}
+                    </p>
                 </div>
             </div>
         </div>
     );
 };
 
-// --- Styles (Unchanged) ---
+// --- Styles ---
 const styles = {
     loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
-    container: { backgroundColor: '#f8fafc', borderRadius: '24px', padding: '24px', fontFamily: 'system-ui, sans-serif', maxWidth: '1100px', margin: '2rem auto', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)' },
-    header: { textAlign: 'center', marginBottom: '24px' },
-    title: { fontSize: '1.8rem', fontWeight: 'bold', color: '#1e293b', margin: '0 0 16px 0' },
-    sceneImage: { maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
-    mainContent: { display: 'grid', gridTemplateColumns: '150px 1fr 150px', gap: '24px', alignItems: 'flex-start' },
-    characterPanel: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', paddingTop: '20px' },
-    avatar: { width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #e2e8f0', transition: 'all 0.3s ease', filter: 'grayscale(50%)', backgroundColor: '#f1f5f9' },
-    avatarActive: { transform: 'scale(1.15)', boxShadow: '0 0 20px 5px rgba(59, 130, 246, 0.5)', borderColor: '#3b82f6', filter: 'grayscale(0%)' },
-    characterName: { fontWeight: '600', color: '#475569' },
-    dialogueArea: { display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '16px', padding: '16px', border: '1px solid #e2e8f0' },
-    controls: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '10px' },
-    playAllButton: { padding: '10px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-    rolePlayControls: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' },
-    roleButton: { padding: '8px 12px', borderRadius: '20px', border: '1px solid #cbd5e0', backgroundColor: 'white', cursor: 'pointer' },
-    roleButtonActive: { backgroundColor: '#3b82f6', color: 'white', borderColor: '#3b82f6' },
-    dialogueLines: { maxHeight: '450px', overflowY: 'auto', padding: '10px 5px' },
-    lineWrapper: { display: 'flex', marginBottom: '12px', maxWidth: '85%' },
-    lineWrapperA: { justifyContent: 'flex-start' },
-    lineWrapperB: { justifyContent: 'flex-end', marginLeft: 'auto' },
-    lineBubble: { padding: '10px 16px', borderRadius: '18px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.2s ease', border: '1px solid transparent' },
-    lineBubbleA: { backgroundColor: '#eef2ff', borderTopLeftRadius: '4px' },
-    lineBubbleB: { backgroundColor: '#f0f9ff', color: '#0c4a6e', borderTopRightRadius: '4px' },
-    lineBubbleActive: { borderColor: 'rgba(59, 130, 246, 0.5)' , transform: 'scale(1.02)', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.1)' },
-    pinyin: { margin: '0 0 4px 0', color: '#64748b', fontSize: '0.9rem' },
-    hanzi: { margin: 0, color: '#1e293b', fontSize: '1.2rem', fontWeight: '500' },
-    myanmarText: { margin: '8px 0 0 0', color: '#4d7c0f', fontSize: '1rem', borderTop: '1px solid #d4d4d8', paddingTop: '6px' }
+    container: { width: '100%', maxWidth: '900px', margin: '1rem auto', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
+    sceneContainer: { position: 'relative', width: '100%', aspectRatio: '16 / 9' },
+    backgroundImage: { width: '100%', height: '100%', objectFit: 'cover' },
+    overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.25)' },
+    characterA: { position: 'absolute', bottom: 0, left: '5%' },
+    characterB: { position: 'absolute', bottom: 0, right: '5%' },
+    avatar: { width: '150px', height: '150px', borderRadius: '50%', objectFit: 'cover', border: '4px solid rgba(255,255,255,0.3)', transition: 'all 0.4s ease', opacity: 0.6, filter: 'grayscale(80%)', transform: 'scale(0.95)' },
+    avatarActive: { opacity: 1, filter: 'grayscale(0%)', transform: 'scale(1)', borderColor: 'rgba(255,255,255,0.9)', boxShadow: '0 0 25px rgba(255,255,255,0.5)' },
+    bubbleContainer: { position: 'absolute', top: '20%', width: '50%', left: '15%', cursor: 'pointer', transition: 'opacity 0.3s ease', opacity: 1 },
+    bubbleContainerB: { left: 'auto', right: '15%' },
+    bubble: { backgroundColor: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '18px', borderTopLeftRadius: '4px', padding: '12px 20px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
+    bubbleB: { borderTopLeftRadius: '18px', borderTopRightRadius: '4px' },
+    pinyin: { margin: '0 0 4px 0', color: '#475569', fontSize: '1rem' },
+    hanzi: { margin: 0, color: '#1e293b', fontSize: '1.5rem', fontWeight: 'bold' },
+    controlsAndTranslation: { display: 'flex', backgroundColor: '#1e293b', alignItems: 'center', padding: '12px 20px', minHeight: '80px' },
+    playButton: { background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, boxShadow: '0 2px 10px rgba(59, 130, 246, 0.5)' },
+    translationArea: { flex: 1, paddingLeft: '20px', textAlign: 'center' },
+    translationText: { color: '#cbd5e1', fontSize: '1.2rem', margin: 0, transition: 'opacity 0.3s ease' },
 };
 
 export default DuiHua;
