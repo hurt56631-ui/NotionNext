@@ -4,7 +4,7 @@ import { pinyin } from 'pinyin-pro';
 import confetti from 'canvas-confetti';
 import { Howl } from 'howler';
 
-// --- Sound & TTS Engine ---
+// --- Sound & TTS Engine (Unchanged) ---
 let sounds = {
     correct: new Howl({ src: ['/sounds/correct.mp3'] }),
     incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 })
@@ -23,10 +23,7 @@ const getTTSAudio = async (text, voice = 'zh-CN-XiaoyouNeural') => {
         const audio = new Audio(URL.createObjectURL(blob));
         ttsCache.set(cacheKey, audio);
         return audio;
-    } catch (e) {
-        console.error(`Failed to get TTS for "${text}"`, e);
-        return null;
-    }
+    } catch (e) { console.error(`Failed to get TTS for "${text}"`, e); return null; }
 };
 
 const playTTS = async (text, voice) => {
@@ -41,7 +38,6 @@ const playTTS = async (text, voice) => {
 };
 // -----------------------------------------------------------
 
-// FIXED: Added default value `= {}` to props for robustness
 const TianKongTi = ({
     id,
     title,
@@ -65,8 +61,8 @@ const TianKongTi = ({
 
     const getPureText = (text) => text.replace(/[^a-zA-Z\u4e00-\u9fa5]/g, '').trim();
 
+    // --- Auto-read TITLE and preload words ---
     useEffect(() => {
-        // Guard clause for when data is not ready
         if (!words || words.length === 0) return;
 
         setUserAnswers(Array(totalBlanks).fill(null));
@@ -74,30 +70,16 @@ const TianKongTi = ({
         setIsSubmitted(false);
         setFeedback([]);
         
-        const allWordsText = words.map(getPureText).filter(Boolean);
-        
-        allWordsText.forEach(text => getTTSAudio(text));
+        // 1. Preload audio for all individual words for click-to-read
+        words.map(getPureText).filter(Boolean).forEach(text => getTTSAudio(text));
 
-        let currentIndex = 0;
-        const playNext = async () => {
-            if (currentIndex < allWordsText.length) {
-                const audio = await getTTSAudio(allWordsText[currentIndex]);
-                if (audio) {
-                    audio.onended = playNext;
-                    audio.play();
-                    currentIndex++;
-                } else {
-                    // if audio fails, still move on
-                    currentIndex++;
-                    playNext();
-                }
-            }
-        };
-        
-        const autoPlayTimeout = setTimeout(playNext, 500);
-        return () => clearTimeout(autoPlayTimeout);
+        // 2. Auto-read the main title
+        if (title) {
+            const autoPlayTimeout = setTimeout(() => playTTS(title), 500);
+            return () => clearTimeout(autoPlayTimeout);
+        }
 
-    }, [id, words]);
+    }, [id, title, words]);
 
     const handleBlankClick = (blankIndex) => { if (!isSubmitted) setActiveBlankIndex(blankIndex); };
     const handleImageLabelClick = (imageIndex) => {
@@ -127,15 +109,14 @@ const TianKongTi = ({
         if (onNext) setTimeout(onNext, 2500);
     };
 
-    // Render a loading state if essential data is missing
     if (!words || words.length === 0) {
         return <div style={{textAlign: 'center', padding: '20px', color: '#666'}}>正在加载题目...</div>;
     }
 
     return (
         <div style={styles.container}>
-            <h3 style={styles.title}>{title}</h3>
-            {/* ... rest of the JSX is identical to the previous version ... */}
+            <h3 style={styles.title} onClick={() => playTTS(title)}>{title}</h3>
+            
             <div style={styles.imageGrid}>
                 {imageOptions.map((opt, index) => (
                     <div key={opt.id} style={styles.imageItem}>
@@ -144,6 +125,7 @@ const TianKongTi = ({
                     </div>
                 ))}
             </div>
+
             <div style={styles.blanksGrid}>
                 {words.map((segment, index) => {
                     const answerId = userAnswers[index];
@@ -167,6 +149,7 @@ const TianKongTi = ({
                     );
                 })}
             </div>
+
             {activeBlankIndex !== null && (
                 <div style={styles.labelSelectorOverlay} onClick={() => setActiveBlankIndex(null)}>
                     <div style={styles.labelSelector} onClick={e => e.stopPropagation()}>
@@ -187,6 +170,7 @@ const TianKongTi = ({
                     </div>
                 </div>
             )}
+
             <div style={styles.buttonContainer}>
                 {!isSubmitted ? (
                     <button 
@@ -202,20 +186,20 @@ const TianKongTi = ({
     );
 };
 
-// --- Styles ---
+// --- Styles (Refined for Compact Layout) ---
 const styles = {
-    container: { backgroundColor: '#f8fafc', borderRadius: '16px', padding: '20px', fontFamily: 'system-ui, sans-serif', maxWidth: '800px', margin: '1rem auto', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '20px' },
-    title: { fontSize: '1.3rem', fontWeight: '600', color: '#334155', textAlign: 'center', margin: 0 },
-    imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' },
+    container: { backgroundColor: '#f8fafc', borderRadius: '16px', padding: '16px', fontFamily: 'system-ui, sans-serif', maxWidth: '750px', margin: '1rem auto', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: '16px' },
+    title: { fontSize: '1.3rem', fontWeight: '600', color: '#334155', textAlign: 'center', margin: 0, cursor: 'pointer' },
+    imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
     imageItem: { position: 'relative', borderRadius: '12px', overflow: 'hidden', aspectRatio: '1 / 1', backgroundColor: '#e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
     image: { width: '100%', height: '100%', objectFit: 'cover' },
-    imageLabel: { position: 'absolute', top: '6px', left: '6px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', borderRadius: '4px', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', backdropFilter: 'blur(2px)' },
-    blanksGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' },
-    blankItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', padding: '10px 8px', borderRadius: '12px', backgroundColor: 'white', border: '1px solid #e2e8f0' },
+    imageLabel: { position: 'absolute', top: '8px', left: '8px', color: 'white', fontWeight: 'bold', fontSize: '12px', textShadow: '0 1px 3px rgba(0,0,0,0.8)' },
+    blanksGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
+    blankItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '8px', borderRadius: '12px', backgroundColor: 'white', border: '1px solid #e2e8f0' },
     wordClickableArea: { cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-    pinyinText: { fontSize: '0.8rem', color: '#64748b', marginBottom: '2px', fontFamily: 'Arial, sans-serif' },
+    pinyinText: { fontSize: '0.8rem', color: '#64748b', marginBottom: '0px', fontFamily: 'Arial, sans-serif' },
     chineseText: { fontSize: '1.2rem', fontWeight: '500', color: '#1e293b' },
-    underlineContainer: { width: '80%', height: '30px', borderBottom: '2px solid #9ca3af', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s ease', marginTop: '4px' },
+    underlineContainer: { width: '80%', height: '30px', borderBottom: '2px solid #9ca3af', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.2s ease' },
     correct: { borderBottomColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)' },
     incorrect: { borderBottomColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)' },
     answerLabel: { backgroundColor: '#3b82f6', color: 'white', borderRadius: '6px', padding: '2px 10px', fontSize: '0.9rem', fontWeight: 'bold' },
@@ -225,11 +209,10 @@ const styles = {
     labelsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' },
     labelButton: { padding: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.2rem', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease' },
     labelButtonUsed: { backgroundColor: '#9ca3af', cursor: 'not-allowed' },
-    buttonContainer: { display: 'flex', justifyContent: 'center', marginTop: '10px' },
+    buttonContainer: { display: 'flex', justifyContent: 'center', marginTop: '8px' },
     submitButton: { width: '180px', padding: '12px 24px', borderRadius: '10px', border: 'none', backgroundColor: '#3b82f6', color: 'white', fontSize: '1.1rem', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s ease' },
     submitButtonDisabled: { backgroundColor: '#93c5fd', cursor: 'not-allowed' },
     nextButton: { backgroundColor: '#16a34a' }
 };
 
-// FIXED: Changed component name to match your file structure.
 export default TianKongTi;
