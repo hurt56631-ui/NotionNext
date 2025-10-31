@@ -4,11 +4,11 @@ import { FaPlay, FaPause } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 import { useDrag } from '@use-gesture/react';
 
-// --- TTS 引擎 (已升级，支持语速控制) ---
+// --- TTS 引擎 ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice, rate = 0) => {
     if (!text || !voice) return null;
-    const cacheKey = `${text}|${voice}|${rate}`; // 缓存键现在包含语速
+    const cacheKey = `${text}|${voice}|${rate}`;
     if (ttsCache.has(cacheKey)) return ttsCache.get(cacheKey);
     try {
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
@@ -20,10 +20,8 @@ const getTTSAudio = async (text, voice, rate = 0) => {
         return audio;
     } catch (e) { console.error(`Failed to get TTS for "${text}"`, e); return null; }
 };
-
 const playTTS = async (text, voice, rate) => {
     const audio = await getTTSAudio(text, voice, rate);
-    // 停止所有其他正在播放的音频
     ttsCache.forEach(a => { if (a && !a.paused) { a.pause(); a.currentTime = 0; } });
     audio?.play();
     return audio;
@@ -62,16 +60,17 @@ const PhoneInstance = ({ scene, isActive }) => {
 
         if (audioRef.current) {
             audioRef.current.onended = () => {
-                // 使用函数式更新确保获取最新的 isPlaying 状态
-                setIsPlaying(currentIsPlaying => {
-                    if (currentIsPlaying && isActive) {
-                        timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
-                    }
-                    return currentIsPlaying;
-                });
+                if (isActive) {
+                    setIsPlaying(currentIsPlaying => {
+                        if (currentIsPlaying) {
+                            timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
+                        }
+                        return currentIsPlaying;
+                    });
+                }
             };
         } else if (isActive) {
-            setIsPlaying(currentIsPlaying => {
+             setIsPlaying(currentIsPlaying => {
                 if (currentIsPlaying) {
                     timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
                 }
@@ -80,39 +79,34 @@ const PhoneInstance = ({ scene, isActive }) => {
         }
     };
     
-    // 核心播放逻辑，现在由 isActive 和 isPlaying 共同触发
-    useEffect(() => {
-        clearTimeout(timeoutRef.current);
-        if (isActive && isPlaying) {
-            // 决定从哪里开始播放
-            const currentIndex = transcript.length > 0 ? transcript[transcript.length - 1].index : -1;
-            const nextIndex = currentIndex >= dialogue.length - 1 ? 0 : currentIndex + 1;
-            if (nextIndex === 0) setTranscript([]); // 从头开始则清空
-            playLine(nextIndex);
-        } else {
-            audioRef.current?.pause();
-        }
-        return () => clearTimeout(timeoutRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPlaying, isActive]);
-
-    // 当场景变为激活状态时，自动播放
     useEffect(() => {
         if (isActive) {
             dialogue.forEach(line => {
                 const character = characters[line.speaker];
                 getTTSAudio(line.hanzi, character?.voice, character?.rate);
             });
-            timeoutRef.current = setTimeout(() => {
-                setIsPlaying(true);
-            }, 500);
+            timeoutRef.current = setTimeout(() => setIsPlaying(true), 500);
         } else {
-            // 当场景失活时，停止一切
+            clearTimeout(timeoutRef.current);
+            audioRef.current?.pause();
             setIsPlaying(false);
         }
-        return () => { audioRef.current?.pause(); };
+        return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive, id]);
+
+    useEffect(() => {
+        clearTimeout(timeoutRef.current);
+        if (isActive && isPlaying) {
+            const currentIndex = transcript.length > 0 ? transcript[transcript.length - 1].index : -1;
+            const nextIndex = currentIndex >= dialogue.length - 1 ? 0 : currentIndex + 1;
+            if (nextIndex === 0) setTranscript([]);
+            playLine(nextIndex);
+        } else {
+            audioRef.current?.pause();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPlaying]);
 
     return (
         <div style={styles.phoneScreen}>
@@ -150,7 +144,6 @@ const PhoneInstance = ({ scene, isActive }) => {
 // ========================================================================
 const DuiHua = (props) => {
     const scenes = props.scenes || (props.data ? [props.data] : null);
-
     if (!scenes || scenes.length === 0) {
         return <div style={styles.loadingOrError}>正在加载对话数据...</div>;
     }
@@ -213,7 +206,7 @@ const styles = {
     transcriptBubble: { position: 'relative', padding: '8px 14px', borderRadius: '18px', boxShadow: '0 1px 2px rgba(0,0,0,0.15)', cursor: 'pointer' },
     transcriptBubbleA: { backgroundColor: '#f9fafb', color: '#1f2937', borderTopLeftRadius: '5px' },
     transcriptBubbleB: { backgroundColor: '#3b82f6', color: '#fff', borderTopRightRadius: '5px' },
-    pinyin: { margin: '0 0 2px 0', fontSize: '0.8rem', color: 'inherit', opacity: 0.6, letterSpacing: '0.5px' },
+    pinyin: { margin: '0 0 1px 0', fontSize: '0.75rem', color: 'inherit', opacity: 0.6, letterSpacing: '-0.5px' },
     transcriptHanzi: { margin: 0, fontSize: '1rem', fontWeight: '500', lineHeight: 1.4 },
     myanmarText: { margin: '8px 0 0 0', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '8px', fontSize: '0.9rem', opacity: 0.8 },
     controlsArea: { position: 'relative', zIndex: 3, flex: '0 0 auto', padding: '12px', display: 'flex', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)' },
