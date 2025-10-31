@@ -2,16 +2,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
-import { useDrag } from 'react-use-gesture';
+import { useDrag } from '@use-gesture/react';
 
-// --- TTS 引擎 ---
+// --- TTS 引擎 (已升级，支持语速控制) ---
 let ttsCache = new Map();
-const getTTSAudio = async (text, voice) => {
+const getTTSAudio = async (text, voice, rate = 0) => {
     if (!text || !voice) return null;
-    const cacheKey = `${text}|${voice}`;
+    const cacheKey = `${text}|${voice}|${rate}`; // 缓存键现在包含语速
     if (ttsCache.has(cacheKey)) return ttsCache.get(cacheKey);
     try {
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
         const response = await fetch(url);
         if (!response.ok) throw new Error('TTS API Error');
         const blob = await response.blob();
@@ -20,8 +20,9 @@ const getTTSAudio = async (text, voice) => {
         return audio;
     } catch (e) { console.error(`Failed to get TTS for "${text}"`, e); return null; }
 };
-const playTTS = async (text, voice) => {
-    const audio = await getTTSAudio(text, voice);
+
+const playTTS = async (text, voice, rate) => {
+    const audio = await getTTSAudio(text, voice, rate);
     // 停止所有其他正在播放的音频
     ttsCache.forEach(a => { if (a && !a.paused) { a.pause(); a.currentTime = 0; } });
     audio?.play();
@@ -56,37 +57,60 @@ const PhoneInstance = ({ scene, isActive }) => {
         setTranscript(dialogue.slice(0, index + 1).map((line, i) => ({ ...line, index: i })));
 
         const line = dialogue[index];
-        const voice = characters[line.speaker]?.voice;
-        audioRef.current = await playTTS(line.hanzi, voice);
+        const character = characters[line.speaker];
+        audioRef.current = await playTTS(line.hanzi, character?.voice, character?.rate);
 
         if (audioRef.current) {
             audioRef.current.onended = () => {
-                if (isActive) {
-                    timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
-                }
+                // 使用函数式更新确保获取最新的 isPlaying 状态
+                setIsPlaying(currentIsPlaying => {
+                    if (currentIsPlaying && isActive) {
+                        timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
+                    }
+                    return currentIsPlaying;
+                });
             };
         } else if (isActive) {
-            timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
+            setIsPlaying(currentIsPlaying => {
+                if (currentIsPlaying) {
+                    timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
+                }
+                return currentIsPlaying;
+            });
         }
     };
     
-    // 核心播放逻辑，现在由 isActive 触发
+    // 核心播放逻辑，现在由 isActive 和 isPlaying 共同触发
     useEffect(() => {
-        // 当场景变为激活状态时，自动播放
+        clearTimeout(timeoutRef.current);
+        if (isActive && isPlaying) {
+            // 决定从哪里开始播放
+            const currentIndex = transcript.length > 0 ? transcript[transcript.length - 1].index : -1;
+            const nextIndex = currentIndex >= dialogue.length - 1 ? 0 : currentIndex + 1;
+            if (nextIndex === 0) setTranscript([]); // 从头开始则清空
+            playLine(nextIndex);
+        } else {
+            audioRef.current?.pause();
+        }
+        return () => clearTimeout(timeoutRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isPlaying, isActive]);
+
+    // 当场景变为激活状态时，自动播放
+    useEffect(() => {
         if (isActive) {
-            dialogue.forEach(line => getTTSAudio(line.hanzi, characters[line.speaker]?.voice));
+            dialogue.forEach(line => {
+                const character = characters[line.speaker];
+                getTTSAudio(line.hanzi, character?.voice, character?.rate);
+            });
             timeoutRef.current = setTimeout(() => {
-                setTranscript([]);
                 setIsPlaying(true);
-                playLine(0);
             }, 500);
         } else {
             // 当场景失活时，停止一切
-            clearTimeout(timeoutRef.current);
-            audioRef.current?.pause();
             setIsPlaying(false);
         }
-        return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
+        return () => { audioRef.current?.pause(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isActive, id]);
 
@@ -103,8 +127,8 @@ const PhoneInstance = ({ scene, isActive }) => {
                         return (
                             <div key={line.index} style={{...styles.transcriptLine, alignSelf: isSpeakerA ? 'flex-start' : 'flex-end'}}>
                                 {isSpeakerA && <img src={character?.avatarSrc} style={styles.avatar} alt={character?.name} />}
-                                <div className={`bubble ${isSpeakerA ? 'bubble-a' : 'bubble-b'}`} style={{...styles.transcriptBubble, ...(isSpeakerA ? styles.transcriptBubbleA : styles.transcriptBubbleB)}} onClick={() => playTTS(line.hanzi, character?.voice)}>
-                                    <p style={styles.pinyin}>{pinyin(line.hanzi, { toneType: 'none' })}</p>
+                                <div className={`bubble ${isSpeakerA ? 'bubble-a' : 'bubble-b'}`} style={{...styles.transcriptBubble, ...(isSpeakerA ? styles.transcriptBubbleA : styles.transcriptBubbleB)}} onClick={() => playTTS(line.hanzi, character?.voice, character?.rate)}>
+                                    <p style={styles.pinyin}>{pinyin(line.hanzi)}</p>
                                     <p style={styles.transcriptHanzi}>{line.hanzi}</p>
                                     {line.myanmar && <p style={styles.myanmarText}>{line.myanmar}</p>}
                                 </div>
@@ -121,7 +145,6 @@ const PhoneInstance = ({ scene, isActive }) => {
     );
 };
 
-
 // ========================================================================
 //                           主容器与滑动逻辑
 // ========================================================================
@@ -136,14 +159,14 @@ const DuiHua = (props) => {
     const containerRef = useRef(null);
 
     const bind = useDrag(({ down, movement: [, my], velocity, direction: [, dy], distance, cancel }) => {
-        if (distance > (containerRef.current?.offsetHeight ?? 800) / 4) {
+        if (!down && distance > (containerRef.current?.offsetHeight ?? 800) / 4) {
             const newIndex = sceneIndex + (dy > 0 ? -1 : 1);
             if (newIndex >= 0 && newIndex < scenes.length) {
                 setSceneIndex(newIndex);
             }
             cancel();
         }
-    }, { axis: 'y', filterTaps: true, taps: true });
+    }, { axis: 'y' });
 
     return (
         <>
