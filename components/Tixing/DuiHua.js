@@ -38,12 +38,11 @@ const PhoneInstance = ({ scene, isActive }) => {
     const [currentTime, setCurrentTime] = useState('');
     const audioRef = useRef(null);
     const timeoutRef = useRef(null);
-    const transcriptEndRef = useRef(null); // 用于滚动
+    const transcriptEndRef = useRef(null);
 
     const speakerKeys = Object.keys(characters);
     const speakerAKey = speakerKeys[0];
 
-    // 更新时间
     useEffect(() => {
         const update = () => setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }));
         update();
@@ -51,13 +50,12 @@ const PhoneInstance = ({ scene, isActive }) => {
         return () => clearInterval(timer);
     }, []);
 
-    // 强制滚动到底部
     useEffect(() => {
         transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [transcript]);
 
     const playLine = async (index) => {
-        if (index >= dialogue.length || !isActive) {
+        if (index >= dialogue.length || !isActive || !isPlaying) {
             setIsPlaying(false);
             return;
         }
@@ -67,45 +65,45 @@ const PhoneInstance = ({ scene, isActive }) => {
         audioRef.current = await playTTS(line.hanzi, character?.voice, character?.rate);
         if (audioRef.current) {
             audioRef.current.onended = () => {
-                if (isActive) {
-                    setIsPlaying(current => {
-                        if (current) timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
-                        return current;
-                    });
+                if (isActive && isPlaying) {
+                    timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
                 }
             };
         }
     };
     
+    // **核心修复**: 播放逻辑完全由 isActive 和 isPlaying 驱动
     useEffect(() => {
+        clearTimeout(timeoutRef.current);
         if (isActive) {
             dialogue.forEach(line => {
                 const character = characters[line.speaker];
                 getTTSAudio(line.hanzi, character?.voice, character?.rate);
             });
-            timeoutRef.current = setTimeout(() => setIsPlaying(true), 500);
+            if (isPlaying) {
+                const currentIndex = transcript.length > 0 ? transcript[transcript.length - 1].index : -1;
+                const nextIndex = currentIndex >= dialogue.length - 1 ? 0 : currentIndex + 1;
+                if (nextIndex === 0) setTranscript([]);
+                playLine(nextIndex);
+            } else {
+                audioRef.current?.pause();
+            }
         } else {
-            clearTimeout(timeoutRef.current);
             audioRef.current?.pause();
             setIsPlaying(false);
-            setTranscript([]); // 切换走时清空历史
+            setTranscript([]);
         }
-        return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
+        return () => clearTimeout(timeoutRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isActive, id]);
+    }, [isPlaying, isActive, id]);
 
+    // 当场景激活时，自动开始播放
     useEffect(() => {
-        clearTimeout(timeoutRef.current);
-        if (isActive && isPlaying) {
-            const currentIndex = transcript.length > 0 ? transcript[transcript.length - 1].index : -1;
-            const nextIndex = currentIndex >= dialogue.length - 1 ? 0 : currentIndex + 1;
-            if (nextIndex === 0) setTranscript([]);
-            playLine(nextIndex);
-        } else {
-            audioRef.current?.pause();
+        if(isActive) {
+            const timer = setTimeout(() => setIsPlaying(true), 500);
+            return () => clearTimeout(timer);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isPlaying]);
+    }, [isActive]);
 
     return (
         <div style={styles.phoneScreen}>
@@ -159,14 +157,15 @@ const DuiHua = (props) => {
     const [sceneIndex, setSceneIndex] = useState(0);
     const containerRef = useRef(null);
 
-    const bind = useDrag(({ down, movement: [, my], velocity, direction: [, dy], distance, cancel, memo = sceneIndex }) => {
-        if (!down && distance > (containerRef.current?.offsetHeight ?? 800) / 4) {
-            const newIndex = memo + (dy > 0 ? -1 : 1);
-            setSceneIndex(Math.max(0, Math.min(scenes.length - 1, newIndex)));
+    const bind = useDrag(({ active, movement: [, my], direction: [, dy], distance, cancel }) => {
+        if (active && distance > (containerRef.current?.offsetHeight ?? 800) / 4) {
+            const newIndex = sceneIndex + (dy < 0 ? 1 : -1);
+            if (newIndex >= 0 && newIndex < scenes.length) {
+                setSceneIndex(newIndex);
+            }
             cancel();
         }
-        return memo;
-    }, { axis: 'y' });
+    }, { axis: 'y', filterTaps: true, taps: true });
     
     return (
         <>
