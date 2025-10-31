@@ -13,6 +13,7 @@ import { NotionRenderer } from 'react-notion-x'
 const LessonPlayer = dynamic(() => import('@/components/Tixing/LessonPlayer'), { ssr: false })
 const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false })
 const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false })
+const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const DuiHua = dynamic(() => import('@/components/Tixing/DuiHua'), { ssr: false })
@@ -86,6 +87,7 @@ const CustomCode = (props) => {
         if (componentPath === '/components/Tixing/PaiXuTi.js') return <PaiXuTi {...parsedProps} />;
         if (componentPath === '/components/HanziModal.js') return <HanziModal {...parsedProps} />;
         if (componentPath === '/components/AiTtsButton.js') return <AiTtsButton {...parsedProps} />;
+        if (componentPath === '/components/WordCard.js') return <WordCard {...parsedProps} />;
         if (componentPath === '/components/PhraseCard.js') return <PhraseCard {...parsedProps} />;
         if (componentPath === '/components/Tixing/LianXianTi.js') return <LianXianTi {...parsedProps} />;
         if (componentPath === '/components/Tixing/FanYiTi.js') return <FanYiTi {...parsedProps} />;
