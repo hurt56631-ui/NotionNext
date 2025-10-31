@@ -1,5 +1,5 @@
 // components/Tixing/DuiHua.js
-import React, from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause, FaWifi } from 'react-icons/fa';
 import { FiBatteryCharging } from 'react-icons/fi';
 import { pinyin } from 'pinyin-pro';
@@ -88,6 +88,7 @@ const PhoneInstance = ({ scene, isActive }) => {
             clearTimeout(timeoutRef.current);
             audioRef.current?.pause();
             setIsPlaying(false);
+            setTranscript([]); // 切换走时清空历史
         }
         return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
