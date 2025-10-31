@@ -2,9 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
-import { useDrag } from '@use-gesture/react';
 
-// --- TTS 引擎 ---
+// --- TTS 引擎 (无需改动) ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice, rate = 0) => {
     if (!text || !voice) return null;
@@ -31,7 +30,7 @@ const playTTS = async (text, voice, rate) => {
 //                           单个手机场景组件
 // ========================================================================
 const PhoneInstance = ({ scene, isActive }) => {
-    const { id, title, imageSrc, characters, dialogue } = scene;
+    const { id, characters, dialogue } = scene;
     const [isPlaying, setIsPlaying] = useState(false);
     const [transcript, setTranscript] = useState([]);
     const audioRef = useRef(null);
@@ -41,18 +40,22 @@ const PhoneInstance = ({ scene, isActive }) => {
     const speakerKeys = Object.keys(characters);
     const speakerAKey = speakerKeys[0];
 
-    useEffect(() => {
+    const scrollToBottom = () => {
         if (transcriptRef.current) {
             transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
         }
-    }, [transcript]);
+    };
 
     const playLine = async (index) => {
         if (index >= dialogue.length || !isActive) {
             setIsPlaying(false);
             return;
         }
-        setTranscript(dialogue.slice(0, index + 1).map((line, i) => ({ ...line, index: i })));
+        setTranscript(prev => {
+            const newTranscript = dialogue.slice(0, index + 1).map((line, i) => ({ ...line, index: i }));
+            setTimeout(scrollToBottom, 50); // 强制滚动
+            return newTranscript;
+        });
 
         const line = dialogue[index];
         const character = characters[line.speaker];
@@ -61,21 +64,11 @@ const PhoneInstance = ({ scene, isActive }) => {
         if (audioRef.current) {
             audioRef.current.onended = () => {
                 if (isActive) {
-                    setIsPlaying(currentIsPlaying => {
-                        if (currentIsPlaying) {
-                            timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
-                        }
-                        return currentIsPlaying;
-                    });
+                     timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
                 }
             };
         } else if (isActive) {
-             setIsPlaying(currentIsPlaying => {
-                if (currentIsPlaying) {
-                    timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
-                }
-                return currentIsPlaying;
-            });
+             timeoutRef.current = setTimeout(() => playLine(index + 1), 900);
         }
     };
     
@@ -90,6 +83,7 @@ const PhoneInstance = ({ scene, isActive }) => {
             clearTimeout(timeoutRef.current);
             audioRef.current?.pause();
             setIsPlaying(false);
+            setTranscript([]); // 切换走时清空历史
         }
         return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,9 +104,15 @@ const PhoneInstance = ({ scene, isActive }) => {
 
     return (
         <div style={styles.phoneScreen}>
-            <div style={styles.phoneHeader}><div style={styles.cameraNotch}></div></div>
+            <div style={styles.phoneHeader}>
+                <div style={styles.cameraNotch}>
+                    <div style={{...styles.breathingLight, animationDelay: '0s'}}></div>
+                    <div style={{...styles.breathingLight, animationDelay: '0.5s'}}></div>
+                    <div style={{...styles.breathingLight, animationDelay: '1s'}}></div>
+                </div>
+            </div>
             <div style={styles.chatContainer} className="chat-container">
-                <img src={imageSrc} alt={title} style={styles.backgroundImage} />
+                <img src={scene.imageSrc} alt={scene.title} style={styles.backgroundImage} />
                 <div style={styles.overlay}></div>
                 <div style={styles.transcriptContainer} ref={transcriptRef}>
                     {transcript.map(line => {
@@ -149,27 +149,37 @@ const DuiHua = (props) => {
     }
 
     const [sceneIndex, setSceneIndex] = useState(0);
+    const touchStartY = useRef(0);
     const containerRef = useRef(null);
 
-    const bind = useDrag(({ down, movement: [, my], velocity, direction: [, dy], distance, cancel }) => {
-        if (!down && distance > (containerRef.current?.offsetHeight ?? 800) / 4) {
-            const newIndex = sceneIndex + (dy > 0 ? -1 : 1);
-            if (newIndex >= 0 && newIndex < scenes.length) {
-                setSceneIndex(newIndex);
+    const handleTouchStart = (e) => {
+        touchStartY.current = e.touches[0].clientY;
+    };
+    const handleTouchEnd = (e) => {
+        const touchEndY = e.changedTouches[0].clientY;
+        const deltaY = touchEndY - touchStartY.current;
+        const swipeThreshold = (containerRef.current?.offsetHeight ?? 800) / 5; // 滑动阈值
+
+        if (Math.abs(deltaY) > swipeThreshold) {
+            if (deltaY > 0) { // 向下滑动
+                setSceneIndex(i => Math.max(0, i - 1));
+            } else { // 向上滑动
+                setSceneIndex(i => Math.min(scenes.length - 1, i + 1));
             }
-            cancel();
         }
-    }, { axis: 'y' });
+    };
 
     return (
         <>
             <style>{`
+                /* CSS动画和气泡尾巴样式 */
+                @keyframes breathe { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.8; } }
                 .bubble-a::after { content: ''; position: absolute; left: -8px; top: 10px; width: 0; height: 0; border: 10px solid transparent; border-right-color: #f9fafb; border-left: 0; }
                 .bubble-b::after { content: ''; position: absolute; right: -8px; top: 10px; width: 0; height: 0; border: 10px solid transparent; border-left-color: #3b82f6; border-right: 0; }
                 .chat-container ::-webkit-scrollbar { width: 4px; }
                 .chat-container ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 4px; }
             `}</style>
-            <div {...bind()} style={styles.swipeContainer} ref={containerRef}>
+            <div style={styles.swipeContainer} ref={containerRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                 <div style={{ ...styles.sceneWrapper, transform: `translateY(-${sceneIndex * 100}%)` }}>
                     {scenes.map((scene, index) => (
                         <div key={scene.id || index} style={styles.phoneShell}>
@@ -195,7 +205,8 @@ const styles = {
     volumeDown: { position: 'absolute', left: '-3px', top: '180px', width: '3px', height: '50px', backgroundColor: '#3f3f46', borderRadius: '2px 0 0 2px' },
     phoneScreen: { width: '100%', height: '100%', backgroundColor: '#000', borderRadius: '32px', overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' },
     phoneHeader: { position: 'absolute', top: 0, left: 0, right: 0, height: '28px', backgroundColor: 'black', zIndex: 10 },
-    cameraNotch: { position: 'absolute', top: '0px', left: '50%', transform: 'translateX(-50%)', width: '120px', height: '28px', backgroundColor: '#18181b', borderRadius: '0 0 15px 15px' },
+    cameraNotch: { position: 'absolute', top: '0px', left: '50%', transform: 'translateX(-50%)', width: '120px', height: '28px', backgroundColor: '#18181b', borderRadius: '0 0 15px 15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' },
+    breathingLight: { width: '6px', height: '6px', backgroundColor: '#52525b', borderRadius: '50%', animation: 'breathe 2s infinite' },
     loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
     chatContainer: { flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', paddingTop: '28px' },
     backgroundImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0 },
