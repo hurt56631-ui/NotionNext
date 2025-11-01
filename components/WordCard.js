@@ -1,4 +1,4 @@
-// components/WordCard.js (最终方案：识别与录音分离，并集成您的新建议)
+// components/WordCard.js (Rewritten to include sentences, decomposition, and mnemonics for Burmese learners)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +10,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
 // =================================================================================
-// ===== IndexedDB 收藏管理模块 (未改动) =============================================
+// ===== IndexedDB 收藏管理模块 (No changes) =======================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
@@ -42,7 +42,8 @@ async function toggleFavorite(word) {
     store.delete(word.id);
     return false;
   } else {
-    const wordToStore = { id: word.id, chinese: word.chinese, burmese: word.burmese, pinyin: word.pinyin, imageUrl: word.imageUrl };
+    // Store all available data for favorites
+    const wordToStore = { ...word };
     store.put(wordToStore);
     return true;
   }
@@ -60,7 +61,7 @@ async function isFavorite(id) {
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 (未改动) ===================================================
+// ===== 辅助工具 & 常量 (No changes) ===============================================
 // =================================================================================
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' },
@@ -129,7 +130,7 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== 子组件 (未改动) =============================================================
+// ===== 子组件 (No changes) ========================================================
 // =================================================================================
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
@@ -252,7 +253,7 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
 };
 
 // =================================================================================
-// ===== 主组件: WordCard (✨ 已集成您的建议) =======================================
+// ===== 主组件: WordCard (✨ Rewritten with new features) ========================
 // =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
@@ -260,7 +261,38 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const [settings, setSettings] = useCardSettings();
   
-  // ✨ [新功能] 1. 新增状态管理：管理已认识的单词
+  // ✨ [New] Augment incoming words data with detailed info for demonstration
+  // In a real application, this data should come from your database/API.
+  const augmentedWords = useMemo(() => {
+    return words.map(word => {
+      if (word.chinese === '好') {
+        return {
+          ...word,
+          sentence_ch: '你好吗？',
+          sentence_mm: 'နေကောင်းလား?',
+          decomposition: [
+            { char: '女', pinyin: 'nǚ', meaning: 'အမျိုးသမီး' },
+            { char: '子', pinyin: 'zǐ', meaning: 'ကလေး' }
+          ],
+          mnemonic: 'အမျိုးသမီး (女) တစ်ယောက်နဲ့ ကလေး (子) တစ်ယောက် အတူတူရှိနေတာက ကောင်းတဲ့ (好) အရာတစ်ခုပါ။'
+        };
+      }
+      if (word.chinese === '电脑') {
+        return {
+          ...word,
+          sentence_ch: '我的电脑很新。',
+          sentence_mm: 'ကျွန်တော့်ကွန်ပျူတာက အသစ်ကြီးပဲ။',
+          decomposition: [
+            { char: '电', pinyin: 'diàn', meaning: 'လျှပ်စစ်' },
+            { char: '脑', pinyin: 'nǎo', meaning: 'ဦးနှောက်' }
+          ],
+          mnemonic: 'လျှပ်စစ် (电) နဲ့ အလုပ်လုပ်တဲ့ ဦးနှောက် (脑) က ကွန်ပျူတာ (电脑) ပါပဲ။'
+        };
+      }
+      return word; // Return original word if no extra data is available
+    });
+  }, [words]);
+  
   const knownWordsStorageKey = `knownWords_${progressKey}`;
   const [knownWords, setKnownWords] = useState(() => {
     if (typeof window === 'undefined') return new Set();
@@ -272,38 +304,26 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     }
   });
 
-  // ✨ [修改] 过滤掉已认识的单词，生成当前学习卡片列表
   const activeCards = useMemo(() => {
-    const filtered = words.filter(w => !knownWords.has(w.id));
-    
-    if (filtered.length === 0 && words.length > 0) {
-        return [{ id: 'finished', chinese: "太棒了!", burmese: "你已学完本单元所有单词", pinyin: 'tài bàng le' }];
+    // Use augmentedWords which contains the new fields
+    const filtered = augmentedWords.filter(w => !knownWords.has(w.id));
+    if (filtered.length === 0 && augmentedWords.length > 0) {
+        return [{ id: 'finished', chinese: "太棒了!", burmese: "သင်ခန်းစာအားလုံးပြီးပါပြီ။", pinyin: 'tài bàng le' }];
     }
-
-    const mapped = filtered.map(w => ({ id: w.id, chinese: w.chinese, burmese: w.burmese, pinyin: w.pinyin, imageUrl: w.imageUrl }));
-    
+    // No need to map again, filtered already has all data
     if (settings.order === 'random') {
-        for (let i = mapped.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [mapped[i], mapped[j]] = [mapped[j], mapped[i]];
-        }
+      for (let i = filtered.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [filtered[i], filtered[j]] = [filtered[j], filtered[i]]; }
     }
-    return mapped.length > 0 ? mapped : [{ id: 'fallback', chinese: "暂无单词", burmese: "..." }];
-  }, [words, knownWords, settings.order]);
+    return filtered.length > 0 ? filtered : [{ id: 'fallback', chinese: "暂无单词", burmese: "..." }];
+  }, [augmentedWords, knownWords, settings.order]);
 
-  const cards = activeCards; // 直接使用过滤后的列表
-  
+  const cards = activeCards;
   const storageKey = `wordCardProgress_${progressKey}`;
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // 当卡片列表变化时，重置索引
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [activeCards]);
+  useEffect(() => { setCurrentIndex(0); }, [cards]);
 
-  // ✨ [新功能] 2. 新增状态：控制详情（释义、拼音等）的显示/隐藏
   const [detailsVisible, setDetailsVisible] = useState(false);
-  
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
@@ -322,73 +342,37 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   
   const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
   
-  // ✨ [修改] 切换卡片时，重置详情的显示状态
   const navigate = useCallback((direction) => {
     lastDirection.current = direction;
-    setDetailsVisible(false); // 切换时隐藏详情
+    setDetailsVisible(false);
     setCurrentIndex(prev => (prev + direction + cards.length) % cards.length);
   }, [cards.length]);
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < cards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setDetailsVisible(false); setCurrentIndex(index); } setIsJumping(false); };
 
-  // ✨ [新功能] 3. 实现“认识”和“不认识”按钮的逻辑
   const handleKnowWord = () => {
     if (!currentCard || currentCard.id === 'fallback' || currentCard.id === 'finished') return;
-    
-    playSoundEffect('correct'); // 给个积极的音效
-    
-    // 使用函数式更新确保状态正确
+    playSoundEffect('correct');
     setKnownWords(prevKnownWords => {
         const newKnownWords = new Set(prevKnownWords).add(currentCard.id);
         localStorage.setItem(knownWordsStorageKey, JSON.stringify(Array.from(newKnownWords)));
         return newKnownWords;
     });
-    // activeCards 会在下一次渲染时自动更新，从而移除当前单词
   };
   
   const handleDontKnowWord = () => {
     if (!currentCard || currentCard.id === 'fallback' || currentCard.id === 'finished') return;
-    navigate(1); // 直接切换到下一个
+    navigate(1);
   };
 
-  // ✨ [修改] 自动播放逻辑以适应“点击揭示”
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
-    
-    const playChinese = (callback) => {
-        if (settings.autoPlayChinese && currentCard.chinese) {
-            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, callback);
-        } else if (callback) {
-            callback();
-        }
-    };
-    
-    const playBurmese = (callback) => {
-        if (settings.autoPlayBurmese && currentCard.burmese) {
-            playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, callback);
-        } else if (callback) {
-            callback();
-        }
-    };
-
-    const startAutoBrowseTimer = () => {
-        if (settings.autoBrowse) {
-            autoBrowseTimerRef.current = setTimeout(() => navigate(1), settings.autoBrowseDelay);
-        }
-    };
-
-    if (detailsVisible) {
-        // 当详情显示时，如果设置了，就播放缅甸语
-        playBurmese(startAutoBrowseTimer);
-    } else {
-        // 当卡片刚切换过来时（详情隐藏），播放中文
-        const initialPlayTimer = setTimeout(() => {
-            playChinese(startAutoBrowseTimer);
-        }, 500); // 延迟播放以配合动画
-        return () => clearTimeout(initialPlayTimer);
-    }
-
+    const playChinese = (callback) => { if (settings.autoPlayChinese && currentCard.chinese) { playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, callback); } else if (callback) { callback(); } };
+    const playBurmese = (callback) => { if (settings.autoPlayBurmese && currentCard.burmese) { playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, callback); } else if (callback) { callback(); } };
+    const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => navigate(1), settings.autoBrowseDelay); } };
+    if (detailsVisible) { playBurmese(startAutoBrowseTimer); } 
+    else { const initialPlayTimer = setTimeout(() => { playChinese(startAutoBrowseTimer); }, 500); return () => clearTimeout(initialPlayTimer); }
     return () => clearTimeout(autoBrowseTimerRef.current);
   }, [currentIndex, currentCard, settings, isOpen, navigate, detailsVisible]);
   
@@ -419,7 +403,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   });
 
   const cardTransitions = useTransition(currentIndex, {
-      key: cards[currentIndex]?.id || currentIndex, // 使用稳定key
+      key: cards[currentIndex]?.id || currentIndex,
       from: { opacity: 0, transform: `translateY(${lastDirection.current >= 0 ? '100%' : '-100%'})` }, 
       enter: { opacity: 1, transform: 'translateY(0%)' }, 
       leave: { opacity: 0, transform: `translateY(${lastDirection.current >= 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
@@ -439,7 +423,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const cardContent = pageTransitions((style, item) =>
     item && (
       <animated.div style={{ ...styles.fullScreen, ...style }}>
-        {/* ✨ [修改] 将点击事件绑定到手势区域，用于切换详情显示 */}
         <div style={styles.gestureArea} {...bind()} onClick={() => setDetailsVisible(v => !v)} />
 
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
@@ -453,19 +436,55 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
           return (
             <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
               <div style={styles.cardContainer}>
-                  <div style={{ textAlign: 'center' }}>
+                  <div style={styles.mainContent}>
                       <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                          {/* ✨ [修改] 拼音根据 detailsVisible 控制显示 */}
                           <div style={{...styles.pinyin, opacity: detailsVisible ? 1 : 0, transition: 'opacity 0.3s'}}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>
                           <div style={styles.textWordChinese}>{cardData.chinese}</div>
                       </div>
-                      
-                      {/* ✨ [修改] 翻译（释义）根据 detailsVisible 控制显示 */}
-                      <div style={{ opacity: detailsVisible ? 1 : 0, transform: `translateY(${detailsVisible ? 0 : 20}px)`, transition: 'opacity 0.4s, transform 0.4s', cursor: 'pointer', marginTop: '2.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
-                          <div style={styles.textWordBurmese}>{cardData.burmese}</div>
-                          {/* 未来可以在这里添加例句、拆解等 */}
-                      </div>
                   </div>
+                  
+                  {/* ✨ [New] Details Section: a scrollable container for all extra info */}
+                  <animated.div style={{ ...styles.detailsWrapper, opacity: detailsVisible ? 1 : 0, transform: `translateY(${detailsVisible ? 0 : 20}px)` }}>
+                    <div style={styles.detailsContent}>
+                        <div style={styles.textWordBurmese} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>{cardData.burmese}</div>
+                        
+                        {/* Example Sentence Section */}
+                        {cardData.sentence_ch && (
+                            <div style={styles.detailsSection}>
+                                <h3 style={styles.detailsTitle}>例句 / ဥပမာ</h3>
+                                <p style={styles.sentenceChinese}>{cardData.sentence_ch}</p>
+                                <p style={styles.sentenceBurmese}>{cardData.sentence_mm}</p>
+                            </div>
+                        )}
+
+                        {/* Decomposition Section */}
+                        {cardData.decomposition && (
+                            <div style={styles.detailsSection}>
+                                <h3 style={styles.detailsTitle}>拆解 / ဖွဲ့စည်းပုံ</h3>
+                                <div style={styles.decompositionContainer}>
+                                    {cardData.decomposition.map((part, index) => (
+                                        <React.Fragment key={index}>
+                                            {index > 0 && <span style={styles.plusSign}>+</span>}
+                                            <div style={styles.decompositionPart}>
+                                                <div style={styles.decompositionChar}>{part.char}</div>
+                                                <div style={styles.decompositionPinyin}>{part.pinyin}</div>
+                                                <div style={styles.decompositionMeaning}>{part.meaning}</div>
+                                            </div>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Mnemonic Section */}
+                        {cardData.mnemonic && (
+                            <div style={styles.detailsSection}>
+                                <h3 style={styles.detailsTitle}>记忆技巧 / မှတ်သားရန်</h3>
+                                <p style={styles.mnemonicText}>{cardData.mnemonic}</p>
+                            </div>
+                        )}
+                    </div>
+                  </animated.div>
               </div>
             </animated.div>
           );
@@ -478,7 +497,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             {<button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={20} color="#f87171" /> : <FaRegHeart size={20} />}</button>}
         </div>)}
 
-        {/* ✨ [新功能] 5. 在底部添加“不认识”和“认识”按钮 */}
         {currentCard && currentCard.id !== 'fallback' && currentCard.id !== 'finished' && (
           <div style={styles.bottomActionButtons} data-no-gesture="true">
             <button style={{...styles.actionButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnowWord}>不认识</button>
@@ -496,20 +514,46 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 };
 
 // =================================================================================
-// ===== 样式表 (✨ 已添加新样式并调整) ==============================================
+// ===== 样式表 (✨ Updated with new styles) =======================================
 // =================================================================================
 const styles = {
+    // --- Core Layout ---
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
-    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
-    textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
-    textWordBurmese: { fontSize: '2.2rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
+    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden', padding: '20px 0' },
+    
+    // --- Main Content (Top part of the card) ---
+    mainContent: { width: '100%', textAlign: 'center', flexShrink: 0, paddingTop: '10vh' },
+    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1rem', letterSpacing: '0.05em' }, 
+    textWordChinese: { fontSize: '4rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
+
+    // --- ✨ [New] Details Wrapper & Content ---
+    detailsWrapper: { width: '100%', flex: 1, overflow: 'hidden', transition: 'opacity 0.4s, transform 0.4s', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', marginTop: '2rem' },
+    detailsContent: { width: '100%', maxWidth: '500px', overflowY: 'auto', padding: '0 20px 20px 20px', scrollbarWidth: 'none' /* Firefox */, 'msOverflowStyle': 'none' /* IE */, '::-webkit-scrollbar': { display: 'none' } /* Chrome, Safari */},
+    textWordBurmese: { fontSize: '2rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)', textAlign: 'center', cursor: 'pointer' },
+    detailsSection: { background: 'rgba(0,0,0,0.2)', backdropFilter: 'blur(8px)', borderRadius: '16px', padding: '15px', marginTop: '20px', textAlign: 'left' },
+    detailsTitle: { marginTop: 0, marginBottom: '10px', color: '#fcd34d', fontSize: '1.1rem', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '8px' },
+    sentenceChinese: { fontSize: '1.2rem', color: 'white', margin: '0 0 5px 0' },
+    sentenceBurmese: { fontSize: '1.1rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', margin: 0 },
+    decompositionContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' },
+    decompositionPart: { display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '10px', borderRadius: '8px' },
+    decompositionChar: { fontSize: '2.5rem', color: 'white', fontWeight: 'bold' },
+    decompositionPinyin: { fontSize: '0.9rem', color: '#fcd34d' },
+    decompositionMeaning: { fontSize: '0.9rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif' },
+    plusSign: { fontSize: '2rem', color: 'white', fontWeight: '300' },
+    mnemonicText: { color: 'white', fontSize: '1.1rem', lineHeight: 1.6, fontFamily: '"Padauk", "Myanmar Text", sans-serif', margin: 0 },
+
+    // --- Controls ---
     rightControls: { position: 'fixed', bottom: '50%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
-    // ✨ [修改] 调整计数器位置，为新按钮留出空间
     bottomCenterCounter: { position: 'fixed', bottom: '110px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, background: 'rgba(0, 0, 0, 0.3)', color: 'white', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)', cursor: 'pointer', userSelect: 'none' },
+    bottomActionButtons: { position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '20px', zIndex: 10, },
+    actionButtonBase: { minWidth: '120px', padding: '15px 30px', fontSize: '1.1rem', fontWeight: 'bold', color: 'white', border: 'none', borderRadius: '30px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', transition: 'transform 0.2s ease, background 0.3s', backdropFilter: 'blur(5px)', },
+    dontKnowButton: { background: 'rgba(239, 68, 68, 0.8)', },
+    knowButton: { background: 'rgba(34, 197, 94, 0.8)', },
+
+    // --- Modals (Comparison, Settings, etc.) ---
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
@@ -544,35 +588,6 @@ const styles = {
     jumpModalTitle: { marginTop: 0, marginBottom: '15px', color: '#333' },
     jumpModalInput: { width: '100px', padding: '10px', fontSize: '1.2rem', textAlign: 'center', border: '2px solid #ccc', borderRadius: '8px', marginBottom: '15px' },
     jumpModalButton: { width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#4299e1', color: 'white', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' },
-    // ✨ [新功能] 新增按钮容器和按钮样式
-    bottomActionButtons: {
-      position: 'fixed',
-      bottom: '30px',
-      left: '50%',
-      transform: 'translateX(-50%)',
-      display: 'flex',
-      gap: '20px',
-      zIndex: 10,
-    },
-    actionButtonBase: {
-      minWidth: '120px',
-      padding: '15px 30px',
-      fontSize: '1.1rem',
-      fontWeight: 'bold',
-      color: 'white',
-      border: 'none',
-      borderRadius: '30px',
-      cursor: 'pointer',
-      boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-      transition: 'transform 0.2s ease, background 0.3s',
-      backdropFilter: 'blur(5px)',
-    },
-    dontKnowButton: {
-      background: 'rgba(239, 68, 68, 0.8)', // 红色系
-    },
-    knowButton: {
-      background: 'rgba(34, 197, 94, 0.8)', // 绿色系
-    },
 };
 
 export default WordCard;
