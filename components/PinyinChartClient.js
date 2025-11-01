@@ -1,4 +1,4 @@
-// /components/PinyinChartClient.js <-- 最终版 (已移除播放动画 + 修复点击动画)
+// /components/PinyinChartClient.js <-- 这是修改好的完整版本，请直接替换
 
 "use client";
 
@@ -121,18 +121,17 @@ export default function PinyinChartClient({ initialData }) {
     const LetterButton = ({ item }) => (
       <motion.div
         onClick={() => playAudio(item)}
-        // --- 核心修改：增强点击缩放动画，使其快速且明显 ---
         whileTap={{ scale: 0.88, transition: { duration: 0.1 } }}
         className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl cursor-pointer transition-colors duration-200 border shadow-lg 
         ${isPlaying === item.letter 
-            ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-400' // 选中时直接变色
+            ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-400'
             : 'bg-white/30 dark:bg-gray-800/30 backdrop-blur-lg border-white/20 hover:border-white/50'
         }`}
       >
-        <span className={`relative text-4xl sm:text-5xl font-bold transition-colors ${isPlaying === item.letter ? 'text-white' : 'text-gray-800 dark:text-white'}`}>
+        {/* ✨ [关键修改] 在这里添加了 pinyin-letter 类名 */}
+        <span className={`pinyin-letter relative text-4xl sm:text-5xl font-bold transition-colors ${isPlaying === item.letter ? 'text-white' : 'text-gray-800 dark:text-white'}`}>
           {item.letter}
         </span>
-        {/* --- 核心修改：换回静态的 Volume2 图标 --- */}
         <div className={`relative mt-1 h-4 w-4 transition-colors ${item.audio ? (isPlaying === item.letter ? 'text-white' : 'text-gray-400') : 'text-transparent'}`}>
             {item.audio && <Volume2 size={16} />}
         </div>
@@ -140,41 +139,57 @@ export default function PinyinChartClient({ initialData }) {
     );
 
     return (
-      <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen">
-        <audio ref={audioRef} onEnded={handleAudioEnd} />
-        <div className="flex items-center justify-between mb-8">
-          <Link href="/" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors p-2 rounded-lg bg-white/50 dark:bg-black/20 backdrop-blur-sm border border-white/30">
-            <ArrowLeft size={20} />
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 tracking-wider">{initialData.title}</h1>
-          <div className="w-12"></div>
-        </div>
+      // ✨ [关键修改] 在这里添加了 <style jsx> 块
+      <>
+        <style jsx>{`
+          .pinyin-letter {
+            /* 
+              核心修复代码：
+              通过禁用字体特性来绕过 Chrome/Blink 渲染引擎的 bug。
+              这可以解决第一声在多字母组合中出现的“黑点”和“偏移”问题。
+            */
+            font-variant-ligatures: none;
+            -webkit-font-feature-settings: "liga" 0, "clig" 0;
+            font-feature-settings: "liga" 0, "clig" 0;
+            font-kerning: none;
+          }
+        `}</style>
+        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen">
+          <audio ref={audioRef} onEnded={handleAudioEnd} />
+          <div className="flex items-center justify-between mb-8">
+            <Link href="/" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors p-2 rounded-lg bg-white/50 dark:bg-black/20 backdrop-blur-sm border border-white/30">
+              <ArrowLeft size={20} />
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 tracking-wider">{initialData.title}</h1>
+            <div className="w-12"></div>
+          </div>
 
-        {renderGrid()}
-        
-        <div className="mt-10 p-5 bg-white/40 dark:bg-gray-800/40 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20">
-          <button onClick={toggleAutoPlay} disabled={!initialData.items?.some(i => i.audio) && !initialData.categories} className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-teal-500/20 hover:bg-teal-600 transition-all focus:outline-none ring-2 ring-transparent focus-visible:ring-teal-300 disabled:bg-gray-400 disabled:shadow-none">
-            {isAutoPlaying ? <PauseCircle /> : <PlayCircle />}
-            {isAutoPlaying ? '停止播放' : '自动播放'}
-          </button>
-          <div className="mt-5">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">发音语速</label>
-            <div className="flex items-center gap-3">
-              <ChevronsLeft size={18} className="text-gray-500" />
-              <input
-                type="range"
-                min="0.5" max="2.0" step="0.1"
-                value={playbackRate}
-                onChange={(e) => setPlaybackRate(Number(e.target.value))}
-                className="w-full h-2 bg-gray-500/30 rounded-lg appearance-none cursor-pointer dark:bg-gray-900/40"
-              />
-              <ChevronsRight size={18} className="text-gray-500" />
-            </div>
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
-              当前速度: {playbackRate.toFixed(1)}x
+          {renderGrid()}
+          
+          <div className="mt-10 p-5 bg-white/40 dark:bg-gray-800/40 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20">
+            <button onClick={toggleAutoPlay} disabled={!initialData.items?.some(i => i.audio) && !initialData.categories} className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-teal-500 text-white font-semibold rounded-xl shadow-lg shadow-teal-500/20 hover:bg-teal-600 transition-all focus:outline-none ring-2 ring-transparent focus-visible:ring-teal-300 disabled:bg-gray-400 disabled:shadow-none">
+              {isAutoPlaying ? <PauseCircle /> : <PlayCircle />}
+              {isAutoPlaying ? '停止播放' : '自动播放'}
+            </button>
+            <div className="mt-5">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">发音语速</label>
+              <div className="flex items-center gap-3">
+                <ChevronsLeft size={18} className="text-gray-500" />
+                <input
+                  type="range"
+                  min="0.5" max="2.0" step="0.1"
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-500/30 rounded-lg appearance-none cursor-pointer dark:bg-gray-900/40"
+                />
+                <ChevronsRight size={18} className="text-gray-500" />
+              </div>
+              <div className="text-center text-xs text-gray-500 dark:text-gray-400 mt-1">
+                当前速度: {playbackRate.toFixed(1)}x
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
-      }
+                }
