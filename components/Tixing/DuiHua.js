@@ -4,7 +4,7 @@ import { FaPlay, FaPause } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 import { useDrag } from '@use-gesture/react';
 
-// --- TTS 引擎 (无需改动) ---
+// --- TTS 引擎 ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice, rate = 0) => {
     if (!text || !voice) return null;
@@ -28,9 +28,9 @@ const playTTS = async (text, voice, rate) => {
 };
 
 // ========================================================================
-//                           单个场景组件
+//                           单个场景渲染组件
 // ========================================================================
-const SceneInstance = ({ scene, isActive }) => {
+const SceneInstance = ({ scene, isActive, onExit }) => {
     const { id, title, imageSrc, characters, dialogue } = scene;
     const [currentLineIndex, setCurrentLineIndex] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -50,38 +50,15 @@ const SceneInstance = ({ scene, isActive }) => {
         const line = dialogue[index];
         const character = characters[line.speaker];
         audioRef.current = await playTTS(line.hanzi, character?.voice, character?.rate);
-
         if (audioRef.current) {
             audioRef.current.onended = () => {
                 if (isActive && isPlaying && !isRepeating) {
                     timeoutRef.current = setTimeout(() => playLine(index + 1), 800);
                 }
             };
-        } else if (isActive && isPlaying && !isRepeating) {
-            timeoutRef.current = setTimeout(() => playLine(index + 1), 800);
         }
     };
-    
-    useEffect(() => {
-        if (isActive) {
-            dialogue.forEach(line => {
-                const character = characters[line.speaker];
-                getTTSAudio(line.hanzi, character?.voice, character?.rate);
-            });
-            // 激活时自动播放
-            timeoutRef.current = setTimeout(() => setIsPlaying(true), 500);
-        } else {
-            // 清理状态
-            clearTimeout(timeoutRef.current);
-            audioRef.current?.pause();
-            setIsPlaying(false);
-            setCurrentLineIndex(null);
-        }
-        return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isActive, id]);
 
-    // 播放/暂停的副作用处理
     useEffect(() => {
         clearTimeout(timeoutRef.current);
         if (isActive && isPlaying) {
@@ -92,10 +69,26 @@ const SceneInstance = ({ scene, isActive }) => {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isPlaying]);
+    
+    useEffect(() => {
+        if (isActive) {
+            dialogue.forEach(line => {
+                const character = characters[line.speaker];
+                getTTSAudio(line.hanzi, character?.voice, character?.rate);
+            });
+            timeoutRef.current = setTimeout(() => setIsPlaying(true), 500);
+        } else {
+            clearTimeout(timeoutRef.current);
+            audioRef.current?.pause();
+            setIsPlaying(false);
+            setCurrentLineIndex(null);
+        }
+        return () => { clearTimeout(timeoutRef.current); audioRef.current?.pause(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isActive, id]);
 
     const handleBubbleClick = () => {
-        if (currentLineIndex === null) return;
-        playLine(currentLineIndex, true);
+        if (currentLineIndex !== null) playLine(currentLineIndex, true);
     };
 
     const currentLine = currentLineIndex !== null ? dialogue[currentLineIndex] : null;
@@ -107,12 +100,12 @@ const SceneInstance = ({ scene, isActive }) => {
 
             {currentLine && (
                 <div style={{...styles.bubbleArea, justifyContent: currentLine.speaker === speakerAKey ? 'flex-start' : 'flex-end'}}>
-                    <div className="bubble" style={{...styles.bubble, ...(currentLine.speaker === speakerAKey ? styles.bubbleA : styles.bubbleB)}} onClick={handleBubbleClick}>
+                    <div className={`bubble ${currentLine.speaker === speakerAKey ? 'bubble-a' : 'bubble-b'}`}
+                         style={{...styles.bubble, ...(currentLine.speaker === speakerAKey ? styles.bubbleA : styles.bubbleB)}}
+                         onClick={handleBubbleClick}>
                         <p style={styles.pinyin}>{pinyin(currentLine.hanzi)}</p>
                         <p style={styles.hanzi}>{currentLine.hanzi}</p>
                         {currentLine.myanmar && <p style={styles.myanmarText}>{currentLine.myanmar}</p>}
-                        {/* 气泡尾巴 */}
-                        <div style={currentLine.speaker === speakerAKey ? styles.bubbleTailA : styles.bubbleTailB}></div>
                     </div>
                 </div>
             )}
@@ -136,7 +129,7 @@ const DuiHua = (props) => {
     }
 
     const [sceneIndex, setSceneIndex] = useState(0);
-    const [isFullScreen, setIsFullScreen] = useState(false);
+    const [isFullScreen, setIsFullScreen] = useState(true); // 默认直接进入全屏
     const containerRef = useRef(null);
 
     const bind = useDrag(({ active, movement: [, my], direction: [, dy], distance, cancel }) => {
@@ -148,7 +141,9 @@ const DuiHua = (props) => {
             cancel();
         }
     }, { axis: 'y', filterTaps: true, taps: true });
-
+    
+    // 如果您想保留点击触发进入的模式，可以取消下面这段注释
+    /*
     if (!isFullScreen) {
         return (
             <div style={styles.triggerContainer} onClick={() => setIsFullScreen(true)}>
@@ -159,15 +154,20 @@ const DuiHua = (props) => {
             </div>
         );
     }
+    */
     
-    // 如果需要默认打开全屏，直接渲染下面的内容，并去掉 isFullScreen 状态
     return (
         <div {...bind()} style={styles.swipeContainer} ref={containerRef}>
-            <style>{` @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } } .bubble { animation: fadeInUp 0.5s ease-out; } `}</style>
+            <style>{`
+                @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+                .bubble { animation: fadeInUp 0.5s ease-out; }
+                /* 关键修复：使用伪元素创建可靠的气泡尾巴 */
+                .bubble-a::after { content: ''; position: absolute; left: 20px; bottom: -14px; width: 0; height: 0; border: 15px solid transparent; border-top-color: #f3f4f6; border-bottom: 0; border-left: 0; }
+                .bubble-b::after { content: ''; position: absolute; right: 20px; bottom: -14px; width: 0; height: 0; border: 15px solid transparent; border-top-color: #3b82f6; border-bottom: 0; border-right: 0; }
+            `}</style>
             <div style={{ ...styles.sceneWrapper, transform: `translateY(-${sceneIndex * 100}%)` }}>
                 {scenes.map((scene, index) => (
                     <div key={scene.id || index} style={{width: '100%', height: '100%'}}>
-                        {/* onExit is removed as there is no close button now */}
                         <SceneInstance scene={scene} isActive={index === sceneIndex} />
                     </div>
                 ))}
@@ -178,12 +178,12 @@ const DuiHua = (props) => {
 
 // --- 样式表 ---
 const styles = {
-    // 触发器样式
+    // 触发器样式 (可选)
     triggerContainer: { position: 'relative', width: '100%', maxWidth: '960px', aspectRatio: '16 / 9', margin: '1rem auto', borderRadius: '18px', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' },
-    triggerImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' },
-    triggerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', transition: 'background-color 0.3s ease' },
-    triggerPlayButton: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70px', height: '70px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.8)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)', boxShadow: '0 0 20px rgba(0,0,0,0.5)', transition: 'transform 0.3s ease' },
-    triggerTitle: { position: 'absolute', bottom: '20px', left: '20px', color: 'white', fontSize: '1.5rem', fontWeight: 'bold', textShadow: '0 2px 5px rgba(0,0,0,0.7)' },
+    triggerImage: { width: '100%', height: '100%', objectFit: 'cover' },
+    triggerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
+    triggerPlayButton: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70px', height: '70px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.8)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    triggerTitle: { position: 'absolute', bottom: '20px', left: '20px', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' },
     
     // 全屏样式
     loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
@@ -196,9 +196,6 @@ const styles = {
     bubble: { position: 'relative', maxWidth: '65%', padding: '12px 20px', borderRadius: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.3)', cursor: 'pointer' },
     bubbleA: { backgroundColor: '#f3f4f6', color: '#1f2937', marginRight: 'auto' },
     bubbleB: { backgroundColor: '#3b82f6', color: '#fff', marginLeft: 'auto' },
-    bubbleTail: { content: '""', position: 'absolute', bottom: '-12px', width: 0, height: 0, border: '16px solid transparent' },
-    bubbleTailA: { left: '20px', borderTopColor: '#f3f4f6', borderBottom: 0, borderLeft: '10px solid transparent', borderRight: '10px solid transparent' },
-    bubbleTailB: { right: '20px', borderTopColor: '#3b82f6', borderBottom: 0, borderLeft: '10px solid transparent', borderRight: '10px solid transparent' },
     pinyin: { margin: '0 0 2px 0', opacity: 0.7, fontSize: '0.9rem', lineHeight: 1.2, letterSpacing: '-0.5px' },
     hanzi: { margin: '0', fontSize: '1.4rem', fontWeight: '500', lineHeight: 1.4 },
     myanmarText: { margin: '10px 0 0 0', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '10px', fontSize: '1rem', opacity: 0.9, lineHeight: 1.5 },
