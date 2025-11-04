@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (最终全适配修复版)
+// components/Tixing/LessonPlayer.jsx (完整最终修复版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -6,7 +6,7 @@ import { pinyin } from 'pinyin-pro';
 import { useSwipeable } from 'react-swipeable';
 import { useRouter } from 'next/router';
 
-// --- 1. 动态导入您所有的题型组件 ---
+// --- 1. 动态导入您所有的题型组件 (已加入 GrammarPointPlayer) ---
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false });
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false });
 const GaiCuoTi = dynamic(() => import('@/components/Tixing/GaiCuoTi'), { ssr: false });
@@ -16,6 +16,8 @@ const CiDianKa = dynamic(() => import('@/components/Tixing/CiDianKa'), { ssr: fa
 const GengDuTi = dynamic(() => import('@/components/Tixing/GengDuTi'), { ssr: false });
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false });
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false });
+const GrammarPointPlayer = dynamic(() => import('@/components/Tixing/GrammarPointPlayer'), { ssr: false });
+
 
 // --- 2. 辅助组件与函数 (自包含) ---
 const generateRubyHTML = (text) => {
@@ -81,12 +83,11 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
     );
 };
 
-// 课程结束界面组件
 const CourseCompleteBlock = ({ onRestart, router }) => {
     useEffect(() => {
         const timer = setTimeout(() => {
             router.push('/');
-        }, 3000); // 3 seconds
+        }, 3000);
         return () => clearTimeout(timer);
     }, [router]);
     
@@ -99,16 +100,10 @@ const CourseCompleteBlock = ({ onRestart, router }) => {
                 您已完成本课，3秒后将返回首页...
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-                <button
-                    onClick={onRestart}
-                    className="px-8 py-4 bg-white/80 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105"
-                >
+                <button onClick={onRestart} className="px-8 py-4 bg-white/80 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
                     重新学习
                 </button>
-                <button
-                    onClick={() => router.push('/')}
-                    className="px-8 py-4 bg-blue-500/80 text-white font-bold text-lg rounded-full shadow-lg hover:bg-blue-500 transition-transform hover:scale-105"
-                >
+                <button onClick={() => router.push('/')} className="px-8 py-4 bg-blue-500/80 text-white font-bold text-lg rounded-full shadow-lg hover:bg-blue-500 transition-transform hover:scale-105">
                     立即返回
                 </button>
             </div>
@@ -165,7 +160,6 @@ export default function LessonPlayer({ lesson }) {
   }, []);
 
   const playAudio = useCallback(async () => {
-    console.log('[TTS] playAudio called.');
     stopAudioAndSubtitles();
     if (isCompleted || !lesson.blocks[currentIndex]) return;
     const currentBlock = lesson.blocks[currentIndex];
@@ -228,14 +222,11 @@ export default function LessonPlayer({ lesson }) {
   };
 
   const handleCorrectAndProceed = useCallback(() => {
-    console.log(`[handleCorrectAndProceed] Triggered. Index: ${currentIndex}, Total: ${totalBlocks}`);
     if (currentIndex < totalBlocks - 1) {
-      console.log('✅ Scheduling next block...');
       setTimeout(() => {
         setCurrentIndex((prev) => prev + 1);
       }, 600);
     } else {
-      console.log('🎯 Course finished! Scheduling completion...');
       stopAudioAndSubtitles();
       setTimeout(() => {
         setIsCompleted(true);
@@ -257,6 +248,9 @@ export default function LessonPlayer({ lesson }) {
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
+  // =========================================================================
+  // ====================== 【已替换为最终修复版】 ======================
+  // =========================================================================
   const renderBlock = () => {
     // 1. 数据不存在的保护
     if (!lesson || !Array.isArray(lesson.blocks) || lesson.blocks.length === 0) {
@@ -270,56 +264,104 @@ export default function LessonPlayer({ lesson }) {
 
     // 3. 索引越界保护
     if (currentIndex >= totalBlocks) {
-      console.warn(`[RenderGuard] HALT! Invalid index. currentIndex=${currentIndex}, totalBlocks=${totalBlocks}. Forcing to completion state.`);
       setTimeout(() => setIsCompleted(true), 0);
       return <div className="p-8 text-center text-white bg-yellow-500/70 rounded-xl">正在加载课程结束页...</div>;
     }
 
-    // 4. 获取当前题并检查有效性
     const currentBlock = lesson.blocks[currentIndex];
+
+    // 4. 获取当前题并检查有效性
     if (!currentBlock || typeof currentBlock.type !== 'string') {
       console.error("[RenderGuard] HALT! Invalid block data or missing type. Block:", currentBlock);
       return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">错误：当前页面数据无效。</div>;
     }
 
     const type = currentBlock.type.toLowerCase();
-    const genericProps = { data: currentBlock.content, onComplete: handleCorrectAndProceed };
+
+    // 统一所有组件都需要的基础 props
+    const baseProps = {
+      data: currentBlock.content,
+      onComplete: handleCorrectAndProceed,
+      settings: settings // <-- 确保 settings 总是被传递！
+    };
     
     // 5. 安全地渲染组件
     switch (type) {
-      case 'teaching': return <TeachingBlock content={currentBlock.content} />;
+      case 'grammar':
+        return <GrammarPointPlayer {...baseProps} />;
+
+      case 'teaching': 
+        return <TeachingBlock content={currentBlock.content} />;
+      
       case 'choice':
         const { prompt: xuanzePrompt, choices, correctId, explanation, imageUrl, videoUrl, audioUrl } = currentBlock.content;
-        return <XuanZeTi question={{ text: xuanzePrompt, imageUrl, videoUrl, audioUrl }} options={choices || []} correctAnswer={correctId ? [correctId] : []} explanation={explanation} onNext={handleCorrectAndProceed} onCorrect={handleCorrectAndProceed} />;
+        return <XuanZeTi 
+                 question={{ text: xuanzePrompt, imageUrl, videoUrl, audioUrl }} 
+                 options={choices || []} 
+                 correctAnswer={correctId ? [correctId] : []} 
+                 explanation={explanation} 
+                 onNext={handleCorrectAndProceed} 
+                 onCorrect={handleCorrectAndProceed} 
+               />;
+      
       case 'paixu':
         const { prompt: paixuPrompt, items, explanation: paixuExplanation } = currentBlock.content;
         const correctOrder = (items || []).sort((a, b) => a.order - b.order).map(item => item.id);
-        return <PaiXuTi title={paixuPrompt} items={items || []} correctOrder={correctOrder} aiExplanation={paixuExplanation} onCorrectionRequest={(prompt) => console.log("AI Correction Requested:", prompt)} />;
+        return <PaiXuTi 
+                 title={paixuPrompt} 
+                 items={items || []} 
+                 correctOrder={correctOrder} 
+                 aiExplanation={paixuExplanation}
+                 // PaiXuTi 可能有自己的 onComplete 逻辑，这里假设它需要 onCorrectionRequest
+                 onCorrectionRequest={(prompt) => console.log("AI Correction Requested:", prompt)} 
+                 onComplete={handleCorrectAndProceed} // 确保 onComplete 被传递
+               />;
+      
       case 'lianxian':
         const { prompt: lianxianPrompt, pairs } = currentBlock.content;
         const columnA = (pairs || []).map(p => ({ id: p.id, content: p.left, imageUrl: p.leftImageUrl }));
         const columnB = [...(pairs || [])].sort(() => 0.5 - Math.random()).map(p => ({ id: p.id, content: p.right, imageUrl: p.rightImageUrl }));
         const correctPairs = (pairs || []).reduce((acc, p) => { acc[p.id] = p.id; return acc; }, {});
-        return <LianXianTi title={lianxianPrompt} columnA={columnA} columnB={columnB} pairs={correctPairs} onCorrect={handleCorrectAndProceed} />;
+        return <LianXianTi 
+                 title={lianxianPrompt} 
+                 columnA={columnA} 
+                 columnB={columnB} 
+                 pairs={correctPairs} 
+                 onCorrect={handleCorrectAndProceed} 
+               />;
+      
       case 'gaicuo':
-        // [核心修改] 为 GaiCuoTi 添加适配器
         const { prompt: gaicuoPrompt, sentence, segmentationType, correctAnswers, corrections, explanation: gaicuoExplanation } = currentBlock.content;
-        const gaiCuoTiProps = {
-          title: gaicuoPrompt,
-          sentence: sentence,
-          segmentationType: segmentationType || 'char',
-          correctAnswers: correctAnswers || [],
-          corrections: corrections || [],
-          explanation: gaicuoExplanation,
-          onCorrect: handleCorrectAndProceed
+        return <GaiCuoTi 
+                 title={gaicuoPrompt}
+                 sentence={sentence}
+                 segmentationType={segmentationType || 'char'}
+                 correctAnswers={correctAnswers || []}
+                 corrections={corrections || []}
+                 explanation={gaicuoExplanation}
+                 onCorrect={handleCorrectAndProceed}
+               />;
+      
+      case 'panduan': 
+      case 'fanyi': 
+      case 'tinglizhuju': 
+      case 'cidianka': 
+      case 'gengdu':
+        const ComponentMap = {
+            panduan: PanDuanTi,
+            fanyi: FanYiTi,
+            tinglizhuju: TingLiZhuJu,
+            cidianka: CiDianKa,
+            gengdu: GengDuTi
         };
-        return <GaiCuoTi {...gaiCuoTiProps} />;
-      case 'panduan': return <PanDuanTi {...genericProps} />;
-      case 'fanyi': return <FanYiTi {...genericProps} />;
-      case 'tinglizhuju': return <TingLiZhuJu {...genericProps} />;
-      case 'cidianka': return <CiDianKa {...genericProps} />;
-      case 'gengdu': return <GengDuTi {...genericProps} />;
-      default: return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：不支持的页面类型 "{type}"。</div> );
+        const DynamicComponent = ComponentMap[type];
+        if (DynamicComponent) {
+            return <DynamicComponent {...baseProps} />;
+        }
+        return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：找不到组件 "{type}"。</div> );
+
+      default: 
+        return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：不支持的页面类型 "{type}"。</div> );
     }
   };
 
