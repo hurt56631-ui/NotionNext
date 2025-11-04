@@ -1,4 +1,4 @@
-// themes/heo/index.js <-- 最终验证版，已彻底审查并优化
+// themes/heo/index.js <-- 最终修复完整版：已解决初始加载吸顶问题和滑动冲突
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -285,7 +285,6 @@ async function getAllFavorites(storeName) {
 
 /**
  * 首页布局组件
- * 此组件完全在客户端运行，不会影响 Next.js 的静态构建 (SSR/SSG Safe)
  */
 const LayoutIndex = props => {
   const router = useRouter();
@@ -303,7 +302,7 @@ const LayoutIndex = props => {
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
   const scrollableContainerRef = useRef(null);
-  const stickySentinelRef = useRef(null); // 观察哨 ref
+  const stickySentinelRef = useRef(null);
   const lastScrollY = useRef(0);
   const [isStickyActive, setIsStickyActive] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
@@ -319,7 +318,6 @@ const LayoutIndex = props => {
   const [sentenceCardData, setSentenceCardData] = useState(null);
   const [wordCardData, setWordCardData] = useState(null);
   
-  // 从 URL hash 判断卡片是否应该打开
   const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
 
@@ -346,12 +344,10 @@ const LayoutIndex = props => {
   }, [router]); 
 
   const handleCloseFavorites = useCallback(() => {
-    // 改变URL但不重新加载页面，触发popstate来关闭卡片
     router.push(router.pathname, undefined, { shallow: true });
   }, [router]);
 
   useEffect(() => {
-    // 监听路由变化来关闭卡片
     const handlePopState = () => {
       if (!window.location.hash.startsWith('#favorite')) {
         setSentenceCardData(null);
@@ -360,20 +356,18 @@ const LayoutIndex = props => {
     };
     window.addEventListener('popstate', handlePopState);
 
-    // 设置随机背景图
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    // 处理吸顶导航栏的逻辑
     const container = scrollableContainerRef.current;
     if (!container) return;
 
     let ticking = false;
     const handleScroll = () => {
-      if (!isStickyActive) { // 仅在吸顶模式激活时处理
+      if (!isStickyActive) {
           lastScrollY.current = container.scrollTop;
           return;
       }
@@ -381,8 +375,8 @@ const LayoutIndex = props => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const diff = currentY - lastScrollY.current;
-          if (Math.abs(diff) > 10) { // 增加阈值避免过于敏感
-            setIsNavVisible(diff <= 0); // 向上滚动或不动时显示
+          if (Math.abs(diff) > 10) {
+            setIsNavVisible(diff <= 0);
           }
           lastScrollY.current = currentY;
           ticking = false;
@@ -391,16 +385,21 @@ const LayoutIndex = props => {
       }
     };
     container.addEventListener('scroll', handleScroll, { passive: true });
-
-    // 使用 IntersectionObserver 监听哨兵元素
+    
+    // ✅ 关键修复：解决初始加载时，因内容过高导致分类栏直接吸顶的问题。
+    // 只有当哨兵元素完全滚动到视口上方时 (boundingClientRect.top < 0)，才激活吸顶。
     const observer = new IntersectionObserver(
         ([entry]) => {
-            setIsStickyActive(!entry.isIntersecting);
-            if(entry.isIntersecting) {
-              setIsNavVisible(true); // 回到顶部时总是显示导航
+            const shouldBeSticky = !entry.isIntersecting && entry.boundingClientRect.top < 0;
+            setIsStickyActive(shouldBeSticky);
+            
+            // 如果恢复为非吸顶状态，总是显示导航栏
+            if (!shouldBeSticky) {
+                setIsNavVisible(true);
             }
-        }, { rootMargin: '0px', threshold: 0 }
+        }, { threshold: 0 }
     );
+      
     const currentSentinel = stickySentinelRef.current;
     if (currentSentinel) observer.observe(currentSentinel);
     
@@ -411,7 +410,6 @@ const LayoutIndex = props => {
     };
   }, [isStickyActive, router]);
 
-  // 处理侧边栏拖拽手势
   const handleTouchStart = (e) => {
     if (!isSidebarOpen && mainContentRef.current?.contains(e.target)) return;
     const startX = e.touches[0].clientX;
@@ -436,7 +434,6 @@ const LayoutIndex = props => {
     else openSidebar();
   };
 
-  // 处理内容区左右滑动切换Tab
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -455,7 +452,6 @@ const LayoutIndex = props => {
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
-  // 渲染 Tab 导航按钮的函数，用于复用
   const renderTabButtons = () => tabs.map(tab => (
     <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
@@ -622,7 +618,7 @@ const LayoutSlug = props => {
         {lock && <PostLock validPassword={validPassword} />}
         {!lock && post && (
           <div id="article-wrapper" className='px-5'>
-            <article itemScope itemType='https://schema.org/Movie'>
+            <article itemScope itemType='https://schema.org/Article'>
               <WWAds orientation='horizontal' className='w-full' />
               {post && <NotionPage post={post} />}
               <WWAds orientation='horizontal' className='w-full' />
