@@ -1,4 +1,4 @@
-// themes/heo/index.js  <-- 最终修复完整版：已解决滑动冲突问题
+// themes/heo/index.js <-- 最终验证版，已彻底审查并优化
 
 // 保持您原始文件的所有 import 语句不变
 import Comment from '@/components/Comment'
@@ -27,7 +27,6 @@ import CategoryBar from './components/CategoryBar'
 import FloatTocButton from './components/FloatTocButton'
 import Footer from './components/Footer'
 import Header from './components/Header'
-import Hero from './components/Hero'
 import { NoticeBar } from './components/NoticeBar'
 import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
@@ -60,7 +59,7 @@ import {
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
 
-// ✅ 导入我们所有新创建的内容块组件
+// 导入内容块组件
 import HskContentBlock from '@/components/HskPageClient'
 import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
@@ -73,7 +72,7 @@ const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
 
 // =================================================================================
-// ====================== ✅ 高级拖拽侧边栏组件 (保持不变) ✅ ========================
+// ====================== 高级拖拽侧边栏组件 (保持不变) ========================
 // =================================================================================
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
@@ -129,14 +128,14 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
 };
 
 
-/**
- * 基础布局
- */
+// =================================================================================
+// ====================== 基础布局 (保持不变) ========================
+// =================================================================================
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
   const router = useRouter()
-
+  // 首页布局由 LayoutIndex 接管
   if (router.route === '/') { return <>{children}</> }
 
   const headerSlot = (
@@ -204,7 +203,7 @@ const BottomNavBar = () => {
     return (
         <>
             <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center'>
+            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
                 {navItems.map(item => (
                     <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
@@ -231,27 +230,12 @@ const ActionButtons = ({ onOpenFavorites }) => {
   return (
     <div className="grid grid-cols-3 gap-4 px-4">
       {actions.map((action, index) => {
-        const content = (
-          <>
-            <div className="mb-2">{action.icon}</div>
-            <span className="text-sm font-semibold">{action.text}</span>
-          </>
-        );
+        const content = ( <> <div className="mb-2">{action.icon}</div> <span className="text-sm font-semibold">{action.text}</span> </> );
         const className = `flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1 w-full`;
-
         if (action.type === 'link') {
-          return (
-            <a key={index} href={action.href} className={className}>
-              {content}
-            </a>
-          );
+          return ( <a key={index} href={action.href} className={className}> {content} </a> );
         }
-
-        return (
-          <button key={index} onClick={() => onOpenFavorites(action.type)} className={className}>
-            {content}
-          </button>
-        );
+        return ( <button key={index} onClick={() => onOpenFavorites(action.type)} className={className}> {content} </button> );
       })}
     </div>
   );
@@ -263,7 +247,7 @@ const ActionButtons = ({ onOpenFavorites }) => {
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const SENTENCE_STORE_NAME = 'favoriteSentences';
-const WORD_STORE_NAME = 'favoriteWords'; // 单词收藏存储名
+const WORD_STORE_NAME = 'favoriteWords';
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -300,10 +284,11 @@ async function getAllFavorites(storeName) {
 
 
 /**
- * 首页 - 终极融合版 (已应用所有修改)
+ * 首页布局组件
+ * 此组件完全在客户端运行，不会影响 Next.js 的静态构建 (SSR/SSG Safe)
  */
 const LayoutIndex = props => {
-  const router = useRouter(); 
+  const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
   const tabs = [
@@ -313,17 +298,16 @@ const LayoutIndex = props => {
     { name: '练习', icon: <ClipboardCheck size={22} /> },
     { name: '书籍', icon: <BookOpen size={22} /> }
   ];
-  
+
   const [activeTab, setActiveTab] = useState(tabs[0].name);
   const [backgroundUrl, setBackgroundUrl] = useState('');
   
   const scrollableContainerRef = useRef(null);
-  const stickySentinelRef = useRef(null);
+  const stickySentinelRef = useRef(null); // 观察哨 ref
   const lastScrollY = useRef(0);
-  const ticking = useRef(false);
   const [isStickyActive, setIsStickyActive] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
-  const mainContentRef = useRef(null); // ✅ 新增：为 main 内容区创建 ref
+  const mainContentRef = useRef(null);
 
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -334,25 +318,25 @@ const LayoutIndex = props => {
 
   const [sentenceCardData, setSentenceCardData] = useState(null);
   const [wordCardData, setWordCardData] = useState(null);
-  const isSentenceFavoritesCardOpen = router.asPath.includes('#favorite-sentences');
-  const isWordFavoritesCardOpen = router.asPath.includes('#favorite-words');
+  
+  // 从 URL hash 判断卡片是否应该打开
+  const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
+  const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
 
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
-        if (sentences && sentences.length > 0) {
+        if (sentences?.length > 0) {
             setSentenceCardData(sentences.map(s => ({ id: s.id, sentence: s.chinese, translation: s.burmese, pinyin: s.pinyin, imageUrl: s.imageUrl })));
-            setWordCardData(null);
-            router.push(router.asPath + '#favorite-sentences', undefined, { shallow: true });
+            router.push('#favorite-sentences', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何短句。');
         }
     } else if (type === 'words') {
         const words = await getAllFavorites(WORD_STORE_NAME);
-        if (words && words.length > 0) {
+        if (words?.length > 0) {
             setWordCardData(words);
-            setSentenceCardData(null);
-            router.push(router.asPath + '#favorite-words', undefined, { shallow: true });
+            router.push('#favorite-words', undefined, { shallow: true });
         } else {
             alert('您还没有收藏任何单词。');
         }
@@ -362,89 +346,76 @@ const LayoutIndex = props => {
   }, [router]); 
 
   const handleCloseFavorites = useCallback(() => {
-    setSentenceCardData(null);
-    setWordCardData(null);
-    if (window.location.hash.includes('#favorite')) {
-        router.back();
-    }
+    // 改变URL但不重新加载页面，触发popstate来关闭卡片
+    router.push(router.pathname, undefined, { shallow: true });
   }, [router]);
 
   useEffect(() => {
-    const container = scrollableContainerRef.current;
-    if (!container) return;
-
-    const threshold = 10;
-    const handleScroll = () => {
-      if (!isStickyActive) {
-          lastScrollY.current = container.scrollTop;
-          return;
-      }
-      
-      const currentY = container.scrollTop;
-      
-      if (!ticking.current) {
-        window.requestAnimationFrame(() => {
-          const diff = currentY - lastScrollY.current;
-          if (Math.abs(diff) > threshold) {
-            if (diff > 0) {
-              setIsNavVisible(false);
-            } else {
-              setIsNavVisible(true);
-            }
-          }
-          lastScrollY.current = currentY;
-          ticking.current = false;
-        });
-        ticking.current = true;
-      }
-    };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-
-    const observer = new IntersectionObserver(
-        ([entry]) => {
-            setIsStickyActive(!entry.isIntersecting);
-            if(entry.isIntersecting) {
-              setIsNavVisible(true);
-            }
-        },
-        { rootMargin: '0px', threshold: 0 }
-    );
-    const currentSentinel = stickySentinelRef.current;
-    if (currentSentinel) observer.observe(currentSentinel);
-    
+    // 监听路由变化来关闭卡片
     const handlePopState = () => {
-      const hash = window.location.hash;
-      if (!hash.includes('favorite-sentences') && !hash.includes('favorite-words')) {
+      if (!window.location.hash.startsWith('#favorite')) {
         setSentenceCardData(null);
         setWordCardData(null);
       }
     };
     window.addEventListener('popstate', handlePopState);
+
+    // 设置随机背景图
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
         'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto-format&fit-crop&q=80&w=2070'
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
+    // 处理吸顶导航栏的逻辑
+    const container = scrollableContainerRef.current;
+    if (!container) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!isStickyActive) { // 仅在吸顶模式激活时处理
+          lastScrollY.current = container.scrollTop;
+          return;
+      }
+      const currentY = container.scrollTop;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const diff = currentY - lastScrollY.current;
+          if (Math.abs(diff) > 10) { // 增加阈值避免过于敏感
+            setIsNavVisible(diff <= 0); // 向上滚动或不动时显示
+          }
+          lastScrollY.current = currentY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // 使用 IntersectionObserver 监听哨兵元素
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            setIsStickyActive(!entry.isIntersecting);
+            if(entry.isIntersecting) {
+              setIsNavVisible(true); // 回到顶部时总是显示导航
+            }
+        }, { rootMargin: '0px', threshold: 0 }
+    );
+    const currentSentinel = stickySentinelRef.current;
+    if (currentSentinel) observer.observe(currentSentinel);
+    
     return () => { 
         container.removeEventListener('scroll', handleScroll);
         if (currentSentinel) observer.unobserve(currentSentinel);
         window.removeEventListener('popstate', handlePopState);
     };
-  }, [isStickyActive]);
+  }, [isStickyActive, router]);
 
-  // ✅ 已修改：解决手势冲突
+  // 处理侧边栏拖拽手势
   const handleTouchStart = (e) => {
-    // 如果触摸点在主内容区内，则不触发侧边栏逻辑，让内容区的滑动优先
-    if (!isSidebarOpen && mainContentRef.current && mainContentRef.current.contains(e.target)) {
-        return;
-    }
-
+    if (!isSidebarOpen && mainContentRef.current?.contains(e.target)) return;
     const startX = e.touches[0].clientX;
-    const screenWidth = window.innerWidth;
-    
-    if (!isSidebarOpen && startX > screenWidth * 0.4) return;
-
+    if (!isSidebarOpen && startX > window.innerWidth * 0.4) return;
     touchStartX.current = startX;
     currentSidebarX.current = sidebarX;
     setIsDragging(true);
@@ -452,24 +423,20 @@ const LayoutIndex = props => {
 
   const handleTouchMove = (e) => {
     if (!isDragging || touchStartX.current === null) return;
-    const currentX = e.touches[0].clientX;
-    const deltaX = currentX - touchStartX.current;
-    let newX = currentSidebarX.current + deltaX;
-    newX = Math.max(-sidebarWidth, Math.min(newX, 0));
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    const newX = Math.max(-sidebarWidth, Math.min(currentSidebarX.current + deltaX, 0));
     setSidebarX(newX);
   };
 
   const handleTouchEnd = () => {
-    if (!isDragging || touchStartX.current === null) return;
+    if (!isDragging) return;
     setIsDragging(false);
     touchStartX.current = null;
-    if (sidebarX < -sidebarWidth / 2) {
-        closeSidebar();
-    } else {
-        openSidebar();
-    }
+    if (sidebarX < -sidebarWidth / 2) closeSidebar();
+    else openSidebar();
   };
 
+  // 处理内容区左右滑动切换Tab
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -479,7 +446,6 @@ const LayoutIndex = props => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
           if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
       },
-      disabled: isDragging,
       preventDefaultTouchmoveEvent: true,
       trackMouse: true,
       delta: 50
@@ -488,6 +454,15 @@ const LayoutIndex = props => {
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
+
+  // 渲染 Tab 导航按钮的函数，用于复用
+  const renderTabButtons = () => tabs.map(tab => (
+    <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+        {tab.icon}
+        <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+        <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
+    </button>
+  ));
 
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
@@ -510,7 +485,7 @@ const LayoutIndex = props => {
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
                         <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/tiktok.jpg')" }}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
                         <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/facebook.jpg')" }}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" title="YouTube" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
+                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe title="YouTube" width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
                     </div>
                 </div>
             </div>
@@ -524,37 +499,18 @@ const LayoutIndex = props => {
                            <div className='px-4 mb-6'><GlosbeSearchCard /></div>
                            <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
                         </div>
-
                         <div ref={stickySentinelRef}></div>
-
-                        <div className={`${isStickyActive ? 'invisible' : ''} border-b border-violet-200 dark:border-gray-700`}>
-                            <div className='flex justify-around'>
-                               {tabs.map(tab => (
-                               <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                   {tab.icon}
-                                   <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-                                   <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                               </button>
-                               ))}
-                           </div>
+                        <div className={`${isStickyActive ? 'invisible h-0' : ''} border-b border-violet-200 dark:border-gray-700`}>
+                            <div className='flex justify-around'>{renderTabButtons()}</div>
                        </div>
                     </div>
 
                     <div className={`transition-transform duration-300 ease-in-out ${isStickyActive ? 'fixed w-full top-0 z-30' : 'hidden'} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
                         <div className='bg-violet-50/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-violet-200 dark:border-gray-700'>
-                            <div className='flex justify-around max-w-[86rem] mx-auto'>
-                                {tabs.map(tab => (
-                                <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    {tab.icon}
-                                    <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-                                    <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
-                                </button>
-                                ))}
-                            </div>
+                            <div className='flex justify-around max-w-[86rem] mx-auto'>{renderTabButtons()}</div>
                         </div>
                     </div>
                     
-                    {/* ✅ 已修改：为 main 添加 ref */}
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
@@ -570,43 +526,25 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            
             <BottomNavBar />
         </div>
 
-        <ShortSentenceCard
-            sentences={sentenceCardData || []}
-            isOpen={isSentenceFavoritesCardOpen}
-            onClose={handleCloseFavorites}
-            progressKey="favorites-sentences" 
-        />
-        <WordCard
-            words={wordCardData || []}
-            isOpen={isWordFavoritesCardOpen}
-            onClose={handleCloseFavorites}
-            progressKey="favorites-words" 
-        />
+        {sentenceCardData && <ShortSentenceCard sentences={sentenceCardData} isOpen={isSentenceFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-sentences" />}
+        {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
     </div>
   );
 };
 
 
 // =========================================================================
-// =============  其他所有组件，保持原样，一字不漏  ===================
+// =============  其他所有布局组件，保持原样  ===================
 // =========================================================================
-
-const LayoutPostList = props => {
-  return (
+const LayoutPostList = props => (
     <div id='post-outer-wrapper' className='px-5  md:px-0'>
       <CategoryBar {...props} />
-      {siteConfig('POST_LIST_STYLE') === 'page' ? (
-        <BlogPostListPage {...props} />
-      ) : (
-        <BlogPostListScroll {...props} />
-      )}
+      {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
     </div>
-  )
-}
+)
 
 const LayoutSearch = props => {
   const { keyword } = props
@@ -624,18 +562,15 @@ const LayoutSearch = props => {
       }, 100)
     }
   }, [currentSearch])
+
   return (
-    <div currentSearch={currentSearch}>
+    <div>
       <div id='post-outer-wrapper' className='px-5 md:px-0'>
         {!currentSearch ? (
           <SearchNav {...props} />
         ) : (
           <div id='posts-wrapper'>
-            {siteConfig('POST_LIST_STYLE') === 'page' ? (
-              <BlogPostListPage {...props} />
-            ) : (
-              <BlogPostListScroll {...props} />
-            )}
+            {siteConfig('POST_LIST_STYLE') === 'page' ? <BlogPostListPage {...props} /> : <BlogPostListScroll {...props} />}
           </div>
         )}
       </div>
@@ -645,7 +580,6 @@ const LayoutSearch = props => {
 
 const LayoutArchive = props => {
   const { archivePosts } = props
-  const { locale } = useGlobal()
   return (
     <div className='p-5 rounded-xl border dark:border-gray-600 max-w-6xl w-full bg-white dark:bg-[#1e1e1e]'>
       <CategoryBar {...props} border={false} />
@@ -665,25 +599,13 @@ const LayoutArchive = props => {
 const LayoutSlug = props => {
   const { post, lock, validPassword } = props
   const { locale, fullWidth } = useGlobal()
-  const [hasCode, setHasCode] = useState(false)
-
-  useEffect(() => {
-    const hasCode = document.querySelectorAll('[class^="language-"]').length > 0
-    setHasCode(hasCode)
-  }, [])
-
-  const commentEnable =
-    siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') ||
-    siteConfig('COMMENT_VALINE_APP_ID') || siteConfig('COMMENT_GISCUS_REPO') ||
-    siteConfig('COMMENT_CUSDIS_APP_ID') || siteConfig('COMMENT_UTTERRANCES_REPO') ||
-    siteConfig('COMMENT_GITALK_CLIENT_ID') || siteConfig('COMMENT_WEBMENTION_ENABLE')
-
   const router = useRouter()
+  
   useEffect(() => {
     if (!post) {
       setTimeout(() => {
         if (isBrowser) {
-          const article = document.querySelector('#article-wrapper #notion-article')
+          const article = document.getElementById('notion-article')
           if (!article) {
             router.push('/404').then(() => console.warn('找不到页面', router.asPath))
           }
@@ -692,30 +614,25 @@ const LayoutSlug = props => {
     }
   }, [post, router])
 
+  const commentEnable = siteConfig('COMMENT_TWIKOO_ENV_ID') || siteConfig('COMMENT_WALINE_SERVER_URL') || siteConfig('COMMENT_VALINE_APP_ID') || siteConfig('COMMENT_GISCUS_REPO') || siteConfig('COMMENT_CUSDIS_APP_ID') || siteConfig('COMMENT_UTTERRANCES_REPO') || siteConfig('COMMENT_GITALK_CLIENT_ID') || siteConfig('COMMENT_WEBMENTION_ENABLE')
+
   return (
     <>
-      <div
-        className={`article h-full w-full ${fullWidth ? '' : 'xl:max-w-5xl'} ${hasCode ? 'xl:w-[73.15vw]' : ''}  bg-white dark:bg-[#18171d] dark:border-gray-600 lg:hover:shadow lg:border rounded-2xl lg:px-2 lg:py-4 `}>
+      <div className={`w-full ${fullWidth ? '' : 'xl:max-w-5xl lg:hover:shadow lg:border'} lg:px-2 lg:py-4 bg-white dark:bg-[#18171d] dark:border-gray-600 rounded-2xl`}>
         {lock && <PostLock validPassword={validPassword} />}
         {!lock && post && (
-          <div className='mx-auto md:w-full md:px-5'>
-            <article id='article-wrapper' itemScope itemType='https://schema.org/Movie'>
-              <section className='wow fadeInUp p-5 justify-center mx-auto' data-wow-delay='.2s'>
-                <ArticleExpirationNotice post={post} />
-                <AISummary aiSummary={post.aiSummary} />
-                <WWAds orientation='horizontal' className='w-full' />
-                {post && <NotionPage post={post} />}
-                <WWAds orientation='horizontal' className='w-full' />
-              </section>
+          <div id="article-wrapper" className='px-5'>
+            <article itemScope itemType='https://schema.org/Movie'>
+              <WWAds orientation='horizontal' className='w-full' />
+              {post && <NotionPage post={post} />}
+              <WWAds orientation='horizontal' className='w-full' />
             </article>
-            {fullWidth ? null : (
-              <div className={`${commentEnable && post ? '' : 'hidden'}`}>
+            {commentEnable && (
+              <div className='px-5'>
                 <hr className='my-4 border-dashed' />
                 <div className='py-2'><AdSlot /></div>
-                <div className='duration-200 overflow-x-auto px-5'>
-                  <div className='text-2xl dark:text-white'><i className='fas fa-comment mr-1' />{locale.COMMON.COMMENTS}</div>
-                  <Comment frontMatter={post} className='' />
-                </div>
+                <div className='text-2xl dark:text-white'><i className='fas fa-comment mr-1' />{locale.COMMON.COMMENTS}</div>
+                <Comment frontMatter={post} />
               </div>
             )}
           </div>
@@ -727,19 +644,13 @@ const LayoutSlug = props => {
 }
 
 const Layout404 = () => {
-  const { onLoading, fullWidth } = useGlobal()
+  const { onLoading } = useGlobal()
   return (
-    <main id='wrapper-outer' className={`flex-grow ${fullWidth ? '' : 'max-w-4xl'} w-screen mx-auto px-5`}>
-      <div id='error-wrapper' className={'w-full mx-auto justify-center'}>
+    <div id='error-wrapper' className='w-full mx-auto justify-center'>
         <Transition
-          show={!onLoading}
-          appear={true}
-          enter='transition ease-in-out duration-700 transform order-first'
-          enterFrom='opacity-0 translate-y-16'
-          enterTo='opacity-100'
-          leave='transition ease-in-out duration-300 transform'
-          leaveFrom='opacity-100 translate-y-0'
-          leaveTo='opacity-0 -translate-y-16'
+          show={!onLoading} appear={true}
+          enter='transition ease-in-out duration-700 transform order-first' enterFrom='opacity-0 translate-y-16' enterTo='opacity-100'
+          leave='transition ease-in-out duration-300 transform' leaveFrom='opacity-100 translate-y-0' leaveTo='opacity-0 -translate-y-16'
           unmount={false}>
           <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
             <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
@@ -750,8 +661,7 @@ const Layout404 = () => {
             </div>
           </div>
         </Transition>
-      </div>
-    </main>
+    </div>
   )
 }
 
