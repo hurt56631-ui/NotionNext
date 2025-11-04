@@ -137,14 +137,14 @@ const useCardSettings = () => {
     try {
       const savedSettings = localStorage.getItem('learningWordCardSettings'); 
       const defaultSettings = {
-        order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000,
+        order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000,
         voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0,
         backgroundImage: '',
       };
       return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
     } catch (error) {
         console.error("加载设置失败", error);
-        return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' };
+        return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' };
     }
   });
   useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]);
@@ -281,7 +281,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
     }
   };
 
-  return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div>
+  return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div>
   <h2 style={{marginTop: '30px'}}>外观设置</h2>
   <div style={styles.settingGroup}>
     <label style={styles.settingLabel}>自定义背景</label>
@@ -324,11 +324,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             id: w.id, 
             chinese: w.chinese, 
             burmese: w.burmese, 
-            pinyin: w.pinyin, 
-            imageUrl: w.imageUrl,
             mnemonic: w.mnemonic,
             example: w.example,
-            exampleHomophone: w.exampleHomophone,
         }));
         if (settings.order === 'random') {
             for (let i = mapped.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [mapped[i], mapped[j]] = [mapped[j], mapped[i]]; }
@@ -345,7 +342,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     setActiveCards(initialCards);
     setCurrentIndex(0);
   }, [processedCards]);
-
 
   const [isRevealed, setIsRevealed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -378,22 +374,39 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
+  // ✅ [修改] 调整自动播放逻辑，加入例句朗读
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
-    const playSequence = () => {
-        if (settings.autoPlayChinese && currentCard?.chinese) {
+
+    const playFullSequence = () => {
+        // 1. 播放中文单词
+        if (settings.autoPlayChinese && currentCard.chinese) {
             playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
-                if (settings.autoPlayBurmese && currentCard?.burmese && isRevealed) {
-                    playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, startAutoBrowseTimer); 
-                } else { startAutoBrowseTimer(); }
+                // 2. 如果已翻开，播放缅甸语
+                if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
+                    playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
+                        // 3. 如果已翻开，播放例句
+                        if (settings.autoPlayExample && currentCard.example && isRevealed) {
+                           playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
+                        } else {
+                           startAutoBrowseTimer();
+                        }
+                    });
+                } else {
+                    startAutoBrowseTimer();
+                }
             });
-        } else if (settings.autoPlayBurmese && currentCard?.burmese && isRevealed) {
-            playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, startAutoBrowseTimer);
-        } else { startAutoBrowseTimer(); }
+        } else {
+             startAutoBrowseTimer(); // 如果不播放中文，直接启动后续流程
+        }
     };
+    
     const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
-    const initialPlayTimer = setTimeout(playSequence, 600);
+    
+    // 延迟播放以等待卡片动画
+    const initialPlayTimer = setTimeout(playFullSequence, 600);
+
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
   
@@ -499,12 +512,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
-                                  {cardData.mnemonic && <div style={styles.extraInfoBox}><span style={styles.extraInfoLabel}>谐音</span>{cardData.mnemonic}</div>}
+                                  
+                                  {/* ✅ [修改] 谐音区域，移除背景，增大字体 */}
+                                  {cardData.mnemonic && 
+                                    <div style={styles.mnemonicBox}>
+                                        <span style={styles.extraInfoLabel}>谐音</span>{cardData.mnemonic}
+                                    </div>
+                                  }
+                                  
+                                  {/* ✅ [修改] 例句区域，移除背景，增大字体，增加拼音 */}
                                   {cardData.example && (
-                                      <div style={{...styles.extraInfoBox, ...styles.exampleBox}}>
-                                          <div style={{ flex: 1 }}>
-                                            {cardData.example}
-                                            {cardData.exampleHomophone && <div style={styles.exampleHomophone}>{cardData.exampleHomophone}</div>}
+                                      <div style={{...styles.exampleBox}}>
+                                          <div style={{ flex: 1, textAlign: 'left' }}>
+                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
+                                            <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                           <button style={styles.playExampleButton} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                                               <FaVolumeUp />
@@ -550,18 +571,21 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' }, // 修改：增加顶部内边距
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
-    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, // 修改：减小字体
-    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' },
+    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
+    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }, // 增加间距
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
-    extraInfoBox: { background: 'rgba(0, 0, 0, 0.25)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: '12px', padding: '12px 18px', width: '100%', maxWidth: '400px', textAlign: 'left', fontSize: '1rem' },
-    extraInfoLabel: { background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '6px', marginRight: '10px', fontSize: '0.8rem', fontWeight: 'bold' },
-    exampleBox: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
-    exampleHomophone: { fontSize: '0.9rem', color: '#e5e5e5', marginTop: '4px', opacity: 0.9 },
-    playExampleButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.5rem', padding: '5px' },
-    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' }, // 修改：调整位置
+    // ✅ [修改] 谐音区域样式
+    mnemonicBox: { color: '#fff', width: '100%', maxWidth: '400px', textAlign: 'left', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
+    extraInfoLabel: { background: '#f59e0b', color: 'white', padding: '3px 9px', borderRadius: '6px', marginRight: '12px', fontSize: '0.9rem', fontWeight: 'bold' },
+    // ✅ [修改] 例句区域样式
+    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
+    examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
+    exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
+    playExampleButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.8rem', padding: '5px', opacity: 0.8 },
+    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
     bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
     bottomCenterCounter: { background: 'rgba(0, 0, 0, 0.3)', color: 'white', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)', cursor: 'pointer', userSelect: 'none' },
