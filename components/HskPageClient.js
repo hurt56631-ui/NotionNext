@@ -12,7 +12,7 @@ const WordCard = dynamic(
 );
 
 // ✅ 直接导入 HSK1 的单词数据
-import hsk1Words from '../../data/hsk/hsk1.json'; // ⚠️ 请确保这个路径相对于你的文件是正确的！
+import hsk1Words from '@/data/hsk/hsk1.json'; // ⚠️ 请确保这个路径相对于你的文件是正确的！
 
 // --- HSK 等级卡片数据 (完整版) ---
 const hskData = [
