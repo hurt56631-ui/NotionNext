@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { pinyin } from 'pinyin-pro';
 
-// --- 辅助函数 (与之前相同) ---
+// --- 辅助函数 ---
 const generateRubyHTML = (text) => {
   if (!text || typeof text !== 'string') return '';
   let html = '';
@@ -30,8 +30,25 @@ const parseMixedLanguageText = (text) => {
     });
 };
 
-// --- 主组件 (升级版) ---
+// --- 主组件 ---
 const GrammarPointPlayer = ({ data, onComplete, settings }) => {
+    // --- 【新增的防御性检查】 ---
+    // 如果传入的 data prop 本身就是 undefined 或 null，则直接显示错误信息，防止程序崩溃
+    if (!data) {
+        return (
+            <div className="w-full h-full flex items-center justify-center p-4" style={{ background: '#1e3a44' }}>
+                <div className="w-11/12 max-w-2xl bg-red-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 md:p-8 text-white flex flex-col text-center">
+                    <h2 className="text-2xl font-bold mb-4">组件加载错误</h2>
+                    <p className="text-lg">未能接收到有效的 <code>content</code> 数据。</p>
+                    <p className="mt-2 text-sm text-red-200">
+                        请检查你的数据源，确保此区块的JSON结构包含了 <code>"content": &#123;...&#125;</code> 包装。
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // --- 状态与引用 ---
     const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [subtitles, setSubtitles] = useState([]);
@@ -43,7 +60,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     const { examples, grammarPoint, pattern, explanation, background } = data;
     const totalExamples = examples?.length || 0;
 
-    // --- 音频播放与字幕高亮 (与之前相同，核心逻辑不变) ---
+    // --- 核心功能: 音频播放与字幕 ---
     const stopPlayback = useCallback(() => {
         if (audioRef.current) {
             audioRef.current.pause();
@@ -94,6 +111,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
         }
     }, [currentExampleIndex, examples, settings, stopPlayback]);
 
+    // --- 动效与副作用 ---
     useEffect(() => {
         const updateHighlight = () => {
             if (!isPlaying || !audioRef.current || !subtitles.length) return;
@@ -113,7 +131,9 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
         };
     }, [isPlaying, subtitles, highlightedWordIndex]);
     
-    // --- 导航逻辑 (与之前相同) ---
+    useEffect(() => stopPlayback, [currentExampleIndex, stopPlayback]);
+
+    // --- 导航逻辑 ---
     const handleNextExample = () => {
         stopPlayback();
         if (currentExampleIndex < totalExamples - 1) {
@@ -130,11 +150,9 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
         }
     };
     
-    useEffect(() => stopPlayback, [currentExampleIndex, stopPlayback]);
-
     const currentExample = examples?.[currentExampleIndex];
 
-    // --- 【新增】背景样式 ---
+    // --- 动态样式 ---
     const backgroundStyle = {
         backgroundImage: background?.imageUrl 
             ? `url(${background.imageUrl})`
@@ -144,22 +162,19 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     };
 
     if (!currentExample) {
-        return <div className="text-white">加载例句失败...</div>;
+        return <div className="text-white">加载例句失败或例句为空...</div>;
     }
 
-    // --- JSX 渲染 (全新视觉设计) ---
+    // --- JSX 渲染 ---
     return (
         <div className="w-full h-full flex flex-col items-center justify-center transition-all duration-500" style={backgroundStyle}>
             <audio ref={audioRef} onEnded={() => { setIsPlaying(false); setHighlightedWordIndex(-1); }} />
             
-            {/* 内容卡片 */}
             <div className="w-11/12 max-w-2xl bg-black/30 backdrop-blur-xl rounded-2xl shadow-2xl p-6 md:p-8 text-white flex flex-col text-center animate-fade-in-up">
                 
-                {/* 1. 语法点标题 & 结构 */}
                 <h1 className="text-4xl md:text-5xl font-bold tracking-wide" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }} dangerouslySetInnerHTML={{ __html: generateRubyHTML(grammarPoint) }}/>
                 <p className="mt-2 text-lg md:text-xl text-cyan-300 font-mono bg-black/20 px-4 py-2 rounded-lg self-center">{pattern}</p>
                 
-                {/* 2. 解释 */}
                 <div className="text-base md:text-lg bg-white/5 p-4 rounded-lg mt-4">
                     <p className="mb-2">{explanation.chinese}</p>
                     <p className="text-slate-300 font-light">{explanation.myanmar}</p>
@@ -167,7 +182,6 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
 
                 <hr className="border-white/20 my-5" />
 
-                {/* 3. 例句展示区 */}
                 <div className="min-h-[140px] md:min-h-[160px] flex flex-col items-center justify-center">
                     <div className="text-3xl md:text-4xl font-semibold leading-relaxed mb-3">
                          {parseMixedLanguageText(currentExample.sentence).map(part => (
@@ -179,7 +193,6 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
                     <p className="text-xl md:text-2xl text-slate-200">{currentExample.translation}</p>
                 </div>
 
-                {/* 4. 例句导航 & 播放控制 */}
                 <div className="mt-6 flex items-center justify-between">
                     <button onClick={handlePrevExample} disabled={currentExampleIndex === 0} className="p-3 bg-white/10 rounded-full hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -190,30 +203,18 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
                         disabled={isLoading}
                         className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-lg transform hover:scale-105 active:scale-95 transition-all disabled:bg-gray-500 disabled:scale-100"
                     >
-                        {/* SVG Icons for play/pause/loading */}
-                        {isLoading ? (
-                            <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        ) : isPlaying ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg>
-                        )}
+                        {isLoading ? ( <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) 
+                        : isPlaying ? ( <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z"/></svg> ) 
+                        : ( <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"/></svg> )}
                     </button>
 
                     <button onClick={handleNextExample} className="p-3 bg-white/10 rounded-full hover:bg-white/30 transition-all">
-                        {currentExampleIndex === totalExamples - 1 ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                        ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                        )}
+                        {currentExampleIndex === totalExamples - 1 ? ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> ) 
+                        : ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg> )}
                     </button>
                 </div>
             </div>
 
-            {/* 字幕区 */}
             {settings.showSubtitles && subtitles.length > 0 && (
                 <div className="absolute bottom-10 md:bottom-16 w-full text-center px-4 pointer-events-none">
                     <div className="inline-block bg-black/60 backdrop-blur-sm p-3 rounded-lg shadow-lg">
@@ -228,7 +229,6 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
                 </div>
             )}
 
-            {/* 右上角例句计数器 */}
             <div className="absolute top-5 right-5 bg-black/40 rounded-full px-4 py-2 text-sm font-mono text-white animate-fade-in">
                 {currentExampleIndex + 1} / {totalExamples}
             </div>
@@ -236,7 +236,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     );
 };
 
-// Prop类型定义
+// --- Prop类型定义 ---
 GrammarPointPlayer.propTypes = {
     data: PropTypes.shape({
         grammarPoint: PropTypes.string.isRequired,
@@ -251,12 +251,12 @@ GrammarPointPlayer.propTypes = {
             translation: PropTypes.string.isRequired,
             narrationText: PropTypes.string,
         })).isRequired,
-        background: PropTypes.shape({ // 新增
+        background: PropTypes.shape({
             imageUrl: PropTypes.string,
             gradientStart: PropTypes.string,
             gradientEnd: PropTypes.string,
         }),
-    }).isRequired,
+    }), // 注意：这里的 'data' 本身可以是 undefined，所以我们不在外面加 isRequired
     onComplete: PropTypes.func.isRequired,
     settings: PropTypes.object.isRequired,
 };
