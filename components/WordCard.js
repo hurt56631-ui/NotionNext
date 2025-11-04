@@ -337,14 +337,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     } catch (error) { console.error("处理卡片数据出错:", error); return []; }
   }, [words, settings.order]);
 
-  const [activeCards, setActiveCards] = useState([]); // ✅ 新增：当前会话的卡片列表
+  const [activeCards, setActiveCards] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // ✅ 当原始卡片列表变化时，重置 activeCards 和索引
   useEffect(() => {
     const initialCards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", burmese: "..." }];
     setActiveCards(initialCards);
-    setCurrentIndex(0); // 每次列表变化都从头开始
+    setCurrentIndex(0);
   }, [processedCards]);
 
 
@@ -420,26 +419,19 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   
   useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
   
-  // ✅ 核心修改：处理“认识”和“不认识”按钮
   const handleKnow = () => {
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (!currentCard) return;
 
-    // 从 activeCards 列表中移除当前卡片
     const newActiveCards = activeCards.filter(card => card.id !== currentCard.id);
     
-    // 如果移除后列表为空，则不进行操作，或可以显示完成界面
     if (newActiveCards.length === 0) {
         setActiveCards([]);
         return;
     }
     
-    // 更新卡片列表状态
     setActiveCards(newActiveCards);
 
-    // 关键：调整 currentIndex
-    // 如果删除的是列表中的最后一个元素，需要将索引指向上一个元素
-    // 否则，索引保持不变，因为原先的下一个元素现在就在当前索引位置
     if (currentIndex >= newActiveCards.length) {
         setCurrentIndex(newActiveCards.length - 1);
     }
@@ -458,7 +450,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   });
 
   const cardTransitions = useTransition(currentIndex, {
-      key: currentCard ? currentCard.id : currentIndex, // 使用唯一ID作为key
+      key: currentCard ? currentCard.id : currentIndex,
       from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
       enter: { opacity: 1, transform: 'translateY(0%)' }, 
       leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
@@ -558,10 +550,10 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#004d40' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px 20px 150px 20px' },
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' }, // 修改：增加顶部内边距
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
-    textWordChinese: { fontSize: '4.0rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
+    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, // 修改：减小字体
     revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     extraInfoBox: { background: 'rgba(0, 0, 0, 0.25)', backdropFilter: 'blur(8px)', color: '#fff', borderRadius: '12px', padding: '12px 18px', width: '100%', maxWidth: '400px', textAlign: 'left', fontSize: '1rem' },
@@ -569,7 +561,7 @@ const styles = {
     exampleBox: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' },
     exampleHomophone: { fontSize: '0.9rem', color: '#e5e5e5', marginTop: '4px', opacity: 0.9 },
     playExampleButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.5rem', padding: '5px' },
-    rightControls: { position: 'fixed', bottom: '55%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
+    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' }, // 修改：调整位置
     rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
     bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
     bottomCenterCounter: { background: 'rgba(0, 0, 0, 0.3)', color: 'white', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)', cursor: 'pointer', userSelect: 'none' },
