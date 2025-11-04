@@ -15,6 +15,7 @@ const HanziModal = dynamic(() => import('@/components/HanziModal'), { ssr: false
 const PhraseCard = dynamic(() => import('@/components/PhraseCard'), { ssr: false })
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false })
+const GrammarPointPlayer = dynamic(() => import('@/components/Tixing/GrammarPointPlayer'), { ssr: false })
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false })
 const DuiHua = dynamic(() => import('@/components/Tixing/DuiHua'), { ssr: false })
 const TianKongTi = dynamic(() => import('@/components/Tixing/TianKongTi'), { ssr: false })
@@ -100,6 +101,7 @@ const CustomCode = (props) => {
         if (componentPath === '/components/Tixing/XuanZeTi.js') return <XuanZeTi {...parsedProps} />;
         if (componentPath === '/components/Tixing/CiDianKa.js') return <CiDianKa {...parsedProps} />;
         if (componentPath === '/components/Tixing/DuiHua.js') return <DuiHua {...parsedProps} />;
+        if (componentPath === '/components/Tixing/GrammarPointPlayer.jsx') return <GrammarPointPlayer {...parsedProps} />;
         return <div style={{ color: 'orange' }}>未找到组件: {componentPath}</div>;
       } catch (e) {
         console.error('!include JSON 解析失败:', e);
