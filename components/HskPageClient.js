@@ -5,13 +5,16 @@ import { ChevronDown, ChevronUp, Mic2, Music4, BookText, ListTodo } from 'lucide
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
-// 动态导入 WordCard 组件，因为它是全屏组件，通常只在客户端渲染
+// 动态导入 WordCard 组件
 const WordCard = dynamic(
   () => import('@/components/WordCard'),
   { ssr: false }
 );
 
-// --- HSK 数据 (保持不变，用于渲染卡片) ---
+// ✅ 直接导入 HSK1 的单词数据
+import hsk1Words from '../../data/hsk/hsk1.json'; // ⚠️ 请确保这个路径相对于你的文件是正确的！
+
+// --- HSK 等级卡片数据 (完整版) ---
 const hskData = [
     { 
         level: 1, 
@@ -225,8 +228,7 @@ const HskCard = ({ level, onVocabularyClick }) => {
     );
 }
 
-// 接收来自父组件 (例如 pages/hsk.js) 传递的全部 words 数据
-export default function HskPageClient({ words }) { 
+export default function HskPageClient() { 
   const router = useRouter();
   const [activeHskWords, setActiveHskWords] = useState(null);
   const [activeLevelTag, setActiveLevelTag] = useState(null);
@@ -234,40 +236,29 @@ export default function HskPageClient({ words }) {
   const isCardViewOpen = router.asPath.includes('#hsk-vocabulary');
 
   const handleVocabularyClick = useCallback((level) => {
-    if (!Array.isArray(words)) {
-        console.error('错误: words 数据未正确传递或不是数组。');
-        alert('加载词汇数据失败，请稍后重试。');
-        return;
-    }
-    
-    // Notion 等级属性的值是 hsk1, hsk2 等
-    const levelTag = `hsk${level.level}`; 
-    
-    // 根据 levelTag 过滤单词
-    const wordsForLevel = words.filter(word => 
-      Array.isArray(word.tags) && word.tags.includes(levelTag)
-    );
-
-    if (wordsForLevel.length > 0) {
-      setActiveHskWords(wordsForLevel);
-      setActiveLevelTag(levelTag);
-      // 使用 hash 触发全屏组件打开
-      router.push(router.asPath + '#hsk-vocabulary', undefined, { shallow: true });
+    // 如果是 HSK 1，我们直接使用本地导入的数据
+    if (level.level === 1) {
+      if (hsk1Words && hsk1Words.length > 0) {
+        setActiveHskWords(hsk1Words);
+        setActiveLevelTag(`hsk${level.level}`);
+        router.push(router.asPath + '#hsk-vocabulary', undefined, { shallow: true });
+      } else {
+        alert('HSK 1 词汇数据加载失败或为空。');
+      }
     } else {
-      alert(`暂无 HSK ${level.level} 级别的词汇卡片。\n请检查 Notion 数据库并确保单词已正确添加 "${levelTag}" 标签。`);
+      // 对于其他等级，显示一个提示
+      alert(`HSK ${level.level} 的词汇列表正在准备中，敬请期待！`);
     }
-  }, [words, router]); // 依赖 words 和 router
+  }, [router]);
 
   const handleCloseCard = useCallback(() => {
     setActiveHskWords(null);
     setActiveLevelTag(null);
-    // 使用 router.back() 或手动移除 hash
     if (window.location.hash.includes('#hsk-vocabulary')) {
         router.back(); 
     }
   }, [router]);
 
-  // 处理浏览器后退按钮关闭 WordCard
   useEffect(() => {
     const handleHashChange = () => {
       if (!window.location.hash.includes('hsk-vocabulary')) {
@@ -281,16 +272,6 @@ export default function HskPageClient({ words }) {
     };
   }, []);
   
-  // 如果 words 是空数组，显示提示
-  if (!words || words.length === 0) {
-      return (
-        <div className="container mx-auto p-8 text-center bg-white dark:bg-gray-800 rounded-lg shadow-lg my-12">
-          <h1 className="text-2xl font-bold mb-4">HSK 单词学习</h1>
-          <p>Notion 数据库没有加载到任何单词数据。请检查 `blog.config.js` 中的 ID 和父页面 (`pages/hsk.js`) 中的属性映射。</p>
-        </div>
-      );
-  }
-
   return (
     <>
       <div 
@@ -346,11 +327,9 @@ export default function HskPageClient({ words }) {
           </div>
       </div>
 
-      {/* 使用 WordCard 组件，传入过滤后的单词数据 */}
-      {/* 结构：{id, chinese, burmese, pinyin, imageUrl} */}
       <WordCard 
         isOpen={isCardViewOpen}
-        words={activeHskWords || []} // 传入过滤后的单词
+        words={activeHskWords || []}
         onClose={handleCloseCard}
         progressKey={activeLevelTag || 'hsk-vocab'}
       />
