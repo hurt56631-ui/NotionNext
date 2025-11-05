@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V3 - 无缝发音 + 高亮字幕)
+// components/Tixing/GrammarPointPlayer.jsx (V3 - 无缝发音 + 高亮字幕) - 已修复
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -35,7 +35,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [subtitles, setSubtitles] = useState({ original: [], translation: '' });
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
-    const audioQueueRef = useRef([]);
     const isPlayingRef = useRef(false);
     const progressIntervalRef = useRef(null);
 
@@ -61,7 +60,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             };
         });
 
-        // 准备字幕
         setSubtitles({ original: parts, translation });
 
         isPlayingRef.current = true;
@@ -87,15 +85,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 const sound = sounds[currentSoundIndex];
                 sound.play();
 
-                // 进度更新，用于字幕高亮
                 if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
                 progressIntervalRef.current = setInterval(() => {
                     if (sound.playing()) {
-                        const totalTime = cumulativeTime + sound.seek();
-                        // 简单的线性高亮，可以根据实际字幕数据调整
-                        if (totalTime > 0) {
-                            setHighlightedIndex(currentSoundIndex);
-                        }
+                        setHighlightedIndex(currentSoundIndex);
                     }
                 }, 100);
                 
@@ -125,7 +118,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     console.error(`语音片段加载失败: ${part.text}`);
                     loadedCount++;
                     if (loadedCount === parts.length) {
-                        startPlayback(); // 即使有片段失败也尝试播放
+                        startPlayback();
                     }
                 }
             });
@@ -146,6 +139,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (activeAudio?.text === text) {
             stopPlayback();
         } else {
+            if (isPlayingRef.current) {
+                stopPlayback();
+            }
             playMixedAudio(text, translation);
         }
     };
@@ -161,7 +157,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         return () => clearTimeout(timer);
     }, [currentIndex, grammarPoints, playMixedAudio, stopPlayback]);
     
-    useEffect(() => stopPlayback, [stopPlayback]);
+    useEffect(() => {
+        return () => stopPlayback();
+    }, [stopPlayback]);
 
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
@@ -199,7 +197,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 return (
                     <animated.div style={{ ...styles.page, ...bgStyle, ...style }}>
                         <div style={styles.contentWrapper}>
-                            {/* ... Header, Explanation Section ... */}
                             <div style={styles.header}>
                                 <div style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
                                 <div style={styles.pattern}>{gp.pattern}</div>
@@ -226,7 +223,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                     const isChinese = part.startsWith('{{');
                                                     const content = isChinese ? part.slice(2, -2) : part;
                                                     return (
-                                                        <span key={pIndex} className={isChinese ? styles.textChinese : styles.textBurmese}>
+                                                        // ✅ FIX: Changed `className` to `style`
+                                                        <span key={pIndex} style={isChinese ? styles.textChinese : styles.textBurmese}>
                                                             {isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> : content}
                                                         </span>
                                                     );
@@ -242,7 +240,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             </div>
                         </div>
 
-                        {/* 字幕区域 */}
                         {activeAudio && (
                              <div style={styles.subtitleContainer}>
                                 <p style={styles.subtitleLine}>
@@ -275,7 +272,6 @@ GrammarPointPlayer.propTypes = {
     onComplete: PropTypes.func,
 };
 
-// --- 样式表 ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
@@ -296,7 +292,6 @@ const styles = {
     footer: { position: 'absolute', bottom: '20px', color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' },
     textChinese: { color: 'white', margin: '0 2px' },
     textBurmese: { color: '#81e6d9' },
-    // 字幕样式
     subtitleContainer: { position: 'absolute', bottom: '80px', left: '20px', right: '20px', textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.7)', pointerEvents: 'none' },
     subtitleLine: { fontSize: '1.8rem', fontWeight: '500', margin: '0 0 8px 0', transition: 'color 0.2s' },
     subtitlePart: { transition: 'color 0.2s ease-in-out' },
