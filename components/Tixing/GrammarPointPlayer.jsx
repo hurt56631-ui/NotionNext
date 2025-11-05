@@ -1,3 +1,5 @@
+// components/Tixing/GrammarPointPlayer.jsx (终极修复版 - 完整代码)
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { pinyin } from 'pinyin-pro';
@@ -32,26 +34,21 @@ const parseMixedLanguageText = (text) => {
 
 // --- 主组件 ---
 const GrammarPointPlayer = ({ data, onComplete, settings }) => {
-    // --- 【日志点 3：检查实际收到的数据】 ---
-    console.log(
-        `%c[GrammarPointPlayer LOG 3] 我实际收到的 props:`,
-        'color: purple; font-weight: bold;',
-        {
-            data: JSON.parse(JSON.stringify(data || null)), // 打印收到的 data
-            dataType: typeof data, // 打印 data 的类型
-            settingsExists: !!settings
-        }
-    );
+    // ================== 【终极修改】 ==================
+    // 从传入的 data (即 currentBlock) 中解构出 content
+    // 同时兼容旧模式，如果 data.content 不存在，则认为 data 本身就是 content
+    const content = data?.content || data;
+    // ===================================================
 
-    // --- 防御性检查代码 ---
-    if (!data) {
+    // --- 防御性检查代码现在检查 content ---
+    if (!content || !content.grammarPoint) {
         return (
             <div className="w-full h-full flex items-center justify-center p-4" style={{ background: '#1e3a44' }}>
                 <div className="w-11/12 max-w-2xl bg-red-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 md:p-8 text-white flex flex-col text-center">
                     <h2 className="text-2xl font-bold mb-4">组件加载错误</h2>
-                    <p className="text-lg">未能接收到有效的 <code>data</code> (content) 数据。</p>
+                    <p className="text-lg">在传入的数据中找不到有效的语法点内容。</p>
                     <p className="mt-2 text-sm text-red-200">
-                        请检查父组件传递的 props 和数据源的 `content` 结构。
+                        请检查 `!include` JSON 结构是否正确。
                     </p>
                 </div>
             </div>
@@ -67,7 +64,9 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
 
     const audioRef = useRef(null);
     const animationFrameRef = useRef(null);
-    const { examples, grammarPoint, pattern, explanation, background } = data;
+    
+    // --- 解构时，全部从 content 对象里取 ---
+    const { examples, grammarPoint, pattern, explanation, background } = content;
     const totalExamples = examples?.length || 0;
 
     // --- 核心功能: 音频播放与字幕 ---
@@ -82,7 +81,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     }, []);
 
     const playAudioForCurrentExample = useCallback(async () => {
-        if (!examples?.[currentExampleIndex] || !settings) return; // 增加 !settings 防御
+        if (!examples?.[currentExampleIndex] || !settings) return;
         stopPlayback();
         setIsLoading(true);
 
@@ -248,25 +247,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
 
 // --- Prop类型定义 ---
 GrammarPointPlayer.propTypes = {
-    data: PropTypes.shape({
-        grammarPoint: PropTypes.string.isRequired,
-        pattern: PropTypes.string.isRequired,
-        explanation: PropTypes.shape({
-            chinese: PropTypes.string.isRequired,
-            myanmar: PropTypes.string.isRequired,
-        }).isRequired,
-        examples: PropTypes.arrayOf(PropTypes.shape({
-            id: PropTypes.any.isRequired,
-            sentence: PropTypes.string.isRequired,
-            translation: PropTypes.string.isRequired,
-            narrationText: PropTypes.string,
-        })).isRequired,
-        background: PropTypes.shape({
-            imageUrl: PropTypes.string,
-            gradientStart: PropTypes.string,
-            gradientEnd: PropTypes.string,
-        }),
-    }),
+    data: PropTypes.object.isRequired, // data 现在是整个区块对象
     onComplete: PropTypes.func.isRequired,
     settings: PropTypes.object,
 };
