@@ -1,17 +1,17 @@
-// components/Tixing/GrammarPointPlayer.jsx (TTS修复最终完整版)
+// components/Tixing/GrammarPointPlayer.jsx (最终可靠版)
 
-import React, antd from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { pinyin } from 'pinyin-pro';
 import { useSwipeable } from 'react-swipeable';
-import { Howl } from 'howler'; // 【关键修改】引入 Howler.js
+import { Howl } from 'howler';
 
-// --- 辅助函数 (保持不变) ---
+// --- 辅助函数 ---
 const generateRubyHTML = (text) => {
   if (!text || typeof text !== 'string') return '';
   let html = '';
   for (const char of text) {
-    if (/[\u4e-00-\u9fa5]/.test(char)) {
+    if (/[\u4e00-\u9fa5]/.test(char)) {
       const pinyinStr = pinyin(char);
       html += `<ruby>${char}<rt>${pinyinStr}</rt></ruby>`;
     } else {
@@ -26,132 +26,75 @@ const parseMixedLanguageText = (text) => {
     const parts = text.split(/(\{\{.*?\}\})/g).filter(Boolean);
     return parts.map((part, index) => {
         const isChinese = part.startsWith('{{') && part.endsWith('}}');
-        return {
-            id: `${part}-${index}`,
-            text: isChinese ? part.slice(2, -2) : part,
-            isChinese: isChinese,
-        };
+        return { id: `${part}-${index}`, text: isChinese ? part.slice(2, -2) : part, isChinese: isChinese };
     });
 };
 
 // --- 主组件 ---
-const GrammarPointPlayer = ({ 
-    grammarPoints,
-    onComplete = () => {} 
-}) => {
-
-    const [grammarIndex, setGrammarIndex] = antd.useState(0);
-    const [exampleIndex, setExampleIndex] = antd.useState(0);
+const GrammarPointPlayer = ({ data, onComplete = () => {} }) => {
+    const { grammarPoints } = data || {}; // 只从 data prop 中获取 grammarPoints
 
     if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) {
-        return <div className="p-4 text-white bg-red-900">错误：未能接收到有效的 `grammarPoints` 数组。</div>;
+        return (
+            <div className="w-full h-full flex items-center justify-center p-4" style={{ background: '#1e3a44' }}>
+                <div className="w-11/12 max-w-2xl bg-red-800/80 rounded-2xl p-6 text-white text-center">
+                    <h2 className="text-2xl font-bold mb-4">组件数据错误</h2>
+                    <p className="text-lg">未能从 `data` 属性中找到有效的 `grammarPoints` 数组。</p>
+                    <p className="mt-2 text-sm text-red-200">请确保 `!include` JSON 结构为 `{"data": {"grammarPoints": [...]}}`。</p>
+                </div>
+            </div>
+        );
     }
+
+    const [grammarIndex, setGrammarIndex] = useState(0);
+    const [exampleIndex, setExampleIndex] = useState(0);
+    
+    const [settings] = useState({ chineseVoice: 'zh-CN-XiaoyouNeural', myanmarVoice: 'my-MM-NilarNeural', rate: 1, showSubtitles: true });
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const soundRef = useRef(null);
 
     const totalGrammarPoints = grammarPoints.length;
     const currentGrammarPoint = grammarPoints[grammarIndex];
     const { background, grammarPoint, pattern, explanation, examples } = currentGrammarPoint;
     const totalExamples = examples?.length || 0;
-    
-    const [settings] = antd.useState({
-      chineseVoice: 'zh-CN-XiaoyouNeural', // 与 XuanZeTi 保持一致
-      myanmarVoice: 'my-MM-NilarNeural', // 假设的缅文发音人
-      rate: 1,
-      showSubtitles: true // 虽然 t.leftsite.cn 不返回字幕，但我们保留这个开关
-    });
-    
-    const [isPlaying, setIsPlaying] = antd.useState(false);
-    const [isLoading, setIsLoading] = antd.useState(false);
-    
-    // 使用 useRef 来存储 Howler 实例，以便可以控制它
-    const soundRef = antd.useRef(null);
 
-    const stopPlayback = antd.useCallback(() => {
-        if (soundRef.current) {
-            soundRef.current.stop();
-        }
+    const stopPlayback = useCallback(() => {
+        if (soundRef.current) { soundRef.current.stop(); }
         setIsPlaying(false);
     }, []);
 
-    const playAudioForCurrentExample = antd.useCallback(async () => {
-        if (isPlaying) {
-            stopPlayback();
-            return;
-        }
-        
+    const playAudioForCurrentExample = useCallback(() => {
+        if (isPlaying) { stopPlayback(); return; }
         if (!examples?.[exampleIndex]) return;
-        
         setIsLoading(true);
-        
         const textToRead = examples[exampleIndex].narrationText || examples[exampleIndex].sentence;
         if (!textToRead) { setIsLoading(false); return; }
         
-        // 【核心修改】构建SSML (语音合成标记语言)
-        // 默认语言是缅语，中文部分用 <voice> 标签指定中文发音人
-        const ssml = `<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xmlns:emo="http://www.w3.org/2009/10/emotionml" version="1.0" xml:lang="my-MM">
-            <voice name="${settings.myanmarVoice}">
-                ${textToRead.replace(/\{\{/g, `</voice><voice name="${settings.chineseVoice}">`).replace(/\}\}/g, '</voice><voice name="' + settings.myanmarVoice + '">')}
-            </voice>
-        </speak>`;
-
-        // 【核心修改】使用 t.leftsite.cn API
-        // 注意：这个API可能需要特定的参数来处理SSML，这里假设't'参数可以接受SSML
+        const ssml = `<speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.0" xml:lang="my-MM"><voice name="${settings.myanmarVoice}">${textToRead.replace(/\{\{/g, `</voice><voice name="${settings.chineseVoice}">`).replace(/\}\}/g, `</voice><voice name="${settings.myanmarVoice}">`)}</voice></speak>`;
         const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(ssml)}`;
 
-        // 停止任何当前正在播放的音频
-        if (soundRef.current) {
-            soundRef.current.unload();
-        }
+        if (soundRef.current) { soundRef.current.unload(); }
         
         const sound = new Howl({
-            src: [ttsUrl],
-            html5: true, // 关键！对于长音频或流式音频，这通常是必须的
-            onplay: () => {
-                setIsLoading(false);
-                setIsPlaying(true);
-            },
-            onend: () => {
-                setIsPlaying(false);
-                soundRef.current = null;
-            },
-            onloaderror: (id, err) => {
-                console.error('TTS Load Error:', err);
-                alert('语音加载失败，请检查网络或联系管理员。');
-                setIsLoading(false);
-                setIsPlaying(false);
-            },
-            onplayerror: (id, err) => {
-                console.error('TTS Play Error:', err);
-                alert('语音播放失败，可能是浏览器限制。');
-                setIsLoading(false);
-                setIsPlaying(false);
-            }
+            src: [ttsUrl], html5: true,
+            onplay: () => { setIsLoading(false); setIsPlaying(true); },
+            onend: () => { setIsPlaying(false); soundRef.current = null; },
+            onloaderror: () => { alert('语音加载失败。'); setIsLoading(false); },
+            onplayerror: () => { alert('语音播放失败。'); setIsLoading(false); }
         });
-        
         soundRef.current = sound;
         sound.play();
-
     }, [exampleIndex, examples, settings, isPlaying, stopPlayback]);
     
-    const goToNextExample = () => { stopPlayback(); if (exampleIndex < totalExamples - 1) { setExampleIndex(p => p + 1); } else { goToNextGrammar(); } };
-    const goToPrevExample = () => { stopPlayback(); if (exampleIndex > 0) { setExampleIndex(p => p - 1); } };
-    const goToNextGrammar = () => { stopPlayback(); if (grammarIndex < totalGrammarPoints - 1) { setGrammarIndex(p => p + 1); setExampleIndex(0); } else { onComplete(); } };
-    const goToPrevGrammar = () => { stopPlayback(); if (grammarIndex > 0) { setGrammarIndex(p => p - 1); setExampleIndex(0); } };
+    const goToNextExample = () => { stopPlayback(); exampleIndex < totalExamples - 1 ? setExampleIndex(p => p + 1) : goToNextGrammar(); };
+    const goToPrevExample = () => { stopPlayback(); if (exampleIndex > 0) setExampleIndex(p => p - 1); };
+    const goToNextGrammar = () => { stopPlayback(); grammarIndex < totalGrammarPoints - 1 ? (setGrammarIndex(p => p + 1), setExampleIndex(0)) : onComplete(); };
+    const goToPrevGrammar = () => { stopPlayback(); if (grammarIndex > 0) (setGrammarIndex(p => p - 1), setExampleIndex(0)); };
 
-    const swipeHandlers = useSwipeable({
-        onSwipedUp: goToNextGrammar,
-        onSwipedDown: goToPrevGrammar,
-        preventDefaultTouchmoveEvent: true,
-        trackMouse: true
-    });
+    const swipeHandlers = useSwipeable({ onSwipedUp: goToNextGrammar, onSwipedDown: goToPrevGrammar, preventDefaultTouchmoveEvent: true, trackMouse: true });
     
-    antd.useEffect(() => {
-        return () => {
-            // 组件卸载时，确保停止并卸载音频
-            if (soundRef.current) {
-                soundRef.current.unload();
-            }
-        };
-    }, []);
+    useEffect(() => () => { if (soundRef.current) soundRef.current.unload(); }, []);
     
     const currentExample = examples?.[exampleIndex];
     const backgroundStyle = { backgroundImage: background?.imageUrl ? `url(${background.imageUrl})` : `linear-gradient(135deg, ${background?.gradientStart || '#4A7684'} 0%, ${background?.gradientEnd || '#1e3a44'} 100%)`, backgroundSize: 'cover', backgroundPosition: 'center', transition: 'background-image 0.5s ease-in-out' };
@@ -164,9 +107,7 @@ const GrammarPointPlayer = ({
                 <h1 className="text-4xl md:text-5xl font-bold tracking-wide" dangerouslySetInnerHTML={{ __html: generateRubyHTML(grammarPoint) }}/>
                 <p className="mt-2 text-lg md:text-xl text-cyan-300 font-mono">{pattern}</p>
                 <div className="text-base md:text-lg bg-white/5 p-4 rounded-lg mt-4">
-                    <p>
-                        {parseMixedLanguageText(explanation).map(part => ( <span key={part.id} className={part.isChinese ? 'text-white font-semibold' : 'text-slate-300 font-light'}>{part.text}</span> ))}
-                    </p>
+                    <p>{parseMixedLanguageText(explanation).map(part => (<span key={part.id} className={part.isChinese ? 'text-white font-semibold' : 'text-slate-300 font-light'}>{part.text}</span>))}</p>
                 </div>
                 <hr className="border-white/20 my-5" />
                 <div className="min-h-[140px] flex flex-col items-center justify-center">
@@ -199,7 +140,9 @@ const GrammarPointPlayer = ({
 };
 
 GrammarPointPlayer.propTypes = {
-    grammarPoints: PropTypes.array.isRequired,
+    data: PropTypes.shape({
+        grammarPoints: PropTypes.array.isRequired,
+    }).isRequired,
     onComplete: PropTypes.func,
 };
 
