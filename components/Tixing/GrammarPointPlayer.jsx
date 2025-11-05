@@ -32,16 +32,26 @@ const parseMixedLanguageText = (text) => {
 
 // --- 主组件 ---
 const GrammarPointPlayer = ({ data, onComplete, settings }) => {
-    // --- 【新增的防御性检查】 ---
-    // 如果传入的 data prop 本身就是 undefined 或 null，则直接显示错误信息，防止程序崩溃
+    // --- 【日志点 3：检查实际收到的数据】 ---
+    console.log(
+        `%c[GrammarPointPlayer LOG 3] 我实际收到的 props:`,
+        'color: purple; font-weight: bold;',
+        {
+            data: JSON.parse(JSON.stringify(data || null)), // 打印收到的 data
+            dataType: typeof data, // 打印 data 的类型
+            settingsExists: !!settings
+        }
+    );
+
+    // --- 防御性检查代码 ---
     if (!data) {
         return (
             <div className="w-full h-full flex items-center justify-center p-4" style={{ background: '#1e3a44' }}>
                 <div className="w-11/12 max-w-2xl bg-red-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 md:p-8 text-white flex flex-col text-center">
                     <h2 className="text-2xl font-bold mb-4">组件加载错误</h2>
-                    <p className="text-lg">未能接收到有效的 <code>content</code> 数据。</p>
+                    <p className="text-lg">未能接收到有效的 <code>data</code> (content) 数据。</p>
                     <p className="mt-2 text-sm text-red-200">
-                        请检查你的数据源，确保此区块的JSON结构包含了 <code>"content": &#123;...&#125;</code> 包装。
+                        请检查父组件传递的 props 和数据源的 `content` 结构。
                     </p>
                 </div>
             </div>
@@ -72,7 +82,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     }, []);
 
     const playAudioForCurrentExample = useCallback(async () => {
-        if (!examples?.[currentExampleIndex]) return;
+        if (!examples?.[currentExampleIndex] || !settings) return; // 增加 !settings 防御
         stopPlayback();
         setIsLoading(true);
 
@@ -215,7 +225,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
                 </div>
             </div>
 
-            {settings.showSubtitles && subtitles.length > 0 && (
+            {settings?.showSubtitles && subtitles.length > 0 && (
                 <div className="absolute bottom-10 md:bottom-16 w-full text-center px-4 pointer-events-none">
                     <div className="inline-block bg-black/60 backdrop-blur-sm p-3 rounded-lg shadow-lg">
                         <p className="text-2xl md:text-3xl font-semibold text-white tracking-wider">
@@ -256,9 +266,9 @@ GrammarPointPlayer.propTypes = {
             gradientStart: PropTypes.string,
             gradientEnd: PropTypes.string,
         }),
-    }), // 注意：这里的 'data' 本身可以是 undefined，所以我们不在外面加 isRequired
+    }),
     onComplete: PropTypes.func.isRequired,
-    settings: PropTypes.object.isRequired,
+    settings: PropTypes.object,
 };
 
 export default GrammarPointPlayer;
