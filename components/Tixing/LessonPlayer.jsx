@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (完整最终修复版)
+// components/Tixing/LessonPlayer.jsx (注入最终诊断日志的完整版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -248,44 +248,52 @@ export default function LessonPlayer({ lesson }) {
       return () => { document.body.style.overscrollBehaviorY = 'auto'; };
   }, []);
 
-  // =========================================================================
-  // ====================== 【已替换为最终修复版】 ======================
-  // =========================================================================
   const renderBlock = () => {
-    // 1. 数据不存在的保护
+    // 1. 数据保护
     if (!lesson || !Array.isArray(lesson.blocks) || lesson.blocks.length === 0) {
       return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">无法加载课程数据。</div>;
     }
 
-    // 2. 优先判断课程是否完成
     if (isCompleted) {
       return <CourseCompleteBlock onRestart={handleRestart} router={router} />;
     }
 
-    // 3. 索引越界保护
     if (currentIndex >= totalBlocks) {
       setTimeout(() => setIsCompleted(true), 0);
       return <div className="p-8 text-center text-white bg-yellow-500/70 rounded-xl">正在加载课程结束页...</div>;
     }
 
+    // --- 【日志点 1：检查原始数据】 ---
     const currentBlock = lesson.blocks[currentIndex];
+    console.log(
+        `%c[LessonPlayer LOG 1] 原始区块数据 (索引 ${currentIndex}):`,
+        'color: blue; font-weight: bold;',
+        JSON.parse(JSON.stringify(currentBlock || {}))
+    );
 
-    // 4. 获取当前题并检查有效性
     if (!currentBlock || typeof currentBlock.type !== 'string') {
-      console.error("[RenderGuard] HALT! Invalid block data or missing type. Block:", currentBlock);
       return <div className="p-8 text-center text-white bg-red-500/70 rounded-xl">错误：当前页面数据无效。</div>;
     }
 
     const type = currentBlock.type.toLowerCase();
 
-    // 统一所有组件都需要的基础 props
+    // --- 【日志点 2：检查准备传递给子组件的数据】 ---
     const baseProps = {
       data: currentBlock.content,
       onComplete: handleCorrectAndProceed,
-      settings: settings // <-- 确保 settings 总是被传递！
+      settings: settings
     };
+    console.log(
+        `%c[LessonPlayer LOG 2] 准备传递给 '${type}' 组件的 props:`,
+        'color: green; font-weight: bold;',
+        {
+            data: JSON.parse(JSON.stringify(baseProps.data || null)),
+            settingsExists: !!baseProps.settings,
+            onCompleteExists: typeof baseProps.onComplete === 'function',
+        }
+    );
     
-    // 5. 安全地渲染组件
+    // 5. 渲染组件
     switch (type) {
       case 'grammar':
         return <GrammarPointPlayer {...baseProps} />;
@@ -312,9 +320,8 @@ export default function LessonPlayer({ lesson }) {
                  items={items || []} 
                  correctOrder={correctOrder} 
                  aiExplanation={paixuExplanation}
-                 // PaiXuTi 可能有自己的 onComplete 逻辑，这里假设它需要 onCorrectionRequest
+                 onComplete={handleCorrectAndProceed}
                  onCorrectionRequest={(prompt) => console.log("AI Correction Requested:", prompt)} 
-                 onComplete={handleCorrectAndProceed} // 确保 onComplete 被传递
                />;
       
       case 'lianxian':
@@ -356,6 +363,7 @@ export default function LessonPlayer({ lesson }) {
         };
         const DynamicComponent = ComponentMap[type];
         if (DynamicComponent) {
+            // 注意：这里也应该使用 baseProps
             return <DynamicComponent {...baseProps} />;
         }
         return ( <div className="text-white bg-red-500/80 p-6 rounded-lg text-center">错误：找不到组件 "{type}"。</div> );
