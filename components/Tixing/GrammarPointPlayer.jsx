@@ -1,6 +1,6 @@
-// components/Tixing/GrammarPointPlayer.jsx (V3 - 无缝发音 + 高亮字幕) - 已修复
+// components/Tixing/GrammarPointPlayer.jsx (V3 - 最终修复版)
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, a{ useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
@@ -12,6 +12,7 @@ import { FaPlay, FaPause, FaSpinner, FaChevronDown } from 'react-icons/fa';
 // --- 辅助函数 ---
 const generateRubyHTML = (text) => {
   if (!text) return '';
+  // 返回 HTML 字符串，用于 dangerouslySetInnerHTML
   return text.replace(/[\u4e00-\u9fa5]/g, char => `<ruby>${char}<rt>${pinyinConverter(char)}</rt></ruby>`);
 };
 
@@ -38,15 +39,18 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const isPlayingRef = useRef(false);
     const progressIntervalRef = useRef(null);
 
-    // 【核心TTS修复】带预加载的无缝播放队列
+    const stopPlayback = useCallback(() => {
+        Howler.stop();
+        isPlayingRef.current = false;
+        setActiveAudio(null);
+        setIsLoadingAudio(false);
+        setHighlightedIndex(-1);
+        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    }, []);
+
     const playMixedAudio = useCallback((text, translation) => {
         if (isPlayingRef.current) {
-            Howler.stop();
-            isPlayingRef.current = false;
-            setActiveAudio(null);
-            setIsLoadingAudio(false);
-            setHighlightedIndex(-1);
-            if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+            stopPlayback();
             return;
         }
 
@@ -61,7 +65,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
 
         setSubtitles({ original: parts, translation });
-
         isPlayingRef.current = true;
         setActiveAudio({ text });
         setIsLoadingAudio(true);
@@ -74,7 +77,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             if (!isPlayingRef.current) return;
             setIsLoadingAudio(false);
             
-            let cumulativeTime = 0;
             let currentSoundIndex = 0;
 
             const playNext = () => {
@@ -83,20 +85,23 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     return;
                 }
                 const sound = sounds[currentSoundIndex];
-                sound.play();
-
-                if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-                progressIntervalRef.current = setInterval(() => {
-                    if (sound.playing()) {
-                        setHighlightedIndex(currentSoundIndex);
-                    }
-                }, 100);
+                
+                sound.once('play', () => {
+                    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+                    progressIntervalRef.current = setInterval(() => {
+                        if (sound.playing()) {
+                            setHighlightedIndex(currentSoundIndex);
+                        }
+                    }, 100);
+                });
                 
                 sound.once('end', () => {
-                    cumulativeTime += sound.duration();
+                    clearInterval(progressIntervalRef.current);
                     currentSoundIndex++;
                     playNext();
                 });
+
+                sound.play();
             };
             playNext();
         };
@@ -110,39 +115,29 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 html5: true,
                 onload: () => {
                     loadedCount++;
-                    if (loadedCount === parts.length) {
-                        startPlayback();
-                    }
+                    if (loadedCount === parts.length) startPlayback();
                 },
                 onloaderror: () => {
                     console.error(`语音片段加载失败: ${part.text}`);
                     loadedCount++;
-                    if (loadedCount === parts.length) {
-                        startPlayback();
-                    }
+                    if (loadedCount === parts.length) startPlayback();
                 }
             });
         });
 
-    }, [settings]);
-
-    const stopPlayback = useCallback(() => {
-        Howler.stop();
-        isPlayingRef.current = false;
-        setActiveAudio(null);
-        setIsLoadingAudio(false);
-        setHighlightedIndex(-1);
-        if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    }, []);
+    }, [settings, stopPlayback]);
 
     const handlePlayButtonClick = (text, translation) => {
         if (activeAudio?.text === text) {
             stopPlayback();
         } else {
+            // 先停止当前播放，再开始新的
             if (isPlayingRef.current) {
                 stopPlayback();
+                setTimeout(() => playMixedAudio(text, translation), 100); // 短暂延迟确保完全停止
+            } else {
+                playMixedAudio(text, translation);
             }
-            playMixedAudio(text, translation);
         }
     };
     
@@ -154,12 +149,11 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 playMixedAudio(gp.narrationScript, ""); // 旁白没有翻译字幕
             }
         }, 800);
-        return () => clearTimeout(timer);
+        return () => {
+            clearTimeout(timer);
+            stopPlayback();
+        };
     }, [currentIndex, grammarPoints, playMixedAudio, stopPlayback]);
-    
-    useEffect(() => {
-        return () => stopPlayback();
-    }, [stopPlayback]);
 
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
@@ -186,12 +180,27 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         config: { mass: 1, tension: 280, friction: 30 },
     });
     
+    // ✅ 【核心修复】使用辅助函数来渲染混合文本，并修复 style 属性
+    const renderMixedText = (text) => {
+        return text.split(/(\{\{.*?\}\})/g).filter(Boolean).map((part, pIndex) => {
+            const isChinese = part.startsWith('{{');
+            const content = isChinese ? part.slice(2, -2) : part;
+            return (
+                <span key={pIndex} style={isChinese ? styles.textChinese : styles.textBurmese}>
+                    {isChinese 
+                        ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> 
+                        : content
+                    }
+                </span>
+            );
+        });
+    };
+
     const content = (
         <div style={styles.fullScreen} {...swipeHandlers}>
             {transitions((style, i) => {
                 const gp = grammarPoints[i];
                 if (!gp) return null;
-
                 const bgStyle = { backgroundImage: gp.background?.imageUrl ? `url(${gp.background.imageUrl})` : `linear-gradient(135deg, ${gp.background?.gradientStart || '#2d3748'} 0%, ${gp.background?.gradientEnd || '#1a202c'} 100%)` };
 
                 return (
@@ -201,7 +210,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 <div style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
                                 <div style={styles.pattern}>{gp.pattern}</div>
                             </div>
-
                             <div style={styles.explanationSection}>
                                 <div style={styles.sectionTitle}>
                                     <span>💡 语法解释</span>
@@ -211,7 +219,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 </div>
                                 <p style={styles.explanationText}>{gp.visibleExplanation}</p>
                             </div>
-
                             <div style={styles.examplesSection}>
                                 <div style={styles.sectionTitle}>✍️ 例句示范</div>
                                 <div style={styles.examplesList}>
@@ -219,16 +226,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         <div key={ex.id} style={styles.exampleItem}>
                                             <div style={styles.exampleSentence}>
                                                 <span style={styles.exampleNumber}>{index + 1}.</span>
-                                                {ex.sentence.split(/(\{\{.*?\}\})/g).filter(Boolean).map((part, pIndex) => {
-                                                    const isChinese = part.startsWith('{{');
-                                                    const content = isChinese ? part.slice(2, -2) : part;
-                                                    return (
-                                                        // ✅ FIX: Changed `className` to `style`
-                                                        <span key={pIndex} style={isChinese ? styles.textChinese : styles.textBurmese}>
-                                                            {isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> : content}
-                                                        </span>
-                                                    );
-                                                })}
+                                                {/* ✅ 使用修复后的渲染逻辑 */}
+                                                {renderMixedText(ex.sentence)}
                                             </div>
                                             <div style={styles.exampleTranslation}>{ex.translation}</div>
                                             <button style={styles.playButton} onClick={() => handlePlayButtonClick(ex.sentence, ex.translation)}>
@@ -293,7 +292,7 @@ const styles = {
     textChinese: { color: 'white', margin: '0 2px' },
     textBurmese: { color: '#81e6d9' },
     subtitleContainer: { position: 'absolute', bottom: '80px', left: '20px', right: '20px', textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.7)', pointerEvents: 'none' },
-    subtitleLine: { fontSize: '1.8rem', fontWeight: '500', margin: '0 0 8px 0', transition: 'color 0.2s' },
+    subtitleLine: { fontSize: '1.8rem', fontWeight: '500', margin: '0 0 8px 0' },
     subtitlePart: { transition: 'color 0.2s ease-in-out' },
     subtitleTranslation: { fontSize: '1.1rem', color: '#cbd5e0' },
 };
