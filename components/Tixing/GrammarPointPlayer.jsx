@@ -1,10 +1,10 @@
-// components/Tixing/GrammarPointPlayer.jsx (终极修复版 - 完整代码)
+// components/Tixing/GrammarPointPlayer.jsx (真正独立的最终版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { pinyin } from 'pinyin-pro';
 
-// --- 辅助函数 ---
+// --- 辅助函数 (保持不变) ---
 const generateRubyHTML = (text) => {
   if (!text || typeof text !== 'string') return '';
   let html = '';
@@ -33,29 +33,43 @@ const parseMixedLanguageText = (text) => {
 };
 
 // --- 主组件 ---
-const GrammarPointPlayer = ({ data, onComplete, settings }) => {
-    // ================== 【终极修改】 ==================
-    // 从传入的 data (即 currentBlock) 中解构出 content
-    // 同时兼容旧模式，如果 data.content 不存在，则认为 data 本身就是 content
-    const content = data?.content || data;
-    // ===================================================
+const GrammarPointPlayer = ({ data, onComplete = () => {}, settings: settingsProp }) => {
+    
+    // ================== 【核心修改：组件自给自足】 ==================
+    // 拥有自己的内部 settings 状态，并设置默认值
+    const [internalSettings, setInternalSettings] = useState({
+      chineseVoice: 'zh-CN-XiaoxiaoNeural',
+      myanmarVoice: 'my-MM-NilarNeural',
+      rate: 1,
+      showSubtitles: true
+    });
 
-    // --- 防御性检查代码现在检查 content ---
+    // 如果父组件（如 LessonPlayer）传来了 settingsProp，就使用它
+    useEffect(() => {
+        if (settingsProp) {
+            setInternalSettings(settingsProp);
+        }
+    }, [settingsProp]);
+    // =================================================================
+
+    // --- 防御性检查：检查传入的 data 结构是否正确 ---
+    // 智能判断 data 结构，无论是否带 .content 包装都能处理
+    const content = data?.content || data;
+
     if (!content || !content.grammarPoint) {
         return (
             <div className="w-full h-full flex items-center justify-center p-4" style={{ background: '#1e3a44' }}>
                 <div className="w-11/12 max-w-2xl bg-red-800/80 backdrop-blur-xl rounded-2xl shadow-2xl p-6 md:p-8 text-white flex flex-col text-center">
-                    <h2 className="text-2xl font-bold mb-4">组件加载错误</h2>
-                    <p className="text-lg">在传入的数据中找不到有效的语法点内容。</p>
+                    <h2 className="text-2xl font-bold mb-4">组件数据错误</h2>
+                    <p className="text-lg">未能从传入的数据中找到有效的语法点内容。</p>
                     <p className="mt-2 text-sm text-red-200">
-                        请检查 `!include` JSON 结构是否正确。
+                        请检查你的 `!include` JSON 结构。
                     </p>
                 </div>
             </div>
         );
     }
-
-    // --- 状态与引用 ---
+    
     const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [subtitles, setSubtitles] = useState([]);
@@ -65,11 +79,9 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     const audioRef = useRef(null);
     const animationFrameRef = useRef(null);
     
-    // --- 解构时，全部从 content 对象里取 ---
     const { examples, grammarPoint, pattern, explanation, background } = content;
     const totalExamples = examples?.length || 0;
 
-    // --- 核心功能: 音频播放与字幕 ---
     const stopPlayback = useCallback(() => {
         if (audioRef.current) {
             audioRef.current.pause();
@@ -81,19 +93,19 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     }, []);
 
     const playAudioForCurrentExample = useCallback(async () => {
-        if (!examples?.[currentExampleIndex] || !settings) return;
+        if (!examples?.[currentExampleIndex]) return;
         stopPlayback();
         setIsLoading(true);
 
         const textToRead = examples[currentExampleIndex].narrationText || examples[currentExampleIndex].sentence;
         if (!textToRead) {
-            console.warn('No text to read for this example.');
             setIsLoading(false);
             return;
         }
 
-        const ssmlText = textToRead.replace(/\{\{/g, `<voice name="${settings.myanmarVoice}">`).replace(/\}\}/g, '</voice>');
-        const params = new URLSearchParams({ text: ssmlText, chinese_voice: settings.chineseVoice, rate: settings.rate, subtitles: 'true' });
+        // 【关键修改】使用 internalSettings
+        const ssmlText = textToRead.replace(/\{\{/g, `<voice name="${internalSettings.myanmarVoice}">`).replace(/\}\}/g, '</voice>');
+        const params = new URLSearchParams({ text: ssmlText, chinese_voice: internalSettings.chineseVoice, rate: internalSettings.rate, subtitles: 'true' });
         const ttsUrl = `https://libretts.is-an.org/api/tts?${params.toString()}`;
 
         try {
@@ -118,9 +130,8 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [currentExampleIndex, examples, settings, stopPlayback]);
+    }, [currentExampleIndex, examples, internalSettings, stopPlayback]);
 
-    // --- 动效与副作用 ---
     useEffect(() => {
         const updateHighlight = () => {
             if (!isPlaying || !audioRef.current || !subtitles.length) return;
@@ -142,13 +153,12 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     
     useEffect(() => stopPlayback, [currentExampleIndex, stopPlayback]);
 
-    // --- 导航逻辑 ---
     const handleNextExample = () => {
         stopPlayback();
         if (currentExampleIndex < totalExamples - 1) {
             setCurrentExampleIndex(prev => prev + 1);
         } else {
-            onComplete();
+            onComplete(); // 如果独立使用，这就是个空函数，不会报错
         }
     };
 
@@ -161,7 +171,6 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     
     const currentExample = examples?.[currentExampleIndex];
 
-    // --- 动态样式 ---
     const backgroundStyle = {
         backgroundImage: background?.imageUrl 
             ? `url(${background.imageUrl})`
@@ -171,10 +180,9 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     };
 
     if (!currentExample) {
-        return <div className="text-white">加载例句失败或例句为空...</div>;
+        return <div className="text-white p-4">例句加载失败或课程已完成。</div>;
     }
 
-    // --- JSX 渲染 ---
     return (
         <div className="w-full h-full flex flex-col items-center justify-center transition-all duration-500" style={backgroundStyle}>
             <audio ref={audioRef} onEnded={() => { setIsPlaying(false); setHighlightedWordIndex(-1); }} />
@@ -224,7 +232,7 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
                 </div>
             </div>
 
-            {settings?.showSubtitles && subtitles.length > 0 && (
+            {internalSettings.showSubtitles && subtitles.length > 0 && (
                 <div className="absolute bottom-10 md:bottom-16 w-full text-center px-4 pointer-events-none">
                     <div className="inline-block bg-black/60 backdrop-blur-sm p-3 rounded-lg shadow-lg">
                         <p className="text-2xl md:text-3xl font-semibold text-white tracking-wider">
@@ -245,10 +253,10 @@ const GrammarPointPlayer = ({ data, onComplete, settings }) => {
     );
 };
 
-// --- Prop类型定义 ---
+// --- Prop类型定义 (现在 props 都是可选的) ---
 GrammarPointPlayer.propTypes = {
-    data: PropTypes.object.isRequired, // data 现在是整个区块对象
-    onComplete: PropTypes.func.isRequired,
+    data: PropTypes.object.isRequired,
+    onComplete: PropTypes.func,
     settings: PropTypes.object,
 };
 
