@@ -1,6 +1,6 @@
 // components/Tixing/GrammarPointPlayer.jsx (V3 - 最终修复版)
 
-import React, a{ useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
