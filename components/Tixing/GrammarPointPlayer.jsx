@@ -1,13 +1,13 @@
 // components/Tixing/GrammarPointPlayer.jsx (全屏抖音模式最终版)
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { Howl } from 'howler';
-import { FaPlay, FaPause, FaSpinner } from 'react-icons/fa';
+import { FaPlay, FaPause, FaVolumeUp, FaSpinner } from 'react-icons/fa';
 
 // --- 辅助函数和工具 ---
 const generateRubyHTML = (text) => {
@@ -21,15 +21,30 @@ const parseMixedLanguageText = (text, isSentence = false) => {
     return parts.map((part, index) => {
         const isChinese = part.startsWith('{{') && part.endsWith('}}');
         const content = isChinese ? part.slice(2, -2) : part;
-        // 注意：这里我们直接使用了 styles 变量，它在主组件作用域中定义
         return (
-            <span key={index} className={isChinese ? 'text-chinese' : 'text-burmese'}>
+            <span key={index} className={isChinese ? styles.textChinese : styles.textBurmese}>
                 {isSentence && isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> : content}
             </span>
         );
     });
 };
 
+let howlInstance = null;
+const playSound = (url, onEndCallback) => {
+    if (howlInstance) howlInstance.stop();
+    howlInstance = new Howl({
+        src: [url],
+        html5: true,
+        onend: onEndCallback,
+        onloaderror: (id, err) => { console.error('音频加载失败:', err); onEndCallback(); },
+        onplayerror: (id, err) => { console.error('音频播放失败:', err); onEndCallback(); },
+    });
+    howlInstance.play();
+};
+
+const stopSound = () => {
+    if (howlInstance) howlInstance.stop();
+};
 
 // --- 主组件 ---
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
@@ -37,6 +52,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     useEffect(() => { setIsMounted(true); }, []);
 
     if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) {
+        // 在 portal 渲染之前，这个错误不会显示，但这能防止崩溃
         return null; 
     }
 
@@ -48,51 +64,23 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       myanmarVoice: 'my-MM-NilarNeural',
     });
     
-    // --- 音频与字幕状态管理 ---
     const [activeAudio, setActiveAudio] = useState(null); // { type, text }
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-    const [subtitle, setSubtitle] = useState(''); // 新增：用于存储当前朗读的字幕
-    const audioQueueRef = useRef([]); // 新增：用于管理音频播放队列
 
-    // 统一的音频停止函数
-    const stopPlayback = useCallback(() => {
-        if (audioQueueRef.current.length > 0) {
-            audioQueueRef.current.forEach(sound => sound && sound.stop());
-            audioQueueRef.current = [];
-        }
-        setActiveAudio(null);
-        setIsLoadingAudio(false);
-        setSubtitle(''); // 停止时清空字幕
-    }, []);
-
-    // 播放混合语言音频的函数
     const playMixedAudio = useCallback((text, type) => {
         if (activeAudio && activeAudio.type === type) {
-            stopPlayback();
+            stopSound();
+            setActiveAudio(null);
             return;
         }
 
-        stopPlayback(); // 播放前先停止所有当前音频
+        stopSound();
         setIsLoadingAudio(true);
         setActiveAudio({ type, text });
-        setSubtitle(text); // 设置当前字幕
 
         const parts = text.split(/(\{\{.*?\}\})/g).filter(Boolean);
-        let localAudioQueue = [];
+        let audioQueue = [];
         let loadedSounds = 0;
-
-        // 队列播放结束后的清理工作
-        const onQueueEnd = () => {
-            audioQueueRef.current = [];
-            setActiveAudio(null);
-            setIsLoadingAudio(false);
-            setSubtitle(''); // 播放结束时清空字幕
-        };
-        
-        if (parts.length === 0) {
-            onQueueEnd();
-            return;
-        }
 
         parts.forEach((part, index) => {
             const isChinese = part.startsWith('{{') && part.endsWith('}}');
@@ -107,36 +95,23 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     loadedSounds++;
                     if (loadedSounds === parts.length) {
                         setIsLoadingAudio(false);
-                        // 确认在加载完成时，播放请求仍然是同一个
-                        if (activeAudio && activeAudio.type === type) {
-                            audioQueueRef.current = localAudioQueue;
-                            playQueue();
-                        }
+                        playQueue();
                     }
                 },
-                onloaderror: (id, err) => {
-                    console.error("音频加载失败:", url, err);
-                    loadedSounds++;
-                    if (loadedSounds === parts.length) {
-                         if (activeAudio && activeAudio.type === type) {
-                            setIsLoadingAudio(false);
-                            audioQueueRef.current = localAudioQueue;
-                            playQueue();
-                        }
-                    }
+                onloaderror: () => {
+                    console.error("加载失败:", url);
+                    loadedSounds++; // 即使失败也继续
+                    if (loadedSounds === parts.length) playQueue();
                 }
             });
-            localAudioQueue[index] = sound;
+            audioQueue[index] = sound;
         });
 
         let currentSoundIndex = 0;
         const playQueue = () => {
-            // 如果在播放过程中被停止，则中断队列
-            if (audioQueueRef.current.length === 0) return;
-
-            if (currentSoundIndex < audioQueueRef.current.length) {
-                const sound = audioQueueRef.current[currentSoundIndex];
-                if (sound && sound.state() === 'loaded') {
+            if (currentSoundIndex < audioQueue.length) {
+                const sound = audioQueue[currentSoundIndex];
+                if (sound) {
                     sound.once('end', () => {
                         currentSoundIndex++;
                         playQueue();
@@ -147,20 +122,19 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     playQueue();
                 }
             } else {
-                onQueueEnd();
+                setActiveAudio(null);
             }
         };
-    }, [activeAudio, settings, stopPlayback]);
+    }, [activeAudio, settings]);
 
-    // 当切换语法点时，停止所有音频
     useEffect(() => {
-        stopPlayback();
-    }, [currentIndex, stopPlayback]);
+        // 当切换语法点时，停止所有音频
+        stopSound();
+        setActiveAudio(null);
+    }, [currentIndex]);
     
     // 组件卸载时清理
-    useEffect(() => {
-        return () => stopPlayback();
-    }, [stopPlayback]);
+    useEffect(() => stopSound, []);
 
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
@@ -185,15 +159,12 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     });
 
     const bind = useDrag(({ down, movement: [mx, my], velocity: { y: vy }, direction: [xDir, yDir], cancel }) => {
-        if (!down && (Math.abs(my) > window.innerHeight / 4 || vy > 0.5)) {
-            // 【修复】上滑 (yDir < 0) 是下一个 (+1)，下滑 (yDir > 0) 是上一个 (-1)
-            const direction = yDir < 0 ? 1 : -1;
-            const newIndex = currentIndex + direction;
-
-            if (newIndex >= grammarPoints.length) {
-                onComplete();
-            } else if (newIndex >= 0) {
-                navigate(direction);
+        if (Math.abs(my) > window.innerHeight / 4 || vy > 0.5) {
+            const direction = yDir > 0 ? 1 : -1;
+            if (currentIndex + direction >= 0 && currentIndex + direction < grammarPoints.length) {
+                 navigate(direction);
+            } else if (currentIndex + direction >= grammarPoints.length) {
+                 onComplete();
             }
             cancel();
         }
@@ -249,16 +220,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             </div>
                         </div>
                         
-                        {/* 【新增】字幕显示区域 */}
-                        {subtitle && (
-                            <div style={styles.subtitleContainer}>
-                                <div style={styles.subtitleText}>
-                                    {/* isSentence=false 以避免在字幕中显示拼音 */}
-                                    {parseMixedLanguageText(subtitle, false)}
-                                </div>
-                            </div>
-                        )}
-
                         {/* 底部导航 */}
                         <div style={styles.footer}>
                             <span>上滑切换下一个语法</span>
@@ -283,7 +244,7 @@ GrammarPointPlayer.propTypes = {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
-    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px', color: 'white', paddingBottom: '80px', paddingTop: '20px' },
+    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px', color: 'white' },
     header: { textAlign: 'center', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
     grammarPointTitle: { fontSize: '2.5rem', fontWeight: 'bold' },
     pattern: { fontSize: '1.2rem', color: '#a0aec0', fontFamily: 'monospace', marginTop: '8px' },
@@ -294,44 +255,12 @@ const styles = {
     examplesList: { display: 'flex', flexDirection: 'column', gap: '20px' },
     exampleItem: { display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '8px 16px' },
     exampleNumber: { color: '#a0aec0', marginRight: '8px' },
-    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.5rem', fontWeight: 500, lineHeight: 1.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap' },
+    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.5rem', fontWeight: 500, lineHeight: 1.6, display: 'flex', alignItems: 'center' },
     exampleTranslation: { gridColumn: '1 / 2', fontSize: '1rem', color: '#cbd5e0', fontStyle: 'italic' },
     playButton: { gridColumn: '2 / 3', gridRow: '1 / 3', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
-    footer: { position: 'absolute', bottom: '20px', left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' },
-    textChinese: { color: 'white' }, // 在 JSX 中通过 className 使用
-    textBurmese: { color: '#81e6d9' }, // 在 JSX 中通过 className 使用
-    // 【新增】字幕样式
-    subtitleContainer: {
-        position: 'absolute',
-        bottom: '60px',
-        left: '0',
-        right: '0',
-        padding: '0 20px',
-        display: 'flex',
-        justifyContent: 'center',
-        pointerEvents: 'none',
-    },
-    subtitleText: {
-        background: 'rgba(0, 0, 0, 0.6)',
-        padding: '10px 16px',
-        borderRadius: '12px',
-        fontSize: '1.1rem',
-        lineHeight: 1.6,
-        textAlign: 'center',
-        color: 'white',
-        textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-    },
+    footer: { position: 'absolute', bottom: '20px', color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem' },
+    textChinese: { color: 'white' },
+    textBurmese: { color: '#81e6d9' }, // 浅绿色以区分
 };
-
-// 动态添加用于 parseMixedLanguageText 的样式类
-const styleTag = document.createElement('style');
-styleTag.innerHTML = `
-    .text-chinese { color: ${styles.textChinese.color}; }
-    .text-burmese { color: ${styles.textBurmese.color}; }
-    .spin { animation: spin 1s linear infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-`;
-document.head.appendChild(styleTag);
-
 
 export default GrammarPointPlayer;
