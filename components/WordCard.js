@@ -135,7 +135,7 @@ const parsePinyin = (pinyinNum) => {
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
     try {
-      const savedSettings = localStorage.getItem('learningWordCardSettings'); 
+      const savedSettings = localStorage.getItem('learningWordCardSettings');
       const defaultSettings = {
         order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000,
         voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0,
@@ -190,13 +190,13 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
     const streamRef = useRef(null);
 
     useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
-    
+
     const handleRecord = useCallback(async () => {
         if (isRecording) {
             mediaRecorderRef.current?.stop();
             return;
         }
-        
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -212,7 +212,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                 streamRef.current?.getTracks().forEach(track => track.stop());
                 setIsRecording(false);
             };
-            
+
             recorder.start();
             setIsRecording(true);
         } catch (err) {
@@ -228,7 +228,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
             sound.play();
         }
     }, [userRecordingUrl]);
-    
+
     const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]);
 
     useEffect(() => {
@@ -250,7 +250,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
                 </div>
                 <div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的发音</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div>))}</div>)}</div>
-                
+
                 <div style={styles.audioComparisonSection}>
                     <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>
                     <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>
@@ -269,7 +269,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
 };
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
-  
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file && file.type.startsWith('image/')) {
@@ -299,7 +299,7 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
     useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []);
     const handleJump = () => {
         const num = parseInt(inputValue, 10);
-        if (num >= 1 && num <= max) { onJump(num - 1); } 
+        if (num >= 1 && num <= max) { onJump(num - 1); }
         else { alert(`请输入 1 到 ${max} 之间的数字`); }
     };
     const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); };
@@ -317,13 +317,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
-  
+
   const processedCards = useMemo(() => {
     try {
-        const mapped = words.map(w => ({ 
-            id: w.id, 
-            chinese: w.chinese, 
-            burmese: w.burmese, 
+        const mapped = words.map(w => ({
+            id: w.id,
+            chinese: w.chinese,
+            burmese: w.burmese,
             mnemonic: w.mnemonic,
             example: w.example,
         }));
@@ -351,42 +351,38 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
-  
+
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = activeCards.length > 0 ? activeCards[currentIndex] : null;
 
-  useEffect(() => { 
-      if (currentCard?.id && currentCard.id !== 'fallback') { 
-          isFavorite(currentCard.id).then(setIsFavoriteCard); 
+  useEffect(() => {
+      if (currentCard?.id && currentCard.id !== 'fallback') {
+          isFavorite(currentCard.id).then(setIsFavoriteCard);
       }
       setIsRevealed(false);
   }, [currentCard]);
-  
+
   const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
-  
-  const navigate = useCallback((direction) => { 
+
+  const navigate = useCallback((direction) => {
     if (activeCards.length === 0) return;
-    lastDirection.current = direction; 
-    setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); 
+    lastDirection.current = direction;
+    setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length);
   }, [activeCards.length]);
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
-  // ✅ [修改] 调整自动播放逻辑，加入例句朗读
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
 
     const playFullSequence = () => {
-        // 1. 播放中文单词
         if (settings.autoPlayChinese && currentCard.chinese) {
             playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
-                // 2. 如果已翻开，播放缅甸语
                 if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                     playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
-                        // 3. 如果已翻开，播放例句
                         if (settings.autoPlayExample && currentCard.example && isRevealed) {
                            playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
                         } else {
@@ -398,18 +394,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 }
             });
         } else {
-             startAutoBrowseTimer(); // 如果不播放中文，直接启动后续流程
+             startAutoBrowseTimer();
         }
     };
-    
+
     const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
-    
-    // 延迟播放以等待卡片动画
+
     const initialPlayTimer = setTimeout(playFullSequence, 600);
 
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
-  
+
   const handleListen = useCallback((e) => {
     e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
@@ -429,20 +424,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const handleCloseComparison = useCallback(() => { setIsComparisonOpen(false); setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
-  
+
   useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
-  
+
   const handleKnow = () => {
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (!currentCard) return;
 
     const newActiveCards = activeCards.filter(card => card.id !== currentCard.id);
-    
+
     if (newActiveCards.length === 0) {
         setActiveCards([]);
         return;
     }
-    
+
     setActiveCards(newActiveCards);
 
     if (currentIndex >= newActiveCards.length) {
@@ -464,42 +459,45 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const cardTransitions = useTransition(currentIndex, {
       key: currentCard ? currentCard.id : currentIndex,
-      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
-      enter: { opacity: 1, transform: 'translateY(0%)' }, 
-      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
-      config: { mass: 1, tension: 280, friction: 30 }, 
+      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` },
+      enter: { opacity: 1, transform: 'translateY(0%)' },
+      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
+      config: { mass: 1, tension: 280, friction: 30 },
       onStart: () => { if(currentCard) playSoundEffect('switch'); },
   });
-  
+
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
       if (event.target.closest('[data-no-gesture]')) return;
       if (down) return;
-      event.stopPropagation(); 
+      event.stopPropagation();
       const isHorizontal = Math.abs(mx) > Math.abs(my);
-      if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); } 
+      if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); }
       else { if (Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30)) navigate(yDir < 0 ? 1 : -1); }
   }, { filterTaps: true, preventDefault: true, threshold: 10 });
 
   const cardContent = pageTransitions((style, item) => {
-    const bgUrl = settings.backgroundImage || '/background.jpg';
+    const backgroundStyle = settings.backgroundImage
+        ? { background: `url(${settings.backgroundImage}) center/cover no-repeat`, backgroundAttachment: 'fixed' }
+        : {}; // Fallback to the color in styles.fullScreen
+
     return item && (
-      <animated.div style={{ ...styles.fullScreen, background: `url(${bgUrl}) center/cover no-repeat`, backgroundAttachment: 'fixed', ...style }}>
+      <animated.div style={{ ...styles.fullScreen, ...style, ...backgroundStyle }}>
         <div style={styles.gestureArea} {...bind()} onClick={() => setIsRevealed(prev => !prev)} />
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
-        
+
         {isComparisonOpen && currentCard && (
-            <PronunciationComparison 
-                correctWord={currentCard.chinese} 
-                userText={recognizedText} 
-                settings={settings} 
-                onContinue={handleNavigateToNext} 
-                onClose={handleCloseComparison} 
+            <PronunciationComparison
+                correctWord={currentCard.chinese}
+                userText={recognizedText}
+                settings={settings}
+                onContinue={handleNavigateToNext}
+                onClose={handleCloseComparison}
             />
         )}
-        
+
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
-        
+
         {activeCards.length > 0 && currentCard ? (
             cardTransitions((cardStyle, i) => {
               const cardData = activeCards[i];
@@ -512,18 +510,18 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
-                                  
-                                  {/* ✅ [修改] 谐音区域，移除背景，增大字体 */}
-                                  {cardData.mnemonic && 
+
+                                  {/* ✅ [MODIFIED] Mnemonic area styling and structure changed */}
+                                  {cardData.mnemonic &&
                                     <div style={styles.mnemonicBox}>
-                                        <span style={styles.extraInfoLabel}>谐音</span>{cardData.mnemonic}
+                                        {cardData.mnemonic}
                                     </div>
                                   }
-                                  
-                                  {/* ✅ [修改] 例句区域，移除背景，增大字体，增加拼音 */}
+
+                                  {/* ✅ [MODIFIED] Example area text alignment changed */}
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
-                                          <div style={{ flex: 1, textAlign: 'left' }}>
+                                          <div style={{ flex: 1, textAlign: 'center' }}>
                                             <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
@@ -548,7 +546,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         )}
 
         {currentCard && (<div style={styles.rightControls} data-no-gesture="true"><button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={18} /></button><button style={styles.rightIconButton} onClick={handleListen} title="发音练习">{isListening ? <FaStop size={18} color={'#dc2626'}/> : <FaMicrophone size={18} color={'#4a5568'} />}</button>{currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={18} /></button>)}{<button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>}</div>)}
-        
+
         <div style={styles.bottomControlsContainer} data-no-gesture="true">
             {activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}
             <div style={styles.knowButtonsWrapper}>
@@ -569,19 +567,19 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 // ===== 样式表 ====================================================================
 // =================================================================================
 const styles = {
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#004d40' }, 
+    // ✅ [MODIFIED] Default background color changed
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#53818E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
-    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
-    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }, // 增加间距
+    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
+    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
+    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
-    // ✅ [修改] 谐音区域样式
-    mnemonicBox: { color: '#fff', width: '100%', maxWidth: '400px', textAlign: 'left', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
-    extraInfoLabel: { background: '#f59e0b', color: 'white', padding: '3px 9px', borderRadius: '6px', marginRight: '12px', fontSize: '0.9rem', fontWeight: 'bold' },
-    // ✅ [修改] 例句区域样式
-    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
+    // ✅ [MODIFIED] Mnemonic area styles changed
+    mnemonicBox: { color: '#fff', width: '100%', maxWidth: '400px', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(0, 0, 0, 0.2)', padding: '12px', borderRadius: '12px' },
+    // ✅ [MODIFIED] Example area styles changed for centering
+    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
     examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     playExampleButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.8rem', padding: '5px', opacity: 0.8 },
@@ -606,7 +604,8 @@ const styles = {
     pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.5rem', height: '1.8rem', color: '#333' },
     pinyinPart: { transition: 'color 0.3s', fontWeight: 500 },
     toneNumber: { fontSize: '1.1rem', fontWeight: 'bold', marginLeft: '2px' },
-    wrongPart: { color: '#dc2626', fontWeight: 'bold' },
+    // ✅ [MODIFIED] Wrong part style made more prominent
+    wrongPart: { color: '#E53E3E', fontWeight: '900' },
     pinyinLabel: { fontSize: '0.75rem', color: '#6b7280', marginBottom: '4px' },
     audioComparisonSection: { display: 'flex', gap: '10px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa', flexWrap: 'wrap' },
     audioPlayerButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontSize: '0.9rem', color: '#374151', fontWeight: 600 },
