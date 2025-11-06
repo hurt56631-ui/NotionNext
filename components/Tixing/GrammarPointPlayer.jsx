@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V7 - 极简设计与稳定性最终版)
+// components/Tixing/GrammarPointPlayer.jsx (V7.1 - 字幕刷新与稳定性最终修复版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,7 +7,7 @@ import { useTransition, animated } from '@react-spring/web';
 import { useSwipeable } from 'react-swipeable';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { Howl } from 'howler';
-import { FaVolumeUp, FaStopCircle, FaSpinner, FaChevronUp } from 'react-icons/fa'; // 引入新图标
+import { FaVolumeUp, FaStopCircle, FaSpinner, FaChevronUp } from 'react-icons/fa';
 
 // --- 辅助函数 ---
 const generateRubyHTML = (text) => {
@@ -19,7 +19,6 @@ const generateRubyHTML = (text) => {
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [isMounted, setIsMounted] = useState(false);
     
-    // 【新增】隐藏手机状态栏的 Effect
     useEffect(() => {
         setIsMounted(true);
         const metaTags = [
@@ -36,12 +35,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
 
         return () => {
-            // 组件卸载时移除 meta 标签
             metaTags.forEach(tagInfo => {
                 const meta = document.getElementById(`gp-player-meta-${tagInfo.name}`);
-                if (meta) {
-                    document.head.removeChild(meta);
-                }
+                if (meta) document.head.removeChild(meta);
             });
         };
     }, []);
@@ -65,6 +61,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const audioCache = useRef({});
     const playbackIdRef = useRef(0);
 
+    // 【修复】重构 stopPlayback，不再管理字幕状态
     const stopPlayback = useCallback(() => {
         playbackIdRef.current += 1;
         audioQueueRef.current.forEach(sound => sound.stop());
@@ -72,7 +69,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setActiveAudio(null);
         setIsLoadingAudio(false);
         setHighlightedIndex(-1);
-        setSubtitles({ original: [], translation: '' });
+        // **移除** setSubtitles，让 playMixedAudio 完全控制字幕的设置
     }, []);
     
     const parseTextForAudio = (text) => {
@@ -92,11 +89,12 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const currentPlaybackId = playbackIdRef.current + 1;
         playbackIdRef.current = currentPlaybackId;
         
+        // 停止之前的音频，但不清除UI状态
         audioQueueRef.current.forEach(sound => sound.stop());
         audioQueueRef.current = [];
 
         if (!text) {
-            stopPlayback();
+            stopPlayback(); // 如果没有文本，则完全停止并清理UI
             return;
         }
         
@@ -106,6 +104,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             return;
         }
 
+        // 在播放开始时，立即设置所有新状态
         setActiveAudio({ text, type });
         setSubtitles({ original: parts, translation });
         setIsLoadingAudio(true);
@@ -177,15 +176,17 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     };
     
     useEffect(() => {
+        // 先停止任何可能在播放的音频
+        stopPlayback();
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
                 playMixedAudio(gp.narrationScript, "", `narration_${gp.id}`);
             }
-        }, 800);
+        }, 800); // 延迟以获得更好的过渡体验
         return () => {
             clearTimeout(timer);
-            stopPlayback();
+            stopPlayback(); // 在切换走时确保清理
         };
     }, [currentIndex, grammarPoints, playMixedAudio, stopPlayback]);
     
@@ -297,7 +298,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 {gp.pattern && <div style={styles.pattern}>{gp.pattern}</div>}
                             </div>
                             
-                            {/* 【修改】移除卡片，采用更简洁的布局 */}
                             <div style={styles.sectionContainer}>
                                 <div style={styles.sectionTitle}>
                                     <span>💡 语法解释</span>
@@ -327,9 +327,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             </div>
                         </div>
 
-                        {/* 【修复】为字幕容器添加 key，确保状态刷新 */}
-                        {activeAudio && subtitles.original.length > 0 && (
-                             <div key={activeAudio.type} style={styles.subtitleContainer}>
+                        {/* 【修复】为字幕容器绑定唯一的播放ID作为key，强制刷新 */}
+                        {activeAudio && (
+                             <div key={playbackIdRef.current} style={styles.subtitleContainer}>
                                 <p style={styles.subtitleLine}>
                                     {subtitles.original.map((part, index) => (
                                         <span key={index} style={{
@@ -363,27 +363,24 @@ GrammarPointPlayer.propTypes = {
     onComplete: PropTypes.func,
 };
 
-// --- 样式表 (V7 - 字体缩小，移除卡片) ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#111827' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
     contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px', color: 'white', paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: '160px' },
     header: { textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)' },
-    grammarPointTitle: { fontSize: '2.2rem', fontWeight: 'bold' }, // 缩小
+    grammarPointTitle: { fontSize: '2.2rem', fontWeight: 'bold' },
     pattern: { fontSize: '1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '10px', letterSpacing: '1px' },
     
-    // 【修改】移除卡片样式，改为简单的容器
     sectionContainer: { width: '100%' },
     
     sectionTitle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1rem', fontWeight: 'bold', color: '#fcd34d', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid rgba(255, 255, 255, 0.15)' },
-    explanationText: { fontSize: '0.9rem', lineHeight: 1.7, color: '#d1d5db', margin: '0 0 8px 0', textAlign: 'left' }, // 缩小
+    explanationText: { fontSize: '0.9rem', lineHeight: 1.7, color: '#d1d5db', margin: '0 0 8px 0', textAlign: 'left' },
     examplesList: { display: 'flex', flexDirection: 'column', gap: '20px' },
     exampleItem: { display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '8px 16px' },
-    exampleNumber: { color: '#9ca3af', marginRight: '8px', fontSize: '0.9rem' }, // 缩小
-    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.3rem', fontWeight: 500, lineHeight: 1.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }, // 缩小
-    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.85rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' }, // 缩小
+    exampleNumber: { color: '#9ca3af', marginRight: '8px', fontSize: '0.9rem' },
+    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.3rem', fontWeight: 500, lineHeight: 1.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap' },
+    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.85rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' },
     
-    // 【修改】播放按钮缩小
     playButton: { gridColumn: '2 / 3', gridRow: '1 / 3', background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.3)', color: 'white', borderRadius: '50%', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s' },
     
     footer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' },
@@ -392,12 +389,11 @@ const styles = {
     textHighlight: { backgroundColor: 'rgba(253, 224, 71, 0.2)', color: '#fde047', fontWeight: 'bold', padding: '1px 4px', borderRadius: '4px' },
     
     subtitleContainer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)', left: '20px', right: '20px', background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '10px 14px', pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
-    subtitleLine: { fontSize: '1.3rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }, // 缩小
+    subtitleLine: { fontSize: '1.3rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
     subtitlePart: { transition: 'color 0.2s ease-in-out', margin: '0 2px' },
-    subtitleTranslation: { fontSize: '0.9rem', color: '#d1d5db', textAlign: 'center', marginTop: '8px' }, // 缩小
+    subtitleTranslation: { fontSize: '0.9rem', color: '#d1d5db', textAlign: 'center', marginTop: '8px' },
 };
 
-// --- 全局样式与动画 ---
 const styleTag = document.getElementById('grammar-player-styles') || document.createElement('style');
 styleTag.id = 'grammar-player-styles';
 styleTag.innerHTML = `
