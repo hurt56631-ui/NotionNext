@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V6.1 - 编译错误修复版)
+// components/Tixing/GrammarPointPlayer.jsx (V7 - 极简设计与稳定性最终版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,7 +7,7 @@ import { useTransition, animated } from '@react-spring/web';
 import { useSwipeable } from 'react-swipeable';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { Howl } from 'howler';
-import { FaPlay, FaPause, FaSpinner, FaChevronUp } from 'react-icons/fa';
+import { FaVolumeUp, FaStopCircle, FaSpinner, FaChevronUp } from 'react-icons/fa'; // 引入新图标
 
 // --- 辅助函数 ---
 const generateRubyHTML = (text) => {
@@ -18,7 +18,33 @@ const generateRubyHTML = (text) => {
 // --- 主组件 ---
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [isMounted, setIsMounted] = useState(false);
-    useEffect(() => { setIsMounted(true); }, []);
+    
+    // 【新增】隐藏手机状态栏的 Effect
+    useEffect(() => {
+        setIsMounted(true);
+        const metaTags = [
+            { name: 'apple-mobile-web-app-capable', content: 'yes' },
+            { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }
+        ];
+        
+        metaTags.forEach(tagInfo => {
+            let meta = document.createElement('meta');
+            meta.name = tagInfo.name;
+            meta.content = tagInfo.content;
+            meta.id = `gp-player-meta-${tagInfo.name}`;
+            document.head.appendChild(meta);
+        });
+
+        return () => {
+            // 组件卸载时移除 meta 标签
+            metaTags.forEach(tagInfo => {
+                const meta = document.getElementById(`gp-player-meta-${tagInfo.name}`);
+                if (meta) {
+                    document.head.removeChild(meta);
+                }
+            });
+        };
+    }, []);
 
     if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) return null;
 
@@ -214,7 +240,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
         const highlightIndices = new Set();
         
-        // 【修复】将链式调用拆分为两行以避免编译错误
         const mappedPartsWithIndices = parts.map((p, i) => ({ text: p, index: i }));
         const chineseParts = mappedPartsWithIndices.filter(p => p.text.startsWith('{{'));
         
@@ -251,7 +276,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const renderExplanation = (text) => {
         if (!text) return null;
         return text.split('\n').map((line, index) => {
-            if (line.trim() === '') return <div key={index} style={{height: '10px'}} />; // 处理空行为间距
+            if (line.trim() === '') return <div key={index} style={{height: '8px'}} />;
             const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             return <p key={index} style={styles.explanationText} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
         });
@@ -271,16 +296,19 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 <div style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
                                 {gp.pattern && <div style={styles.pattern}>{gp.pattern}</div>}
                             </div>
-                            <div style={styles.glassPanel}>
+                            
+                            {/* 【修改】移除卡片，采用更简洁的布局 */}
+                            <div style={styles.sectionContainer}>
                                 <div style={styles.sectionTitle}>
                                     <span>💡 语法解释</span>
                                     <button className="play-button" style={styles.playButton} onClick={() => handlePlayButtonClick(gp.narrationScript, "", `narration_${gp.id}`)}>
-                                        {isLoadingAudio && activeAudio?.type === `narration_${gp.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `narration_${gp.id}` ? <FaPause/> : <FaPlay/>) }
+                                        {isLoadingAudio && activeAudio?.type === `narration_${gp.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `narration_${gp.id}` ? <FaStopCircle/> : <FaVolumeUp/>) }
                                     </button>
                                 </div>
                                 {renderExplanation(gp.visibleExplanation)}
                             </div>
-                            <div style={styles.glassPanel}>
+                            
+                            <div style={styles.sectionContainer}>
                                 <div style={styles.sectionTitle}>✍️ 例句示范</div>
                                 <div style={styles.examplesList}>
                                     {gp.examples.map((ex, index) => (
@@ -291,7 +319,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                             </div>
                                             <div style={styles.exampleTranslation}>{ex.translation}</div>
                                             <button className="play-button" style={styles.playButton} onClick={() => handlePlayButtonClick(ex.narrationScript || ex.sentence, ex.translation, `example_${ex.id}`)}>
-                                                {isLoadingAudio && activeAudio?.type === `example_${ex.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `example_${ex.id}` ? <FaPause/> : <FaPlay/>) }
+                                                 {isLoadingAudio && activeAudio?.type === `example_${ex.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `example_${ex.id}` ? <FaStopCircle/> : <FaVolumeUp/>) }
                                             </button>
                                         </div>
                                     ))}
@@ -299,8 +327,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             </div>
                         </div>
 
+                        {/* 【修复】为字幕容器添加 key，确保状态刷新 */}
                         {activeAudio && subtitles.original.length > 0 && (
-                             <div style={styles.subtitleContainer}>
+                             <div key={activeAudio.type} style={styles.subtitleContainer}>
                                 <p style={styles.subtitleLine}>
                                     {subtitles.original.map((part, index) => (
                                         <span key={index} style={{
@@ -334,37 +363,41 @@ GrammarPointPlayer.propTypes = {
     onComplete: PropTypes.func,
 };
 
+// --- 样式表 (V7 - 字体缩小，移除卡片) ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#111827' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
-    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '20px', color: 'white', paddingTop: '20px', paddingBottom: '160px' },
-    header: { textAlign: 'center', textShadow: '0 4px 15px rgba(0,0,0,0.5)' },
-    grammarPointTitle: { fontSize: '2.5rem', fontWeight: 'bold' },
-    pattern: { fontSize: '1.1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '12px', letterSpacing: '1px' },
+    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px', color: 'white', paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: '160px' },
+    header: { textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)' },
+    grammarPointTitle: { fontSize: '2.2rem', fontWeight: 'bold' }, // 缩小
+    pattern: { fontSize: '1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '10px', letterSpacing: '1px' },
     
-    glassPanel: { background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '20px', padding: '18px', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' },
+    // 【修改】移除卡片样式，改为简单的容器
+    sectionContainer: { width: '100%' },
     
-    sectionTitle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1.1rem', fontWeight: 'bold', color: '#fcd34d', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' },
-    explanationText: { fontSize: '0.95rem', lineHeight: 1.8, color: '#d1d5db', margin: '0 0 10px 0', textAlign: 'left' },
+    sectionTitle: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1rem', fontWeight: 'bold', color: '#fcd34d', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid rgba(255, 255, 255, 0.15)' },
+    explanationText: { fontSize: '0.9rem', lineHeight: 1.7, color: '#d1d5db', margin: '0 0 8px 0', textAlign: 'left' }, // 缩小
     examplesList: { display: 'flex', flexDirection: 'column', gap: '20px' },
     exampleItem: { display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '8px 16px' },
-    exampleNumber: { color: '#9ca3af', marginRight: '8px', fontSize: '1rem' },
-    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.4rem', fontWeight: 500, lineHeight: 1.7, display: 'flex', alignItems: 'center', flexWrap: 'wrap' },
-    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.9rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' },
+    exampleNumber: { color: '#9ca3af', marginRight: '8px', fontSize: '0.9rem' }, // 缩小
+    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.3rem', fontWeight: 500, lineHeight: 1.6, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }, // 缩小
+    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.85rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' }, // 缩小
     
-    playButton: { gridColumn: '2 / 3', gridRow: '1 / 3', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', color: 'white', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s' },
+    // 【修改】播放按钮缩小
+    playButton: { gridColumn: '2 / 3', gridRow: '1 / 3', background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.3)', color: 'white', borderRadius: '50%', width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s' },
     
-    footer: { position: 'absolute', bottom: '30px', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' },
-    textChinese: { color: 'white', margin: '0 2px' },
-    textBurmese: { color: '#5eead4', margin: '0 2px' },
-    textHighlight: { backgroundColor: 'rgba(253, 224, 71, 0.2)', color: '#fde047', fontWeight: 'bold', padding: '2px 4px', borderRadius: '4px' },
+    footer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 30px)', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' },
+    textChinese: { color: 'white', margin: '0 1px' },
+    textBurmese: { color: '#5eead4', margin: '0 1px' },
+    textHighlight: { backgroundColor: 'rgba(253, 224, 71, 0.2)', color: '#fde047', fontWeight: 'bold', padding: '1px 4px', borderRadius: '4px' },
     
-    subtitleContainer: { position: 'absolute', bottom: '90px', left: '20px', right: '20px', background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '12px 16px', pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
-    subtitleLine: { fontSize: '1.4rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
-    subtitlePart: { transition: 'color 0.2s ease-in-out', margin: '0 3px' },
-    subtitleTranslation: { fontSize: '0.95rem', color: '#d1d5db', textAlign: 'center', marginTop: '10px' },
+    subtitleContainer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)', left: '20px', right: '20px', background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '10px 14px', pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+    subtitleLine: { fontSize: '1.3rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }, // 缩小
+    subtitlePart: { transition: 'color 0.2s ease-in-out', margin: '0 2px' },
+    subtitleTranslation: { fontSize: '0.9rem', color: '#d1d5db', textAlign: 'center', marginTop: '8px' }, // 缩小
 };
 
+// --- 全局样式与动画 ---
 const styleTag = document.getElementById('grammar-player-styles') || document.createElement('style');
 styleTag.id = 'grammar-player-styles';
 styleTag.innerHTML = `
@@ -372,7 +405,7 @@ styleTag.innerHTML = `
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     .play-button:hover {
-        background-color: rgba(255, 255, 255, 0.2);
+        background-color: rgba(255, 255, 255, 0.15);
         transform: scale(1.1);
     }
     
