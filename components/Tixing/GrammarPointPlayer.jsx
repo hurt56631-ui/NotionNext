@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V7.1 - 字幕刷新与稳定性最终修复版)
+// components/Tixing/GrammarPointPlayer.jsx (V8 - 滚动字幕与最终稳定性修复版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -54,14 +54,16 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     
     const [activeAudio, setActiveAudio] = useState(null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-    const [subtitles, setSubtitles] = useState({ original: [], translation: '' });
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    
+    // 【字幕滚动系统】
+    const [subtitleHistory, setSubtitleHistory] = useState([]);
+    const [currentSubtitleIndex, setCurrentSubtitleIndex] = useState(-1);
 
     const audioQueueRef = useRef([]);
     const audioCache = useRef({});
     const playbackIdRef = useRef(0);
 
-    // 【修复】重构 stopPlayback，不再管理字幕状态
     const stopPlayback = useCallback(() => {
         playbackIdRef.current += 1;
         audioQueueRef.current.forEach(sound => sound.stop());
@@ -69,7 +71,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setActiveAudio(null);
         setIsLoadingAudio(false);
         setHighlightedIndex(-1);
-        // **移除** setSubtitles，让 playMixedAudio 完全控制字幕的设置
+        // 清空字幕历史记录
+        setSubtitleHistory([]);
+        setCurrentSubtitleIndex(-1);
     }, []);
     
     const parseTextForAudio = (text) => {
@@ -89,12 +93,11 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const currentPlaybackId = playbackIdRef.current + 1;
         playbackIdRef.current = currentPlaybackId;
         
-        // 停止之前的音频，但不清除UI状态
         audioQueueRef.current.forEach(sound => sound.stop());
         audioQueueRef.current = [];
 
         if (!text) {
-            stopPlayback(); // 如果没有文本，则完全停止并清理UI
+            stopPlayback();
             return;
         }
         
@@ -104,9 +107,16 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             return;
         }
 
-        // 在播放开始时，立即设置所有新状态
+        // 【滚动字幕逻辑】将新字幕添加到历史记录
+        const newSubtitle = {
+            id: currentPlaybackId,
+            original: parts,
+            translation: translation
+        };
+        setSubtitleHistory(prev => [...prev, newSubtitle]);
+        setCurrentSubtitleIndex(prev => prev + 1);
+
         setActiveAudio({ text, type });
-        setSubtitles({ original: parts, translation });
         setIsLoadingAudio(true);
         setHighlightedIndex(-1);
 
@@ -153,14 +163,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 const sound = new Howl({
                     src: [url],
                     html5: true,
-                    onload: () => {
-                        audioCache.current[url] = sound;
-                        onSoundLoad(sound);
-                    },
-                    onloaderror: () => {
-                        console.error(`语音片段加载失败: ${part.text}`);
-                        onSoundLoad(null);
-                    }
+                    onload: () => { audioCache.current[url] = sound; onSoundLoad(sound); },
+                    onloaderror: () => { console.error(`语音片段加载失败: ${part.text}`); onSoundLoad(null); }
                 });
                 sounds[index] = sound;
             }
@@ -171,22 +175,25 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (activeAudio?.type === type) {
             stopPlayback();
         } else {
-            playMixedAudio(text, translation, type);
+            // 在播放新音频前，清空之前的字幕历史
+            setSubtitleHistory([]);
+            setCurrentSubtitleIndex(-1);
+            // 使用 setTimeout 确保状态更新后再播放，避免滚动动画冲突
+            setTimeout(() => playMixedAudio(text, translation, type), 50);
         }
     };
     
     useEffect(() => {
-        // 先停止任何可能在播放的音频
         stopPlayback();
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
                 playMixedAudio(gp.narrationScript, "", `narration_${gp.id}`);
             }
-        }, 800); // 延迟以获得更好的过渡体验
+        }, 800);
         return () => {
             clearTimeout(timer);
-            stopPlayback(); // 在切换走时确保清理
+            stopPlayback();
         };
     }, [currentIndex, grammarPoints, playMixedAudio, stopPlayback]);
     
@@ -327,22 +334,28 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             </div>
                         </div>
 
-                        {/* 【修复】为字幕容器绑定唯一的播放ID作为key，强制刷新 */}
-                        {activeAudio && (
-                             <div key={playbackIdRef.current} style={styles.subtitleContainer}>
-                                <p style={styles.subtitleLine}>
-                                    {subtitles.original.map((part, index) => (
-                                        <span key={index} style={{
-                                            ...styles.subtitlePart, 
-                                            color: part.isChinese ? (highlightedIndex === index ? '#fde047' : 'white') : (highlightedIndex === index ? '#fde047' : '#5eead4')
-                                        }}>
-                                            {part.text}
-                                        </span>
-                                    ))}
-                                </p>
-                                {subtitles.translation && <p style={styles.subtitleTranslation}>{subtitles.translation}</p>}
+                        {/* 【滚动字幕渲染】 */}
+                        <div style={styles.subtitleContainer}>
+                            <div style={{...styles.subtitleScroller, transform: `translateY(-${currentSubtitleIndex * 80}px)`}}>
+                                {subtitleHistory.map((sub, subIndex) => (
+                                    <div key={sub.id} style={styles.subtitleEntry}>
+                                        <p style={styles.subtitleLine}>
+                                            {sub.original.map((part, index) => (
+                                                <span key={index} style={{
+                                                    ...styles.subtitlePart, 
+                                                    color: part.isChinese 
+                                                        ? (activeAudio && sub.id === playbackIdRef.current && highlightedIndex === index ? '#fde047' : 'white') 
+                                                        : (activeAudio && sub.id === playbackIdRef.current && highlightedIndex === index ? '#fde047' : '#5eead4')
+                                                }}>
+                                                    {part.text}
+                                                </span>
+                                            ))}
+                                        </p>
+                                        {sub.translation && <p style={styles.subtitleTranslation}>{sub.translation}</p>}
+                                    </div>
+                                ))}
                             </div>
-                        )}
+                        </div>
                         
                         <div style={styles.footer} onClick={() => navigate(1)}>
                             <div className="bounce-icon"><FaChevronUp size="1.2em" /></div>
@@ -388,7 +401,10 @@ const styles = {
     textBurmese: { color: '#5eead4', margin: '0 1px' },
     textHighlight: { backgroundColor: 'rgba(253, 224, 71, 0.2)', color: '#fde047', fontWeight: 'bold', padding: '1px 4px', borderRadius: '4px' },
     
-    subtitleContainer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)', left: '20px', right: '20px', background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '10px 14px', pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+    // 【滚动字幕样式】
+    subtitleContainer: { position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)', left: '20px', right: '20px', height: '80px', pointerEvents: 'none', overflow: 'hidden' },
+    subtitleScroller: { transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' },
+    subtitleEntry: { height: '80px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
     subtitleLine: { fontSize: '1.3rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
     subtitlePart: { transition: 'color 0.2s ease-in-out', margin: '0 2px' },
     subtitleTranslation: { fontSize: '0.9rem', color: '#d1d5db', textAlign: 'center', marginTop: '8px' },
