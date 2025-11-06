@@ -25,7 +25,7 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => { if (e && e.stop
 const playSoundEffect = (type) => { stopAllAudio(); if (sounds[type]) sounds[type].play(); };
 
 // =================================================================================
-// ===== 子组件 (代码无变化) =======================================================
+// ===== 子组件 ====================================================================
 // =================================================================================
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
@@ -38,25 +38,94 @@ const useCardSettings = () => {
   useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]);
   return [settings, setSettings];
 };
+
+// ✅ [修复] 重新加入被我误删的发音对比组件
 const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => {
     const analysis = useMemo(() => {
         if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; }
+        
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'symbol', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'symbol', removeNonHan: true });
+
         if (correctPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
-        let correctCount = 0; const comparisonResult = []; const maxLength = Math.max(correctPinyin.length, userPinyin.length);
-        for (let i = 0; i < maxLength; i++) { const correctSyllable = correctPinyin[i] || ''; const userSyllable = userPinyin[i] || ''; const isMatch = correctSyllable === userSyllable; if (isMatch && correctSyllable) { correctCount++; } comparisonResult.push({ text: userSyllable, isCorrect: isMatch }); }
+        
+        let correctCount = 0;
+        const comparisonResult = [];
+        const maxLength = Math.max(correctPinyin.length, userPinyin.length);
+
+        for (let i = 0; i < maxLength; i++) {
+            const correctSyllable = correctPinyin[i] || '';
+            const userSyllable = userPinyin[i] || '';
+            const isMatch = correctSyllable === userSyllable;
+            if (isMatch && correctSyllable) {
+                correctCount++;
+            }
+            comparisonResult.push({ text: userSyllable, isCorrect: isMatch });
+        }
+
         const isFullyCorrect = correctPinyin.join('') === userPinyin.join('');
         const accuracy = correctPinyin.length > 0 ? (correctCount / correctPinyin.length * 100).toFixed(0) : 0;
-        return { isCorrect: isFullyCorrect, accuracy, correctPinyinStr: correctPinyin.join(' ').normalize('NFC'), comparisonResult };
+        
+        return { 
+            isCorrect: isFullyCorrect, 
+            accuracy,
+            correctPinyinStr: correctPinyin.join(' ').normalize('NFC'),
+            comparisonResult
+        };
     }, [correctWord, userText]);
-    const [isRecording, setIsRecording] = useState(false); const [userRecordingUrl, setUserRecordingUrl] = useState(null); const mediaRecorderRef = useRef(null); const streamRef = useRef(null);
+
+    const [isRecording, setIsRecording] = useState(false);
+    const [userRecordingUrl, setUserRecordingUrl] = useState(null);
+    const mediaRecorderRef = useRef(null);
+    const streamRef = useRef(null);
+
     useEffect(() => { playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
-    const handleRecord = useCallback(async () => { if (isRecording) { mediaRecorderRef.current?.stop(); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); streamRef.current = stream; const recorder = new MediaRecorder(stream); mediaRecorderRef.current = recorder; const chunks = []; recorder.ondataavailable = e => chunks.push(e.data); recorder.onstop = () => { const blob = new Blob(chunks, { type: 'audio/webm' }); const url = URL.createObjectURL(blob); setUserRecordingUrl(url); streamRef.current?.getTracks().forEach(track => track.stop()); setIsRecording(false); }; recorder.start(); setIsRecording(true); } catch (err) { console.error("录音初始化失败:", err); alert("请检查麦克风权限。"); } }, [isRecording]);
-    const playUserAudio = useCallback(() => { if (userRecordingUrl) { stopAllAudio(); const sound = new Howl({ src: [userRecordingUrl], html5: true }); sound.play(); } }, [userRecordingUrl]);
+    
+    const handleRecord = useCallback(async () => {
+        if (isRecording) {
+            mediaRecorderRef.current?.stop();
+            return;
+        }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            const recorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                setUserRecordingUrl(url);
+                streamRef.current?.getTracks().forEach(track => track.stop());
+                setIsRecording(false);
+            };
+            recorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("录音初始化失败:", err);
+            alert("请检查麦克风权限。");
+        }
+    }, [isRecording]);
+
+    const playUserAudio = useCallback(() => {
+        if (userRecordingUrl) {
+            stopAllAudio();
+            const sound = new Howl({ src: [userRecordingUrl], html5: true });
+            sound.play();
+        }
+    }, [userRecordingUrl]);
+    
     const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]);
-    useEffect(() => { return () => { if (userRecordingUrl) URL.revokeObjectURL(userRecordingUrl); }; }, [userRecordingUrl]);
+
+    useEffect(() => {
+        return () => {
+            if (userRecordingUrl) URL.revokeObjectURL(userRecordingUrl);
+        };
+    }, [userRecordingUrl]);
+
     if (!analysis) return null;
+
     return (
         <div style={styles.comparisonOverlay}>
             <div style={styles.comparisonPanel}>
@@ -65,27 +134,56 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                     <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div>
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
                 </div>
+                
                 <div style={styles.errorDetailsContainer}>
-                    {analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.pinyinComparisonBox}><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>标准发音</div><div style={styles.pinyinText}>{analysis.correctPinyinStr}</div></div><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>你的发音</div><div style={styles.pinyinText}>{analysis.comparisonResult.map((part, index) => (<span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}>{part.text.normalize('NFC')}{' '}</span>))}</div></div></div>)}
+                    {analysis.error ? (
+                        <div style={styles.lengthError}><h3>{analysis.message}</h3></div>
+                    ) : (
+                        <div style={styles.pinyinComparisonBox}>
+                            <div style={styles.pinyinComparisonRow}>
+                                <div style={styles.pinyinLabel}>标准发音</div>
+                                <div style={styles.pinyinText}>{analysis.correctPinyinStr}</div>
+                            </div>
+                            <div style={styles.pinyinComparisonRow}>
+                                <div style={styles.pinyinLabel}>你的发音</div>
+                                <div style={styles.pinyinText}>
+                                    {analysis.comparisonResult.map((part, index) => (
+                                        <span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}>
+                                            {part.text.normalize('NFC')}{' '}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <div style={styles.audioComparisonSection}><button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button><button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>{isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />}{isRecording ? '停止录音' : '录音对比'}</button>{userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}</div>
-                <div style={styles.comparisonActions}>{analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}</div>
+                
+                <div style={styles.audioComparisonSection}>
+                    <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>
+                    <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>
+                        {isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />}
+                        {isRecording ? '停止录音' : '录音对比'}
+                    </button>
+                    {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}
+                </div>
+
+                <div style={styles.comparisonActions}>
+                    {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}
+                </div>
             </div>
         </div>
     );
 };
+
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
-  const handleImageUpload = (e) => { const file = e.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (loadEvent) => { handleSettingChange('backgroundImage', loadEvent.target.result); }; reader.readAsDataURL(file); } };
+  const handleImageUpload = (e) => { const file = e.target.files[0]; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (loadEvent) => { handleSettingChange('backgroundImage', loadEvent.target.result); }; reader.readAsDataURL(file); } };
   return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>外观设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>自定义背景</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
 });
 const JumpModal = ({ max, current, onJump, onClose }) => {
     const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> );
 };
 
-// =================================================================================
-// ===== 主组件: WordCard ==========================================================
-// =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false); useEffect(() => { setIsMounted(true); }, []);
   const [settings, setSettings] = useCardSettings();
@@ -169,11 +267,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   return null;
 };
 
-// =================================================================================
-// ===== 样式表 ====================================================================
-// =================================================================================
 const styles = {
-    // ✅ [修改] 更新背景色
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
@@ -194,7 +288,6 @@ const styles = {
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
-    // ✅ [修改] 美化“完成”界面的样式
     completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
