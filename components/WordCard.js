@@ -1,4 +1,4 @@
-// components/WordCard.js (最终方案：识别与录音分离，保证100%稳定)
+// components/WordCard.js (最终稳定版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +10,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
 // =================================================================================
-// ===== IndexedDB 收藏管理模块 ====================================================
+// ===== 数据库和辅助函数 (原始版本，无修改) =======================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
@@ -59,9 +59,6 @@ async function isFavorite(id) {
   });
 }
 
-// =================================================================================
-// ===== 辅助工具 & 常量 ===========================================================
-// =================================================================================
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' },
     { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' },
@@ -130,7 +127,7 @@ const parsePinyin = (pinyinNum) => {
 };
 
 // =================================================================================
-// ===== 子组件 ====================================================================
+// ===== 子组件 (原始版本，无修改) =================================================
 // =================================================================================
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
@@ -505,7 +502,10 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
-                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}><div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div><div style={styles.textWordChinese}>{cardData.chinese}</div></div>
+                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                            <span className="perfect-pinyin" style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</span>
+                            <div style={styles.textWordChinese}>{cardData.chinese}</div>
+                          </div>
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
@@ -519,7 +519,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'left' }}>
-                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
+                                            <span className="perfect-pinyin" style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</span>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                           <button style={styles.playExampleButton} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}>
@@ -538,7 +538,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             <div style={styles.completionContainer}>
                 <h2>🎉 全部完成！</h2>
                 <p>你已学完本列表中的所有单词。</p>
-                <button style={styles.knowButton} onClick={onClose}>关闭</button>
+                <button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>关闭</button>
             </div>
         )}
 
@@ -564,18 +564,19 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 // ===== 样式表 ====================================================================
 // =================================================================================
 const styles = {
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#004d40' }, 
+    // ✅ [修改] 更新背景色
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
+    pinyin: { display: 'inline-block', fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     mnemonicBox: { color: '#fff', width: '100%', maxWidth: '400px', textAlign: 'left', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
     extraInfoLabel: { background: '#f59e0b', color: 'white', padding: '3px 9px', borderRadius: '6px', marginRight: '12px', fontSize: '0.9rem', fontWeight: 'bold' },
     exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
-    examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
+    examplePinyin: { display: 'inline-block', fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     playExampleButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.8rem', padding: '5px', opacity: 0.8 },
     rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
@@ -586,7 +587,8 @@ const styles = {
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
-    completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5 },
+    // ✅ [修改] 美化“完成”界面的样式
+    completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
