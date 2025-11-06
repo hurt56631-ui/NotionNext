@@ -167,7 +167,6 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
         return { 
             isCorrect: isFullyCorrect, 
             accuracy,
-            // ✅ [MODIFIED] Apply Unicode normalization
             correctPinyinStr: correctPinyin.join(' ').normalize('NFC'),
             comparisonResult
         };
@@ -248,7 +247,6 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                                 <div style={styles.pinyinText}>
                                     {analysis.comparisonResult.map((part, index) => (
                                         <span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}>
-                                            {/* ✅ [MODIFIED] Apply Unicode normalization */}
                                             {part.text.normalize('NFC')}{' '}
                                         </span>
                                     ))}
@@ -526,7 +524,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
-                          {/* ✅ [MODIFIED] Apply Unicode normalization */}
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}><div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div><div style={styles.textWordChinese}>{cardData.chinese}</div></div>
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
@@ -541,7 +538,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            {/* ✅ [MODIFIED] Apply Unicode normalization */}
                                             <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
@@ -588,15 +584,15 @@ const styles = {
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
-    pinyin: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em', verticalAlign: 'middle' },
+    // ✅ [最终修改] 显式指定使用全局加载的 'Noto Sans SC' 字体，并加入精调 CSS
+    pinyin: { fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif", fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em', display: 'inline-block', lineHeight: 1, transform: 'translateY(0.1em)' },
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
     revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     mnemonicBox: { color: '#fff', display: 'inline-block', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(128, 90, 213, 0.4)', padding: '8px 16px', borderRadius: '12px' },
     exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
-    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
-    examplePinyin: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em', verticalAlign: 'middle' },
+    // ✅ [最终修改] 显式指定使用全局加载的 'Noto Sans SC' 字体，并加入精调 CSS
+    examplePinyin: { fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif", fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em', display: 'inline-block', lineHeight: 1, transform: 'translateY(0.1em)' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
@@ -614,8 +610,8 @@ const styles = {
     lengthError: { textAlign: 'center', color: '#b91c1c', padding: '10px 0' },
     pinyinComparisonBox: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px', background: '#f8f9fa', borderRadius: '12px' },
     pinyinComparisonRow: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start' },
-    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
-    pinyinText: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.5rem', color: '#333', fontWeight: 500, letterSpacing: '0.05em', verticalAlign: 'middle' },
+    // ✅ [最终修改] 显式指定使用全局加载的 'Noto Sans SC' 字体
+    pinyinText: { fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif", fontSize: '1.5rem', color: '#333', fontWeight: 500, letterSpacing: '0.05em' },
     wrongPinyinSegment: { color: '#dc2626', fontWeight: 'bold' },
     pinyinLabel: { fontSize: '0.85rem', color: '#6b7280', marginBottom: '4px', fontWeight: '600' },
     audioComparisonSection: { display: 'flex', gap: '10px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa', flexWrap: 'wrap' },
