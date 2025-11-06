@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V6 - 稳定性和样式增强版)
+// components/Tixing/GrammarPointPlayer.jsx (V6.1 - 编译错误修复版)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,7 +12,7 @@ import { FaPlay, FaPause, FaSpinner, FaChevronUp } from 'react-icons/fa';
 // --- 辅助函数 ---
 const generateRubyHTML = (text) => {
   if (!text) return '';
-  return text.replace(/[\u4e-00-\u9fa5]/g, char => `<ruby>${char}<rt>${pinyinConverter(char)}</rt></ruby>`);
+  return text.replace(/[\u4e00-\u9fa5]/g, char => `<ruby>${char}<rt>${pinyinConverter(char)}</rt></ruby>`);
 };
 
 // --- 主组件 ---
@@ -37,11 +37,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     const audioQueueRef = useRef([]);
     const audioCache = useRef({});
-    // 【新增】唯一的播放ID，用于防止旧的回调执行
     const playbackIdRef = useRef(0);
 
     const stopPlayback = useCallback(() => {
-        playbackIdRef.current += 1; // 使所有进行中的加载/播放无效
+        playbackIdRef.current += 1;
         audioQueueRef.current.forEach(sound => sound.stop());
         audioQueueRef.current = [];
         setActiveAudio(null);
@@ -64,11 +63,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     };
 
     const playMixedAudio = useCallback((text, translation, type) => {
-        // 【重构音频逻辑】
         const currentPlaybackId = playbackIdRef.current + 1;
         playbackIdRef.current = currentPlaybackId;
         
-        // 停止当前所有音频
         audioQueueRef.current.forEach(sound => sound.stop());
         audioQueueRef.current = [];
 
@@ -92,7 +89,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         let loadedCount = 0;
 
         const startPlayback = () => {
-            // 如果ID不再匹配，说明新的播放已开始，中止本次播放
             if (playbackIdRef.current !== currentPlaybackId) return;
 
             setIsLoadingAudio(false);
@@ -101,7 +97,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             let currentSoundIndex = 0;
             const playNext = () => {
                 if (playbackIdRef.current !== currentPlaybackId || currentSoundIndex >= sounds.length) {
-                    // 在播放队列结束或ID失效时，仅当ID仍有效时才调用stopPlayback
                     if(playbackIdRef.current === currentPlaybackId) stopPlayback();
                     return;
                 }
@@ -139,7 +134,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     },
                     onloaderror: () => {
                         console.error(`语音片段加载失败: ${part.text}`);
-                        onSoundLoad(null); // 即使失败也继续
+                        onSoundLoad(null);
                     }
                 });
                 sounds[index] = sound;
@@ -215,13 +210,13 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         config: { mass: 1, tension: 280, friction: 30 },
     });
     
-    // 【新增】高亮渲染逻辑
     const renderMixedText = (text, pattern = "") => {
         const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
         const highlightIndices = new Set();
         
-        const chineseParts = parts.map((p, i) => ({ text: p, index: i }))
-                                  .filter(p => p.text.startsWith('{{')));
+        // 【修复】将链式调用拆分为两行以避免编译错误
+        const mappedPartsWithIndices = parts.map((p, i) => ({ text: p, index: i }));
+        const chineseParts = mappedPartsWithIndices.filter(p => p.text.startsWith('{{'));
         
         const zaiStandaloneIndex = chineseParts.findIndex(p => p.text === '{{在}}');
         const zaiNarIndex = chineseParts.findIndex(p => p.text === '{{在哪儿}}');
@@ -253,10 +248,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
     };
 
-    // 【新增】富文本解释渲染
     const renderExplanation = (text) => {
         if (!text) return null;
         return text.split('\n').map((line, index) => {
+            if (line.trim() === '') return <div key={index} style={{height: '10px'}} />; // 处理空行为间距
             const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             return <p key={index} style={styles.explanationText} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
         });
@@ -339,14 +334,13 @@ GrammarPointPlayer.propTypes = {
     onComplete: PropTypes.func,
 };
 
-// --- 样式表 (字体已调小) ---
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#111827' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
     contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '20px', color: 'white', paddingTop: '20px', paddingBottom: '160px' },
     header: { textAlign: 'center', textShadow: '0 4px 15px rgba(0,0,0,0.5)' },
-    grammarPointTitle: { fontSize: '2.5rem', fontWeight: 'bold' }, // 缩小
-    pattern: { fontSize: '1.1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '12px', letterSpacing: '1px' }, // 修改颜色
+    grammarPointTitle: { fontSize: '2.5rem', fontWeight: 'bold' },
+    pattern: { fontSize: '1.1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '12px', letterSpacing: '1px' },
     
     glassPanel: { background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '20px', padding: '18px', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' },
     
@@ -355,23 +349,22 @@ const styles = {
     examplesList: { display: 'flex', flexDirection: 'column', gap: '20px' },
     exampleItem: { display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '8px 16px' },
     exampleNumber: { color: '#9ca3af', marginRight: '8px', fontSize: '1rem' },
-    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.4rem', fontWeight: 500, lineHeight: 1.7, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }, // 缩小
-    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.9rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' }, // 缩小
+    exampleSentence: { gridColumn: '1 / 2', fontSize: '1.4rem', fontWeight: 500, lineHeight: 1.7, display: 'flex', alignItems: 'center', flexWrap: 'wrap' },
+    exampleTranslation: { gridColumn: '1 / 2', fontSize: '0.9rem', color: '#e5e7eb', fontStyle: 'italic', textAlign: 'left', marginTop: '4px' },
     
     playButton: { gridColumn: '2 / 3', gridRow: '1 / 3', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', color: 'white', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s' },
     
     footer: { position: 'absolute', bottom: '30px', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer' },
     textChinese: { color: 'white', margin: '0 2px' },
     textBurmese: { color: '#5eead4', margin: '0 2px' },
-    textHighlight: { color: '#fde047', fontWeight: 'bold' }, // 【新增】高亮样式
+    textHighlight: { backgroundColor: 'rgba(253, 224, 71, 0.2)', color: '#fde047', fontWeight: 'bold', padding: '2px 4px', borderRadius: '4px' },
     
     subtitleContainer: { position: 'absolute', bottom: '90px', left: '20px', right: '20px', background: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '12px 16px', pointerEvents: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
-    subtitleLine: { fontSize: '1.4rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }, // 缩小
+    subtitleLine: { fontSize: '1.4rem', fontWeight: '500', margin: 0, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' },
     subtitlePart: { transition: 'color 0.2s ease-in-out', margin: '0 3px' },
     subtitleTranslation: { fontSize: '0.95rem', color: '#d1d5db', textAlign: 'center', marginTop: '10px' },
 };
 
-// --- 全局样式与动画 ---
 const styleTag = document.getElementById('grammar-player-styles') || document.createElement('style');
 styleTag.id = 'grammar-player-styles';
 styleTag.innerHTML = `
