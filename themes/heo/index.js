@@ -1,6 +1,8 @@
-// themes/heo/index.js <-- 最终修复完整版：已解决初始加载吸顶问题和滑动冲突
+// themes/heo/index.js <-- 最终修复完整版：已解决初始加载吸顶问题和滑动冲突，并修复了手势返回问题
 
-// 保持您原始文件的所有 import 语句不变
+// =================================================================================
+// ======================  所有 import 语句保持不变  ========================
+// =================================================================================
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
 import { HashTag } from '@/components/HeroIcons'
@@ -72,7 +74,7 @@ const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
 
 // =================================================================================
-// ====================== 高级拖拽侧边栏组件 (保持不变) ========================
+// ====================== 所有其他组件 (HomeSidebar, LayoutBase, 等) 保持不变 ========================
 // =================================================================================
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
@@ -127,10 +129,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
-
-// =================================================================================
-// ====================== 基础布局 (保持不变) ========================
-// =================================================================================
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
@@ -167,7 +165,6 @@ const LayoutBase = props => {
   )
 }
 
-// 纤细滚动条样式
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -177,10 +174,6 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
-
-// =================================================================================
-// ====================== 主页专用的底部导航栏 (保持不变) ========================
-// =================================================================================
 const BottomNavBar = () => {
     const navItems = [
         { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
@@ -215,9 +208,6 @@ const BottomNavBar = () => {
     );
 };
 
-// =================================================================================
-// ====================== 快捷操作按钮组件 (保持不变) ========================
-// =================================================================================
 const ActionButtons = ({ onOpenFavorites }) => {
   const actions = [
     { icon: <Phone size={24} />, text: '联系我们', type: 'link', href: 'tel:YOUR_PHONE_NUMBER', color: 'from-blue-500 to-sky-500' },
@@ -241,10 +231,6 @@ const ActionButtons = ({ onOpenFavorites }) => {
   );
 };
 
-
-// =================================================================================
-// ====================== IndexedDB 辅助函数 (保持不变) ========================
-// =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const SENTENCE_STORE_NAME = 'favoriteSentences';
 const WORD_STORE_NAME = 'favoriteWords';
@@ -283,41 +269,61 @@ async function getAllFavorites(storeName) {
 }
 
 
-/**
- * 首页布局组件
- */
+// =================================================================================
+// ======================  关键修改区域: LayoutIndex 组件 ========================
+// =================================================================================
 const LayoutIndex = props => {
   const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
+  // 定义 tab 映射，方便通过名字查找
   const tabs = [
-    { name: '文章', icon: <Newspaper size={22} /> },
-    { name: 'HSK', icon: <GraduationCap size={22} /> },
-    { name: '口语', icon: <Mic size={22} /> },
-    { name: '练习', icon: <ClipboardCheck size={22} /> },
-    { name: '书籍', icon: <BookOpen size={22} /> }
+    { name: '文章', key: 'articles', icon: <Newspaper size={22} /> },
+    { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> },
+    { name: '口语', key: 'speaking', icon: <Mic size={22} /> },
+    { name: '练习', key: 'practice', icon: <ClipboardCheck size={22} /> },
+    { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
 
-  const [activeTab, setActiveTab] = useState(tabs[0].name);
-  const [backgroundUrl, setBackgroundUrl] = useState('');
+  // ✅ 1. activeTab 的状态现在由 URL 参数决定，而不是写死的初始值
+  // 只有当 router 准备好后，我们才从 URL 读取 tab 参数
+  const [activeTab, setActiveTab] = useState(null); 
+
+  useEffect(() => {
+    if (router.isReady) {
+      const tabFromQuery = router.query.tab;
+      const validTab = tabs.find(t => t.key === tabFromQuery);
+      // 如果 URL 参数有效，则设置它，否则使用默认的第一个 tab
+      setActiveTab(validTab ? validTab.name : tabs[0].name);
+    }
+  }, [router.isReady, router.query.tab]); // 依赖 router 准备状态和 tab 参数
   
+  // ✅ 2. 创建一个函数来处理 tab 切换，这个函数会更新 URL
+  const handleTabChange = (tabName) => {
+    const newTabKey = tabs.find(t => t.name === tabName)?.key;
+    if (newTabKey) {
+      // 使用 shallow routing 更新 URL，这样页面不会重新加载
+      router.push(`/?tab=${newTabKey}`, undefined, { shallow: true });
+    }
+  };
+
+
+  // --- 您所有其他的 state 和 ref 保持不变 ---
+  const [backgroundUrl, setBackgroundUrl] = useState('');
   const scrollableContainerRef = useRef(null);
   const stickySentinelRef = useRef(null);
   const lastScrollY = useRef(0);
   const [isStickyActive, setIsStickyActive] = useState(false);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const mainContentRef = useRef(null);
-
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
-
   const [sentenceCardData, setSentenceCardData] = useState(null);
   const [wordCardData, setWordCardData] = useState(null);
-  
   const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
 
@@ -348,6 +354,7 @@ const LayoutIndex = props => {
   }, [router]);
 
   useEffect(() => {
+    // 这个 useEffect 里的所有其他逻辑保持不变
     const handlePopState = () => {
       if (!window.location.hash.startsWith('#favorite')) {
         setSentenceCardData(null);
@@ -386,14 +393,10 @@ const LayoutIndex = props => {
     };
     container.addEventListener('scroll', handleScroll, { passive: true });
     
-    // ✅ 关键修复：解决初始加载时，因内容过高导致分类栏直接吸顶的问题。
-    // 只有当哨兵元素完全滚动到视口上方时 (boundingClientRect.top < 0)，才激活吸顶。
     const observer = new IntersectionObserver(
         ([entry]) => {
             const shouldBeSticky = !entry.isIntersecting && entry.boundingClientRect.top < 0;
             setIsStickyActive(shouldBeSticky);
-            
-            // 如果恢复为非吸顶状态，总是显示导航栏
             if (!shouldBeSticky) {
                 setIsNavVisible(true);
             }
@@ -410,6 +413,22 @@ const LayoutIndex = props => {
     };
   }, [isStickyActive, router]);
 
+  // 手势切换 tab 的逻辑现在也调用 handleTabChange
+  const contentSwipeHandlers = useSwipeable({
+      onSwipedLeft: () => {
+          const currentIndex = tabs.findIndex(t => t.name === activeTab);
+          if (currentIndex < tabs.length - 1) handleTabChange(tabs[currentIndex + 1].name);
+      },
+      onSwipedRight: () => {
+          const currentIndex = tabs.findIndex(t => t.name === activeTab);
+          if (currentIndex > 0) handleTabChange(tabs[currentIndex - 1].name);
+      },
+      preventDefaultTouchmoveEvent: true,
+      trackMouse: true,
+      delta: 50
+  });
+
+  // 其他所有函数 (handleTouchStart, openSidebar, etc.) 保持不变
   const handleTouchStart = (e) => {
     if (!isSidebarOpen && mainContentRef.current?.contains(e.target)) return;
     const startX = e.touches[0].clientX;
@@ -418,14 +437,12 @@ const LayoutIndex = props => {
     currentSidebarX.current = sidebarX;
     setIsDragging(true);
   };
-
   const handleTouchMove = (e) => {
     if (!isDragging || touchStartX.current === null) return;
     const deltaX = e.touches[0].clientX - touchStartX.current;
     const newX = Math.max(-sidebarWidth, Math.min(currentSidebarX.current + deltaX, 0));
     setSidebarX(newX);
   };
-
   const handleTouchEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
@@ -433,33 +450,29 @@ const LayoutIndex = props => {
     if (sidebarX < -sidebarWidth / 2) closeSidebar();
     else openSidebar();
   };
-
-  const contentSwipeHandlers = useSwipeable({
-      onSwipedLeft: () => {
-          const currentIndex = tabs.findIndex(t => t.name === activeTab);
-          if (currentIndex < tabs.length - 1) setActiveTab(tabs[currentIndex + 1].name);
-      },
-      onSwipedRight: () => {
-          const currentIndex = tabs.findIndex(t => t.name === activeTab);
-          if (currentIndex > 0) setActiveTab(tabs[currentIndex - 1].name);
-      },
-      preventDefaultTouchmoveEvent: true,
-      trackMouse: true,
-      delta: 50
-  });
-
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
+  // ✅ 3. renderTabButtons 的 onClick 现在调用新的 handleTabChange 函数
   const renderTabButtons = () => tabs.map(tab => (
-    <button key={tab.name} onClick={() => setActiveTab(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+    <button key={tab.name} onClick={() => handleTabChange(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
         <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
     </button>
   ));
 
+  // ✅ 4. 如果 activeTab 还没从 URL 中恢复，可以显示一个加载状态
+  if (!activeTab) {
+    return (
+        <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
+            {/* 可以放一个简单的加载动画 */}
+        </div>
+    );
+  }
+
+  // --- 最终的 JSX 结构保持不变 ---
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
@@ -532,9 +545,9 @@ const LayoutIndex = props => {
 };
 
 
-// =========================================================================
-// =============  其他所有布局组件，保持原样  ===================
-// =========================================================================
+// =================================================================================
+// ======================  所有其他布局组件 (LayoutPostList, etc.) 保持不变 ========================
+// =================================================================================
 const LayoutPostList = props => (
     <div id='post-outer-wrapper' className='px-5  md:px-0'>
       <CategoryBar {...props} />
