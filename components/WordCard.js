@@ -10,7 +10,9 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 import PinyinRenderer from './PinyinRenderer'; // ✅ [新] 引入 PinyinRenderer 组件
 
-// ... (IndexedDB 和辅助函数部分保持不变，此处省略以节省空间) ...
+// =================================================================================
+// ===== IndexedDB 收藏管理模块 (代码无变化) =======================================
+// =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
 
@@ -58,6 +60,9 @@ async function isFavorite(id) {
   });
 }
 
+// =================================================================================
+// ===== 辅助工具 & 常量 (代码无变化) ===============================================
+// =================================================================================
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' },
     { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' },
@@ -350,6 +355,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) handleCloseRequest(); }
       else { if (Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30)) navigate(yDir < 0 ? 1 : -1); }
   }, { filterTaps: true, preventDefault: true, threshold: 10 });
+
   const cardContent = pageTransitions((style, item) => {
     const backgroundStyle = settings.backgroundImage ? { background: `url(${settings.backgroundImage}) center/cover no-repeat`, backgroundAttachment: 'fixed' } : {};
     return item && (
@@ -368,7 +374,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                            {/* ✅ [最终修改] 使用 PinyinRenderer 替换 <div> */}
                             <PinyinRenderer text={pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })} style={styles.pinyin} />
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
@@ -379,7 +384,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            {/* ✅ [最终修改] 使用 PinyinRenderer 替换 <div> */}
                                             <PinyinRenderer text={pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })} style={styles.examplePinyin} />
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
@@ -396,11 +400,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {currentCard && (<div style={styles.rightControls} data-no-gesture="true"><button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={18} /></button><button style={styles.rightIconButton} onClick={handleListen} title="发音练习">{isListening ? <FaStop size={18} color={'#dc2626'}/> : <FaMicrophone size={18} color={'#4a5568'} />}</button>{currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={18} /></button>)}{<button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>}</div>)}
         <div style={styles.bottomControlsContainer} data-no-gesture="true}>{activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}<div style={styles.knowButtonsWrapper}><button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow}>不认识</button><button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow}>认识</button></div></div>
       </animated.div>
-    );
+    // ✅ [修复] 补上缺失的闭合标签
+    )); 
   });
+
   if (isMounted) return createPortal(cardContent, document.body);
   return null;
 };
+
 
 // =================================================================================
 // ===== 样式表 ====================================================================
@@ -457,6 +464,24 @@ const styles = {
     jumpModalTitle: { marginTop: 0, marginBottom: '15px', color: '#333' },
     jumpModalInput: { width: '100px', padding: '10px', fontSize: '1.2rem', textAlign: 'center', border: '2px solid #ccc', borderRadius: '8px', marginBottom: '15px' },
     jumpModalButton: { width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#4299e1', color: 'white', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' },
+
+    // ✅ [新] 添加 PinyinRenderer 所需的样式
+    pinyinVowelContainer: {
+        position: 'relative',
+        display: 'inline-block',
+    },
+    pinyinTone1: {
+        position: 'absolute',
+        top: '0.1em', // 可以微调这个值来改变平调的高度
+        left: '0',
+        width: '100%',
+        height: '0',
+        borderTop: '0.1em solid', 
+        color: 'inherit',
+    },
+    pinyinToneOther: {
+        color: 'transparent' // 隐藏2,3,4声的基础字母
+    }
 };
 
 export default WordCard;
