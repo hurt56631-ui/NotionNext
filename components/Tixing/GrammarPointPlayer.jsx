@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V3 - 最终修复版)
+// components/Tixing/GrammarPointPlayer.jsx (V3 - 编译错误已修复)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -131,10 +131,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (activeAudio?.text === text) {
             stopPlayback();
         } else {
-            // 先停止当前播放，再开始新的
             if (isPlayingRef.current) {
                 stopPlayback();
-                setTimeout(() => playMixedAudio(text, translation), 100); // 短暂延迟确保完全停止
+                setTimeout(() => playMixedAudio(text, translation), 100);
             } else {
                 playMixedAudio(text, translation);
             }
@@ -146,7 +145,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
-                playMixedAudio(gp.narrationScript, ""); // 旁白没有翻译字幕
+                playMixedAudio(gp.narrationScript, "");
             }
         }, 800);
         return () => {
@@ -180,7 +179,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         config: { mass: 1, tension: 280, friction: 30 },
     });
     
-    // ✅ 【核心修复】使用辅助函数来渲染混合文本，并修复 style 属性
     const renderMixedText = (text) => {
         return text.split(/(\{\{.*?\}\})/g).filter(Boolean).map((part, pIndex) => {
             const isChinese = part.startsWith('{{');
@@ -226,7 +224,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         <div key={ex.id} style={styles.exampleItem}>
                                             <div style={styles.exampleSentence}>
                                                 <span style={styles.exampleNumber}>{index + 1}.</span>
-                                                {/* ✅ 使用修复后的渲染逻辑 */}
                                                 {renderMixedText(ex.sentence)}
                                             </div>
                                             <div style={styles.exampleTranslation}>{ex.translation}</div>
