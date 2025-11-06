@@ -1,4 +1,4 @@
-// components/Tixing/LessonPlayer.jsx (注入最终诊断日志的完整版)
+// components/Tixing/LessonPlayer.jsx (已集成DuiHua组件的最终版本)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -6,7 +6,7 @@ import { pinyin } from 'pinyin-pro';
 import { useSwipeable } from 'react-swipeable';
 import { useRouter } from 'next/router';
 
-// --- 1. 动态导入您所有的题型组件 (已加入 GrammarPointPlayer) ---
+// --- 1. 动态导入您所有的题型组件 (已加入 DuiHua 组件) ---
 const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false });
 const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false });
 const GaiCuoTi = dynamic(() => import('@/components/Tixing/GaiCuoTi'), { ssr: false });
@@ -17,6 +17,8 @@ const GengDuTi = dynamic(() => import('@/components/Tixing/GengDuTi'), { ssr: fa
 const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false });
 const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false });
 const GrammarPointPlayer = dynamic(() => import('@/components/Tixing/GrammarPointPlayer'), { ssr: false });
+// [新增] 导入对话组件
+const DuiHua = dynamic(() => import('@/components/Tixing/DuiHua'), { ssr: false });
 
 
 // --- 2. 辅助组件与函数 (自包含) ---
@@ -164,9 +166,18 @@ export default function LessonPlayer({ lesson }) {
     if (isCompleted || !lesson.blocks[currentIndex]) return;
     const currentBlock = lesson.blocks[currentIndex];
     let textToRead = '';
-    if (currentBlock.type === 'teaching') { textToRead = currentBlock.content?.narrationText; } 
-    else { textToRead = currentBlock.content?.prompt; }
-    if (!textToRead) { console.warn('[TTS] No text to read found.'); return; }
+    // [修改] 调整语音播放逻辑，对话和语法组件自己管理语音
+    if (currentBlock.type === 'teaching') { 
+        textToRead = currentBlock.content?.narrationText || currentBlock.content?.displayText; 
+    } else if (currentBlock.type === 'choice' || currentBlock.type === 'panduan') {
+        textToRead = currentBlock.content?.prompt;
+    }
+    
+    if (!textToRead) { 
+        console.warn('[TTS] No text to read found for this block type. Component might handle its own audio.'); 
+        return; 
+    }
+
     const params = new URLSearchParams({ text: textToRead.replace(/\{\{/g, `<voice name="${settings.myanmarVoice}">`).replace(/\}\}/g, '</voice>'), chinese_voice: settings.chineseVoice, rate: settings.rate, subtitles: 'true' });
     const ttsUrl = `https://libretts.is-an.org/api/tts?${params.toString()}`;
     try {
@@ -297,6 +308,10 @@ export default function LessonPlayer({ lesson }) {
     switch (type) {
       case 'grammar':
         return <GrammarPointPlayer {...baseProps} />;
+      
+      // [新增] 添加 dialogue_cinematic 的 case
+      case 'dialogue_cinematic':
+        return <DuiHua {...baseProps} />;
 
       case 'teaching': 
         return <TeachingBlock content={currentBlock.content} />;
