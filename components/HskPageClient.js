@@ -11,8 +11,17 @@ const WordCard = dynamic(
   { ssr: false }
 );
 
-// ✅ 直接导入 HSK1 的单词数据
-import hsk1Words from '@/data/hsk/hsk1.json'; // ⚠️ 请确保这个路径相对于你的文件是正确的！
+// --- 数据中心：一次性导入所有 HSK 等级的词汇数据 ---
+// 确保这些 JSON 文件都存在于你的 data/hsk 目录下
+// 如果某个文件不存在，导入会失败，但我们的代码会优雅地处理这种情况
+let hskWordsData = {};
+try { hskWordsData[1] = require('@/data/hsk/hsk1.json'); } catch (e) { console.warn("HSK 1 words not found."); }
+try { hskWordsData[2] = require('@/data/hsk/hsk2.json'); } catch (e) { console.warn("HSK 2 words not found."); }
+try { hskWordsData[3] = require('@/data/hsk/hsk3.json'); } catch (e) { console.warn("HSK 3 words not found."); }
+try { hskWordsData[4] = require('@/data/hsk/hsk4.json'); } catch (e) { console.warn("HSK 4 words not found."); }
+try { hskWordsData[5] = require('@/data/hsk/hsk5.json'); } catch (e) { console.warn("HSK 5 words not found."); }
+try { hskWordsData[6] = require('@/data/hsk/hsk6.json'); } catch (e) { console.warn("HSK 6 words not found."); }
+// ----------------------------------------------------
 
 // --- HSK 等级卡片数据 (完整版) ---
 const hskData = [
@@ -236,17 +245,17 @@ export default function HskPageClient() {
   const isCardViewOpen = router.asPath.includes('#hsk-vocabulary');
 
   const handleVocabularyClick = useCallback((level) => {
-    // 如果是 HSK 1，我们直接使用本地导入的数据
-    if (level.level === 1) {
-      if (hsk1Words && hsk1Words.length > 0) {
-        setActiveHskWords(hsk1Words);
-        setActiveLevelTag(`hsk${level.level}`);
-        router.push(router.asPath + '#hsk-vocabulary', undefined, { shallow: true });
-      } else {
-        alert('HSK 1 词汇数据加载失败或为空。');
-      }
+    // 从我们的映射中动态获取对应等级的单词
+    const words = hskWordsData[level.level];
+
+    // 检查单词数据是否存在且不为空
+    if (words && words.length > 0) {
+      setActiveHskWords(words);
+      setActiveLevelTag(`hsk${level.level}`); // 设置唯一的 progressKey
+      // 使用 hash 路由来显示全屏卡片
+      router.push(router.pathname + '#hsk-vocabulary', undefined, { shallow: true });
     } else {
-      // 对于其他等级，显示一个提示
+      // 如果数据不存在或为空，给出提示
       alert(`HSK ${level.level} 的词汇列表正在准备中，敬请期待！`);
     }
   }, [router]);
@@ -255,11 +264,13 @@ export default function HskPageClient() {
     setActiveHskWords(null);
     setActiveLevelTag(null);
     if (window.location.hash.includes('#hsk-vocabulary')) {
+        // 使用 router.back() 来清除 hash
         router.back(); 
     }
   }, [router]);
 
   useEffect(() => {
+    // 这个 effect 监听浏览器前进后退事件，确保 hash 变化时状态能同步
     const handleHashChange = () => {
       if (!window.location.hash.includes('hsk-vocabulary')) {
         setActiveHskWords(null);
