@@ -351,7 +351,9 @@ GrammarPointPlayer.propTypes = {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#111827' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
-    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px', color: 'white', paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: '100px' },
+    // --- 修改点 START ---
+    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '40px', color: 'white', paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: '100px' },
+    // --- 修改点 END ---
     header: { textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)' },
     grammarPointTitle: { fontSize: '2.2rem', fontWeight: 'bold' },
     pattern: { fontSize: '1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '10px', letterSpacing: '1px' },
