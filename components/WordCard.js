@@ -9,302 +9,25 @@ import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, F
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// =================================================================================
-// ===== 数据库和辅助函数 (原始版本，无修改) =======================================
-// =================================================================================
+// --- 数据库和辅助函数部分省略 (与您提供的代码一致) ---
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject('数据库打开失败');
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-  });
-}
-
-async function toggleFavorite(word) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  const existing = await new Promise((resolve) => {
-    const getReq = store.get(word.id);
-    getReq.onsuccess = () => resolve(getReq.result);
-    getReq.onerror = () => resolve(null);
-  });
-  if (existing) {
-    store.delete(word.id);
-    return false;
-  } else {
-    const wordToStore = { ...word };
-    store.put(wordToStore);
-    return true;
-  }
-}
-
-async function isFavorite(id) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readonly');
-  const store = tx.objectStore(STORE_NAME);
-  return new Promise((resolve) => {
-    const getReq = store.get(id);
-    getReq.onsuccess = () => resolve(!!getReq.result);
-    getReq.onerror = () => resolve(false);
-  });
-}
-
-const TTS_VOICES = [
-    { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' },
-    { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' },
-    { value: 'my-MM-NilarNeural', label: '缅甸语女声' },
-    { value: 'my-MM-ThihaNeural', label: '缅甸语男声' },
-];
-const sounds = {
-  switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
-  correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
-  incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
-};
+function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: 'id' }); } }; }); }
+async function toggleFavorite(word) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readwrite'); const store = tx.objectStore(STORE_NAME); const existing = await new Promise((resolve) => { const getReq = store.get(word.id); getReq.onsuccess = () => resolve(getReq.result); getReq.onerror = () => resolve(null); }); if (existing) { store.delete(word.id); return false; } else { const wordToStore = { ...word }; store.put(wordToStore); return true; } }
+async function isFavorite(id) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readonly'); const store = tx.objectStore(STORE_NAME); return new Promise((resolve) => { const getReq = store.get(id); getReq.onsuccess = () => resolve(!!getReq.result); getReq.onerror = () => resolve(false); }); }
+const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
+const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
 let _howlInstance = null;
+const playTTS = async (text, voice, rate, onEndCallback, e) => { if (e && e.stopPropagation) e.stopPropagation(); if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } if (_howlInstance?.playing()) _howlInstance.stop(); const apiUrl = 'https://libretts.is-an.org/api/tts'; const rateValue = Math.round(rate / 2); try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), }); if (!response.ok) throw new Error(`API Error: ${response.status}`); const audioBlob = await response.blob(); if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); const audioUrl = URL.createObjectURL(audioBlob); _howlInstance = new Howl({ src: [audioUrl], format: ['mpeg'], html5: true, onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onloaderror: (id, err) => { console.error('Howler load error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onplayerror: (id, err) => { console.error('Howler play error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } }); _howlInstance.play(); } catch (error) { console.error('TTS fetch error:', error); if (onEndCallback) onEndCallback(); } };
+const playSoundEffect = (type) => { if (_howlInstance?.playing()) _howlInstance.stop(); if (sounds[type]) sounds[type].play(); };
+const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
-const playTTS = async (text, voice, rate, onEndCallback, e) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
-    if (_howlInstance?.playing()) _howlInstance.stop();
-    const apiUrl = 'https://libretts.is-an.org/api/tts';
-    const rateValue = Math.round(rate / 2);
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }),
-        });
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        const audioBlob = await response.blob();
-        if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type');
-        const audioUrl = URL.createObjectURL(audioBlob);
-        _howlInstance = new Howl({
-            src: [audioUrl], format: ['mpeg'], html5: true,
-            onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); },
-            onloaderror: (id, err) => { console.error('Howler load error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); },
-            onplayerror: (id, err) => { console.error('Howler play error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }
-        });
-        _howlInstance.play();
-    } catch (error) {
-        console.error('TTS fetch error:', error);
-        if (onEndCallback) onEndCallback();
-    }
-};
-
-const playSoundEffect = (type) => {
-    if (_howlInstance?.playing()) _howlInstance.stop();
-    if (sounds[type]) sounds[type].play();
-};
-
-const parsePinyin = (pinyinNum) => {
-    if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
-    const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, '');
-    let pinyinPlain = rawPinyin.replace(/[1-5]$/, '');
-    const toneMatch = rawPinyin.match(/[1-5]$/);
-    const tone = toneMatch ? toneMatch[0] : '0';
-    const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' });
-    const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w'];
-    let initial = '';
-    let final = pinyinPlain;
-    for (const init of initials) {
-        if (pinyinPlain.startsWith(init)) {
-            initial = init;
-            final = pinyinPlain.slice(init.length);
-            break;
-        }
-    }
-    return { initial, final, tone, pinyinMark, rawPinyin };
-};
-
-// =================================================================================
-// ===== 子组件 (原始版本，无修改) =================================================
-// =================================================================================
-const useCardSettings = () => {
-  const [settings, setSettings] = useState(() => {
-    try {
-      const savedSettings = localStorage.getItem('learningWordCardSettings'); 
-      const defaultSettings = {
-        order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000,
-        voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0,
-        backgroundImage: '',
-      };
-      return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
-    } catch (error) {
-        console.error("加载设置失败", error);
-        return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' };
-    }
-  });
-  useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]);
-  return [settings, setSettings];
-};
-
-const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => {
-    const { parts, errors } = analysis;
-    const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {};
-    const finalStyle = !isCorrect && parts.final && errors.final ? styles.wrongPart : {};
-    const toneStyle = !isCorrect && parts.tone !== '0' && errors.tone ? styles.wrongPart : {};
-    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', '');
-    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; }
-    finalDisplay = finalDisplay.replace(/[1-5]$/, '');
-    return (
-        <div style={styles.pinyinVisualizerContainer}><span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span><span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span><span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span></div>
-    );
-});
-
-const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => {
-    const analysis = useMemo(() => {
-        if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; }
-        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
-        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
-        if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' };
-        if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` };
-        const results = correctPinyin.map((correctPy, index) => {
-            const userPy = userPinyin[index];
-            const correctParts = parsePinyin(correctPy);
-            const userParts = parsePinyin(userPy);
-            const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone };
-            const pinyinMatch = !errors.initial && !errors.final && !errors.tone;
-            return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts }, user: { parts: userParts, errors } };
-        });
-        const isCorrect = results.every(r => r.pinyinMatch);
-        const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0);
-        return { isCorrect, results, accuracy };
-    }, [correctWord, userText]);
-
-    const [isRecording, setIsRecording] = useState(false);
-    const [userRecordingUrl, setUserRecordingUrl] = useState(null);
-    const mediaRecorderRef = useRef(null);
-    const streamRef = useRef(null);
-
-    useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
-    
-    const handleRecord = useCallback(async () => {
-        if (isRecording) {
-            mediaRecorderRef.current?.stop();
-            return;
-        }
-        
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            streamRef.current = stream;
-            const recorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = recorder;
-
-            const chunks = [];
-            recorder.ondataavailable = e => chunks.push(e.data);
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const url = URL.createObjectURL(blob);
-                setUserRecordingUrl(url);
-                streamRef.current?.getTracks().forEach(track => track.stop());
-                setIsRecording(false);
-            };
-            
-            recorder.start();
-            setIsRecording(true);
-        } catch (err) {
-            console.error("录音初始化失败:", err);
-            alert("请检查麦克风权限。");
-        }
-    }, [isRecording]);
-
-    const playUserAudio = useCallback(() => {
-        if (userRecordingUrl) {
-            if (_howlInstance?.playing()) _howlInstance.stop();
-            const sound = new Howl({ src: [userRecordingUrl], html5: true });
-            sound.play();
-        }
-    }, [userRecordingUrl]);
-    
-    const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]);
-
-    useEffect(() => {
-        return () => {
-            if (userRecordingUrl) {
-                URL.revokeObjectURL(userRecordingUrl);
-            }
-        };
-    }, [userRecordingUrl]);
-
-    if (!analysis) return null;
-
-    return (
-        <div style={styles.comparisonOverlay}>
-            <div style={styles.comparisonPanel}>
-                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}>
-                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div>
-                    <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
-                </div>
-                <div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的发音</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div>))}</div>)}</div>
-                
-                <div style={styles.audioComparisonSection}>
-                    <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button>
-                    <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>
-                        {isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />}
-                        {isRecording ? '停止录音' : '录音对比'}
-                    </button>
-                    {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}
-                </div>
-
-                <div style={styles.comparisonActions}>
-                    {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}
-                </div>
-            </div>
-        </div>
-    );
-};
-const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
-  const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
-  
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (loadEvent) => {
-            handleSettingChange('backgroundImage', loadEvent.target.result);
-        };
-        reader.readAsDataURL(file);
-    }
-  };
-
-  return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div>
-  <h2 style={{marginTop: '30px'}}>外观设置</h2>
-  <div style={styles.settingGroup}>
-    <label style={styles.settingLabel}>自定义背景</label>
-    <div style={styles.settingControl}>
-      <input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} />
-      <button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button>
-      <button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button>
-    </div>
-  </div>
-  <h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
-});
-const JumpModal = ({ max, current, onJump, onClose }) => {
-    const [inputValue, setInputValue] = useState(current + 1);
-    const inputRef = useRef(null);
-    useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []);
-    const handleJump = () => {
-        const num = parseInt(inputValue, 10);
-        if (num >= 1 && num <= max) { onJump(num - 1); } 
-        else { alert(`请输入 1 到 ${max} 之间的数字`); }
-    };
-    const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); };
-    return (
-        <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div>
-    );
-};
-
+// --- 子组件部分省略 (与您提供的代码一致) ---
+const useCardSettings = () => { const [settings, setSettings] = useState(() => { try { const savedSettings = localStorage.getItem('learningWordCardSettings'); const defaultSettings = { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '', }; return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; } catch (error) { console.error("加载设置失败", error); return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' }; } }); useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]); return [settings, setSettings]; };
+const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => { const { parts, errors } = analysis; const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {}; const finalStyle = !isCorrect && parts.final && errors.final ? styles.wrongPart : {}; const toneStyle = !isCorrect && parts.tone !== '0' && errors.tone ? styles.wrongPart : {}; let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', ''); if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; } finalDisplay = finalDisplay.replace(/[1-5]$/, ''); return ( <div style={styles.pinyinVisualizerContainer}><span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span><span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span><span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span></div> ); });
+const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => { const analysis = useMemo(() => { if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; } const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true }); const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true }); if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` }; const results = correctPinyin.map((correctPy, index) => { const userPy = userPinyin[index]; const correctParts = parsePinyin(correctPy); const userParts = parsePinyin(userPy); const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone }; const pinyinMatch = !errors.initial && !errors.final && !errors.tone; return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts }, user: { parts: userParts, errors } }; }); const isCorrect = results.every(r => r.pinyinMatch); const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0); return { isCorrect, results, accuracy }; }, [correctWord, userText]); const [isRecording, setIsRecording] = useState(false); const [userRecordingUrl, setUserRecordingUrl] = useState(null); const mediaRecorderRef = useRef(null); const streamRef = useRef(null); useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]); const handleRecord = useCallback(async () => { if (isRecording) { mediaRecorderRef.current?.stop(); return; } try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); streamRef.current = stream; const recorder = new MediaRecorder(stream); mediaRecorderRef.current = recorder; const chunks = []; recorder.ondataavailable = e => chunks.push(e.data); recorder.onstop = () => { const blob = new Blob(chunks, { type: 'audio/webm' }); const url = URL.createObjectURL(blob); setUserRecordingUrl(url); streamRef.current?.getTracks().forEach(track => track.stop()); setIsRecording(false); }; recorder.start(); setIsRecording(true); } catch (err) { console.error("录音初始化失败:", err); alert("请检查麦克风权限。"); } }, [isRecording]); const playUserAudio = useCallback(() => { if (userRecordingUrl) { if (_howlInstance?.playing()) _howlInstance.stop(); const sound = new Howl({ src: [userRecordingUrl], html5: true }); sound.play(); } }, [userRecordingUrl]); const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]); useEffect(() => { return () => { if (userRecordingUrl) { URL.revokeObjectURL(userRecordingUrl); } }; }, [userRecordingUrl]); if (!analysis) return null; return ( <div style={styles.comparisonOverlay}> <div style={styles.comparisonPanel}> <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}> <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div> <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? '发音完美！' : `准确率: ${analysis.accuracy}%`}</div> <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div> </div> <div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的发音</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div>))}</div>)}</div> <div style={styles.audioComparisonSection}> <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button> <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}> {isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />} {isRecording ? '停止录音' : '录音对比'} </button> {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>} </div> <div style={styles.comparisonActions}> {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)} </div> </div> </div> ); };
+const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => { const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; const handleImageUpload = (e) => { const file = e.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (loadEvent) => { handleSettingChange('backgroundImage', loadEvent.target.result); }; reader.readAsDataURL(file); } }; return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>外观设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>自定义背景</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>); });
+const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
 
 // =================================================================================
 // ===== 主组件: WordCard ==========================================================
@@ -503,7 +226,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                            <span className="perfect-pinyin" style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</span>
+                            <span className="perfect-pinyin" style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</span>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           {isRevealed && (
@@ -519,7 +242,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'left' }}>
-                                            <span className="perfect-pinyin" style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</span>
+                                            <span className="perfect-pinyin" style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</span>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                           <button style={styles.playExampleButton} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}>
@@ -535,10 +258,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               );
             })
         ) : (
+            // ✅ [修改] 修复完成界面的样式
             <div style={styles.completionContainer}>
-                <h2>🎉 全部完成！</h2>
-                <p>你已学完本列表中的所有单词。</p>
-                <button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>关闭</button>
+                <div style={{fontSize: '3rem'}}>🎉</div>
+                <h2 style={{fontSize: '1.5rem', fontWeight: 'bold', marginTop: '1rem'}}>全部完成！</h2>
+                <p style={{marginTop: '0.5rem'}}>你已学完本列表中的所有单词。</p>
+                <button style={{...styles.knowButtonBase, ...styles.knowButton, marginTop: '1.5rem', width: 'auto', padding: '12px 24px'}} onClick={onClose}>关闭</button>
             </div>
         )}
 
