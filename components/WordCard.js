@@ -75,7 +75,6 @@ const sounds = {
 };
 let _howlInstance = null;
 
-// ✅ [MODIFIED] Centralized audio stop function
 const stopAllAudio = () => {
     if (_howlInstance && _howlInstance.playing()) {
         _howlInstance.stop();
@@ -84,7 +83,7 @@ const stopAllAudio = () => {
 
 const playTTS = async (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    stopAllAudio(); // Stop any currently playing sound first
+    stopAllAudio();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
 
     const apiUrl = 'https://libretts.is-an.org/api/tts';
@@ -139,12 +138,10 @@ const useCardSettings = () => {
   return [settings, setSettings];
 };
 
-// ✅ [REWRITTEN] New pronunciation comparison component
 const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => {
     const analysis = useMemo(() => {
         if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; }
         
-        // Convert both correct text and user text to pinyin arrays
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'symbol', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'symbol', removeNonHan: true });
 
@@ -170,7 +167,8 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
         return { 
             isCorrect: isFullyCorrect, 
             accuracy,
-            correctPinyinStr: correctPinyin.join(' '),
+            // ✅ [MODIFIED] Apply Unicode normalization
+            correctPinyinStr: correctPinyin.join(' ').normalize('NFC'),
             comparisonResult
         };
     }, [correctWord, userText]);
@@ -250,7 +248,8 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                                 <div style={styles.pinyinText}>
                                     {analysis.comparisonResult.map((part, index) => (
                                         <span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}>
-                                            {part.text}{' '}
+                                            {/* ✅ [MODIFIED] Apply Unicode normalization */}
+                                            {part.text.normalize('NFC')}{' '}
                                         </span>
                                     ))}
                                 </div>
@@ -374,7 +373,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
 
-  // ✅ [MODIFIED] Added audio stop on navigation
   const navigate = useCallback((direction) => {
     stopAllAudio();
     if (activeCards.length === 0) return;
@@ -435,7 +433,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const handleCloseComparison = useCallback(() => { setIsComparisonOpen(false); setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
 
-  // ✅ [MODIFIED] Ensure all audio stops when component is closed/unmounted
   useEffect(() => {
       return () => {
           if (recognitionRef.current) {
@@ -529,7 +526,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
-                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}><div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div><div style={styles.textWordChinese}>{cardData.chinese}</div></div>
+                          {/* ✅ [MODIFIED] Apply Unicode normalization */}
+                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}><div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div><div style={styles.textWordChinese}>{cardData.chinese}</div></div>
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
@@ -540,11 +538,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                     </div>
                                   }
 
-                                  {/* ✅ [MODIFIED] Example play button removed */}
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
+                                            {/* ✅ [MODIFIED] Apply Unicode normalization */}
+                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                       </div>
@@ -590,15 +588,15 @@ const styles = {
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
+    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
+    pinyin: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em', verticalAlign: 'middle' },
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
     revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
-    // ✅ [MODIFIED] Mnemonic style updated for purple, adaptive background
     mnemonicBox: { color: '#fff', display: 'inline-block', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(128, 90, 213, 0.4)', padding: '8px 16px', borderRadius: '12px' },
-    // ✅ [MODIFIED] Example box style adjusted after removing button
     exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
-    examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
+    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
+    examplePinyin: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em', verticalAlign: 'middle' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
@@ -614,10 +612,10 @@ const styles = {
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
     errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1 },
     lengthError: { textAlign: 'center', color: '#b91c1c', padding: '10px 0' },
-    // ✅ [NEW] Styles for the new comparison view
     pinyinComparisonBox: { display: 'flex', flexDirection: 'column', gap: '20px', padding: '10px', background: '#f8f9fa', borderRadius: '12px' },
     pinyinComparisonRow: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start' },
-    pinyinText: { fontSize: '1.5rem', color: '#333', fontWeight: 500, letterSpacing: '0.05em' },
+    // ✅ [MODIFIED] Added professional font stack for perfect pinyin rendering
+    pinyinText: { fontFamily: "'Noto Sans SC', 'Brill', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: '1.5rem', color: '#333', fontWeight: 500, letterSpacing: '0.05em', verticalAlign: 'middle' },
     wrongPinyinSegment: { color: '#dc2626', fontWeight: 'bold' },
     pinyinLabel: { fontSize: '0.85rem', color: '#6b7280', marginBottom: '4px', fontWeight: '600' },
     audioComparisonSection: { display: 'flex', gap: '10px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa', flexWrap: 'wrap' },
