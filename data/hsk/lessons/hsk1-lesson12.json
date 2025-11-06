@@ -1,5 +1,5 @@
 {
-  "id": "hsk1-lesson12-linear",
+  "id": "hsk1-lesson12-station-mode",
   "title": "第12课 明天天气怎么样",
   "blocks": [
     {
@@ -12,114 +12,58 @@
         "narrationText": "မင်္ဂလာပါ ကျောင်းသားတို့။ သင်ခန်းစာ ၁၂ ကို ကြိုဆိုပါတယ်။"
       }
     },
-    { "type": "teaching", "id": "word1", "content": { "displayText": "天气", "pinyin": "tiānqì", "translation": "ရာသီဥတု", "narrationText": "天气" } },
-    { "type": "teaching", "id": "word2", "content": { "displayText": "怎么样", "pinyin": "zěnmeyàng", "translation": "ဘယ်လိုလဲ", "narrationText": "怎么样" } },
-    { "type": "teaching", "id": "word3", "content": { "displayText": "太", "pinyin": "tài", "translation": "အရမ်း၊ လွန်းတယ်", "narrationText": "太" } },
-    { "type": "teaching", "id": "word4", "content": { "displayText": "热", "pinyin": "rè", "translation": "ပူတယ်", "narrationText": "热" } },
-    { "type": "teaching", "id": "word5", "content": { "displayText": "冷", "pinyin": "lěng", "translation": "အေးတယ်", "narrationText": "冷" } },
     {
-      "type": "lianxian",
-      "id": "quiz1",
+      "type": "word_study",
+      "id": "vocab_station",
       "content": {
-        "prompt": "ကျေးဇူးပြု၍ တရုတ်စကားလုံးနှင့် အဓိပ္ပာယ်ကို တွဲပေးပါ။",
-        "pairs": [
-          { "id": "p1", "left": "天气", "right": "ရာသီဥတု" },
-          { "id": "p2", "left": "热", "right": "ပူတယ်" },
-          { "id": "p3", "left": "冷", "right": "အေးတယ်" }
+        "title": "生词学习站",
+        "words": [
+          { "hanzi": "天气", "pinyin": "tiānqì", "translation": "ရာသီဥတု" },
+          { "hanzi": "怎么样", "pinyin": "zěnmeyàng", "translation": "ဘယ်လိုလဲ" },
+          { "hanzi": "太", "pinyin": "tài", "translation": "အရမ်း၊ လွန်းတယ်" },
+          { "hanzi": "热", "pinyin": "rè", "translation": "ပူတယ်" },
+          { "hanzi": "冷", "pinyin": "lěng", "translation": "အေးတယ်" },
+          { "hanzi": "下雨", "pinyin": "xià yǔ", "translation": "မိုးရွာတယ်" },
+          { "hanzi": "小姐", "pinyin": "xiǎojiě", "translation": "အမျိုးသမီးငယ်၊ မမ" },
+          { "hanzi": "来", "pinyin": "lái", "translation": "လာတယ်" },
+          { "hanzi": "身体", "pinyin": "shēntǐ", "translation": "ခန္ဓာကိုယ်၊ ကျန်းမာရေး" },
+          { "hanzi": "水果", "pinyin": "shuǐguǒ", "translation": "သစ်သီး" },
+          { "hanzi": "水", "pinyin": "shuǐ", "translation": "ရေ" }
         ]
       }
     },
     {
-      "type": "dialogue_cinematic",
-      "id": "dialogue1",
+      "type": "grammar_study",
+      "id": "grammar_station",
       "content": {
-        "title": "在路上 (လမ်းမှာ)",
-        "imageSrc": "https://images.unsplash.com/photo-1500353392829-38b8c9a8a7e7",
-        "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } },
-        "dialogue": [
-          { "speaker": "A", "pinyin": "Zuótiān Běijīng de tiānqì zěnmeyàng?", "hanzi": "昨天北京的天气怎么样？", "myanmar": "မနေ့က ပေကျင်းရဲ့ ရာသီဥတု ဘယ်လိုလဲ။" },
-          { "speaker": "B", "pinyin": "Tài rè le.", "hanzi": "太热了。", "myanmar": "အရမ်းပူတယ်။" }
-        ]
-      }
-    },
-    { "type": "teaching", "id": "word6", "content": { "displayText": "下雨", "pinyin": "xià yǔ", "translation": "မိုးရွာတယ်", "narrationText": "下雨" } },
-    { "type": "teaching", "id": "word7", "content": { "displayText": "小姐", "pinyin": "xiǎojiě", "translation": "အမျိုးသမီးငယ်၊ မမ", "narrationText": "小姐" } },
-    { "type": "teaching", "id": "word8", "content": { "displayText": "来", "pinyin": "lái", "translation": "လာတယ်", "narrationText": "来" } },
-    {
-        "type": "choice",
-        "id": "quiz2",
-        "content": {
-            "prompt": "အသံဖိုင်ကိုနားထောင်ပြီး သင်ကြားလိုက်ရသော စကားလုံးကို ရွေးချယ်ပါ။",
-            "narrationText": "下雨",
-            "choices": [
-                {"id": "c1", "text": "小姐 (xiǎojiě)"},
-                {"id": "c2", "text": "下雨 (xià yǔ)"}
-            ],
-            "correctId": "c2"
-        }
-    },
-    {
-      "type": "dialogue_cinematic",
-      "id": "dialogue2",
-      "content": {
-        "title": "在健身房 (Gym မှာ)",
-        "imageSrc": "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e",
-        "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } },
-        "dialogue": [
-          { "speaker": "A", "pinyin": "Jīntiān huì xià yǔ ma?", "hanzi": "今天会下雨吗？", "myanmar": "ဒီနေ့ မိုးရွာမှာလား။" },
-          { "speaker": "B", "pinyin": "Jīntiān bù huì xià yǔ.", "hanzi": "今天不会下雨。", "myanmar": "ဒီနေ့ မိုးမရွာဘူး။" }
+        "grammarPoints": [
+          { "id": "grammar_zenmeyang", "grammarPoint": "疑问代词 ‘怎么样’", "pattern": "Noun + 怎么样?", "visibleExplanation": "“怎么样”用来询问状况。", "narrationScript": "သဒ္ဒါစည်းမျဉ်းကို လေ့လာကြရအောင်။ {{怎么样}} က တစ်ခုခုရဲ့ အခြေအနေကို သိချင်ရင်သုံးပါတယ်။", "examples": [{ "id": "ex1", "sentence": "你的汉语怎么样？", "translation": "မင်းရဲ့ တရုတ်စာ ဘယ်လိုလဲ။" }] },
+          { "id": "grammar_adverb_tai", "grammarPoint": "程度副词 ‘太’", "pattern": "太 + Adj. + 了", "visibleExplanation": "“太”表示程度很高。", "narrationScript": "{{太}} က အရမ်းဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ဥပမာ {{太热了}} ဆိုရင် အရမ်းပူတယ်လို့ ပြောတာပါ။", "examples": [{ "id": "ex2", "sentence": "天气太冷了。", "translation": "ရာသီဥတု အရမ်းအေးတယ်။" }] }
         ]
       }
     },
     {
-      "type": "paixu",
-      "id": "quiz3",
+      "type": "practice_session",
+      "id": "quiz_station",
       "content": {
-          "prompt": "ကျေးဇူးပြု၍ စကားလုံးများကို ဝါကျမှန်ဖြစ်အောင် စီပါ။",
-          "items": [
-              { "id": "i2", "text": "不会", "order": 2 },
-              { "id": "i3", "text": "下雨", "order": 3 },
-              { "id": "i1", "text": "今天", "order": 1 }
-          ]
-      }
-    },
-    { "type": "teaching", "id": "word9", "content": { "displayText": "身体", "pinyin": "shēntǐ", "translation": "ခန္ဓာကိုယ်၊ ကျန်းမာရေး", "narrationText": "身体" } },
-    { "type": "teaching", "id": "word12", "content": { "displayText": "水果", "pinyin": "shuǐguǒ", "translation": "သစ်သီး", "narrationText": "水果" } },
-    { "type": "teaching", "id": "word13", "content": { "displayText": "水", "pinyin": "shuǐ", "translation": "ရေ", "narrationText": "水" } },
-    {
-      "type": "dialogue_cinematic",
-      "id": "dialogue3",
-      "content": {
-        "title": "在病房 (ဆေးရုံခန်းမှာ)",
-        "imageSrc": "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7",
-        "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } },
-        "dialogue": [
-          { "speaker": "A", "pinyin": "Nǐ shēntǐ zěnmeyàng?", "hanzi": "你身体怎么样？", "myanmar": "ခင်ဗျား ကျန်းမာရေး ဘယ်လိုလဲ။" },
-          { "speaker": "B", "pinyin": "Wǒ shēntǐ bú tài hǎo.", "hanzi": "我身体不太好。", "myanmar": "ကျွန်တော် နေသိပ်မကောင်းဘူး။" }
+        "title": "综合练习站",
+        "questions": [
+          { "type": "lianxian", "id": "q1", "content": { "prompt": "ကျေးဇူးပြု၍ တွဲပေးပါ။", "pairs": [{ "id": "p1", "left": "热", "right": "ပူတယ်" }, { "id": "p2", "left": "冷", "right": "အေးတယ်" }] } },
+          { "type": "choice", "id": "q2", "content": { "prompt": "听录音选择", "narrationText": "下雨", "choices": [{"id": "c1", "text": "小姐"}, {"id": "c2", "text": "下雨"}], "correctId": "c2" } },
+          { "type": "paixu", "id": "q3", "content": { "prompt": "ဝါကျမှန်အောင် စီပါ။", "items": [{ "id": "i2", "text": "不会", "order": 2 }, { "id": "i1", "text": "今天", "order": 1 }, { "id": "i3", "text": "下雨", "order": 3 }] } }
         ]
       }
     },
-     {
-      "type": "gaicuo",
-      "id": "quiz4",
+    {
+      "type": "dialogue_study",
+      "id": "dialogue_station",
       "content": {
-          "prompt": "ကျေးဇူးပြု၍ ဝါကျထဲမှ အမှားကို ရှာပြီး ပြင်ပေးပါ။",
-          "sentence": "我 的 身体 好 不 太。",
-          "segmentationType": "word",
-          "correctAnswers": [3, 4],
-          "corrections": { "3": "不太好" },
-          "explanation": "မှန်ကန်သော စီစဉ်ပုံမှာ '不太好' ဖြစ်ပါတယ်။"
+        "scenes": [
+            { "id": "dialogue1", "title": "在路上", "imageSrc": "https://images.unsplash.com/photo-1500353392829-38b8c9a8a7e7", "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } }, "dialogue": [{ "speaker": "A", "hanzi": "昨天天气怎么样？", "myanmar": "မနေ့က ရာသီဥတု ဘယ်လိုလဲ။" }, { "speaker": "B", "hanzi": "太热了。", "myanmar": "အရမ်းပူတယ်။" }] },
+            { "id": "dialogue2", "title": "在健身房", "imageSrc": "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e", "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } }, "dialogue": [{ "speaker": "A", "hanzi": "今天会下雨吗？", "myanmar": "ဒီနေ့ မိုးရွာမှာလား။" }, { "speaker": "B", "hanzi": "今天不会下雨。", "myanmar": "ဒီနေ့ မိုးမရွာဘူး။" }] }
+        ]
       }
     },
-    {
-      "type": "grammar",
-      "id": "grammar_points",
-      "content": { /* ... 语法内容保持不变 ... */ }
-    },
-    {
-      "type": "complete",
-      "id": "end",
-      "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၂ ပြီးဆုံးပါပြီ။" }
-    }
+    { "type": "complete", "id": "end", "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၂ ပြီးဆုံးပါပြီ။" } }
   ]
 }
