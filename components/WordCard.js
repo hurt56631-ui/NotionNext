@@ -8,7 +8,6 @@ import { Howl } from 'howler';
 import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
-import PinyinRenderer from './PinyinRenderer';
 
 // =================================================================================
 // ===== 数据库和辅助函数 (代码无变化) =============================================
@@ -49,7 +48,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
         for (let i = 0; i < maxLength; i++) { const correctSyllable = correctPinyin[i] || ''; const userSyllable = userPinyin[i] || ''; const isMatch = correctSyllable === userSyllable; if (isMatch && correctSyllable) { correctCount++; } comparisonResult.push({ text: userSyllable, isCorrect: isMatch }); }
         const isFullyCorrect = correctPinyin.join('') === userPinyin.join('');
         const accuracy = correctPinyin.length > 0 ? (correctCount / correctPinyin.length * 100).toFixed(0) : 0;
-        return { isCorrect: isFullyCorrect, accuracy, correctPinyinStr: correctPinyin.join(' '), comparisonResult };
+        return { isCorrect: isFullyCorrect, accuracy, correctPinyinStr: correctPinyin.join(' ').normalize('NFC'), comparisonResult };
     }, [correctWord, userText]);
     const [isRecording, setIsRecording] = useState(false); const [userRecordingUrl, setUserRecordingUrl] = useState(null); const mediaRecorderRef = useRef(null); const streamRef = useRef(null);
     useEffect(() => { playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]);
@@ -67,7 +66,7 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                     <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? '太棒了！' : '再接再厉！'}</div>
                 </div>
                 <div style={styles.errorDetailsContainer}>
-                    {analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.pinyinComparisonBox}><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>标准发音</div><PinyinRenderer text={analysis.correctPinyinStr} style={styles.pinyinText} /></div><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>你的发音</div><div style={styles.pinyinText}>{analysis.comparisonResult.map((part, index) => (<span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}><PinyinRenderer text={part.text} />{' '}</span>))}</div></div></div>)}
+                    {analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.pinyinComparisonBox}><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>标准发音</div><div style={styles.pinyinText}>{analysis.correctPinyinStr}</div></div><div style={styles.pinyinComparisonRow}><div style={styles.pinyinLabel}>你的发音</div><div style={styles.pinyinText}>{analysis.comparisonResult.map((part, index) => (<span key={index} style={!part.isCorrect ? styles.wrongPinyinSegment : {}}>{part.text.normalize('NFC')}{' '}</span>))}</div></div></div>)}
                 </div>
                 <div style={styles.audioComparisonSection}><button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> 标准发音</button><button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}>{isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />}{isRecording ? '停止录音' : '录音对比'}</button>{userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> 你的录音</button>}</div>
                 <div style={styles.comparisonActions}>{analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>继续下一个 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>再试一次</button>)}</div>
@@ -100,7 +99,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const navigate = useCallback((direction) => { stopAllAudio(); if (activeCards.length === 0) return; lastDirection.current = direction; setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); }, [activeCards.length]);
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { stopAllAudio(); lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
   useEffect(() => { if (!isOpen || !currentCard) return; clearTimeout(autoBrowseTimerRef.current); const playFullSequence = () => { if (settings.autoPlayChinese && currentCard.chinese) { playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => { if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) { playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => { if (settings.autoPlayExample && currentCard.example && isRevealed) { playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer); } else { startAutoBrowseTimer(); } }); } else { startAutoBrowseTimer(); } }); } else { startAutoBrowseTimer(); } }; const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } }; const initialPlayTimer = setTimeout(playFullSequence, 600); return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); }; }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
-  const handleListen = useCallback((e) => { e.stopPropagation(); stopAllAudio(); if (isListening) { recognitionRef.current?.stop(); return; } const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别。"); return; } const recognition = new SpeechRecognition(); recognition.lang = "zh-CN"; recognition.interimResults = false; recognition.onstart = () => { setIsListening(true); setRecognizedText(""); }; recognition.onresult = (event) => { const result = event.results[event.results.length - 1].transcript; setRecognizedText(result.trim().replace(/[.,。，]/g, '')); }; recognition.onerror = (event) => { console.error("语音识别出错:", event.error); if (event.error !== 'aborted' && event.error !== 'no-speech') { alert(`语音识别错误: ${event.error}`); } }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; setIsComparisonOpen(true); }; recognitionRef.current = recognition; recognition.start(); }, [isListening]);
+  const handleListen = useCallback((e) => { e.stopPropagation(); stopAllAudio(); if (isListening) { recognitionRef.current?.stop(); return; } const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别。"); return; } const recognition = new SpeechRecognition(); recognition.lang = "zh-CN"; recognition.interimResults = false; recognition.onstart = () => { setIsListening(true); setRecognizedText(""); }; recognition.onresult = (event) => { const result = event.results[event.results.length - 1][0].transcript; setRecognizedText(result.trim().replace(/[.,。，]/g, '')); }; recognition.onerror = (event) => { console.error("语音识别出错:", event.error); if (event.error !== 'aborted' && event.error !== 'no-speech') { alert(`语音识别错误: ${event.error}`); } }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; setIsComparisonOpen(true); }; recognitionRef.current = recognition; recognition.start(); }, [isListening]);
   const handleCloseComparison = useCallback(() => { setIsComparisonOpen(false); setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
   useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } stopAllAudio(); }; }, []);
@@ -120,6 +119,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         {isComparisonOpen && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} settings={settings} onContinue={handleNavigateToNext} onClose={handleCloseComparison} />)}
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
+        
         {activeCards.length > 0 && currentCard ? (
             cardTransitions((cardStyle, i) => {
               const cardData = activeCards[i];
@@ -129,7 +129,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                            <PinyinRenderer text={pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })} style={styles.pinyin} />
+                            <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           {isRevealed && (
@@ -139,7 +139,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={{...styles.exampleBox}}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            <PinyinRenderer text={pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })} style={styles.examplePinyin} />
+                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).normalize('NFC')}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                       </div>
@@ -151,7 +151,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 </animated.div>
               );
             })
-        ) : ( <div style={styles.completionContainer}><h2>🎉 全部完成！</h2><p>你已学完本列表中的所有单词。</p><button style={styles.knowButton} onClick={handleCloseRequest}>关闭</button></div> )}
+        ) : ( 
+            <div style={styles.completionContainer}>
+                <h2>🎉 全部完成！</h2>
+                <p>你已学完本列表中的所有单词。</p>
+                <button style={styles.knowButton} onClick={handleCloseRequest}>关闭</button>
+            </div> 
+        )}
+
         {currentCard && (<div style={styles.rightControls} data-no-gesture="true"><button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={18} /></button><button style={styles.rightIconButton} onClick={handleListen} title="发音练习">{isListening ? <FaStop size={18} color={'#dc2626'}/> : <FaMicrophone size={18} color={'#4a5568'} />}</button>{currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={18} /></button>)}{<button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>}</div>)}
         <div style={styles.bottomControlsContainer} data-no-gesture="true">{activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}<div style={styles.knowButtonsWrapper}><button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow}>不认识</button><button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow}>认识</button></div></div>
       </animated.div>
@@ -162,9 +169,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   return null;
 };
 
-
+// =================================================================================
+// ===== 样式表 ====================================================================
+// =================================================================================
 const styles = {
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30535E' },
+    // ✅ [修改] 更新背景色
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
@@ -184,7 +194,8 @@ const styles = {
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
-    completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5 },
+    // ✅ [修改] 美化“完成”界面的样式
+    completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
