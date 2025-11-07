@@ -1,5 +1,5 @@
 {
-  "id": "hsk1-lesson12-final-fix",
+  "id": "hsk1-lesson12-linear-final",
   "title": "第12课 明天天气怎么样",
   "blocks": [
     {
@@ -12,33 +12,34 @@
         "narrationText": "မင်္ဂလာပါ ကျောင်းသားတို့။ သင်ခန်းစာ ၁၂ ကို ကြိုဆိုပါတယ်။"
       }
     },
+    { "type": "cidianka", "id": "word1", "content": { "hanzi": "天气", "pinyin": "tiānqì", "translation": "ရာသီဥတု", "example": "今天天气很好。" } },
+    { "type": "cidianka", "id": "word2", "content": { "hanzi": "怎么样", "pinyin": "zěnmeyàng", "translation": "ဘယ်လိုလဲ", "example": "你身体怎么样？" } },
+    { "type": "cidianka", "id": "word3", "content": { "hanzi": "太", "pinyin": "tài", "translation": "အရမ်း၊ လွန်းတယ်", "example": "天气太热了。" } },
+    { "type": "cidianka", "id": "word4", "content": { "hanzi": "热", "pinyin": "rè", "translation": "ပူတယ်", "example": "今天很热。" } },
+    { "type": "cidianka", "id": "word5", "content": { "hanzi": "冷", "pinyin": "lěng", "translation": "အေးတယ်", "example": "水太冷了。" } },
+    { "type": "cidianka", "id": "word6", "content": { "hanzi": "下雨", "pinyin": "xià yǔ", "translation": "မိုးရွာတယ်", "example": "明天会下雨吗？" } },
     {
-      "type": "word_study",
-      "id": "vocab_station",
+      "type": "lianxian",
+      "id": "quiz1",
       "content": {
-        "title": "生词学习站",
-        "words": [
-          { "id": 1, "chinese": "天气", "pinyin": "tiānqì", "burmese": "ရာသီဥတု", "example": "今天天气很好。" },
-          { "id": 2, "chinese": "怎么样", "pinyin": "zěnmeyàng", "burmese": "ဘယ်လိုလဲ", "example": "你身体怎么样？" },
-          { "id": 3, "chinese": "太", "pinyin": "tài", "burmese": "အရမ်း၊ လွန်းတယ်", "example": "天气太热了。" },
-          { "id": 4, "chinese": "热", "pinyin": "rè", "burmese": "ပူတယ်", "example": "今天很热。" },
-          { "id": 5, "chinese": "冷", "pinyin": "lěng", "burmese": "အေးတယ်", "example": "水太冷了。" },
-          { "id": 6, "chinese": "下雨", "pinyin": "xià yǔ", "burmese": "မိုးရွာတယ်", "example": "明天会下雨吗？" },
-          { "id": 7, "chinese": "小姐", "pinyin": "xiǎojiě", "burmese": "အမျိုးသမီးငယ်၊ မမ", "example": "王小姐今天会来吗？" },
-          { "id": 8, "chinese": "来", "pinyin": "lái", "burmese": "လာတယ်", "example": "她明天来我家。" },
-          { "id": 9, "chinese": "身体", "pinyin": "shēntǐ", "burmese": "ခန္ဓာကိုယ်၊ ကျန်းမာရေး", "example": "你爸爸身体好吗？" },
-          { "id": 10, "chinese": "水果", "pinyin": "shuǐguǒ", "burmese": "သစ်သီး", "example": "你多吃些水果。" },
-          { "id": 11, "chinese": "水", "pinyin": "shuǐ", "burmese": "ရေ", "example": "请喝水。" }
+        "prompt": "ကျေးဇူးပြု၍ တရုတ်စကားလုံးနှင့် အဓိပ္ပာယ်ကို တွဲပေးပါ။",
+        "pairs": [
+          { "id": "p1", "left": "天气", "right": "ရာသီဥတု" },
+          { "id": "p2", "left": "热", "right": "ပူတယ်" },
+          { "id": "p3", "left": "冷", "right": "အေးတယ်" }
         ]
       }
     },
     {
-      "type": "practice_session",
-      "id": "quiz_station",
+      "type": "dialogue_cinematic",
+      "id": "dialogue1",
       "content": {
-        "title": "综合练习站",
-        "questions": [
-          { "type": "lianxian", "id": "q1", "content": { "prompt": "ကျေးဇူးပြု၍ တွဲပေးပါ။", "pairs": [{ "id": "p1", "left": "热", "right": "ပူတယ်" }, { "id": "p2", "left": "冷", "right": "အေးတယ်" }] } }
+        "title": "在路上 (လမ်းမှာ)",
+        "imageSrc": "https://images.unsplash.com/photo-1500353392829-38b8c9a8a7e7",
+        "characters": { "A": { "name": "A", "voice": "zh-CN-YunxiNeural" }, "B": { "name": "B", "voice": "zh-CN-XiaoxiaoNeural" } },
+        "dialogue": [
+          { "speaker": "A", "hanzi": "昨天天气怎么样？", "myanmar": "မနေ့က ရာသီဥတု ဘယ်လိုလဲ။" },
+          { "speaker": "B", "hanzi": "太热了。", "myanmar": "အရမ်းပူတယ်။" }
         ]
       }
     },
