@@ -1,70 +1,18 @@
-// components/Tixing/InteractiveLesson.jsx (基于AI方案优化并适配您的风格)
+// components/Tixing/InteractiveLesson.jsx
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
 
-// --- 1. 动态导入所有题型组件 (按您的路径) ---
-import XuanZeTi from '@/components/Tixing/XuanZeTi';
-import PanDuanTi from '@/components/Tixing/PanDuanTi';
+// --- 题型组件占位符 (你将在这里添加正确的导入) ---
 import PaiXuTi from '@/components/Tixing/PaiXuTi';
 import LianXianTi from '@/components/Tixing/LianXianTi';
 import GaiCuoTi from '@/components/Tixing/GaiCuoTi';
-import DuiHua from '@/components/Tixing/DuiHua';
-import GrammarPointPlayer from '@/components/Tixing/GrammarPointPlayer';
 
-// --- 2. 统一的TTS模块 (采纳AI方案的智能缓存) ---
-const ttsCache = new Map();
-const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
-    if (!text) return;
-    const cacheKey = `${text}|${voice}`;
-    try {
-        let objectUrl = ttsCache.get(cacheKey);
-        if (!objectUrl) {
-            const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('API Error');
-            const blob = await response.blob();
-            objectUrl = URL.createObjectURL(blob);
-            ttsCache.set(cacheKey, objectUrl);
-        }
-        new Audio(objectUrl).play();
-    } catch (e) { console.error(`播放 "${text}" (${voice}) 失败:`, e); }
-};
+// --- 内置的辅助UI组件 ---
+const TeachingBlock = ({ data, onComplete }) => { /* ... */ };
+const CompletionBlock = ({ data, router }) => { /* ... */ };
 
-// --- 3. 内置的辅助UI组件 ---
-const TeachingBlock = ({ data, onComplete, settings }) => (
-    <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white animate-fade-in">
-        {data.pinyin && <p className="text-3xl text-slate-300 mb-2">{data.pinyin}</p>}
-        <h1 className="text-7xl font-bold mb-4">{data.displayText}</h1>
-        {data.translation && <p className="text-3xl text-slate-200">{data.translation}</p>}
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
-            <button onClick={onComplete} className="px-8 py-4 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
-                နောက်တစ်ခု (Next)
-            </button>
-        </div>
-    </div>
-);
-
-const CompletionBlock = ({ data, router }) => {
-    useEffect(() => {
-        const textToPlay = data.title || "恭喜";
-        playTTS(textToPlay);
-        const timer = setTimeout(() => router.push('/'), 5000);
-        return () => clearTimeout(timer);
-    }, [data, router]);
-
-    return (
-        <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white animate-fade-in">
-            <h1 className="text-7xl mb-4">🎉</h1>
-            <h2 className="text-4xl font-bold mb-4">{data.title || "ဂုဏ်ယူပါတယ်။"}</h2>
-            <p className="text-xl">{data.text || "သင်ခန်းစာပြီးဆုံးပါပြီ။ ပင်မစာမျက်နှာသို့ ပြန်သွားနေသည်..."}</p>
-        </div>
-    );
-};
-
-
-// --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [settings] = useState({ chineseVoice: 'zh-CN-XiaoyouNeural' });
@@ -76,78 +24,87 @@ export default function InteractiveLesson({ lesson }) {
 
     const handleCorrect = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-        // 答对后延迟1秒进入下一题
         setTimeout(() => {
             if (currentIndex < totalBlocks - 1) {
                 setCurrentIndex(prev => prev + 1);
             } else {
-                setCurrentIndex(prev => prev + 1); // 超出索引以显示完成页
+                setCurrentIndex(prev => prev + 1);
             }
-        }, 1000);
+        }, 1200);
     }, [currentIndex, totalBlocks]);
 
-    // 开场自动播放语音
-    useEffect(() => {
-        const firstBlock = blocks[0];
-        if (currentIndex === 0 && firstBlock?.type === 'teaching' && firstBlock?.content?.narrationText) {
-            playTTS(firstBlock.content.narrationText, settings.chineseVoice);
-        }
-    }, [blocks, currentIndex, settings.chineseVoice]);
-
     const renderBlock = () => {
-        if (currentIndex >= totalBlocks) {
-            // 如果 lesson.blocks 为空，会在这里显示完成页
-            const lastBlockContent = blocks[totalBlocks-1]?.content || {};
-            return <CompletionBlock data={lastBlockContent} router={router} />;
-        }
-        if (!currentBlock) {
-            return <div className="text-white">正在加载...</div>;
-        }
+        if (currentIndex >= totalBlocks) { /* ... */ }
+        if (!currentBlock) { /* ... */ }
 
         const type = currentBlock.type.toLowerCase();
-        
-        // [核心] 所有子组件都遵循这个统一的 props 接口
-        const props = {
+        const baseProps = {
             data: currentBlock.content,
-            onCorrect: handleCorrect, // 所有题型组件都使用 onCorrect 作为成功回调
-            onComplete: handleCorrect, // 兼容 onComplete
-            settings: { ...settings, playTTS },
+            onCorrect: handleCorrect,
+            settings: { ...settings /*, playTTS */ },
         };
 
         switch (type) {
-            case 'teaching': return <TeachingBlock {...props} />;
-            case 'choice': return <XuanZeTi {...props} />;
-            case 'panduan': return <PanDuanTi {...props} />;
-            case 'paixu': return <PaiXuTi {...props} />;
-            case 'lianxian': return <LianXianTi {...props} />;
-            case 'gaicuo': return <GaiCuoTi {...props} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} />;
-            case 'grammar': return <GrammarPointPlayer {...props} />;
-            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+            case 'teaching': 
+                return <TeachingBlock data={baseProps.data} onComplete={handleCorrect} />;
+            
+            // 你将在这里为其他题型组件添加 case 和适配器逻辑
+            
+            case 'paixu': {
+                // 适配器逻辑：将 data 中的 prompt 映射到 title，onCorrect 映射到 onComplete
+                const adapterProps = {
+                    title: baseProps.data.prompt,
+                    items: baseProps.data.items,
+                    correctOrder: baseProps.data.correctOrder,
+                    onComplete: baseProps.onCorrect,
+                };
+                return <PaiXuTi {...adapterProps} />;
+            }
+
+            case 'lianxian': {
+                // 适配器逻辑：处理 LianXianTi 需要的特殊数据结构
+                const { prompt, pairs } = baseProps.data;
+
+                // 1. 提取 Column A
+                const columnA = pairs.map(p => ({ id: p.id, content: p.left }));
+
+                // 2. 提取并打乱 Column B
+                const columnB = [...pairs.map(p => ({ id: p.id, content: p.right }))]
+                    .sort(() => Math.random() - 0.5);
+                
+                // 3. 转换配对关系为 ID 映射对象
+                const correctPairs = pairs.reduce((acc, p) => {
+                    acc[p.id] = p.id;
+                    return acc;
+                }, {});
+
+                const adapterProps = {
+                    title: prompt,
+                    columnA: columnA,
+                    columnB: columnB,
+                    pairs: correctPairs,
+                    onCorrect: baseProps.onCorrect,
+                };
+                return <LianXianTi {...adapterProps} />;
+            }
+
+            case 'gaicuo': {
+                // 适配器逻辑：将 data 中的 prompt 映射到 title，其他数据直接传递
+                const { prompt, ...restOfData } = baseProps.data;
+                const adapterProps = {
+                    ...restOfData, // 传递 sentence, segmentationType 等
+                    title: prompt,
+                    onCorrect: baseProps.onCorrect,
+                };
+                return <GaiCuoTi {...adapterProps} />;
+            }
+
             default:
                 console.warn(`不支持的组件类型: "${type}", 自动跳过。`);
                 useEffect(() => { handleCorrect(); }, [handleCorrect]);
                 return <div className="text-white">正在加载下一题...</div>;
         }
     };
-
-    const progress = totalBlocks > 0 ? ((currentIndex) / totalBlocks) * 100 : 0;
-
-    return (
-        <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
-            {/* 进度条 */}
-            {currentIndex < totalBlocks && (
-                 <div className="w-full max-w-4xl absolute top-4 px-4 z-10">
-                    <div className="w-full bg-gray-600/50 rounded-full h-2.5">
-                        <div className="bg-blue-400 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}></div>
-                    </div>
-                </div>
-            )}
-            
-            {/* 渲染当前页面/题目 */}
-            <div className="w-full h-full flex items-center justify-center">
-                {renderBlock()}
-            </div>
-        </div>
-    );
+    
+    return ( /* ... JSX ... */ );
 }
