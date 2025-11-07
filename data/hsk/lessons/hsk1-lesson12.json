@@ -1,74 +1,13 @@
 {
-  "id": "hsk1-lesson12-grammar-quiz-mode",
-  "title": "第12课 语法与练习",
+  "id": "hsk1-lesson12-simple-linear",
   "blocks": [
     {
       "type": "teaching",
       "id": "intro",
-      "content": {
-        "pinyin": "Yǔfǎ hé Liànxí",
-        "displayText": "语法与练习",
-        "translation": "သဒ္ဒါ နှင့် လေ့ကျင့်ခန်း",
-        "narrationText": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာ သင်ခန်းစာ ၁၂ ရဲ့ အဓိက သဒ္ဒါစည်းမျဉ်းတွေနဲ့ လေ့ကျင့်ခန်းတွေကို ပြုလုပ်ကြမှာပါ။"
-      }
+      "content": { "pinyin": "Yǔfǎ hé Liànxí", "displayText": "语法与练习", "translation": "သဒ္ဒါ နှင့် လေ့ကျင့်ခန်း", "narrationText": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာ သင်ခန်းစာ ၁၂ ရဲ့ အဓိက သဒ္ဒါစည်းမျဉ်းတွေနဲ့ လေ့ကျင့်ခန်းတွေကို ပြုလုပ်ကြမှာပါ။" }
     },
-    {
-      "type": "grammar_study",
-      "id": "grammar_station",
-      "content": {
-        "title": "语法学习站",
-        "grammarPoints": [
-          {
-            "id": "grammar_zenmeyang",
-            "background": { "gradientStart": "#4A7684", "gradientEnd": "#1e3a44" },
-            "grammarPoint": "疑问代词 ‘怎么样’",
-            "pattern": "Noun / Pronoun + 怎么样?",
-            "visibleExplanation": "“怎么样”用来询问人或事物的状况。\n💡 例如: 天气怎么样？(ရာသီဥတု ဘယ်လိုလဲ။)",
-            "narrationScript": "ပထမဆုံး သဒ္ဒါစည်းမျဉ်းကတော့ {{怎么样}} ပါ။ တစ်ခုခုရဲ့ အခြေအနေကို သိချင်ရင် သူ့ကိုသုံးပြီး မေးရပါတယ်။",
-            "examples": [
-              { "id": "ex1", "sentence": "你的汉语怎么样？", "translation": "မင်းရဲ့ တရုတ်စာ ဘယ်လိုလဲ။" },
-              { "id": "ex2", "sentence": "你妈妈身体怎么样？", "translation": "မင်းအမေ ကျန်းမာရေး ဘယ်လိုလဲ။" }
-            ]
-          },
-          {
-            "id": "grammar_adverb_tai",
-            "background": { "gradientStart": "#5E5A80", "gradientEnd": "#2e2c40" },
-            "grammarPoint": "程度副词 ‘太’",
-            "pattern": "太 + Adj. + 了",
-            "visibleExplanation": "“太”表示程度很高，常常和“了”一起使用。\n💡 例如: 太热了。(အရမ်းပူတယ်။)",
-            "narrationScript": "နောက်တစ်ခုကတော့ {{太}} ပါ။ ဒါက အရမ်းဆိုတဲ့ အဓိပ္ပာယ်ပါ။ {{太}} နဲ့ {{了}} ကို တွဲသုံးလေ့ရှိပါတယ်။",
-            "examples": [
-              { "id": "ex3", "sentence": "天气太冷了。", "translation": "ရာသီဥတု အရမ်းအေးတယ်။" },
-              { "id": "ex4", "sentence": "我身体不太好。", "translation": "ကျွန်တော် နေသိပ်မကောင်းဘူး။" }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "type": "practice_session",
-      "id": "quiz_station",
-      "content": {
-        "title": "综合练习站",
-        "questions": [
-          { "type": "choice", "id": "q1", "content": { "prompt": "今天天气 ______ 冷了。", "choices": [{"id": "c1", "text": "很"}, {"id": "c2", "text": "太"}, {"id": "c3", "text": "不"}], "correctId": "c2", "explanation": "句尾有 '了'，表示程度很高，通常用 '太...了' 结构。" } },
-          { "type": "choice", "id": "q2", "content": { "prompt": "听录音，选择你听到的句子。", "narrationText": "明天天气很好。", "choices": [{"id": "c1", "text": "今天天气很好。"}, {"id": "c2", "text": "明天天气很好。"}], "correctId": "c2" } },
-          { "type": "choice", "id": "q3", "content": { "prompt": "A: 你身体怎么样？ B: 我身体 ______。", "choices": [{"id": "c1", "text": "不太好"}, {"id": "c2", "text": "太不好"}], "correctId": "c1", "explanation": "否定时，我们说 '不太好'，不说 '太不好'。" } },
-          
-          { "type": "lianxian", "id": "q4", "content": { "prompt": "ကျေးဇူးပြု၍ မေးခွန်းနှင့် အဖြေကို တွဲပေးပါ။", "pairs": [{ "id": "p1", "left": "天气怎么样？", "right": "太热了。" }, { "id": "p2", "left": "你会来吗？", "right": "我不会来。" }, { "id": "p3", "left": "下雨了吗？", "right": "没下雨。" }] } },
-          { "type": "lianxian", "id": "q5", "content": { "prompt": "ကျေးဇူးပြု၍ တရုတ်စာနှင့် ပင်ယင်ကို တွဲပေးပါ။", "pairs": [{ "id": "p1", "left": "身体", "right": "shēntǐ" }, { "id": "p2", "left": "水果", "right": "shuǐguǒ" }, { "id": "p3", "left": "下雨", "right": "xià yǔ" }] } },
-          { "type": "lianxian", "id": "q6", "content": { "prompt": "ကျေးဇူးပြု၍ တရုတ်စာနှင့် မြန်မာဘာသာပြန်ကို တွဲပေးပါ။", "pairs": [{ "id": "p1", "left": "天气", "right": "ရာသီဥတု" }, { "id": "p2", "left": "来", "right": "လာတယ်" }, { "id": "p3", "left": "医生", "right": "ဆရာဝန်" }] } },
-
-          { "type": "paixu", "id": "q7", "content": { "prompt": "ဝါကျမှန်အောင် စီပါ။", "items": [{ "id": "i2", "text": "天气", "order": 2 }, { "id": "i3", "text": "太冷了", "order": 3 }, { "id": "i1", "text": "今天", "order": 1 }] } },
-          { "type": "paixu", "id": "q8", "content": { "prompt": "ဝါကျမှန်အောင် စီပါ။", "items": [{ "id": "i2", "text": "身体", "order": 2 }, { "id": "i3", "text": "怎么样", "order": 3 }, { "id": "i1", "text": "你的", "order": 1 }] } },
-          { "type": "paixu", "id": "q9", "content": { "prompt": "ဝါကျမှန်အောင် စီပါ။", "items": [{ "id": "i2", "text": "不会", "order": 2 }, { "id": "i3", "text": "下雨", "order": 3 }, { "id": "i1", "text": "明天", "order": 1 }] } }
-        ]
-      }
-    },
-    {
-      "type": "complete",
-      "id": "end",
-      "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၂ ၏ သဒ္ဒါနှင့် လေ့ကျင့်ခန်းများ ပြီးဆုံးပါပြီ။" }
-    }
+    { "type": "choice", "id": "q1", "content": { "prompt": "今天天气 ______ 冷了。", "choices": [{"id": "c1", "text": "很"}, {"id": "c2", "text": "太"}], "correctId": "c2", "explanation": "句尾有 '了'，表示程度很高，通常用 '太...了' 结构。" } },
+    { "type": "choice", "id": "q2", "content": { "prompt": "听录音，选择你听到的句子。", "narrationText": "明天天气很好。", "choices": [{"id": "c1", "text": "今天天气很好。"}, {"id": "c2", "text": "明天天气很好。"}], "correctId": "c2" } },
+    { "type": "choice", "id": "q3", "content": { "prompt": "A: 你身体怎么样？ B: 我身体 ______。", "choices": [{"id": "c1", "text": "不太好"}, {"id": "c2", "text": "太不好"}], "correctId": "c1", "explanation": "否定时，我们说 '不太好'，不说 '太不好'。" } }
   ]
 }
