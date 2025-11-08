@@ -1,5 +1,3 @@
-// components/Tixing/InteractiveLesson.jsx
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
@@ -12,22 +10,22 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-import GrammarPointPlayer from './GrammarPointPlayer';
+// [重要] GrammarPointPlayer 组件已不再需要，被彻底移除
 
 // --- 2. 统一的TTS模块 ---
 const ttsCache = new Map();
 const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
+  // 播放新音频前，停止所有正在播放的音频
+  ttsCache.forEach(cachedAudio => {
+    if (cachedAudio && !cachedAudio.paused) {
+      cachedAudio.pause();
+      cachedAudio.currentTime = 0;
+    }
+  });
+
   if (!text) return;
   const cacheKey = `${text}|${voice}`;
   try {
-    // 停止当前所有正在播放的音频
-    ttsCache.forEach(cachedAudio => {
-        if (cachedAudio && !cachedAudio.paused) {
-            cachedAudio.pause();
-            cachedAudio.currentTime = 0;
-        }
-    });
-
     let objectUrl = ttsCache.get(cacheKey);
     if (!objectUrl) {
       const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
@@ -37,19 +35,28 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
       objectUrl = URL.createObjectURL(blob);
     }
     const audio = new Audio(objectUrl);
-    ttsCache.set(cacheKey, audio); // 将 audio 对象存入缓存，以便后续控制
+    ttsCache.set(cacheKey, audio);
     await audio.play();
   } catch (e) { console.error(`播放 "${text}" (${voice}) 失败:`, e); }
 };
 
 // --- 3. 内置的辅助UI组件 (完整实现) ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
-    const handleStart = () => {
+    // [核心修正] 增加 useEffect 来处理自动播放
+    useEffect(() => {
         const textToPlay = data.narrationScript || data.displayText;
         if (textToPlay) {
-            settings.playTTS(textToPlay, settings.chineseVoice);
+            // 延迟一点播放，给页面加载和动画留出时间
+            const timer = setTimeout(() => {
+                settings.playTTS(textToPlay, settings.chineseVoice);
+            }, 800);
+            return () => clearTimeout(timer);
         }
-        setTimeout(onComplete, 1200);
+    }, [data, settings]); // 依赖 data, 确保内容变化时能重新触发
+
+    const handleContinue = () => {
+        // 点击按钮时，立即进入下一个环节
+        onComplete();
     };
 
     return (
@@ -58,8 +65,8 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
             <h1 className="text-7xl font-bold mb-4">{data.displayText}</h1>
             {data.translation && <p className="text-3xl text-slate-200">{data.translation}</p>}
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
-                <button onClick={handleStart} className="px-8 py-4 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
-                    စတင်လေ့လာမည်
+                <button onClick={handleContinue} className="px-8 py-4 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
+                    ဆက်လက်လုပ်ဆောင်ရန် (Continue)
                 </button>
             </div>
         </div>
@@ -86,15 +93,12 @@ const CompletionBlock = ({ data, router }) => {
 const UnknownBlockHandler = ({ type, onSkip }) => {
     useEffect(() => {
         console.warn(`不支持的组件类型: "${type}", 将在1.2秒后自动跳过。`);
-        const timer = setTimeout(() => {
-            onSkip();
-        }, 1200);
+        const timer = setTimeout(onSkip, 1200);
         return () => clearTimeout(timer);
     }, [type, onSkip]);
 
     return <div className="text-white text-xl font-bold">不支持的题型，正在加载下一题...</div>;
 };
-
 
 // --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
@@ -107,6 +111,14 @@ export default function InteractiveLesson({ lesson }) {
     const currentBlock = blocks[currentIndex];
 
     const nextStep = useCallback(() => {
+        // 不再使用 confetti，因为 Continue 按钮是即时响应的
+        if (currentIndex < totalBlocks) {
+            setCurrentIndex(prev => prev + 1);
+        }
+    }, [currentIndex, totalBlocks]);
+
+    // 对于需要延迟的完成（如答题正确后）
+    const delayedNextStep = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
             if (currentIndex < totalBlocks) {
@@ -128,25 +140,20 @@ export default function InteractiveLesson({ lesson }) {
         const type = currentBlock.type.toLowerCase();
         const props = {
             data: currentBlock.content,
-            onCorrect: nextStep,
-            onComplete: nextStep, // 统一完成信号
+            onCorrect: delayedNextStep, // 答对题，延迟跳转
+            onComplete: nextStep,       // 点击 Continue 或对话结束，立即跳转
             settings: { ...settings, playTTS },
         };
 
         switch (type) {
-            // --- 教学环节 ---
             case 'teaching': 
                 return <TeachingBlock {...props} />;
-
-            case 'grammar_study': 
-                return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} settings={props.settings}/>;
             
             case 'dialogue_cinematic': 
-                return <DuiHua data={props.data} onComplete={props.onComplete} settings={props.settings} />;
+                return <DuiHua {...props} />;
             
-            // --- 独立练习题环节 (不再有 practice_session) ---
             case 'image_match_blanks':
-                 const tianKongTiProps = { ...props.data, onCorrect: props.onCorrect, onNext: props.onComplete };
+                 const tianKongTiProps = { ...props.data, onCorrect: props.onCorrect, onNext: props.onCorrect }; // onNext 也用延迟
                  return <TianKongTi {...tianKongTiProps} />;
 
             case 'choice':
@@ -156,7 +163,7 @@ export default function InteractiveLesson({ lesson }) {
                     correctAnswer: props.data.correctId ? [props.data.correctId] : [],
                     explanation: props.data.explanation,
                     onCorrect: props.onCorrect,
-                    onNext: props.onComplete, // [重要] 确保 onNext 指向 onComplete
+                    onNext: props.onCorrect,
                     isListeningMode: !!props.data.narrationText,
                 };
                 if(xuanZeTiProps.isListeningMode){
@@ -164,12 +171,11 @@ export default function InteractiveLesson({ lesson }) {
                 }
                 return <XuanZeTi {...xuanZeTiProps} />;
             
-            case 'lianxian': return <LianXianTi {...props} />;
-            case 'paixu': return <PaiXuTi {...props} />;
+            case 'lianxian': return <LianXianTi onComplete={props.onCorrect} {...props} />; // 连线题完成也应该延迟
+            case 'paixu': return <PaiXuTi onComplete={props.onCorrect} {...props} />; // 排序题完成也应该延迟
             case 'panduan': return <PanDuanTi {...props} />;
             case 'gaicuo': return <GaiCuoTi {...props} />;
                 
-            // --- 结束环节 ---
             case 'complete': case 'end':
                 return <CompletionBlock data={props.data} router={router} />;
 
