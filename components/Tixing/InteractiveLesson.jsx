@@ -29,15 +29,18 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
       objectUrl = URL.createObjectURL(blob);
       ttsCache.set(cacheKey, objectUrl);
     }
-    new Audio(objectUrl).play();
+    // [重要修复] 确保在用户交互后播放音频，以符合浏览器策略
+    const audio = new Audio(objectUrl);
+    audio.play().catch(e => console.error("音频播放失败，可能需要用户交互:", e));
   } catch (e) { console.error(`播放 "${text}" (${voice}) 失败:`, e); }
 };
 
 // --- 3. 内置的辅助UI组件 ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const handleStart = () => {
-        if (data.narrationText) {
-            playTTS(data.narrationText, settings.chineseVoice);
+        // [修复] 确保 playTTS 被调用
+        if (data.displayText) {
+            playTTS(data.displayText, settings.chineseVoice);
         }
         setTimeout(onComplete, 800);
     };
@@ -73,6 +76,19 @@ const CompletionBlock = ({ data, router }) => {
     );
 };
 
+// [核心修复] 用于安全地跳过未知组件的特殊组件
+const UnknownBlockHandler = ({ type, onSkip }) => {
+    useEffect(() => {
+        console.warn(`不支持的组件类型: "${type}", 将在1.2秒后自动跳过。`);
+        const timer = setTimeout(() => {
+            onSkip();
+        }, 1200); // 使用 onSkip 代替直接调用 handleCorrect
+        return () => clearTimeout(timer);
+    }, [type, onSkip]);
+
+    return <div className="text-white text-xl font-bold">不支持的题型，正在加载下一题...</div>;
+};
+
 
 // --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
@@ -84,33 +100,20 @@ export default function InteractiveLesson({ lesson }) {
     const totalBlocks = blocks.length;
     const currentBlock = blocks[currentIndex];
 
-    const handleCorrect = useCallback(() => {
+    // [核心修复] 将 handleCorrect 重命名为 nextStep 并使其更健壮
+    const nextStep = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
-            // 使用 < totalBlocks 而不是 <= totalBlocks-1 来确保能到达完成页
-            if (currentIndex < totalBlocks) { 
+            if (currentIndex < totalBlocks) {
                 setCurrentIndex(prev => prev + 1);
             }
         }, 1200);
     }, [currentIndex, totalBlocks]);
 
-    // 用于安全地跳过未知组件的特殊组件
-    const UnknownBlockHandler = ({ type }) => {
-        // [核心修复] 将状态更新逻辑放在 useEffect 中，这才是安全的方式
-        useEffect(() => {
-            console.warn(`不支持的组件类型: "${type}", 自动跳过。`);
-            // 调用 handleCorrect 来进入下一页
-            handleCorrect();
-        }, []); // 空依赖数组确保这个 effect 只运行一次
-
-        return <div className="text-white text-xl font-bold">正在加载下一题...</div>;
-    };
-
 
     const renderBlock = () => {
-        // 如果索引超出或等于总数，显示完成页面
         if (currentIndex >= totalBlocks) {
-            const lastBlockData = blocks[totalBlocks-1]?.content || {};
+            const lastBlockData = blocks[totalBlocks - 1]?.content || {};
             return <CompletionBlock data={lastBlockData} router={router} />;
         }
         if (!currentBlock) {
@@ -121,25 +124,28 @@ export default function InteractiveLesson({ lesson }) {
         
         const props = {
             data: currentBlock.content,
-            onCorrect: handleCorrect,
-            onComplete: handleCorrect, // 统一完成信号
+            onCorrect: nextStep, // 使用 nextStep
+            onComplete: nextStep, // 统一完成信号
             settings: { ...settings, playTTS },
         };
 
         switch (type) {
-            case 'teaching': 
+            case 'teaching':
                 return <TeachingBlock {...props} />;
             
+            // [核心修复] 正确处理 grammar_study 和 practice_session
             case 'grammar_study':
                 if (!props.data || !props.data.grammarPoints || props.data.grammarPoints.length === 0) {
-                    return <UnknownBlockHandler type="grammar_study (no data)" />;
+                    return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={nextStep} />;
                 }
+                // 注意：这里假设 GrammarPointPlayer 接受 grammarPoints 和 onComplete 属性
                 return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
 
             case 'practice_session':
                 if (!props.data || !props.data.questions || props.data.questions.length === 0) {
-                    return <UnknownBlockHandler type="practice_session (no data)" />;
+                    return <UnknownBlockHandler type="practice_session (数据为空)" onSkip={nextStep} />;
                 }
+                 // 注意：这里假设 QuizPlayer 接受 data (包含questions) 和 onComplete 属性
                 return <QuizPlayer {...props} />;
             
             case 'choice':
@@ -149,7 +155,7 @@ export default function InteractiveLesson({ lesson }) {
                     correctAnswer: props.data.correctId ? [props.data.correctId] : [],
                     explanation: props.data.explanation,
                     onCorrect: props.onCorrect,
-                    onNext: props.onCorrect,
+                    onNext: props.onCorrect, // 确保 onNext 也指向正确的函数
                     isListeningMode: !!props.data.narrationText,
                 };
                 if(xuanZeTiProps.isListeningMode){
@@ -163,16 +169,16 @@ export default function InteractiveLesson({ lesson }) {
             case 'gaicuo': return <GaiCuoTi {...props} />;
             case 'dialogue_cinematic': return <DuiHua {...props} />;
                 
-            case 'complete': case 'end': 
+            case 'complete': case 'end':
                 return <CompletionBlock data={props.data} router={router} />;
 
             default:
-                // [核心修复] 使用一个安全的组件来处理未知类型，而不是直接调用 useEffect
-                return <UnknownBlockHandler type={type} />;
+                // [核心修复] 使用一个安全的组件来处理未知类型
+                return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
     };
 
-    const progress = totalBlocks > 0 ? (currentIndex / totalBlocks) * 100 : 0;
+    const progress = totalBlocks > 0 ? ((currentIndex) / totalBlocks) * 100 : 0;
 
     return (
         <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
