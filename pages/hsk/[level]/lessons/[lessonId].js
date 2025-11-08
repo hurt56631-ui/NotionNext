@@ -1,13 +1,13 @@
-// pages/hsk/[level]/lessons/[lessonId].js (极简版)
+// pages/hsk/[level]/lessons/[lessonId].js (最终推荐版)
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 
-// 动态导入我们全新的互动课程组件
+// [修改] 导入我们最终的 InteractiveLesson 组件
 const InteractiveLesson = dynamic(
-  () => import('../../../../components/Tixing/InteractiveLesson'),
-  { loading: () => <p className="text-white">正在加载课程播放器...</p>, ssr: false }
+  () => import('@/components/Tixing/InteractiveLesson'), // 确保路径正确
+  { ssr: false }
 );
 
 const LessonHostPage = () => {
@@ -15,33 +15,57 @@ const LessonHostPage = () => {
   const { level, lessonId } = router.query;
 
   const [lessonData, setLessonData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (level && lessonId) {
+      setIsLoading(true);
+      setError(null);
       import(`@/data/hsk/lessons/hsk${level}-lesson${lessonId}.json`)
-        .then(data => setLessonData(data.default))
+        .then(data => {
+          setLessonData(data.default);
+        })
         .catch(err => {
           console.error(`加载课程失败:`, err);
-          setError(`无法找到课程数据。`);
+          setError(`无法找到课程数据。请检查文件是否存在。`);
+        })
+        .finally(() => {
+          setIsLoading(false);
         });
     }
   }, [level, lessonId]);
 
-  if (error) {
-    return <div className="text-red-500 text-center p-8">{error}</div>;
-  }
-
-  if (!lessonData) {
+  if (isLoading) {
     return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#1a202c', color: 'white' }}>
-            <h1>正在加载课程 HSK {level} - {lessonId}...</h1>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#1a202c', color: 'white' }}>
+        <h1>正在加载课程 HSK {level} - {lessonId}...</h1>
+      </div>
     );
   }
 
-  // 只需渲染这一个组件，并把课程数据传给它
-  return <InteractiveLesson lesson={lessonData} />;
+  if (error) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#4a0e0e', color: 'white', padding: '20px' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>加载失败</h1>
+        <p style={{ color: '#fecaca', marginBottom: '2rem' }}>{error}</p>
+        <button onClick={() => router.back()} style={{ padding: '10px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          返回上一页
+        </button>
+      </div>
+    );
+  }
+
+  if (lessonData) {
+    // [修改] 渲染我们最终的 InteractiveLesson 组件
+    return <InteractiveLesson lesson={lessonData} />;
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#1a202c', color: 'white' }}>
+      <h1>未知错误，无法显示课程。</h1>
+    </div>
+  );
 };
 
 export default LessonHostPage;
