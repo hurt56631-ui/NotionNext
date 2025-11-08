@@ -13,7 +13,7 @@ import PaiXuTi from './Tixing/PaiXuTi';
 import LianXianTi from './Tixing/LianXianTi';
 import PanDuanTi from './Tixing/PanDuanTi';
 import TianKongTi from './Tixing/TianKongTi';
-import GaiCuoTi from './Tixing/GaiCuoTiV2';
+import GaiCuoTi from './Tixing/GaiCuoTi';
 import DuiHua from './Tixing/DuiHua';
 import GrammarPointPlayer from './Tixing/GrammarPointPlayer';
 
