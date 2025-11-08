@@ -1,18 +1,17 @@
-// components/Tixing/InteractiveLesson.jsx (最终完整版 - 解决 React Error #310)
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
 
-// --- 1. 动态导入所有题型组件 (请确保这些文件都存在于 './' 目录下) ---
+// --- 1. 动态导入所有题型组件 ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
 import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
-import DuiHua from './DuiHua';
+import DuiHua from './DuiHua'; // [新增] 导入对话组件
+import TianKongTi from './TianKongTi'; // [新增] 导入填空题（图文匹配）组件
 import GrammarPointPlayer from './GrammarPointPlayer';
-import QuizPlayer from './QuizPlayer'; // 确保 QuizPlayer 也被导入
+import QuizPlayer from './QuizPlayer'; 
 
 // --- 2. 统一的TTS模块 ---
 const ttsCache = new Map();
@@ -29,7 +28,6 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
       objectUrl = URL.createObjectURL(blob);
       ttsCache.set(cacheKey, objectUrl);
     }
-    // [重要修复] 确保在用户交互后播放音频，以符合浏览器策略
     const audio = new Audio(objectUrl);
     audio.play().catch(e => console.error("音频播放失败，可能需要用户交互:", e));
   } catch (e) { console.error(`播放 "${text}" (${voice}) 失败:`, e); }
@@ -38,7 +36,6 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
 // --- 3. 内置的辅助UI组件 ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const handleStart = () => {
-        // [修复] 确保 playTTS 被调用
         if (data.displayText) {
             playTTS(data.displayText, settings.chineseVoice);
         }
@@ -76,13 +73,10 @@ const CompletionBlock = ({ data, router }) => {
     );
 };
 
-// [核心修复] 用于安全地跳过未知组件的特殊组件
 const UnknownBlockHandler = ({ type, onSkip }) => {
     useEffect(() => {
         console.warn(`不支持的组件类型: "${type}", 将在1.2秒后自动跳过。`);
-        const timer = setTimeout(() => {
-            onSkip();
-        }, 1200); // 使用 onSkip 代替直接调用 handleCorrect
+        const timer = setTimeout(() => { onSkip(); }, 1200);
         return () => clearTimeout(timer);
     }, [type, onSkip]);
 
@@ -100,7 +94,6 @@ export default function InteractiveLesson({ lesson }) {
     const totalBlocks = blocks.length;
     const currentBlock = blocks[currentIndex];
 
-    // [核心修复] 将 handleCorrect 重命名为 nextStep 并使其更健壮
     const nextStep = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
@@ -124,7 +117,7 @@ export default function InteractiveLesson({ lesson }) {
         
         const props = {
             data: currentBlock.content,
-            onCorrect: nextStep, // 使用 nextStep
+            onCorrect: nextStep,
             onComplete: nextStep, // 统一完成信号
             settings: { ...settings, playTTS },
         };
@@ -133,21 +126,33 @@ export default function InteractiveLesson({ lesson }) {
             case 'teaching':
                 return <TeachingBlock {...props} />;
             
-            // [核心修复] 正确处理 grammar_study 和 practice_session
             case 'grammar_study':
                 if (!props.data || !props.data.grammarPoints || props.data.grammarPoints.length === 0) {
                     return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={nextStep} />;
                 }
-                // 注意：这里假设 GrammarPointPlayer 接受 grammarPoints 和 onComplete 属性
-                return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
+                return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} settings={props.settings}/>;
 
             case 'practice_session':
                 if (!props.data || !props.data.questions || props.data.questions.length === 0) {
                     return <UnknownBlockHandler type="practice_session (数据为空)" onSkip={nextStep} />;
                 }
-                 // 注意：这里假设 QuizPlayer 接受 data (包含questions) 和 onComplete 属性
                 return <QuizPlayer {...props} />;
-            
+
+            // [新增] 集成对话组件
+            case 'dialogue_cinematic':
+                return <DuiHua data={props.data} onComplete={props.onComplete} />;
+
+            // [新增] 集成图文匹配填空题组件
+            // 注意：我们使用一个更具体的名字 image_match_blanks 来对应这个组件的功能
+            case 'image_match_blanks':
+                 const tianKongTiProps = {
+                     ...props.data, // 将 content 里的所有字段 (title, words, imageOptions...) 都作为 props 展开
+                     onCorrect: props.onCorrect,
+                     onNext: props.onComplete, // 将 onNext 连接到课程的 onComplete (即 nextStep)
+                 };
+                 return <TianKongTi {...tianKongTiProps} />;
+
+            // --- 下面是为练习站之外的单个题目类型做的兼容 ---
             case 'choice':
                 const xuanZeTiProps = {
                     question: { text: props.data.prompt, ...props.data },
@@ -155,7 +160,7 @@ export default function InteractiveLesson({ lesson }) {
                     correctAnswer: props.data.correctId ? [props.data.correctId] : [],
                     explanation: props.data.explanation,
                     onCorrect: props.onCorrect,
-                    onNext: props.onCorrect, // 确保 onNext 也指向正确的函数
+                    onNext: props.onCorrect, 
                     isListeningMode: !!props.data.narrationText,
                 };
                 if(xuanZeTiProps.isListeningMode){
@@ -167,13 +172,11 @@ export default function InteractiveLesson({ lesson }) {
             case 'paixu': return <PaiXuTi {...props} />;
             case 'panduan': return <PanDuanTi {...props} />;
             case 'gaicuo': return <GaiCuoTi {...props} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} />;
                 
             case 'complete': case 'end':
                 return <CompletionBlock data={props.data} router={router} />;
 
             default:
-                // [核心修复] 使用一个安全的组件来处理未知类型
                 return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
     };
