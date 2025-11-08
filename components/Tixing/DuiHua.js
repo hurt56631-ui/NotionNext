@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause, FaArrowUp } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- TTS 引擎 ---
+// --- TTS 引擎 (已支持 rate 参数) ---
 const ttsCache = new Map();
 const playTTS = async (text, voice, rate = 0) => {
-    // 播放前停止所有音频
     ttsCache.forEach(a => { if (a && !a.paused) { a.pause(); a.currentTime = 0; } });
     if (!text || !voice) return null;
     const cacheKey = `${text}|${voice}|${rate}`;
@@ -16,6 +15,7 @@ const playTTS = async (text, voice, rate = 0) => {
         return audio;
     }
     try {
+        // [核心修改] 将 rate 参数添加到 URL 中
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
         const response = await fetch(url);
         if (!response.ok) throw new Error('TTS API Error');
@@ -39,19 +39,17 @@ const DuiHua = ({ data, onComplete, settings }) => {
     const timeoutRef = useRef(null);
     const isExiting = useRef(false);
 
-    // 在组件内部处理禁止下拉刷新
     useEffect(() => {
         document.body.style.overscrollBehaviorY = 'contain';
         const preventPullToRefresh = (e) => e.preventDefault();
         document.body.addEventListener('touchmove', preventPullToRefresh, { passive: false });
         
-        // 预加载所有音频
         dialogue.forEach(line => {
             const character = characters[line.speaker];
-            playTTS(line.hanzi, character?.voice, character?.rate).then(audio => audio?.pause());
+            // [核心修改] 预加载时也传入语速
+            playTTS(line.hanzi, character?.voice, character?.rate || 0).then(audio => audio?.pause());
         });
         
-        // 自动开始播放
         const startTimer = setTimeout(() => setIsPlaying(true), 800);
 
         return () => {
@@ -59,7 +57,6 @@ const DuiHua = ({ data, onComplete, settings }) => {
             document.body.removeEventListener('touchmove', preventPullToRefresh);
             clearTimeout(startTimer);
             clearTimeout(timeoutRef.current);
-            // 确保组件卸载时停止所有音频
             ttsCache.forEach(a => { if (a && !a.paused) a.pause(); });
         };
     }, [id, dialogue, characters]);
@@ -68,14 +65,15 @@ const DuiHua = ({ data, onComplete, settings }) => {
         clearTimeout(timeoutRef.current);
         if (index >= dialogue.length) {
             setIsPlaying(false);
-            setIsFinished(true); // 标记对话已结束
+            setIsFinished(true);
             return;
         }
         setIsFinished(false);
         setCurrentLineIndex(index);
         const line = dialogue[index];
         const character = characters[line.speaker];
-        audioRef.current = await playTTS(line.hanzi, character?.voice, character?.rate);
+        // [核心修改] 播放时传入每个角色指定的语速
+        audioRef.current = await playTTS(line.hanzi, character?.voice, character?.rate || 0);
         if (audioRef.current) {
             audioRef.current.onended = () => {
                 if (isPlaying && !isRepeating) {
@@ -145,13 +143,11 @@ const DuiHua = ({ data, onComplete, settings }) => {
 
 // --- 样式表 ---
 const styles = {
-    fullScreenContainer: { position: 'relative', width: '100%', height: '100%', backgroundColor: '#000' },
+    // [核心修改] 使用 'fixed' 定位来强制全屏
+    fullScreenContainer: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: '#000', zIndex: 100 },
     backgroundImage: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 0 },
     overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)', zIndex: 1 },
-    
-    // [核心修改] 将 top 从 '25%' 改为 '15%'，让气泡更靠近顶部
     bubbleArea: { position: 'absolute', top: '15%', left: '0', right: '0', zIndex: 5, display: 'flex', padding: '0 5%' },
-    
     bubble: { position: 'relative', maxWidth: '65%', padding: '12px 20px', borderRadius: '20px', boxShadow: '0 5px 20px rgba(0,0,0,0.3)', cursor: 'pointer' },
     bubbleA: { backgroundColor: '#f3f4f6', color: '#1f2937', marginRight: 'auto' },
     bubbleB: { backgroundColor: '#3b82f6', color: '#fff', marginLeft: 'auto' },
