@@ -1,11 +1,10 @@
-// components/Tixing/InteractiveLesson.jsx (最终完整版 - 解决所有问题)
+// components/Tixing/InteractiveLesson.jsx (最终完整版 - 解决 React Error #310)
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
 
-// --- 1. [核心修复] 使用相对路径导入所有题型组件 ---
-// 假设这些文件都与 InteractiveLesson.jsx 在同一个 /Tixing 文件夹下
+// --- 1. 动态导入所有题型组件 (请确保这些文件都存在于 './' 目录下) ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -13,6 +12,7 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import GrammarPointPlayer from './GrammarPointPlayer';
+import QuizPlayer from './QuizPlayer'; // 确保 QuizPlayer 也被导入
 
 // --- 2. 统一的TTS模块 ---
 const ttsCache = new Map();
@@ -36,11 +36,9 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
 // --- 3. 内置的辅助UI组件 ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const handleStart = () => {
-        // [核心修复] 在用户点击时才播放语音，避免浏览器报错
         if (data.narrationText) {
             playTTS(data.narrationText, settings.chineseVoice);
         }
-        // 延迟一小段时间后进入下一页，给语音播放留出时间
         setTimeout(onComplete, 800);
     };
 
@@ -75,7 +73,8 @@ const CompletionBlock = ({ data, router }) => {
     );
 };
 
-// --- 4. 主播放器组件 (核心逻辑 - “智能导演”) ---
+
+// --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [settings] = useState({ chineseVoice: 'zh-CN-XiaoyouNeural' });
@@ -88,15 +87,28 @@ export default function InteractiveLesson({ lesson }) {
     const handleCorrect = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
-            if (currentIndex < totalBlocks - 1) {
+            // 使用 < totalBlocks 而不是 <= totalBlocks-1 来确保能到达完成页
+            if (currentIndex < totalBlocks) { 
                 setCurrentIndex(prev => prev + 1);
-            } else {
-                setCurrentIndex(prev => prev + 1); // 超出索引以显示完成页
             }
         }, 1200);
     }, [currentIndex, totalBlocks]);
 
+    // 用于安全地跳过未知组件的特殊组件
+    const UnknownBlockHandler = ({ type }) => {
+        // [核心修复] 将状态更新逻辑放在 useEffect 中，这才是安全的方式
+        useEffect(() => {
+            console.warn(`不支持的组件类型: "${type}", 自动跳过。`);
+            // 调用 handleCorrect 来进入下一页
+            handleCorrect();
+        }, []); // 空依赖数组确保这个 effect 只运行一次
+
+        return <div className="text-white text-xl font-bold">正在加载下一题...</div>;
+    };
+
+
     const renderBlock = () => {
+        // 如果索引超出或等于总数，显示完成页面
         if (currentIndex >= totalBlocks) {
             const lastBlockData = blocks[totalBlocks-1]?.content || {};
             return <CompletionBlock data={lastBlockData} router={router} />;
@@ -107,47 +119,60 @@ export default function InteractiveLesson({ lesson }) {
 
         const type = currentBlock.type.toLowerCase();
         
-        const baseProps = {
+        const props = {
             data: currentBlock.content,
             onCorrect: handleCorrect,
+            onComplete: handleCorrect, // 统一完成信号
             settings: { ...settings, playTTS },
         };
 
         switch (type) {
             case 'teaching': 
-                return <TeachingBlock data={baseProps.data} onComplete={handleCorrect} settings={baseProps.settings} />;
+                return <TeachingBlock {...props} />;
+            
+            case 'grammar_study':
+                if (!props.data || !props.data.grammarPoints || props.data.grammarPoints.length === 0) {
+                    return <UnknownBlockHandler type="grammar_study (no data)" />;
+                }
+                return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
+
+            case 'practice_session':
+                if (!props.data || !props.data.questions || props.data.questions.length === 0) {
+                    return <UnknownBlockHandler type="practice_session (no data)" />;
+                }
+                return <QuizPlayer {...props} />;
             
             case 'choice':
                 const xuanZeTiProps = {
-                    question: { text: baseProps.data.prompt, imageUrl: baseProps.data.imageUrl, videoUrl: baseProps.data.videoUrl, audioUrl: baseProps.data.audioUrl },
-                    options: baseProps.data.choices || [],
-                    correctAnswer: baseProps.data.correctId ? [baseProps.data.correctId] : [],
-                    explanation: baseProps.data.explanation,
-                    onCorrect: baseProps.onCorrect,
-                    onNext: baseProps.onCorrect,
-                    isListeningMode: !!baseProps.data.narrationText,
+                    question: { text: props.data.prompt, ...props.data },
+                    options: props.data.choices || [],
+                    correctAnswer: props.data.correctId ? [props.data.correctId] : [],
+                    explanation: props.data.explanation,
+                    onCorrect: props.onCorrect,
+                    onNext: props.onCorrect,
+                    isListeningMode: !!props.data.narrationText,
                 };
-                if (xuanZeTiProps.isListeningMode) {
-                    xuanZeTiProps.question.text = baseProps.data.narrationText;
+                if(xuanZeTiProps.isListeningMode){
+                   xuanZeTiProps.question.text = props.data.narrationText;
                 }
                 return <XuanZeTi {...xuanZeTiProps} />;
-
-            case 'panduan': return <PanDuanTi {...baseProps} />;
-            case 'paixu': return <PaiXuTi {...baseProps} onComplete={baseProps.onCorrect}/>;
-            case 'lianxian': return <LianXianTi {...baseProps} />;
-            case 'gaicuo': return <GaiCuoTi {...baseProps} />;
-            case 'dialogue_cinematic': return <DuiHua {...baseProps} />;
-            case 'grammar': return <GrammarPointPlayer grammarPoints={baseProps.data.grammarPoints} onComplete={baseProps.onCorrect} />;
-            case 'complete': case 'end': return <CompletionBlock data={baseProps.data} router={router} />;
+            
+            case 'lianxian': return <LianXianTi {...props} />;
+            case 'paixu': return <PaiXuTi {...props} />;
+            case 'panduan': return <PanDuanTi {...props} />;
+            case 'gaicuo': return <GaiCuoTi {...props} />;
+            case 'dialogue_cinematic': return <DuiHua {...props} />;
+                
+            case 'complete': case 'end': 
+                return <CompletionBlock data={props.data} router={router} />;
 
             default:
-                console.warn(`不支持的组件类型: "${type}", 自动跳过。`);
-                useEffect(() => { handleCorrect(); }, [handleCorrect]);
-                return <div className="text-white">正在加载下一题...</div>;
+                // [核心修复] 使用一个安全的组件来处理未知类型，而不是直接调用 useEffect
+                return <UnknownBlockHandler type={type} />;
         }
     };
 
-    const progress = totalBlocks > 0 ? ((currentIndex) / totalBlocks) * 100 : 0;
+    const progress = totalBlocks > 0 ? (currentIndex / totalBlocks) * 100 : 0;
 
     return (
         <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
