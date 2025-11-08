@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
+import { SpeakerWaveIcon } from '@heroicons/react/24/solid'; // 引入图标
 
 // --- 1. 导入所有“独立环节”组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -10,25 +11,18 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-// [重要] GrammarPointPlayer 组件已不再需要，被彻底移除
+// [重要] WordCard.js 和 GrammarPointPlayer.jsx 已不再需要
 
 // --- 2. 统一的TTS模块 ---
 const ttsCache = new Map();
-const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
-  // 播放新音频前，停止所有正在播放的音频
-  ttsCache.forEach(cachedAudio => {
-    if (cachedAudio && !cachedAudio.paused) {
-      cachedAudio.pause();
-      cachedAudio.currentTime = 0;
-    }
-  });
-
+const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural', rate = 0) => {
+  ttsCache.forEach(a => { if (a && !a.paused) { a.pause(); a.currentTime = 0; } });
   if (!text) return;
-  const cacheKey = `${text}|${voice}`;
+  const cacheKey = `${text}|${voice}|${rate}`;
   try {
     let objectUrl = ttsCache.get(cacheKey);
     if (!objectUrl) {
-      const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
+      const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error('TTS API Error');
       const blob = await response.blob();
@@ -37,27 +31,22 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural') => {
     const audio = new Audio(objectUrl);
     ttsCache.set(cacheKey, audio);
     await audio.play();
-  } catch (e) { console.error(`播放 "${text}" (${voice}) 失败:`, e); }
+  } catch (e) { console.error(`播放 "${text}" (${voice}, rate: ${rate}) 失败:`, e); }
 };
 
 // --- 3. 内置的辅助UI组件 (完整实现) ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
-    // [核心修正] 增加 useEffect 来处理自动播放
     useEffect(() => {
         const textToPlay = data.narrationScript || data.displayText;
         if (textToPlay) {
-            // 延迟一点播放，给页面加载和动画留出时间
             const timer = setTimeout(() => {
                 settings.playTTS(textToPlay, settings.chineseVoice);
             }, 800);
             return () => clearTimeout(timer);
         }
-    }, [data, settings]); // 依赖 data, 确保内容变化时能重新触发
+    }, [data, settings]);
 
-    const handleContinue = () => {
-        // 点击按钮时，立即进入下一个环节
-        onComplete();
-    };
+    const handleContinue = () => { onComplete(); };
 
     return (
         <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white animate-fade-in">
@@ -96,9 +85,81 @@ const UnknownBlockHandler = ({ type, onSkip }) => {
         const timer = setTimeout(onSkip, 1200);
         return () => clearTimeout(timer);
     }, [type, onSkip]);
-
     return <div className="text-white text-xl font-bold">不支持的题型，正在加载下一题...</div>;
 };
+
+const GrammarBlock = ({ data, onComplete, settings }) => {
+    const { grammarPoint, pattern, visibleExplanation, examples, narrationScript, narrationRate } = data;
+    const playNarration = () => {
+        const textToPlay = (narrationScript || '').replace(/{{(.*?)}}/g, '$1');
+        settings.playTTS(textToPlay, settings.chineseVoice, narrationRate || 0);
+    };
+    const handlePlayExample = (example) => {
+        settings.playTTS(example.narrationScript || example.sentence, settings.chineseVoice, example.rate || 0);
+    };
+    return (
+        <div className="w-full max-w-3xl mx-auto flex flex-col justify-center text-white p-4 animate-fade-in">
+            <div className="p-8 rounded-2xl shadow-2xl bg-gray-800/80 backdrop-blur-md">
+                <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-3xl font-bold">{grammarPoint}</h2>
+                    {narrationScript && (
+                        <button onClick={playNarration} className="p-2 rounded-full hover:bg-white/20 transition-colors"><SpeakerWaveIcon className="h-7 w-7" /></button>
+                    )}
+                </div>
+                <p className="text-lg bg-black/20 px-3 py-1 rounded-md inline-block mb-4">{pattern}</p>
+                <p className="text-slate-200 text-lg whitespace-pre-line mb-6">{visibleExplanation}</p>
+                <div className="space-y-3">
+                    {examples.map(example => (
+                        <div key={example.id} className="bg-black/20 p-4 rounded-lg flex items-center justify-between hover:bg-black/30 transition-colors">
+                            <div><p className="text-xl">{example.sentence}</p><p className="text-sm text-slate-400">{example.translation}</p></div>
+                            <button onClick={() => handlePlayExample(example)} className="p-2 rounded-full hover:bg-white/20"><SpeakerWaveIcon className="h-6 w-6" /></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="flex justify-center mt-6">
+                <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">继续</button>
+            </div>
+        </div>
+    );
+};
+
+// [新增] 内置的生词学习组件
+const WordStudyBlock = ({ data, onComplete, settings }) => {
+    const { title, words } = data;
+
+    const handlePlayWord = (word) => {
+        settings.playTTS(word.chinese, settings.chineseVoice, word.rate || 0);
+    };
+
+    return (
+        <div className="w-full max-w-2xl mx-auto flex flex-col text-white p-4 animate-fade-in">
+            <h2 className="text-4xl font-bold text-center mb-6">{title || "生词"}</h2>
+            <div className="bg-gray-800/70 backdrop-blur-md rounded-2xl p-4 flex-grow overflow-y-auto max-h-[60vh]">
+                <div className="space-y-2">
+                    {words.map((word) => (
+                        <div key={word.id} className="bg-black/20 p-4 rounded-lg flex items-center justify-between hover:bg-black/30 transition-colors">
+                            <div className="flex-1">
+                                <p className="text-sm text-slate-400 mb-1">{word.pinyin}</p>
+                                <p className="text-2xl font-semibold">{word.chinese}</p>
+                                <p className="text-lg text-yellow-300 mt-1">{word.translation}</p>
+                            </div>
+                            <button onClick={() => handlePlayWord(word)} className="ml-4 p-3 rounded-full hover:bg-white/20">
+                                <SpeakerWaveIcon className="h-7 w-7" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="flex justify-center mt-6">
+                <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
+                    我学会了
+                </button>
+            </div>
+        </div>
+    );
+};
+
 
 // --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
@@ -111,76 +172,61 @@ export default function InteractiveLesson({ lesson }) {
     const currentBlock = blocks[currentIndex];
 
     const nextStep = useCallback(() => {
-        // 不再使用 confetti，因为 Continue 按钮是即时响应的
-        if (currentIndex < totalBlocks) {
-            setCurrentIndex(prev => prev + 1);
-        }
+        if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); }
     }, [currentIndex, totalBlocks]);
 
-    // 对于需要延迟的完成（如答题正确后）
     const delayedNextStep = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
-            if (currentIndex < totalBlocks) {
-                setCurrentIndex(prev => prev + 1);
-            }
+            if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); }
         }, 1200);
     }, [currentIndex, totalBlocks]);
-
 
     const renderBlock = () => {
         if (currentIndex >= totalBlocks) {
             const lastBlockData = blocks[totalBlocks - 1]?.content || {};
             return <CompletionBlock data={lastBlockData} router={router} />;
         }
-        if (!currentBlock) {
-            return <div className="text-white">正在加载...</div>;
-        }
+        if (!currentBlock) { return <div className="text-white">正在加载...</div>; }
 
         const type = currentBlock.type.toLowerCase();
         const props = {
             data: currentBlock.content,
-            onCorrect: delayedNextStep, // 答对题，延迟跳转
-            onComplete: nextStep,       // 点击 Continue 或对话结束，立即跳转
+            onCorrect: delayedNextStep,
+            onComplete: nextStep,
             settings: { ...settings, playTTS },
         };
 
         switch (type) {
-            case 'teaching': 
-                return <TeachingBlock {...props} />;
+            case 'teaching': return <TeachingBlock {...props} />;
             
-            case 'dialogue_cinematic': 
-                return <DuiHua {...props} />;
+            // [新增] 使用新的“生词学习”环节
+            case 'word_study': return <WordStudyBlock {...props} />;
+
+            case 'grammar_study':
+                const firstGrammarPoint = props.data.grammarPoints?.[0];
+                if (!firstGrammarPoint) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={nextStep} />;
+                return <GrammarBlock data={firstGrammarPoint} onComplete={props.onComplete} settings={props.settings} />;
+
+            case 'dialogue_cinematic': return <DuiHua {...props} />;
             
             case 'image_match_blanks':
-                 const tianKongTiProps = { ...props.data, onCorrect: props.onCorrect, onNext: props.onCorrect }; // onNext 也用延迟
+                 const tianKongTiProps = { ...props.data, onCorrect: props.onCorrect, onNext: props.onCorrect };
                  return <TianKongTi {...tianKongTiProps} />;
-
+            
             case 'choice':
-                const xuanZeTiProps = {
-                    question: { text: props.data.prompt, ...props.data },
-                    options: props.data.choices || [],
-                    correctAnswer: props.data.correctId ? [props.data.correctId] : [],
-                    explanation: props.data.explanation,
-                    onCorrect: props.onCorrect,
-                    onNext: props.onCorrect,
-                    isListeningMode: !!props.data.narrationText,
-                };
-                if(xuanZeTiProps.isListeningMode){
-                   xuanZeTiProps.question.text = props.data.narrationText;
-                }
+                const xuanZeTiProps = { question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], explanation: props.data.explanation, onCorrect: props.onCorrect, onNext: props.onCorrect, isListeningMode: !!props.data.narrationText, };
+                if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
                 return <XuanZeTi {...xuanZeTiProps} />;
             
-            case 'lianxian': return <LianXianTi onComplete={props.onCorrect} {...props} />; // 连线题完成也应该延迟
-            case 'paixu': return <PaiXuTi onComplete={props.onCorrect} {...props} />; // 排序题完成也应该延迟
+            case 'lianxian': return <LianXianTi onComplete={props.onCorrect} {...props} />;
+            case 'paixu': return <PaiXuTi onComplete={props.onCorrect} {...props} />;
             case 'panduan': return <PanDuanTi {...props} />;
             case 'gaicuo': return <GaiCuoTi {...props} />;
-                
-            case 'complete': case 'end':
-                return <CompletionBlock data={props.data} router={router} />;
-
-            default:
-                return <UnknownBlockHandler type={type} onSkip={nextStep} />;
+            
+            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+            
+            default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
     };
 
