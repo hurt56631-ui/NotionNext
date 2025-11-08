@@ -61,6 +61,7 @@ const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
 // --- 3. 内置的辅助UI组件 (完整实现) ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const textToPlay = data.narrationScript || data.displayText;
+    const narrationLang = data.narrationLang || 'zh'; // [核心修正] 读取JSON中的语言设置
 
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
@@ -68,22 +69,22 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
     }, { axis: 'y', filterTaps: true, preventDefault: true });
 
     useEffect(() => {
-        if (textToPlay) {
+        if (textToPlay && data.narrationScript) { // [核心修正] 只有在 narationScript 存在时才自动播放
             const timer = setTimeout(() => {
-                settings.playTTS(textToPlay, 'my', 0, onComplete); // 首页旁白通常是引导语，这里设为缅甸语
+                settings.playTTS(textToPlay, narrationLang, 0, onComplete);
             }, 1000);
             return () => clearTimeout(timer);
         } else {
-             // 如果没有旁白，4.5秒后自动进入下一页
-            const autoNextTimer = setTimeout(onComplete, 4500);
-            return () => clearTimeout(autoNextTimer);
+            // 如果没有旁白，则不自动跳转，等待用户上滑
         }
-    }, [data, settings, onComplete, textToPlay]);
+    }, [data, settings, onComplete, textToPlay, narrationLang]);
 
     const handleManualPlay = (e) => {
         e.stopPropagation();
-        if (textToPlay) {
-            settings.playTTS(textToPlay, 'my');
+        if (textToPlay && data.narrationScript) {
+            settings.playTTS(textToPlay, narrationLang);
+        } else if (data.displayText) { // 如果没有旁白，则朗读主标题
+            settings.playTTS(data.displayText, 'zh');
         }
     };
 
@@ -94,15 +95,14 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
                 .animate-bounce-up { animation: bounce-up 2s infinite; }
             `}</style>
             <div className="flex-grow flex flex-col items-center justify-center">
-                {data.pinyin && <p className="text-2xl text-slate-300 mb-2">{data.pinyin}</p>}
+                {data.pinyin && <p className="text-3xl text-slate-300 mb-2">{data.pinyin}</p>}
                 <div className="flex items-center gap-4">
-                    {/* [核心修正] 调整文字大小 */}
                     <h1 className="text-6xl font-bold">{data.displayText}</h1>
                     <button onClick={handleManualPlay} className="p-2 rounded-full hover:bg-white/20 transition-colors">
                         <HiSpeakerWave className="h-8 w-8" />
                     </button>
                 </div>
-                {data.translation && <p className="text-2xl text-slate-200 mt-4">{data.translation}</p>}
+                {data.translation && <p className="text-3xl text-slate-200 mt-4">{data.translation}</p>}
             </div>
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-80">
                 <FaChevronUp className="h-10 w-10 animate-bounce-up" />
@@ -112,18 +112,40 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
     );
 };
 
-const CompletionBlock = ({ data, router }) => { /* (与上轮代码相同) */ };
-const UnknownBlockHandler = ({ type, onSkip }) => { /* (与上轮代码相同) */ };
+const CompletionBlock = ({ data, router }) => {
+    useEffect(() => {
+        const textToPlay = data.title || "恭喜";
+        playTTS(textToPlay, 'zh');
+        const timer = setTimeout(() => router.push('/'), 5000);
+        return () => clearTimeout(timer);
+    }, [data, router]);
 
-// [核心修正] GrammarBlock 增加全屏容器
+    return (
+        <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white animate-fade-in">
+            <h1 className="text-7xl mb-4">🎉</h1>
+            <h2 className="text-4xl font-bold mb-4">{data.title || "ဂုဏ်ယူပါတယ်။"}</h2>
+            <p className="text-xl">{data.text || "သင်ခန်းစာပြီးဆုံးပါပြီ။ ပင်မစာမျက်နှာသို့ ပြန်သွားနေသည်..."}</p>
+        </div>
+    );
+};
+
+const UnknownBlockHandler = ({ type, onSkip }) => {
+    useEffect(() => {
+        console.error(`不支持的组件类型或渲染失败: "${type}", 将在1.2秒后自动跳过。`);
+        const timer = setTimeout(onSkip, 1200);
+        return () => clearTimeout(timer);
+    }, [type, onSkip]);
+    return <div className="text-red-400 text-xl font-bold bg-black/50 p-4 rounded-lg">错误：不支持的题型 ({type})</div>;
+};
+
 const GrammarBlock = ({ data, onComplete, settings }) => {
     const { grammarPoint, pattern, visibleExplanation, examples, narrationScript, narrationRate } = data;
     const playNarration = () => {
         const textToPlay = (narrationScript || '').replace(/{{(.*?)}}/g, '$1');
-        settings.playTTS(textToPlay, 'my', narrationRate || 0);
+        settings.playTTS(textToPlay, 'my', narrationRate || 0); // 语法讲解固定为缅甸语
     };
     const handlePlayExample = (example) => {
-        settings.playTTS(example.narrationScript || example.sentence, 'zh', example.rate || 0);
+        settings.playTTS(example.narrationScript || example.sentence, 'zh', example.rate || 0); // 例句固定为中文
     };
     return (
         <div className="w-full h-full flex flex-col items-center justify-center text-white p-4 animate-fade-in">
@@ -154,7 +176,38 @@ const GrammarBlock = ({ data, onComplete, settings }) => {
     );
 };
 
-const WordStudyBlock = ({ data, onComplete, settings }) => { /* (与上轮代码相同) */ };
+const WordStudyBlock = ({ data, onComplete, settings }) => {
+    const { title, words } = data;
+    const handlePlayWord = (word) => {
+        settings.playTTS(word.chinese, 'zh', word.rate || 0);
+    };
+    return (
+        <div className="w-full max-w-2xl mx-auto flex flex-col text-white p-4 animate-fade-in">
+            <h2 className="text-4xl font-bold text-center mb-6">{title || "生词"}</h2>
+            <div className="bg-gray-800/70 backdrop-blur-md rounded-2xl p-4 flex-grow overflow-y-auto max-h-[60vh]">
+                <div className="space-y-2">
+                    {words.map((word) => (
+                        <div key={word.id} className="bg-black/20 p-4 rounded-lg flex items-center justify-between hover:bg-black/30 transition-colors">
+                            <div className="flex-1">
+                                <p className="text-sm text-slate-400 mb-1">{word.pinyin}</p>
+                                <p className="text-2xl font-semibold">{word.chinese}</p>
+                                <p className="text-lg text-yellow-300 mt-1">{word.translation}</p>
+                            </div>
+                            <button onClick={() => handlePlayWord(word)} className="ml-4 p-3 rounded-full hover:bg-white/20">
+                                <HiSpeakerWave className="h-7 w-7" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="flex justify-center mt-6">
+                <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
+                    我学会了
+                </button>
+            </div>
+        </div>
+    );
+};
 
 // --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
@@ -180,50 +233,46 @@ export default function InteractiveLesson({ lesson }) {
             settings: { playTTS },
         };
 
-        switch (type) {
-            case 'teaching': return <TeachingBlock {...props} />;
-            case 'word_study': return <WordStudyBlock {...props} />;
-            case 'grammar_study':
-                const firstGrammarPoint = props.data.grammarPoints?.[0];
-                if (!firstGrammarPoint) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={nextStep} />;
-                return <GrammarBlock data={firstGrammarPoint} onComplete={props.onComplete} settings={props.settings} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} />;
-            
-            // [核心修正] 为不显示的组件创建 Props 适配器
-            case 'image_match_blanks':
-                 return <TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />;
-
-            case 'choice':
-                const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
-                if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
-                return <XuanZeTi {...xuanZeTiProps} />;
-            
-            case 'lianxian':
-                // 从 data 中提取 LianXianTi 需要的 props
-                const lianXianProps = {
-                    title: props.data.prompt, // 你的 JSON 中 prompt 对应 title
-                    columnA: props.data.pairs.map(p => ({ id: p.id, content: p.left })),
-                    columnB: props.data.pairs.map(p => ({ id: p.id, content: p.right })),
-                    pairs: props.data.pairs.reduce((acc, p) => ({ ...acc, [p.id]: p.id }), {}), // 假设左右 id 相同来配对
-                    onCorrect: props.onCorrect,
-                };
-                return <LianXianTi {...lianXianProps} />;
-
-            case 'paixu':
-                // 从 data 中提取 PaiXuTi 需要的 props
-                const paiXuProps = {
-                    title: props.data.prompt,
-                    items: props.data.items, // items 结构匹配
-                    // 从 items 生成 correctOrder 数组
-                    correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id),
-                    onCorrect: props.onCorrect,
-                };
-                return <PaiXuTi {...paiXuProps} />;
-
-            case 'panduan': return <PanDuanTi {...props} />;
-            case 'gaicuo': return <GaiCuoTi {...props} />;
-            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
-            default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
+        try {
+            switch (type) {
+                case 'teaching': return <TeachingBlock {...props} />;
+                case 'word_study': return <WordStudyBlock {...props} />;
+                case 'grammar_study':
+                    const firstGrammarPoint = props.data.grammarPoints?.[0];
+                    if (!firstGrammarPoint) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={nextStep} />;
+                    return <GrammarBlock data={firstGrammarPoint} onComplete={props.onComplete} settings={props.settings} />;
+                case 'dialogue_cinematic': return <DuiHua {...props} />;
+                case 'image_match_blanks':
+                     return <TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />;
+                case 'choice':
+                    const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
+                    if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
+                    return <XuanZeTi {...xuanZeTiProps} />;
+                case 'lianxian':
+                    const lianXianProps = {
+                        title: props.data.prompt,
+                        pairs: props.data.pairs, // LianXianTi V16可以直接使用pairs
+                        onCorrect: props.onCorrect,
+                        onComplete: props.onCorrect, // 确保有完成回调
+                    };
+                    return <LianXianTi {...lianXianProps} />;
+                case 'paixu':
+                    const paiXuProps = {
+                        title: props.data.prompt,
+                        items: props.data.items,
+                        correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id),
+                        onCorrect: props.onCorrect, // PaiXuTi可能没有这个prop，但传了无妨
+                        onComplete: props.onCorrect, // 确保有完成回调
+                    };
+                    return <PaiXuTi {...paiXuProps} />;
+                case 'panduan': return <PanDuanTi {...props} />;
+                case 'gaicuo': return <GaiCuoTi {...props} />;
+                case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+                default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
+            }
+        } catch (error) {
+            console.error(`渲染环节 "${type}" 时发生错误:`, error);
+            return <UnknownBlockHandler type={`${type} (渲染失败)`} onSkip={nextStep} />;
         }
     };
 
@@ -244,8 +293,3 @@ export default function InteractiveLesson({ lesson }) {
         </div>
     );
 }
-
-// 再次确保其他辅助组件的完整代码在这里
-// const CompletionBlock = ...
-// const UnknownBlockHandler = ...
-// const WordStudyBlock = ...
