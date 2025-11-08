@@ -1,1 +1,110 @@
-[]
+{
+  "lessonId": "hsk1-lesson1",
+  "title": "HSK 1 - 第一课",
+  "blocks": [
+    // 1. 标题/教学区块
+    {
+      "type": "teaching",
+      "content": {
+        "displayText": "你好",
+        "pinyin": "Nǐ hǎo",
+        "translation": "မင်္ဂလာပါ",
+        "audioUrl": "/sounds/nihao.mp3" // 可选
+      }
+    },
+    // 2. 生词学习区块
+    {
+      "type": "new_word",
+      "content": {
+        "word": "家",
+        "pinyin": "jiā",
+        "translation": "အိမ်",
+        "imageUrl": "/images/house.jpg",
+        "exampleSentence": {
+          "hanzi": "我家在北京。",
+          "pinyin": "Wǒ jiā zài Běijīng.",
+          "translation": "ကျွန်တော့်အိမ်က ပေကျင်းမှာပါ။",
+          "audioUrl": "/sounds/wojiazai.mp3"
+        }
+      }
+    },
+    // 3. 语法讲解区块
+    {
+      "type": "grammar",
+      "content": {
+        "title": "用“是”的句子",
+        "explanation": [ // 用数组来表示多行文本
+          "“是” (shì) အသုံးပြုပုံ...",
+          "ဖွဲ့စည်းပုံ: Subject + 是 + Object"
+        ],
+        "examples": [
+          { "hanzi": "我是老师。", "pinyin": "Wǒ shì lǎoshī.", "translation": "ကျွန်တော်က ဆရာတစ်ယောက်ပါ။" },
+          { "hanzi": "他不是学生。", "pinyin": "Tā bú shì xuéshēng.", "translation": "သူက ကျောင်းသားမဟုတ်ပါဘူး။" }
+        ]
+      }
+    },
+    // 4. 对话区块
+    {
+      "type": "dialogue",
+      "content": {
+          "imageSrc": "/backgrounds/airport.jpg",
+          "characters": {
+            "A": { "name": "小明", "voice": "zh-CN-YunxiNeural" },
+            "B": { "name": "David", "voice": "zh-CN-YunyangNeural" }
+          },
+          "dialogue": [
+            { "speaker": "A", "hanzi": "你好！", "pinyin": "Nǐ hǎo!", "myanmar": "မင်္ဂလာပါ။" },
+            { "speaker": "B", "hanzi": "你好！你叫什么名字？", "pinyin": "Nǐ hǎo! Nǐ jiào shénme míngzì?", "myanmar": "မင်္ဂလာပါ။ နာမည်ဘယ်လိုခေါ်လဲ။" }
+          ]
+      }
+    },
+    // 5. 练习题区块 (核心)
+    {
+      "type": "exercise",
+      "content": {
+        "subType": "choice", // **** 通过 subType 决定具体题型 ****
+        "question": {
+          "text": "“医生” 在哪里工作？",
+          "audioUrl": "/sounds/q1.mp3" // 听力题
+        },
+        "options": [
+          { "id": "A", "text": "学校" },
+          { "id": "B", "text": "医院", "imageUrl": "/images/hospital.jpg" },
+          { "id": "C", "text": "商店" }
+        ],
+        "correctAnswer": ["B"],
+        "explanation": "医生在医院工作。"
+      }
+    },
+    {
+      "type": "exercise",
+      "content": {
+        "subType": "ordering", // **** 句子排序题 ****
+        "title": "把词语组成一个句子：",
+        "items": [
+            { "id": "1", "text": "我" },
+            { "id": "2", "text": "是" },
+            { "id": "3", "text": "学生" }
+        ],
+        "correctOrder": ["1", "2", "3"]
+      }
+    },
+     {
+      "type": "exercise",
+      "content": {
+        "subType": "matching", // **** 连线题 ****
+        "title": "把中文和缅语连起来：",
+        "columnA": [
+          { "id": "a1", "content": "苹果" },
+          { "id": "a2", "content": "猫" }
+        ],
+        "columnB": [
+          { "id": "b1", "content": "ကြောင်" },
+          { "id": "b2", "content": "ပန်းသီး" }
+        ],
+        "pairs": { "a1": "b2", "a2": "b1" }
+      }
+    }
+    // ... 可以继续添加更多区块
+  ]
+}
