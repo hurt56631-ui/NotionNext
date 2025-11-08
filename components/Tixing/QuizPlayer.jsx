@@ -1,5 +1,3 @@
-// components/Tixing/QuizPlayer.jsx (新文件)
-
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 
@@ -27,7 +25,7 @@ const QuizPlayer = ({ data, onComplete }) => {
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
-      // 所有练习题都完成了，通知 LessonPlayer 进入下一站
+      // 所有练习题都完成了，通知 InteractiveLesson 进入下一站
       onComplete();
     }
   };
@@ -40,6 +38,46 @@ const QuizPlayer = ({ data, onComplete }) => {
   
   const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100;
 
+  // [核心修复] 新增一个函数，用来准备传递给具体题型组件的 props
+  const getQuestionProps = () => {
+    const content = currentQuestion.content;
+    const type = currentQuestion.type.toLowerCase();
+
+    // 默认 props，适用于大多数简单组件 (如 lianxian, paixu 等)
+    const baseProps = {
+      data: content,
+      onComplete: handleQuestionComplete,
+      onCorrect: handleQuestionComplete,
+    };
+
+    // 针对需要特殊 props 结构的组件进行适配
+    switch (type) {
+      case 'choice':
+        const xuanZeTiProps = {
+          question: { text: content.prompt, ...content },
+          options: content.choices || [],
+          correctAnswer: content.correctId ? [content.correctId] : [],
+          explanation: content.explanation,
+          onCorrect: handleQuestionComplete,
+          onNext: handleQuestionComplete, // 兼容 onNext
+          isListeningMode: !!content.narrationText,
+        };
+        // 处理听力模式的文本替换
+        if (xuanZeTiProps.isListeningMode) {
+           xuanZeTiProps.question.text = content.narrationText;
+        }
+        return xuanZeTiProps;
+
+      // 如果其他组件 (如 panduan) 也需要特殊 props，可以在这里添加 case
+      // case 'panduan':
+      //   return { ... };
+
+      default:
+        // 对于不需要转换的组件，直接返回基础 props
+        return baseProps;
+    }
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto p-4">
         <div className="mb-4">
@@ -48,11 +86,8 @@ const QuizPlayer = ({ data, onComplete }) => {
                 <div className="bg-blue-400 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}></div>
             </div>
         </div>
-      <QuestionComponent 
-        data={currentQuestion.content} 
-        onComplete={handleQuestionComplete} 
-        onCorrect={handleQuestionComplete} // 兼容不同组件的完成回调
-      />
+      {/* [核心修复] 使用 getQuestionProps() 来传递正确的 props */}
+      <QuestionComponent {...getQuestionProps()} />
     </div>
   );
 };
