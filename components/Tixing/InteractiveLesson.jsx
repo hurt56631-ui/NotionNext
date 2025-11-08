@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
-import { SpeakerWaveIcon } from '@heroicons/react/24/solid'; // 引入图标
+import { SpeakerWaveIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
+import { useDrag } from '@use-gesture/react';
 
-// --- 1. 导入所有“独立环节”组件 ---
+// --- 1. 导入所有外部“独立环节”组件 ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -11,13 +12,15 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-// [重要] WordCard.js 和 GrammarPointPlayer.jsx 已不再需要
 
 // --- 2. 统一的TTS模块 ---
 const ttsCache = new Map();
-const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural', rate = 0) => {
+const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural', rate = 0, onEndCallback = null) => {
   ttsCache.forEach(a => { if (a && !a.paused) { a.pause(); a.currentTime = 0; } });
-  if (!text) return;
+  if (!text) {
+    if (onEndCallback) onEndCallback();
+    return;
+  }
   const cacheKey = `${text}|${voice}|${rate}`;
   try {
     let objectUrl = ttsCache.get(cacheKey);
@@ -30,33 +33,70 @@ const playTTS = async (text, voice = 'zh-CN-XiaoyouNeural', rate = 0) => {
     }
     const audio = new Audio(objectUrl);
     ttsCache.set(cacheKey, audio);
+    
+    audio.onended = () => { if (onEndCallback) onEndCallback(); };
+    audio.onerror = (e) => {
+        console.error("Audio element failed to play:", e);
+        if (onEndCallback) onEndCallback();
+    };
+
     await audio.play();
-  } catch (e) { console.error(`播放 "${text}" (${voice}, rate: ${rate}) 失败:`, e); }
+  } catch (e) {
+    console.error(`播放 "${text}" (${voice}, rate: ${rate}) 失败:`, e);
+    if (onEndCallback) onEndCallback();
+  }
 };
 
 // --- 3. 内置的辅助UI组件 (完整实现) ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
+    const textToPlay = data.narrationScript || data.displayText;
+
+    const bind = useDrag(({ swipe: [, swipeY], event }) => {
+        event.stopPropagation();
+        if (swipeY === -1) {
+            onComplete();
+        }
+    }, { axis: 'y', filterTaps: true, preventDefault: true });
+
     useEffect(() => {
-        const textToPlay = data.narrationScript || data.displayText;
         if (textToPlay) {
             const timer = setTimeout(() => {
-                settings.playTTS(textToPlay, settings.chineseVoice);
-            }, 800);
+                settings.playTTS(textToPlay, settings.chineseVoice, 0, onComplete);
+            }, 1000);
             return () => clearTimeout(timer);
         }
-    }, [data, settings]);
+    }, [data, settings, onComplete, textToPlay]);
 
-    const handleContinue = () => { onComplete(); };
+    const handleManualPlay = (e) => {
+        e.stopPropagation();
+        if (textToPlay) {
+            settings.playTTS(textToPlay, settings.chineseVoice);
+        }
+    };
 
     return (
-        <div className="flex flex-col items-center justify-center text-center p-8 w-full h-full text-white animate-fade-in">
-            {data.pinyin && <p className="text-3xl text-slate-300 mb-2">{data.pinyin}</p>}
-            <h1 className="text-7xl font-bold mb-4">{data.displayText}</h1>
-            {data.translation && <p className="text-3xl text-slate-200">{data.translation}</p>}
-            <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
-                <button onClick={handleContinue} className="px-8 py-4 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">
-                    ဆက်လက်လုပ်ဆောင်ရန် (Continue)
-                </button>
+        <div {...bind()} className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-white animate-fade-in cursor-pointer">
+            <style>{`
+                @keyframes bounce-up {
+                    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+                    40% { transform: translateY(-20px); }
+                    60% { transform: translateY(-10px); }
+                }
+                .animate-bounce-up { animation: bounce-up 2s infinite; }
+            `}</style>
+            <div className="flex-grow flex flex-col items-center justify-center">
+                {data.pinyin && <p className="text-3xl text-slate-300 mb-2">{data.pinyin}</p>}
+                <div className="flex items-center gap-4">
+                    <h1 className="text-7xl font-bold">{data.displayText}</h1>
+                    <button onClick={handleManualPlay} className="p-2 rounded-full hover:bg-white/20 transition-colors">
+                        <SpeakerWaveIcon className="h-9 w-9" />
+                    </button>
+                </div>
+                {data.translation && <p className="text-3xl text-slate-200 mt-4">{data.translation}</p>}
+            </div>
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-80">
+                <ChevronUpIcon className="h-10 w-10 animate-bounce-up" />
+                <span className="mt-2 text-lg">上滑开始学习</span>
             </div>
         </div>
     );
@@ -124,14 +164,11 @@ const GrammarBlock = ({ data, onComplete, settings }) => {
     );
 };
 
-// [新增] 内置的生词学习组件
 const WordStudyBlock = ({ data, onComplete, settings }) => {
     const { title, words } = data;
-
     const handlePlayWord = (word) => {
         settings.playTTS(word.chinese, settings.chineseVoice, word.rate || 0);
     };
-
     return (
         <div className="w-full max-w-2xl mx-auto flex flex-col text-white p-4 animate-fade-in">
             <h2 className="text-4xl font-bold text-center mb-6">{title || "生词"}</h2>
@@ -160,7 +197,6 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
     );
 };
 
-
 // --- 4. 主播放器组件 (核心逻辑) ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -172,14 +208,18 @@ export default function InteractiveLesson({ lesson }) {
     const currentBlock = blocks[currentIndex];
 
     const nextStep = useCallback(() => {
-        if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); }
+        if (currentIndex < totalBlocks) {
+            setCurrentIndex(prev => prev + 1);
+        }
     }, [currentIndex, totalBlocks]);
 
     const delayedNextStep = useCallback(() => {
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         setTimeout(() => {
-            if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); }
-        }, 1200);
+            if (currentIndex < totalBlocks) {
+                setCurrentIndex(prev => prev + 1);
+            }
+        }, 4500);
     }, [currentIndex, totalBlocks]);
 
     const renderBlock = () => {
@@ -197,35 +237,31 @@ export default function InteractiveLesson({ lesson }) {
             settings: { ...settings, playTTS },
         };
 
+        // [核心修正] 确保所有 case 都被正确处理
         switch (type) {
             case 'teaching': return <TeachingBlock {...props} />;
-            
-            // [新增] 使用新的“生词学习”环节
             case 'word_study': return <WordStudyBlock {...props} />;
-
+            
+            // [核心修正] 之前遗漏的 grammar_study case 已被正确添加
             case 'grammar_study':
                 const firstGrammarPoint = props.data.grammarPoints?.[0];
                 if (!firstGrammarPoint) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={nextStep} />;
                 return <GrammarBlock data={firstGrammarPoint} onComplete={props.onComplete} settings={props.settings} />;
 
             case 'dialogue_cinematic': return <DuiHua {...props} />;
-            
-            case 'image_match_blanks':
-                 const tianKongTiProps = { ...props.data, onCorrect: props.onCorrect, onNext: props.onCorrect };
-                 return <TianKongTi {...tianKongTiProps} />;
-            
+            case 'image_match_blanks': return <TianKongTi {...props} onNext={props.onCorrect} />;
             case 'choice':
-                const xuanZeTiProps = { question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], explanation: props.data.explanation, onCorrect: props.onCorrect, onNext: props.onCorrect, isListeningMode: !!props.data.narrationText, };
+                const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
                 if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
                 return <XuanZeTi {...xuanZeTiProps} />;
             
-            case 'lianxian': return <LianXianTi onComplete={props.onCorrect} {...props} />;
-            case 'paixu': return <PaiXuTi onComplete={props.onCorrect} {...props} />;
+            // [核心修正] 确保所有练习题类型都被正确渲染
+            case 'lianxian': return <LianXianTi {...props} onComplete={props.onCorrect} />;
+            case 'paixu': return <PaiXuTi {...props} onComplete={props.onCorrect} />;
             case 'panduan': return <PanDuanTi {...props} />;
             case 'gaicuo': return <GaiCuoTi {...props} />;
-            
+
             case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
-            
             default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
     };
@@ -233,7 +269,7 @@ export default function InteractiveLesson({ lesson }) {
     const progress = totalBlocks > 0 ? ((currentIndex + 1) / totalBlocks) * 100 : 0;
 
     return (
-        <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
+        <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4 overflow-hidden" style={{ backgroundImage: "url(/background.jpg)" }}>
             {currentIndex < totalBlocks && (
                  <div className="w-full max-w-4xl absolute top-4 px-4 z-10">
                     <div className="w-full bg-gray-600/50 rounded-full h-2.5">
@@ -246,4 +282,4 @@ export default function InteractiveLesson({ lesson }) {
             </div>
         </div>
     );
-}
+}```
