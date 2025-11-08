@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
-import { SpeakerWaveIcon, ChevronUpIcon } from '@heroicons/react/24/solid';
 import { useDrag } from '@use-gesture/react';
+// [核心修正] 导入 react-icons 中的图标
+import { HiSpeakerWave } from "react-icons/hi2";
+import { FaChevronUp } from "react-icons/fa";
 
 // --- 1. 导入所有外部“独立环节”组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -88,14 +90,16 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
                 {data.pinyin && <p className="text-3xl text-slate-300 mb-2">{data.pinyin}</p>}
                 <div className="flex items-center gap-4">
                     <h1 className="text-7xl font-bold">{data.displayText}</h1>
+                    {/* [核心修正] 使用 react-icons 替代 */}
                     <button onClick={handleManualPlay} className="p-2 rounded-full hover:bg-white/20 transition-colors">
-                        <SpeakerWaveIcon className="h-9 w-9" />
+                        <HiSpeakerWave className="h-9 w-9" />
                     </button>
                 </div>
                 {data.translation && <p className="text-3xl text-slate-200 mt-4">{data.translation}</p>}
             </div>
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-80">
-                <ChevronUpIcon className="h-10 w-10 animate-bounce-up" />
+                {/* [核心修正] 使用 react-icons 替代 */}
+                <FaChevronUp className="h-10 w-10 animate-bounce-up" />
                 <span className="mt-2 text-lg">上滑开始学习</span>
             </div>
         </div>
@@ -143,7 +147,10 @@ const GrammarBlock = ({ data, onComplete, settings }) => {
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-3xl font-bold">{grammarPoint}</h2>
                     {narrationScript && (
-                        <button onClick={playNarration} className="p-2 rounded-full hover:bg-white/20 transition-colors"><SpeakerWaveIcon className="h-7 w-7" /></button>
+                        // [核心修正] 使用 react-icons 替代
+                        <button onClick={playNarration} className="p-2 rounded-full hover:bg-white/20 transition-colors">
+                            <HiSpeakerWave className="h-7 w-7" />
+                        </button>
                     )}
                 </div>
                 <p className="text-lg bg-black/20 px-3 py-1 rounded-md inline-block mb-4">{pattern}</p>
@@ -152,7 +159,10 @@ const GrammarBlock = ({ data, onComplete, settings }) => {
                     {examples.map(example => (
                         <div key={example.id} className="bg-black/20 p-4 rounded-lg flex items-center justify-between hover:bg-black/30 transition-colors">
                             <div><p className="text-xl">{example.sentence}</p><p className="text-sm text-slate-400">{example.translation}</p></div>
-                            <button onClick={() => handlePlayExample(example)} className="p-2 rounded-full hover:bg-white/20"><SpeakerWaveIcon className="h-6 w-6" /></button>
+                            {/* [核心修正] 使用 react-icons 替代 */}
+                            <button onClick={() => handlePlayExample(example)} className="p-2 rounded-full hover:bg-white/20">
+                                <HiSpeakerWave className="h-6 w-6" />
+                            </button>
                         </div>
                     ))}
                 </div>
@@ -181,8 +191,9 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
                                 <p className="text-2xl font-semibold">{word.chinese}</p>
                                 <p className="text-lg text-yellow-300 mt-1">{word.translation}</p>
                             </div>
+                            {/* [核心修正] 使用 react-icons 替代 */}
                             <button onClick={() => handlePlayWord(word)} className="ml-4 p-3 rounded-full hover:bg-white/20">
-                                <SpeakerWaveIcon className="h-7 w-7" />
+                                <HiSpeakerWave className="h-7 w-7" />
                             </button>
                         </div>
                     ))}
@@ -237,30 +248,23 @@ export default function InteractiveLesson({ lesson }) {
             settings: { ...settings, playTTS },
         };
 
-        // [核心修正] 确保所有 case 都被正确处理
         switch (type) {
             case 'teaching': return <TeachingBlock {...props} />;
             case 'word_study': return <WordStudyBlock {...props} />;
-            
-            // [核心修正] 之前遗漏的 grammar_study case 已被正确添加
             case 'grammar_study':
                 const firstGrammarPoint = props.data.grammarPoints?.[0];
                 if (!firstGrammarPoint) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={nextStep} />;
                 return <GrammarBlock data={firstGrammarPoint} onComplete={props.onComplete} settings={props.settings} />;
-
             case 'dialogue_cinematic': return <DuiHua {...props} />;
             case 'image_match_blanks': return <TianKongTi {...props} onNext={props.onCorrect} />;
             case 'choice':
                 const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
                 if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
                 return <XuanZeTi {...xuanZeTiProps} />;
-            
-            // [核心修正] 确保所有练习题类型都被正确渲染
             case 'lianxian': return <LianXianTi {...props} onComplete={props.onCorrect} />;
             case 'paixu': return <PaiXuTi {...props} onComplete={props.onCorrect} />;
             case 'panduan': return <PanDuanTi {...props} />;
             case 'gaicuo': return <GaiCuoTi {...props} />;
-
             case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
             default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
