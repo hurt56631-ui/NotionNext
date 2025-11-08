@@ -2,17 +2,15 @@
   "lessonId": "hsk1-lesson1",
   "title": "HSK 1 - 第一课",
   "blocks": [
-    // 1. 标题/教学区块
     {
       "type": "teaching",
       "content": {
         "displayText": "你好",
         "pinyin": "Nǐ hǎo",
         "translation": "မင်္ဂလာပါ",
-        "audioUrl": "/sounds/nihao.mp3" // 可选
+        "audioUrl": "/sounds/nihao.mp3"
       }
     },
-    // 2. 生词学习区块
     {
       "type": "new_word",
       "content": {
@@ -28,12 +26,11 @@
         }
       }
     },
-    // 3. 语法讲解区块
     {
       "type": "grammar",
       "content": {
         "title": "用“是”的句子",
-        "explanation": [ // 用数组来表示多行文本
+        "explanation": [
           "“是” (shì) အသုံးပြုပုံ...",
           "ဖွဲ့စည်းပုံ: Subject + 是 + Object"
         ],
@@ -43,7 +40,6 @@
         ]
       }
     },
-    // 4. 对话区块
     {
       "type": "dialogue",
       "content": {
@@ -58,14 +54,13 @@
           ]
       }
     },
-    // 5. 练习题区块 (核心)
     {
       "type": "exercise",
       "content": {
-        "subType": "choice", // **** 通过 subType 决定具体题型 ****
+        "subType": "choice",
         "question": {
           "text": "“医生” 在哪里工作？",
-          "audioUrl": "/sounds/q1.mp3" // 听力题
+          "audioUrl": "/sounds/q1.mp3"
         },
         "options": [
           { "id": "A", "text": "学校" },
@@ -79,7 +74,7 @@
     {
       "type": "exercise",
       "content": {
-        "subType": "ordering", // **** 句子排序题 ****
+        "subType": "ordering",
         "title": "把词语组成一个句子：",
         "items": [
             { "id": "1", "text": "我" },
@@ -89,10 +84,10 @@
         "correctOrder": ["1", "2", "3"]
       }
     },
-     {
+    {
       "type": "exercise",
       "content": {
-        "subType": "matching", // **** 连线题 ****
+        "subType": "matching",
         "title": "把中文和缅语连起来：",
         "columnA": [
           { "id": "a1", "content": "苹果" },
@@ -105,6 +100,5 @@
         "pairs": { "a1": "b2", "a2": "b1" }
       }
     }
-    // ... 可以继续添加更多区块
   ]
 }
