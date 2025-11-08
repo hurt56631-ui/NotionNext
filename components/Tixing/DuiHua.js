@@ -1,10 +1,9 @@
-// components/Tixing/DuiHua.js
 import React, { useState, useEffect, useRef } from 'react';
 import { FaPlay, FaPause } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 import { useDrag } from '@use-gesture/react';
 
-// --- TTS 引擎 ---
+// --- TTS 引擎 (无变动) ---
 let ttsCache = new Map();
 const getTTSAudio = async (text, voice, rate = 0) => {
     if (!text || !voice) return null;
@@ -30,7 +29,7 @@ const playTTS = async (text, voice, rate) => {
 // ========================================================================
 //                           单个场景渲染组件
 // ========================================================================
-const SceneInstance = ({ scene, isActive, onExit }) => {
+const SceneInstance = ({ scene, isActive, onExit }) => { // onExit 是我们用来通知完成的 prop
     const { id, title, imageSrc, characters, dialogue } = scene;
     const [currentLineIndex, setCurrentLineIndex] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -43,7 +42,11 @@ const SceneInstance = ({ scene, isActive, onExit }) => {
     const playLine = async (index, isRepeating = false) => {
         if (index >= dialogue.length || !isActive) {
             setIsPlaying(false);
-            timeoutRef.current = setTimeout(() => setCurrentLineIndex(null), 1500);
+            // [修改] 在对话结束时，调用 onExit
+            timeoutRef.current = setTimeout(() => {
+                setCurrentLineIndex(null);
+                if (onExit) onExit(); // <-- 通知父组件对话已结束
+            }, 1500);
             return;
         }
         setCurrentLineIndex(index);
@@ -59,6 +62,7 @@ const SceneInstance = ({ scene, isActive, onExit }) => {
         }
     };
 
+    // ... 其余 SceneInstance 代码无变动 ...
     useEffect(() => {
         clearTimeout(timeoutRef.current);
         if (isActive && isPlaying) {
@@ -97,19 +101,15 @@ const SceneInstance = ({ scene, isActive, onExit }) => {
         <div style={styles.fullScreenContainer}>
             <img src={imageSrc} alt={title} style={styles.backgroundImage} />
             <div style={styles.overlay}></div>
-
             {currentLine && (
                 <div style={{...styles.bubbleArea, justifyContent: currentLine.speaker === speakerAKey ? 'flex-start' : 'flex-end'}}>
-                    <div className={`bubble ${currentLine.speaker === speakerAKey ? 'bubble-a' : 'bubble-b'}`}
-                         style={{...styles.bubble, ...(currentLine.speaker === speakerAKey ? styles.bubbleA : styles.bubbleB)}}
-                         onClick={handleBubbleClick}>
+                    <div className={`bubble ${currentLine.speaker === speakerAKey ? 'bubble-a' : 'bubble-b'}`} style={{...styles.bubble, ...(currentLine.speaker === speakerAKey ? styles.bubbleA : styles.bubbleB)}} onClick={handleBubbleClick}>
                         <p style={styles.pinyin}>{pinyin(currentLine.hanzi)}</p>
                         <p style={styles.hanzi}>{currentLine.hanzi}</p>
                         {currentLine.myanmar && <p style={styles.myanmarText}>{currentLine.myanmar}</p>}
                     </div>
                 </div>
             )}
-
             <div style={styles.controlsArea}>
                 <button onClick={() => setIsPlaying(p => !p)} style={styles.controlButton}>
                     {isPlaying ? <FaPause /> : <FaPlay />}
@@ -123,13 +123,14 @@ const SceneInstance = ({ scene, isActive, onExit }) => {
 //                           主容器与滑动逻辑
 // ========================================================================
 const DuiHua = (props) => {
+    // [修改] 接收 onComplete prop
+    const { onComplete } = props;
     const scenes = props.scenes || (props.data ? [props.data] : null);
     if (!scenes || scenes.length === 0) {
         return <div style={styles.loadingOrError}>正在加载对话数据...</div>;
     }
 
     const [sceneIndex, setSceneIndex] = useState(0);
-    const [isFullScreen, setIsFullScreen] = useState(true); // 默认直接进入全屏
     const containerRef = useRef(null);
 
     const bind = useDrag(({ active, movement: [, my], direction: [, dy], distance, cancel }) => {
@@ -137,38 +138,28 @@ const DuiHua = (props) => {
             const newIndex = sceneIndex + (dy < 0 ? 1 : -1);
             if (newIndex >= 0 && newIndex < scenes.length) {
                 setSceneIndex(newIndex);
+            } else if (newIndex >= scenes.length) {
+                 // [修改] 如果是最后一个场景且用户尝试向上滑动，则触发 onComplete
+                 if (onComplete) onComplete();
             }
             cancel();
         }
     }, { axis: 'y', filterTaps: true, taps: true });
     
-    // 如果您想保留点击触发进入的模式，可以取消下面这段注释
-    /*
-    if (!isFullScreen) {
-        return (
-            <div style={styles.triggerContainer} onClick={() => setIsFullScreen(true)}>
-                <img src={scenes[0].imageSrc} alt={scenes[0].title} style={styles.triggerImage} />
-                <div style={styles.triggerOverlay}></div>
-                <div style={styles.triggerPlayButton}><FaPlay size={24}/></div>
-                <h3 style={styles.triggerTitle}>{scenes[0].title || '开始情景对话'}</h3>
-            </div>
-        );
-    }
-    */
-    
     return (
         <div {...bind()} style={styles.swipeContainer} ref={containerRef}>
             <style>{`
+                /* ... 样式无变动 ... */
                 @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
                 .bubble { animation: fadeInUp 0.5s ease-out; }
-                /* 关键修复：使用伪元素创建可靠的气泡尾巴 */
                 .bubble-a::after { content: ''; position: absolute; left: 20px; bottom: -14px; width: 0; height: 0; border: 15px solid transparent; border-top-color: #f3f4f6; border-bottom: 0; border-left: 0; }
                 .bubble-b::after { content: ''; position: absolute; right: 20px; bottom: -14px; width: 0; height: 0; border: 15px solid transparent; border-top-color: #3b82f6; border-bottom: 0; border-right: 0; }
             `}</style>
             <div style={{ ...styles.sceneWrapper, transform: `translateY(-${sceneIndex * 100}%)` }}>
                 {scenes.map((scene, index) => (
                     <div key={scene.id || index} style={{width: '100%', height: '100%'}}>
-                        <SceneInstance scene={scene} isActive={index === sceneIndex} />
+                        {/* [修改] 将 onComplete 传递给 SceneInstance 的 onExit */}
+                        <SceneInstance scene={scene} isActive={index === sceneIndex} onExit={onComplete} />
                     </div>
                 ))}
             </div>
@@ -176,16 +167,13 @@ const DuiHua = (props) => {
     );
 };
 
-// --- 样式表 ---
+// --- 样式表 (无变动) ---
 const styles = {
-    // 触发器样式 (可选)
     triggerContainer: { position: 'relative', width: '100%', maxWidth: '960px', aspectRatio: '16 / 9', margin: '1rem auto', borderRadius: '18px', overflow: 'hidden', cursor: 'pointer', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' },
     triggerImage: { width: '100%', height: '100%', objectFit: 'cover' },
     triggerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
     triggerPlayButton: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '70px', height: '70px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.8)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     triggerTitle: { position: 'absolute', bottom: '20px', left: '20px', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' },
-    
-    // 全屏样式
     loadingOrError: { textAlign: 'center', padding: '40px', fontFamily: 'system-ui, sans-serif', color: '#7f1d1d', backgroundColor: '#fef2f2', borderRadius: '12px' },
     swipeContainer: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'pan-y' },
     sceneWrapper: { height: '100%', transition: 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)' },
