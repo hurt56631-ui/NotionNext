@@ -1,4 +1,4 @@
-// components/Tixing/GrammarPointPlayer.jsx (V10 - 数据驱动发音人最终版)
+// components/Tixing/GrammarPointPlayer.jsx (已修改为内容全屏)
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -46,9 +46,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     const [currentIndex, setCurrentIndex] = useState(0);
     const lastDirection = useRef(0);
-    
-    // 【修改】移除了内部的 settings 状态
-    
     const [activeAudio, setActiveAudio] = useState(null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
@@ -95,9 +92,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             return;
         }
         
-        // 【修改】直接从当前页的数据中获取声音设置
         const currentGp = grammarPoints[currentIndex];
-        const chineseVoice = currentGp.chineseVoice || 'zh-CN-XiaomengNeural'; // 提供默认值以防数据缺失
+        const chineseVoice = currentGp.chineseVoice || 'zh-CN-XiaomengNeural';
         const myanmarVoice = currentGp.myanmarVoice || 'my-MM-NilarNeural';
 
         setActiveAudio({ text, type });
@@ -128,7 +124,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         };
         
         parts.forEach((part, index) => {
-            // 【修改】使用从数据中获取的声音
             const voice = part.isChinese ? chineseVoice : myanmarVoice;
             const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(part.text)}&v=${voice}`;
             
@@ -151,7 +146,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 sounds[index] = sound;
             }
         });
-    }, [grammarPoints, currentIndex, stopPlayback]); // 【修改】依赖项更新
+    }, [grammarPoints, currentIndex, stopPlayback]);
     
     const handlePlayButtonClick = (text, type) => {
         if (activeAudio?.type === type) {
@@ -161,7 +156,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         }
     };
     
-    // 自动播放 Effect
     useEffect(() => {
         stopPlayback();
         const timer = setTimeout(() => {
@@ -176,13 +170,11 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         };
     }, [currentIndex, grammarPoints, playMixedAudio, stopPlayback]);
     
-    // 预加载 Effect
     useEffect(() => {
         const preloadAudioFor = (index) => {
             const gp = grammarPoints[index];
             if (!gp) return;
 
-            // 【修改】从指定页的数据中获取声音
             const chineseVoice = gp.chineseVoice || 'zh-CN-XiaomengNeural';
             const myanmarVoice = gp.myanmarVoice || 'my-MM-NilarNeural';
 
@@ -202,7 +194,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (currentIndex + 1 < grammarPoints.length) {
             preloadAudioFor(currentIndex + 1);
         }
-    }, [currentIndex, grammarPoints]); // 【修改】依赖项更新
+    }, [currentIndex, grammarPoints]);
 
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
@@ -338,8 +330,8 @@ GrammarPointPlayer.propTypes = {
         id: PropTypes.string.isRequired,
         grammarPoint: PropTypes.string,
         pattern: PropTypes.string,
-        chineseVoice: PropTypes.string, // 新增
-        myanmarVoice: PropTypes.string, // 新增
+        chineseVoice: PropTypes.string,
+        myanmarVoice: PropTypes.string,
         visibleExplanation: PropTypes.string,
         narrationScript: PropTypes.string,
         examples: PropTypes.array,
@@ -351,9 +343,24 @@ GrammarPointPlayer.propTypes = {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#111827' },
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundSize: 'cover', backgroundPosition: 'center', willChange: 'transform, opacity' },
-    // --- 修改点 START ---
-    contentWrapper: { width: '100%', maxWidth: '500px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '40px', color: 'white', paddingTop: 'env(safe-area-inset-top, 20px)', paddingBottom: '100px' },
-    // --- 修改点 END ---
+    
+    // --- 【【【【【【 最终修改 】】】】】】 ---
+    contentWrapper: { 
+        width: '100%', 
+        // maxWidth: '500px',  // <-- 我注释掉了这一行
+        maxWidth: '1200px', //  <-- 或者您可以设置一个更大的宽度，比如1200px，以适应宽屏
+        margin: '0 auto', //     <-- 增加这一行让它在超宽屏上也能居中
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        justifyContent: 'center', 
+        gap: '40px', 
+        color: 'white', 
+        paddingTop: 'env(safe-area-inset-top, 20px)', 
+        paddingBottom: '100px' 
+    },
+    // --- 【【【【【【 修改结束 】】】】】】 ---
+
     header: { textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)' },
     grammarPointTitle: { fontSize: '2.2rem', fontWeight: 'bold' },
     pattern: { fontSize: '1rem', color: '#7dd3fc', fontFamily: 'monospace', marginTop: '10px', letterSpacing: '1px' },
@@ -391,7 +398,7 @@ styleTag.innerHTML = `
     @keyframes bounce {
         0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
         40% { transform: translateY(-10px); }
-        60% { transform: translateY(-5px); }
+        60% { translateY(-5px); }
     }
 `;
 if (!document.getElementById('grammar-player-styles')) {
