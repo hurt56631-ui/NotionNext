@@ -1,6 +1,6 @@
-// components/Tixing/PaiXuTi.js (全新重构 - 沉浸式V2 - 放大版)
+// components/Tixing/PaiXuTi.js (全新重构 - 沉浸式V2 - 放大版 - 已修正编译错误)
 
-import React, 'useState', useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react'; // <--- 已修正此行
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
@@ -112,13 +112,20 @@ const ComponentStyles = `
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
     cursor: grabbing;
   }
-  .pai-xu-ti-button-container { /* ... (样式无变化) ... */ }
-  .pai-xu-ti-submit-button { /* ... (样式无变化) ... */ }
-  .pai-xu-ti-feedback-container { /* ... (样式无变化) ... */ }
-  .pai-xu-ti-continue-prompt { /* ... (样式无变化) ... */ }
+  .pai-xu-ti-button-container, .pai-xu-ti-feedback-container, .pai-xu-ti-continue-prompt {
+    animation: pai-xu-ti-fade-in 0.5s 0.2s backwards; /* 延迟出现，效果更好 */
+  }
+  .pai-xu-ti-button-container { display: flex; justify-content: center; margin-top: 12px; }
+  .pai-xu-ti-submit-button { padding: 16px 40px; border-radius: 9999px; border: none; background-color: #3b82f6; color: white; font-size: 1.2rem; font-weight: bold; cursor: pointer; transition: background-color 0.2s, transform 0.2s; }
+  .pai-xu-ti-submit-button:hover { background-color: #60a5fa; transform: scale(1.05); }
+  .pai-xu-ti-submit-button:disabled { background-color: #475569; cursor: not-allowed; transform: none; }
+  .pai-xu-ti-feedback-container { text-align: center; font-size: 1.3rem; font-weight: bold; padding: 14px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+  .pai-xu-ti-feedback-correct { background-color: #166534; color: #dcfce7; }
+  .pai-xu-ti-feedback-incorrect { background-color: #991b1b; color: #fee2e2; }
+  .pai-xu-ti-continue-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-top: 24px; color: #94a3b8; cursor: pointer; opacity: 0.8; }
+  .pai-xu-ti-continue-prompt .icon { font-size: 2.5rem; animation: pai-xu-ti-bounce-up 2s infinite; }
 `;
 
-// ... (音频管理、Card 和 SortableCard 组件代码无变化)
 // --- 音频管理 ---
 let sounds = {};
 if (typeof window !== 'undefined') {
@@ -156,14 +163,13 @@ const SortableCard = ({ id, content, onClick }) => {
 };
 
 
-// --- 主组件 (逻辑无变化) ---
+// --- 主组件 ---
 const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }) => {
   const [answerItems, setAnswerItems] = useState([]);
   const [poolItems, setPoolItems] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [feedback, setFeedback] = useState({ shown: false, correct: false });
 
-  // 初始化和重置题目
   useEffect(() => {
     if (items) {
       const shuffled = [...items].sort(() => Math.random() - 0.5);
@@ -179,7 +185,7 @@ const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }
   const toggleItemPlacement = useCallback((itemToMove) => {
     if (feedback.shown) return;
     playSound('click');
-    settings.playTTS(itemToMove.text, 'zh');
+    if(itemToMove.text) settings.playTTS(itemToMove.text, 'zh');
     if (answerItems.some(item => item.id === itemToMove.id)) {
       setAnswerItems(prev => prev.filter(item => item.id !== itemToMove.id));
       setPoolItems(prev => [...prev, itemToMove]);
@@ -190,7 +196,7 @@ const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }
   }, [answerItems, feedback.shown, settings]);
 
   const handleDragEnd = useCallback((event) => {
-    const { active, over } = event;
+    const { active, over } => event;
     if (over && active.id !== over.id) {
       setAnswerItems((currentItems) => {
         const oldIndex = currentItems.findIndex(({ id }) => id === active.id);
@@ -222,7 +228,7 @@ const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }
   }, [feedback.correct, onCorrect, onComplete]);
   
   const bind = useDrag(({ swipe: [, swipeY], event }) => {
-    event.stopPropagation();
+    if (event) event.stopPropagation();
     if (feedback.shown && swipeY === -1) {
       handleContinue();
     }
