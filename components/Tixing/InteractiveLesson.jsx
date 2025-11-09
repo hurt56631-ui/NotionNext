@@ -1,9 +1,8 @@
-// components/Tixing/InteractiveLesson.jsx (最终修复版 - 移除 useDrag 的顶层导入)
+// components/Tixing/InteractiveLesson.jsx (最终修复版)
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-// 【关键修正】: 移除 useDrag 的导入，由子组件自己处理或在运行时导入
-// import { useDrag } from '@use-gesture/react'; 
+// 关键修正: 移除顶层的 useDrag 导入，由子组件在客户端动态导入
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronUp } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
@@ -70,19 +69,16 @@ const stopAllAudio = () => {
 
 
 // --- 3. 内置的辅助UI组件 ---
+
+// [MODIFIED] TeachingBlock: 文字改为居中靠上
 const TeachingBlock = ({ data, onComplete, settings }) => {
-    // 【修正】: 在这里而不是顶层导入 useDrag，但为了简化，直接移除 useDrag 的导入
-    // 由于此组件的 useDrag 逻辑本身也需要在客户端，我们暂时假设 useDrag 在其组件内部被正确导入
-    // 但如果 useDrag 的导入导致问题，最简单的方式是使用一个自定义 Hook 包裹 useDrag
-    // 这里我们先移除顶层导入，并假设子组件可以处理其依赖
-    
-    // 为了让 TeachingBlock 继续支持手势，我们必须保留 useDrag 逻辑，
-    // 因此在组件内部模拟导入（实际您需要在 TeachingBlock.jsx 内部导入 useDrag）
+    // 为避免服务端渲染问题，在组件内部动态导入 useDrag
     const useDrag = typeof window !== 'undefined' ? require('@use-gesture/react').useDrag : () => () => {};
 
+    // 手势绑定: 向上滑动时触发 onComplete
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
-        if (swipeY === -1) { onComplete(); }
+        if (swipeY === -1) { onComplete(); } // swipeY -1 代表向上滑动
     }, { axis: 'y', filterTaps: true, preventDefault: true });
 
     useEffect(() => {
@@ -99,7 +95,7 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
         settings.playTTS(data.displayText, 'zh');
     };
     return (
-        <div {...bind()} className="w-full h-full flex flex-col items-center justify-center text-center p-4 md:p-8 text-white animate-fade-in cursor-pointer" onClick={onComplete}>
+        <div {...bind()} className="w-full h-full flex flex-col items-center justify-start pt-24 text-center p-4 md:p-8 text-white animate-fade-in cursor-pointer" onClick={onComplete}>
             <style>{`
                 @keyframes bounce-up { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-20px); } 60% { transform: translateY(-10px); } }
                 .animate-bounce-up { animation: bounce-up 2s infinite; }
@@ -122,13 +118,14 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
     );
 };
 
+// [MODIFIED] WordStudyBlock: 背景改为不透明，卡片加上颜色
 const WordStudyBlock = ({ data, onComplete, settings }) => {
-    // 【修正】: 在这里而不是顶层导入 useDrag，但为了简化，直接移除 useDrag 的导入
     const useDrag = typeof window !== 'undefined' ? require('@use-gesture/react').useDrag : () => () => {};
-
+    
+    // 手势绑定: 向上滑动时触发 onComplete
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
-        if (swipeY === -1) { onComplete(); }
+        if (swipeY === -1) { onComplete(); } // swipeY -1 代表向上滑动
     }, { axis: 'y', filterTaps: true, preventDefault: true });
 
     const handlePlayWord = (word) => {
@@ -137,7 +134,7 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
 
     return (
         <div {...bind()} className="w-full h-full flex flex-col items-center justify-center text-white p-6 animate-fade-in cursor-pointer" onClick={onComplete}>
-            <div className="w-full max-w-4xl h-full max-h-[90vh] flex flex-col p-6 bg-black/40 backdrop-blur-sm rounded-2xl shadow-lg">
+            <div className="w-full max-w-4xl h-full max-h-[90vh] flex flex-col p-6 bg-gray-900 rounded-2xl shadow-lg"> {/* 背景改为不透明 */}
                 <div className="flex-shrink-0 text-center mb-6">
                     <h2 className="text-3xl font-bold">{data.title || "生词学习"}</h2>
                     <p className="text-slate-300 mt-1">点击生词听发音，或上滑/点击下方按钮继续</p>
@@ -149,7 +146,7 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
                             <button 
                                 key={word.id} 
                                 onClick={(e) => { e.stopPropagation(); handlePlayWord(word); }}
-                                className="p-4 rounded-lg shadow-md transition-transform transform bg-gray-700/70 hover:bg-gray-600/70 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-400 text-center"
+                                className="p-4 rounded-lg shadow-md transition-transform transform bg-slate-700 hover:bg-slate-600 hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-400 text-center" // 卡片加上颜色
                             >
                                 <div className="text-sm text-slate-300">{word.pinyin}</div>
                                 <div className="text-2xl font-semibold mt-1">{word.chinese}</div>
@@ -172,6 +169,7 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
     );
 };
 
+// [MODIFIED] CompletionBlock: 返回首页时间改为4秒
 const CompletionBlock = ({ data, router }) => {
     useEffect(() => {
         const textToPlay = data.title || "恭喜";
@@ -183,8 +181,9 @@ const CompletionBlock = ({ data, router }) => {
                 confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
             });
         }
-
-        const timer = setTimeout(() => router.push('/'), 5000);
+        
+        // 修改计时器为 4 秒
+        const timer = setTimeout(() => router.push('/'), 4000);
         return () => clearTimeout(timer);
     }, [data, router]);
 
@@ -222,8 +221,6 @@ export default function InteractiveLesson({ lesson }) {
     const currentBlock = blocks[currentIndex];
 
     // --- 缓存与恢复逻辑 ---
-
-    // [1] 缓存完整的课程数据
     useEffect(() => {
         if (lesson && lesson.id) {
             const storageKey = `lesson-cache-${lesson.id}`;
@@ -236,7 +233,6 @@ export default function InteractiveLesson({ lesson }) {
         }
     }, [lesson]);
 
-    // [2] 读取已保存的学习进度
     useEffect(() => {
         if (lesson?.id) {
             const storageKey = `lesson-progress-${lesson.id}`;
@@ -250,7 +246,6 @@ export default function InteractiveLesson({ lesson }) {
         }
     }, [lesson?.id, totalBlocks]);
 
-    // [3] 保存当前学习进度
     useEffect(() => {
         if (lesson?.id) {
             const storageKey = `lesson-progress-${lesson.id}`;
@@ -276,7 +271,6 @@ export default function InteractiveLesson({ lesson }) {
 
     const nextStep = useCallback(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, [currentIndex, totalBlocks]);
     
-    // 修改 delayedNextStep 以动态导入 confetti
     const delayedNextStep = useCallback(() => {
         if (typeof window !== 'undefined') {
             import('canvas-confetti').then(module => {
