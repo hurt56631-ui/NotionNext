@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import confetti from 'canvas-confetti';
 import { useDrag } from '@use-gesture/react';
 import { HiSpeakerWave } from "react-icons/hi2";
-import { FaChevronUp } from "react-icons/fa";
+import { FaChevronUp, FaCheck } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
 // --- 1. [融合] 导入所有需要的组件，包括 GrammarPointPlayer ---
@@ -70,7 +70,6 @@ const stopAllAudio = () => {
 
 // --- 3. [融合] 内置的辅助UI组件 ---
 
-// TeachingBlock, WordStudyBlock等组件保持原样，因为它们是居中卡片布局的一部分
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
@@ -103,41 +102,80 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
 };
 
 const WordStudyBlock = ({ data, onComplete, settings }) => {
+    const [learnedWords, setLearnedWords] = useState(new Set());
+
     const handlePlayWord = (word) => {
         settings.playTTS(word.chinese, 'zh', word.rate || 0);
+        // 创建一个新的 Set 以触发状态更新
+        setLearnedWords(prev => new Set(prev).add(word.id));
     };
     
-    const bind = useDrag(({ swipe: [, swipeY], event }) => {
-        event.stopPropagation();
-        if (swipeY === -1) { onComplete(); }
-    }, { axis: 'y', filterTaps: true, preventDefault: true });
+    // 当所有单词都学过后，自动进入下一步
+    useEffect(() => {
+        if (data.words && learnedWords.size === data.words.length) {
+            const timer = setTimeout(onComplete, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [learnedWords, data.words, onComplete]);
+
+    const wordCount = data.words ? data.words.length : 0;
 
     return (
-        <div {...bind()} className="w-full h-full flex flex-col text-white p-4 animate-fade-in bg-black/20 rounded-2xl shadow-lg max-w-2xl max-h-[80vh]">
-            <div className="flex-shrink-0 pt-4 text-center">
-                <h2 className="text-3xl font-bold">{data.title || "生词"}</h2>
+        // 使用一个内层容器来控制最大宽度和样式
+        <div className="w-full max-w-4xl h-full max-h-[90vh] flex flex-col text-white p-6 bg-black/25 backdrop-blur-sm rounded-2xl shadow-lg animate-fade-in">
+            <div className="flex-shrink-0 text-center mb-6">
+                <h2 className="text-3xl font-bold">{data.title || "生词学习"}</h2>
+                <p className="text-slate-300 mt-1">点击生词听发音</p>
             </div>
-            <div className="flex-grow overflow-y-auto mt-4 px-2">
-                <div className="grid grid-cols-2 gap-3">
-                    {data.words.map((word) => (
-                        <div key={word.id} onClick={() => handlePlayWord(word)} className="bg-black/25 p-4 rounded-lg flex flex-col justify-between hover:bg-black/40 transition-colors cursor-pointer">
-                            <div>
-                                {word.pinyin && <p className="text-sm text-slate-400 mb-1">{word.pinyin}</p>}
-                                <p className="text-xl font-semibold">{word.chinese}</p>
-                                <p className="text-base text-yellow-300 mt-1 leading-normal">{word.translation}</p>
-                            </div>
-                        </div>
-                    ))}
+            
+            {/* 键盘式布局 */}
+            <div className="flex-grow overflow-y-auto pr-2">
+                <div className="flex flex-wrap justify-center gap-3">
+                    {data.words && data.words.map((word) => {
+                        const isLearned = learnedWords.has(word.id);
+                        return (
+                            <button 
+                                key={word.id} 
+                                onClick={() => handlePlayWord(word)}
+                                className={`
+                                    relative p-4 rounded-lg shadow-md transition-all duration-300 transform 
+                                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-cyan-400
+                                    text-left
+                                    ${isLearned 
+                                        ? 'bg-green-600/80 text-white hover:bg-green-500/80' 
+                                        : 'bg-gray-700/70 hover:bg-gray-600/70 hover:-translate-y-1'
+                                    }
+                                `}
+                            >
+                                <div className="text-2xl font-semibold mb-1">{word.chinese}</div>
+                                <div className="text-sm text-slate-300">{word.pinyin}</div>
+                                <div className="text-base text-yellow-300 mt-1">{word.translation}</div>
+                                {isLearned && (
+                                    <div className="absolute -top-2 -right-2 bg-green-500 rounded-full p-1 shadow-lg">
+                                        <FaCheck className="text-white h-3 w-3" />
+                                    </div>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
-            <div onClick={onComplete} className="flex-shrink-0 h-20 flex flex-col items-center justify-center opacity-80 cursor-pointer mt-2">
-                <FaChevronUp className="h-8 w-8 animate-bounce-up text-yellow-400" />
+
+            {/* 底部继续按钮 */}
+            <div className="flex-shrink-0 pt-6 text-center">
+                 <button 
+                    onClick={onComplete}
+                    className="px-8 py-3 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={learnedWords.size < wordCount}
+                >
+                    继续 ({learnedWords.size}/{wordCount})
+                </button>
             </div>
         </div>
     );
 };
 
-const CompletionBlock = ({ data, router }) => { /* ...代码不变... */ 
+const CompletionBlock = ({ data, router }) => { 
     useEffect(() => {
         playTTS(data.title || "恭喜", 'zh');
         const timer = setTimeout(() => router.push('/'), 5000);
@@ -152,7 +190,7 @@ const CompletionBlock = ({ data, router }) => { /* ...代码不变... */
     );
 };
 
-const UnknownBlockHandler = ({ type, onSkip }) => { /* ...代码不变... */ 
+const UnknownBlockHandler = ({ type, onSkip }) => { 
     useEffect(() => {
         console.error(`不支持的组件类型或渲染失败: "${type}", 将在1.2秒后自动跳过。`);
         const timer = setTimeout(onSkip, 1200);
@@ -200,31 +238,35 @@ export default function InteractiveLesson({ lesson }) {
             settings: { playTTS },
         };
 
+        // 辅助函数，用于包裹标准题型，提供一个统一的、宽度更大的卡片容器
+        const wrapInCenteredCard = (component) => (
+             <div className="w-full max-w-4xl max-h-[90vh] flex flex-col p-4 sm:p-6 bg-black/25 backdrop-blur-sm rounded-2xl shadow-lg">
+                {component}
+            </div>
+        );
+
         switch (type) {
             case 'teaching': return <TeachingBlock {...props} />;
             case 'word_study': return <WordStudyBlock {...props} />;
-            
-            // <-- 【【【【【【 关键修改 】】】】】】 -->
-            // 直接调用 GrammarPointPlayer，并传入 onComplete 信号
             case 'grammar_study':
                 if (!props.data || !props.data.grammarPoints || props.data.grammarPoints.length === 0) {
                     return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={nextStep} />;
                 }
                 return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
-            // <-- 【【【【【【 修改结束 】】】】】】 -->
-                
             case 'dialogue_cinematic': return <DuiHua {...props} />;
-            case 'image_match_blanks': return <TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />;
+            
+            case 'image_match_blanks': return wrapInCenteredCard(<TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />);
             case 'choice':
                 const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
-                return <XuanZeTi {...xuanZeTiProps} />;
+                return wrapInCenteredCard(<XuanZeTi {...xuanZeTiProps} />);
             case 'lianxian':
-                return <LianXianTi title={props.data.prompt} pairs={props.data.pairs} onCorrect={props.onCorrect} />;
+                return wrapInCenteredCard(<LianXianTi title={props.data.prompt} pairs={props.data.pairs} onCorrect={props.onCorrect} />);
             case 'paixu':
                 const paiXuProps = { title: props.data.prompt, items: props.data.items, correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id), onCorrect: props.onCorrect, };
-                return <PaiXuTi {...paiXuProps} />;
-            case 'panduan': return <PanDuanTi {...props} />;
-            case 'gaicuo': return <GaiCuoTi {...props} />;
+                return wrapInCenteredCard(<PaiXuTi {...paiXuProps} />);
+            case 'panduan': return wrapInCenteredCard(<PanDuanTi {...props} />);
+            case 'gaicuo': return wrapInCenteredCard(<GaiCuoTi {...props} />);
+            
             case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
             default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
         }
@@ -233,11 +275,9 @@ export default function InteractiveLesson({ lesson }) {
     const progress = totalBlocks > 0 ? ((currentIndex + 1) / totalBlocks) * 100 : 0;
 
     return (
-        // [融合] 使用居中布局作为基础
-        <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
-            {/* [融合] 顶部进度条和页码跳转功能 */}
+        <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-2 sm:p-4" style={{ backgroundImage: "url(/background.jpg)" }}>
             {currentIndex < totalBlocks && (
-                 <div className="w-full max-w-4xl absolute top-4 px-4 z-20 flex justify-between items-center">
+                 <div className="w-full max-w-5xl absolute top-4 px-2 sm:px-4 z-20 flex justify-between items-center">
                     <div className="w-full bg-gray-600/50 rounded-full h-1.5">
                         <div className="bg-blue-400 h-1.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}></div>
                     </div>
@@ -249,12 +289,25 @@ export default function InteractiveLesson({ lesson }) {
             
             {isJumping && (
                 <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center animate-fade-in" onClick={() => setIsJumping(false)}>
-                    {/* ...跳转模态框代码不变... */}
+                    <div onClick={(e) => e.stopPropagation()} className="bg-gray-800 p-6 rounded-lg shadow-xl relative">
+                        <h3 className="text-white text-lg mb-4">跳转到第几页？ (1-{totalBlocks})</h3>
+                        <form onSubmit={handleJump}>
+                            <input
+                                type="number"
+                                autoFocus
+                                value={jumpValue}
+                                onChange={(e) => setJumpValue(e.target.value)}
+                                className="w-full px-4 py-2 text-center bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </form>
+                         <button onClick={() => setIsJumping(false)} className="absolute top-2 right-2 p-2 text-gray-400 hover:text-white">
+                            <IoMdClose size={24} />
+                        </button>
+                    </div>
                 </div>
             )}
             
-            {/* [融合] 主内容区，对于非全屏组件，它会居中显示 */}
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center pt-12 sm:pt-16">
                 {renderBlock()}
             </div>
         </div>
