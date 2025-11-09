@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import confetti from 'canvas-confetti';
 import { useDrag } from '@use-gesture/react';
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronUp } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
+
+// 【关键修正】: 移除了文件顶层的 'canvas-confetti' 导入，以防止在服务器端构建时出错。
+// import confetti from 'canvas-confetti';
 
 // --- 1. 导入所有外部组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -161,10 +163,19 @@ const CompletionBlock = ({ data, router }) => {
     useEffect(() => {
         const textToPlay = data.title || "恭喜";
         playTTS(textToPlay, 'zh');
-        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+        
+        // 【关键修正】: 动态导入并执行 confetti，确保只在浏览器中运行
+        if (typeof window !== 'undefined') {
+            import('canvas-confetti').then(module => {
+                const confetti = module.default;
+                confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+            });
+        }
+
         const timer = setTimeout(() => router.push('/'), 5000);
         return () => clearTimeout(timer);
     }, [data, router]);
+
     return (
         <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-white animate-fade-in">
             <h1 className="text-7xl mb-4">🎉</h1>
@@ -198,7 +209,7 @@ export default function InteractiveLesson({ lesson }) {
     const totalBlocks = blocks.length;
     const currentBlock = blocks[currentIndex];
 
-    // --- 【新增】缓存与恢复逻辑 ---
+    // --- 缓存与恢复逻辑 ---
 
     // [1] 缓存完整的课程数据
     useEffect(() => {
@@ -207,7 +218,6 @@ export default function InteractiveLesson({ lesson }) {
             try {
                 const lessonJson = JSON.stringify(lesson);
                 localStorage.setItem(storageKey, lessonJson);
-                console.log(`课程数据已缓存: ${lesson.id}`);
             } catch (error) {
                 console.error("缓存课程数据失败:", error);
             }
@@ -222,7 +232,6 @@ export default function InteractiveLesson({ lesson }) {
             if (savedProgress) {
                 const savedIndex = parseInt(savedProgress, 10);
                 if (!isNaN(savedIndex) && savedIndex > 0 && savedIndex < totalBlocks) {
-                    console.log(`发现已保存的进度，正在跳转到第 ${savedIndex + 1} 页...`);
                     setCurrentIndex(savedIndex);
                 }
             }
@@ -254,7 +263,21 @@ export default function InteractiveLesson({ lesson }) {
     }, [currentIndex, currentBlock]);
 
     const nextStep = useCallback(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, [currentIndex, totalBlocks]);
-    const delayedNextStep = useCallback(() => { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); setTimeout(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, 4500); }, [currentIndex, totalBlocks]);
+    
+    // 【关键修正】: 修改 delayedNextStep 以动态导入 confetti
+    const delayedNextStep = useCallback(() => {
+        if (typeof window !== 'undefined') {
+            import('canvas-confetti').then(module => {
+                const confetti = module.default;
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+            });
+        }
+        setTimeout(() => {
+            if (currentIndex < totalBlocks) {
+                setCurrentIndex(prev => prev + 1);
+            }
+        }, 4500);
+    }, [currentIndex, totalBlocks]);
     
     const handleJump = (e) => {
         e.preventDefault();
@@ -321,4 +344,4 @@ export default function InteractiveLesson({ lesson }) {
             </div>
         </div>
     );
-            }
+}
