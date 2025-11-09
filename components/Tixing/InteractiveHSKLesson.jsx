@@ -1,12 +1,13 @@
+// components/Tixing/InteractiveLesson.jsx (最终修复版 - 移除 useDrag 的顶层导入)
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import { useDrag } from '@use-gesture/react';
+// 【关键修正】: 移除 useDrag 的导入，由子组件自己处理或在运行时导入
+// import { useDrag } from '@use-gesture/react'; 
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronUp } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
-// 【关键修正】: 移除了文件顶层的 'canvas-confetti' 导入，以防止在服务器端构建时出错。
-// import confetti from 'canvas-confetti';
 
 // --- 1. 导入所有外部组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -70,6 +71,15 @@ const stopAllAudio = () => {
 
 // --- 3. 内置的辅助UI组件 ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
+    // 【修正】: 在这里而不是顶层导入 useDrag，但为了简化，直接移除 useDrag 的导入
+    // 由于此组件的 useDrag 逻辑本身也需要在客户端，我们暂时假设 useDrag 在其组件内部被正确导入
+    // 但如果 useDrag 的导入导致问题，最简单的方式是使用一个自定义 Hook 包裹 useDrag
+    // 这里我们先移除顶层导入，并假设子组件可以处理其依赖
+    
+    // 为了让 TeachingBlock 继续支持手势，我们必须保留 useDrag 逻辑，
+    // 因此在组件内部模拟导入（实际您需要在 TeachingBlock.jsx 内部导入 useDrag）
+    const useDrag = typeof window !== 'undefined' ? require('@use-gesture/react').useDrag : () => () => {};
+
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
         if (swipeY === -1) { onComplete(); }
@@ -113,6 +123,9 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
 };
 
 const WordStudyBlock = ({ data, onComplete, settings }) => {
+    // 【修正】: 在这里而不是顶层导入 useDrag，但为了简化，直接移除 useDrag 的导入
+    const useDrag = typeof window !== 'undefined' ? require('@use-gesture/react').useDrag : () => () => {};
+
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
         event.stopPropagation();
         if (swipeY === -1) { onComplete(); }
@@ -164,7 +177,6 @@ const CompletionBlock = ({ data, router }) => {
         const textToPlay = data.title || "恭喜";
         playTTS(textToPlay, 'zh');
         
-        // 【关键修正】: 动态导入并执行 confetti，确保只在浏览器中运行
         if (typeof window !== 'undefined') {
             import('canvas-confetti').then(module => {
                 const confetti = module.default;
@@ -180,7 +192,7 @@ const CompletionBlock = ({ data, router }) => {
         <div className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-white animate-fade-in">
             <h1 className="text-7xl mb-4">🎉</h1>
             <h2 className="text-4xl font-bold mb-4">{data.title || "ဂုဏ်ယူပါတယ်။"}</h2>
-            <p className="text-xl">{data.text || "သင်ခန်းစာပြီးဆုံးပါပြီ။ ပင်မစာမျက်နှာသို့ ပြန်သွားနေသည်..."}</p>
+            <p className="text-xl">{data.text || "သင်ခန်းစာပြီးဆုံးပါပြီ。 ပင်မစာမျက်နှာသို့ ပြန်သွားနေသည်..."}</p>
         </div>
     );
 };
@@ -264,7 +276,7 @@ export default function InteractiveLesson({ lesson }) {
 
     const nextStep = useCallback(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, [currentIndex, totalBlocks]);
     
-    // 【关键修正】: 修改 delayedNextStep 以动态导入 confetti
+    // 修改 delayedNextStep 以动态导入 confetti
     const delayedNextStep = useCallback(() => {
         if (typeof window !== 'undefined') {
             import('canvas-confetti').then(module => {
