@@ -66,6 +66,16 @@ const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
   }
 };
 
+// [新增] 停止所有音频的辅助函数
+const stopAllAudio = () => {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+    }
+};
+
+
 // --- 3. 内置的辅助UI组件 (完整实现) ---
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const textToPlay = data.narrationScript || data.displayText;
@@ -187,11 +197,19 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
     const handlePlayWord = (word) => {
         settings.playTTS(word.chinese, 'zh', word.rate || 0);
     };
+
+    const bind = useDrag(({ swipe: [, swipeY], event }) => {
+        event.stopPropagation();
+        if (swipeY === -1) { onComplete(); }
+    }, { axis: 'y', filterTaps: true, preventDefault: true });
+
     return (
-        <div className="w-full max-w-2xl mx-auto flex flex-col text-white p-4 animate-fade-in">
-            <h2 className="text-4xl font-bold text-center mb-6">{title || "生词"}</h2>
-            <div className="bg-gray-800/70 backdrop-blur-md rounded-2xl p-4 flex-grow overflow-y-auto max-h-[60vh]">
-                <div className="space-y-2">
+        <div {...bind()} className="w-full h-full flex flex-col text-white p-4 animate-fade-in cursor-pointer">
+            <div className="flex-shrink-0 pt-4 text-center">
+                <h2 className="text-3xl font-bold">{title || "生词"}</h2>
+            </div>
+            <div className="flex-grow overflow-y-auto max-h-[75vh] mt-4">
+                <div className="w-full max-w-2xl mx-auto space-y-2">
                     {words.map((word) => (
                         <div key={word.id} className="bg-black/20 p-4 rounded-lg flex items-center justify-between hover:bg-black/30 transition-colors">
                             <div className="flex-1">
@@ -204,8 +222,8 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
                     ))}
                 </div>
             </div>
-            <div className="flex justify-center mt-6">
-                <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold text-lg rounded-full shadow-lg hover:bg-white transition-transform hover:scale-105">我学会了</button>
+            <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center opacity-80">
+                <FaChevronUp className="h-8 w-8 animate-bounce-up" />
             </div>
         </div>
     );
@@ -219,6 +237,21 @@ export default function InteractiveLesson({ lesson }) {
     const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
     const totalBlocks = blocks.length;
     const currentBlock = blocks[currentIndex];
+
+    // [核心修正] 切换环节时，立即停止上一个环节的音频
+    useEffect(() => {
+        stopAllAudio();
+    }, [currentIndex]);
+    
+    // [核心修正] 专门为听力题处理自动播放
+    useEffect(() => {
+        if (currentBlock && currentBlock.type === 'choice' && currentBlock.content.narrationText) {
+            const timer = setTimeout(() => {
+                playTTS(currentBlock.content.narrationText, 'zh');
+            }, 500); // 延迟播放给组件渲染留出时间
+            return () => clearTimeout(timer);
+        }
+    }, [currentIndex, currentBlock]);
 
     const nextStep = useCallback(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, [currentIndex, totalBlocks]);
     const delayedNextStep = useCallback(() => { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); setTimeout(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, 4500); }, [currentIndex, totalBlocks]);
@@ -248,20 +281,13 @@ export default function InteractiveLesson({ lesson }) {
                      return <TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />;
                 case 'choice':
                     const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
-                    if(xuanZeTiProps.isListeningMode){ xuanZeTiProps.question.text = props.data.narrationText; }
+                    if(xuanZeTiProps.data.narrationText){ xuanZeTiProps.isListeningMode = true; xuanZeTiProps.question.text = props.data.prompt; } // 修正听力题的文本显示
                     return <XuanZeTi {...xuanZeTiProps} />;
                 
                 // [核心修正] 为连线题创建精确的 Props 适配器
                 case 'lianxian':
                     if (!props.data.pairs) return <UnknownBlockHandler type="lianxian (no pairs)" onSkip={nextStep} />;
-                    const lianXianProps = {
-                        title: props.data.prompt,
-                        columnA: props.data.pairs.map(p => ({ id: p.id, content: p.left })),
-                        columnB: [...props.data.pairs].sort(() => 0.5 - Math.random()).map(p => ({ id: p.id, content: p.right })),
-                        pairs: props.data.pairs.reduce((acc, p) => ({ ...acc, [p.id]: p.id }), {}),
-                        onCorrect: props.onCorrect,
-                    };
-                    return <LianXianTi {...lianXianProps} />;
+                    return <LianXianTi title={props.data.prompt} pairs={props.data.pairs} onCorrect={props.onCorrect} />;
 
                 // [核心修正] 为排序题创建精确的 Props 适配器
                 case 'paixu':
@@ -270,7 +296,7 @@ export default function InteractiveLesson({ lesson }) {
                         title: props.data.prompt,
                         items: props.data.items,
                         correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id),
-                        onComplete: props.onCorrect,
+                        onCorrect: props.onCorrect,
                     };
                     return <PaiXuTi {...paiXuProps} />;
                 
@@ -291,8 +317,9 @@ export default function InteractiveLesson({ lesson }) {
         <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col items-center justify-center p-4 overflow-hidden" style={{ backgroundImage: "url(/background.jpg)" }}>
             {currentIndex < totalBlocks && (
                  <div className="w-full max-w-4xl absolute top-4 px-4 z-10">
-                    <div className="w-full bg-gray-600/50 rounded-full h-2.5">
-                        <div className="bg-blue-400 h-2.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}></div>
+                    {/* [核心修正] 调整指示条粗细 */}
+                    <div className="w-full bg-gray-600/50 rounded-full h-1.5">
+                        <div className="bg-blue-400 h-1.5 rounded-full" style={{ width: `${progress}%`, transition: 'width 0.5s ease' }}></div>
                     </div>
                 </div>
             )}
