@@ -7,7 +7,7 @@ import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modi
 import { CSS } from '@dnd-kit/utilities';
 import { Howl } from 'howler';
 import { FaVolumeUp, FaCheck, FaTimes, FaRedo, FaSpinner, FaCommentAlt, FaLightbulb } from 'react-icons/fa';
-import confetti from 'canvas-confetti';
+// import confetti from 'canvas-confetti'; // Parent handles confetti now
 import { pinyin } from 'pinyin-pro';
 
 // --- 样式定义 ---
@@ -103,7 +103,7 @@ const SortableCard = ({ id, content, color, lang, onClick }) => {
 };
 
 // --- 主组件 ---
-const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCorrectionRequest, lang = 'zh' }) => {
+const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCorrectionRequest, lang = 'zh', onCorrect }) => { // 增加 onCorrect prop
   const [isMounted, setIsMounted] = useState(false);
   const [answerItems, setAnswerItems] = useState([]);
   const [poolItems, setPoolItems] = useState([]);
@@ -111,13 +111,20 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
   const [feedback, setFeedback] = useState({ shown: false, correct: false, showExplanation: false });
   const [isRequestingCorrection, setIsRequestingCorrection] = useState(false);
   const itemsWithColors = useMemo(() => { if (!initialItems) return []; return initialItems.map((item, index) => ({ ...item, color: keyColors[index % keyColors.length] })); }, [initialItems]);
-  const shuffledItems = useMemo(() => [...itemsWithColors].sort(() => Math.random() - 0.5), [itemsWithColors]);
   
+  // 负责重置当前排序题的状态（重新洗牌，清空答案区）
+  const resetCurrentQuestion = useCallback(() => {
+    const shuffledItems = [...itemsWithColors].sort(() => Math.random() - 0.5); // 重新打乱顺序
+    setPoolItems(shuffledItems);
+    setAnswerItems([]);
+    setFeedback({ shown: false, correct: false, showExplanation: false });
+    setIsRequestingCorrection(false); // 重置AI解释请求状态
+  }, [itemsWithColors]);
+
+  // 初始加载和 items 变化时重置题目
   useEffect(() => {
     if (itemsWithColors.length > 0) {
-      setPoolItems(shuffledItems);
-      setAnswerItems([]);
-      setFeedback({ shown: false, correct: false, showExplanation: false });
+      resetCurrentQuestion();
       if(title) preloadTTS(title, lang);
       itemsWithColors.forEach(item => {
         if (item.text && !/^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/.test(item.text.trim())) {
@@ -125,7 +132,7 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
         }
       });
     }
-  }, [itemsWithColors, shuffledItems, title, lang]);
+  }, [itemsWithColors, title, lang, resetCurrentQuestion]);
 
   useEffect(() => { setIsMounted(true); }, []);
   
@@ -133,27 +140,46 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
   const handleDragStart = useCallback((event) => { setActiveId(event.active.id); }, []);
   const handleDragEnd = useCallback((event) => { const { active, over } = event; if (over && active.id !== over.id) { setAnswerItems((items) => { const oldIndex = items.findIndex(({ id }) => id === active.id); const newIndex = items.findIndex(({ id }) => id === over.id); return arrayMove(items, oldIndex, newIndex); }); } setActiveId(null); }, []);
   const toggleItemPlacement = useCallback((itemToMove) => { playSound('click'); if (answerItems.some(item => item.id === itemToMove.id)) { setAnswerItems(prev => prev.filter(item => item.id !== itemToMove.id)); setPoolItems(prev => [...prev, itemToMove]); } else { setPoolItems(prev => prev.filter(item => item.id !== itemToMove.id)); setAnswerItems(prev => [...prev, itemToMove]); } }, [answerItems]);
-  const handleSubmit = useCallback(() => { const isCorrect = answerItems.map(item => item.id).join(',') === correctOrder.join(','); setFeedback({ shown: true, correct: isCorrect, showExplanation: !isCorrect }); playSound(isCorrect ? 'correct' : 'incorrect'); if (isCorrect) confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); }, [answerItems, correctOrder]);
-
-  // [核心修改] “下一题”逻辑，代替原来的 "handleReset"
-  const handleNextQuestion = useCallback(() => { 
-    const reShuffled = [...itemsWithColors].sort(() => Math.random() - 0.5); 
-    setPoolItems(reShuffled); 
-    setAnswerItems([]); 
-    setFeedback({ shown: false, correct: false, showExplanation: false }); 
-  }, [itemsWithColors]);
   
-  // [核心修改] 答对后 4.5 秒自动进入下一题
-  useEffect(() => {
-    let timer;
-    if (feedback.shown && feedback.correct) {
-      timer = setTimeout(() => {
-        handleNextQuestion();
-      }, 4500); // 4.5秒
+  const handleSubmit = useCallback(() => { 
+    const isCorrect = answerItems.map(item => item.id).join(',') === correctOrder.join(','); 
+    setFeedback({ shown: true, correct: isCorrect, showExplanation: !isCorrect }); 
+    playSound(isCorrect ? 'correct' : 'incorrect'); 
+    
+    // 如果答案正确，通知父组件（InteractiveLesson）当前块已完成
+    if (isCorrect) {
+      if (onCorrect) {
+        onCorrect(); // 调用父组件的 onCorrect (即 delayedNextStep)
+      }
+      // 这里不再进行 confetti 或 4.5 秒延迟，父组件会处理
     }
-    // 组件卸载或 feedback 变化时清除定时器
-    return () => clearTimeout(timer);
-  }, [feedback.shown, feedback.correct, handleNextQuestion]);
+  }, [answerItems, correctOrder, onCorrect]); // 增加 onCorrect 到依赖数组
+
+  // 移除 PaiXuTi 内部的 4.5 秒自动下一题的 useEffect
+  // 因为 InteractiveLesson 的 onCorrect (delayedNextStep) 已经处理了延迟和跳转
+  // useEffect(() => {
+  //   let timer;
+  //   if (feedback.shown && feedback.correct) {
+  //     timer = setTimeout(() => {
+  //       handleNextQuestion();
+  //     }, 4500); // 4.5秒
+  //   }
+  //   // 组件卸载或 feedback 变化时清除定时器
+  //   return () => clearTimeout(timer);
+  // }, [feedback.shown, feedback.correct, handleNextQuestion]);
+
+  // 用户点击“下一题”或“重新尝试”的处理器
+  const handleUserAction = useCallback(() => {
+    if (feedback.correct) {
+      // 如果答对了，直接通知父组件进入下一块
+      if (onCorrect) {
+        onCorrect();
+      }
+    } else {
+      // 如果答错了，重置当前题目，让用户重新尝试
+      resetCurrentQuestion();
+    }
+  }, [feedback.correct, onCorrect, resetCurrentQuestion]);
 
   const handleAskForCorrection = useCallback(() => { 
     if (!onCorrectionRequest) return; 
@@ -204,7 +230,7 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
                 <button style={styles.submitButton} onClick={handleSubmit}>检查答案</button>
             ) : (
                 <>
-                    <div style={{ ...styles.feedback, ...(feedback.correct ? styles.feedbackCorrect : styles.feedbackIncorrect) }}>
+                    <div style={{ ...styles.feedback, ...(feedback.correct ? styles.feedbackCorrect : styles.incorrect) }}> {/* 修正了feedback.incorrect拼写错误 */}
                         {/* [核心修改] 错误提示文案修改 */}
                         {feedback.correct ? <><FaCheck /> 完全正确！</> : <><FaTimes /> 答案不对哦！</>}
                     </div>
@@ -222,8 +248,8 @@ const PaiXuTi = ({ title, items: initialItems, correctOrder, aiExplanation, onCo
                         </button>
                     )}
                     {/* [核心修改] 按钮文案和功能绑定修改 */}
-                    <button style={{...styles.submitButton, backgroundColor: '#64748b'}} onClick={handleNextQuestion}>
-                        <FaRedo /> 下一题
+                    <button style={{...styles.submitButton, backgroundColor: '#64748b'}} onClick={handleUserAction}>
+                        {feedback.correct ? <><FaRedo /> 下一题</> : <><FaRedo /> 重新尝试</>}
                     </button>
                 </>
             )}
