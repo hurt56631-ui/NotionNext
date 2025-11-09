@@ -1,6 +1,6 @@
-// components/Tixing/PaiXuTi.js (全新重构 - 沉浸式V2 - 放大版 - 已修正编译错误)
+// components/Tixing/PaiXuTi.js (全新重构 - 沉浸式V2 - 已修正所有编译错误)
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react'; // <--- 已修正此行
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
@@ -38,10 +38,10 @@ const ComponentStyles = `
   }
   .pai-xu-ti-content-area {
     width: 100%;
-    max-width: 640px; /* 【优化】适当增加内容区域最大宽度 */
+    max-width: 640px;
     display: flex;
     flex-direction: column;
-    gap: 24px; /* 【优化】增加元素间距 */
+    gap: 24px;
   }
   .pai-xu-ti-title-container {
     display: flex;
@@ -51,13 +51,13 @@ const ComponentStyles = `
     text-align: center;
   }
   .pai-xu-ti-title {
-    font-size: 2.2rem; /* 【放大】标题字体 */
+    font-size: 2.2rem;
     font-weight: 700;
     margin: 0;
   }
   .pai-xu-ti-title-play-button {
     cursor: pointer;
-    font-size: 2rem; /* 【放大】朗读按钮 */
+    font-size: 2rem;
     color: #94a3b8; /* slate-400 */
     transition: color 0.2s;
   }
@@ -67,9 +67,9 @@ const ComponentStyles = `
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 12px; /* 【优化】卡片间距 */
+    gap: 12px;
     padding: 16px;
-    min-height: 100px; /* 【放大】区域最小高度 */
+    min-height: 100px;
     border-radius: 18px;
   }
   .pai-xu-ti-drop-zone {
@@ -87,9 +87,9 @@ const ComponentStyles = `
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-width: 90px; /* 【放大】卡片最小宽度 */
-    padding: 12px 8px; /* 【放大】卡片内边距 */
-    border-radius: 14px; /* 【优化】圆角 */
+    min-width: 90px;
+    padding: 12px 8px;
+    border-radius: 14px;
     border: 1px solid #475569; /* slate-600 */
     background-color: #334155; /* slate-700 */
     color: #f1f5f9; /* slate-100 */
@@ -99,12 +99,12 @@ const ComponentStyles = `
   }
   .pai-xu-ti-card:hover { transform: translateY(-4px); }
   .pai-xu-ti-pinyin {
-    font-size: 0.9rem; /* 【放大】拼音字体 */
+    font-size: 0.9rem;
     color: #94a3b8; /* slate-400 */
     height: 1.3em;
   }
   .pai-xu-ti-content {
-    font-size: 2rem; /* 【放大】核心文字字体 */
+    font-size: 2rem;
     font-weight: 600;
   }
   .pai-xu-ti-drag-overlay {
@@ -113,7 +113,7 @@ const ComponentStyles = `
     cursor: grabbing;
   }
   .pai-xu-ti-button-container, .pai-xu-ti-feedback-container, .pai-xu-ti-continue-prompt {
-    animation: pai-xu-ti-fade-in 0.5s 0.2s backwards; /* 延迟出现，效果更好 */
+    animation: pai-xu-ti-fade-in 0.5s 0.2s backwards;
   }
   .pai-xu-ti-button-container { display: flex; justify-content: center; margin-top: 12px; }
   .pai-xu-ti-submit-button { padding: 16px 40px; border-radius: 9999px; border: none; background-color: #3b82f6; color: white; font-size: 1.2rem; font-weight: bold; cursor: pointer; transition: background-color 0.2s, transform 0.2s; }
@@ -162,7 +162,6 @@ const SortableCard = ({ id, content, onClick }) => {
   );
 };
 
-
 // --- 主组件 ---
 const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }) => {
   const [answerItems, setAnswerItems] = useState([]);
@@ -196,7 +195,7 @@ const PaiXuTi = ({ title, items, correctOrder, onCorrect, onComplete, settings }
   }, [answerItems, feedback.shown, settings]);
 
   const handleDragEnd = useCallback((event) => {
-    const { active, over } => event;
+    const { active, over } = event; // <--- 已修正此行
     if (over && active.id !== over.id) {
       setAnswerItems((currentItems) => {
         const oldIndex = currentItems.findIndex(({ id }) => id === active.id);
