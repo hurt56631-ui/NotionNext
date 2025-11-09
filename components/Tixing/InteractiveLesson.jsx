@@ -6,7 +6,7 @@ import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronUp } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
-// --- 1. 导入所有需要的组件 ---
+// --- 1. [最终修正] 导入 GrammarPointPlayer ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -14,15 +14,14 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-import GrammarPointPlayer from './GrammarPointPlayer';
+import GrammarPointPlayer from './GrammarPointPlayer'; // <-- 确保导入了正确的语法组件
 
-// --- 2. TTS模块 (完整代码) ---
+// --- 2. 统一的TTS模块 (无修改) ---
 const ttsVoices = {
     zh: 'zh-CN-XiaoyouNeural',
     my: 'my-MM-NilarNeural',
 };
 let currentAudio = null;
-
 const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
   if (currentAudio) {
     currentAudio.pause();
@@ -58,7 +57,6 @@ const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
     if (onEndCallback) onEndCallback();
   }
 };
-
 const stopAllAudio = () => {
     if (currentAudio) {
         currentAudio.pause();
@@ -68,7 +66,9 @@ const stopAllAudio = () => {
 };
 
 
-// --- 3. 内置的辅助UI组件 (已按要求修改和恢复) ---
+// --- 3. 内置的辅助UI组件 ---
+
+// [最终修正] GrammarBlock 组件被删除，因为它将被 GrammarPointPlayer 替代
 
 const TeachingBlock = ({ data, onComplete, settings }) => {
     const bind = useDrag(({ swipe: [, swipeY], event }) => {
@@ -89,10 +89,13 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
         e.stopPropagation();
         settings.playTTS(data.displayText, 'zh');
     };
-
     return (
-        <div {...bind()} className="w-full h-full flex flex-col items-center justify-center text-center p-8 text-white animate-fade-in cursor-pointer" onClick={onComplete}>
-            <div className="w-full max-w-4xl mx-auto flex-grow flex flex-col items-center justify-center">
+        <div {...bind()} className="w-full h-full flex flex-col items-center justify-center text-center p-4 md:p-8 text-white animate-fade-in cursor-pointer" onClick={onComplete}>
+            <style>{`
+                @keyframes bounce-up { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-20px); } 60% { transform: translateY(-10px); } }
+                .animate-bounce-up { animation: bounce-up 2s infinite; }
+            `}</style>
+            <div className="flex-grow flex flex-col items-center justify-center">
                 {data.pinyin && <p className="text-2xl text-slate-300 mb-2">{data.pinyin}</p>}
                 <div className="flex items-center gap-4">
                     <h1 className="text-5xl md:text-6xl font-bold">{data.displayText}</h1>
@@ -152,9 +155,11 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
     );
 };
 
-const CompletionBlock = ({ data, router }) => { 
+const CompletionBlock = ({ data, router }) => {
     useEffect(() => {
-        playTTS(data.title || "恭喜", 'zh');
+        const textToPlay = data.title || "恭喜";
+        playTTS(textToPlay, 'zh');
+        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
         const timer = setTimeout(() => router.push('/'), 5000);
         return () => clearTimeout(timer);
     }, [data, router]);
@@ -167,32 +172,38 @@ const CompletionBlock = ({ data, router }) => {
     );
 };
 
-const UnknownBlockHandler = ({ type, onSkip }) => { 
+const UnknownBlockHandler = ({ type, onSkip }) => {
     useEffect(() => {
         console.error(`不支持的组件类型或渲染失败: "${type}", 将在1.2秒后自动跳过。`);
         const timer = setTimeout(onSkip, 1200);
         return () => clearTimeout(timer);
     }, [type, onSkip]);
-    return <div className="w-full h-full flex items-center justify-center"><div className="text-red-400 text-xl font-bold bg-black/50 p-4 rounded-lg">错误：不支持的题型 ({type})</div></div>;
+    return (
+        <div className="w-full h-full flex items-center justify-center">
+            <div className="text-red-400 text-xl font-bold bg-black/50 p-4 rounded-lg">错误：不支持的题型 ({type})</div>
+        </div>
+    );
 };
 
 
-// --- 4. 主播放器组件 (统一全屏模式) ---
+// --- 4. 主播放器组件 ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isJumping, setIsJumping] = useState(false);
     const [jumpValue, setJumpValue] = useState('');
     const router = useRouter();
-
     const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
     const totalBlocks = blocks.length;
     const currentBlock = blocks[currentIndex];
-
     useEffect(() => { stopAllAudio(); }, [currentIndex]);
-    
+    useEffect(() => {
+        if (currentBlock && currentBlock.type === 'choice' && currentBlock.content.narrationText) {
+            const timer = setTimeout(() => { playTTS(currentBlock.content.narrationText, 'zh'); }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [currentIndex, currentBlock]);
     const nextStep = useCallback(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, [currentIndex, totalBlocks]);
-    const delayedNextStep = useCallback(() => { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); setTimeout(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, 1200); }, [currentIndex, totalBlocks]);
-
+    const delayedNextStep = useCallback(() => { confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); setTimeout(() => { if (currentIndex < totalBlocks) { setCurrentIndex(prev => prev + 1); } }, 4500); }, [currentIndex, totalBlocks]);
     const handleJump = (e) => {
         e.preventDefault();
         const pageNum = parseInt(jumpValue, 10);
@@ -202,11 +213,10 @@ export default function InteractiveLesson({ lesson }) {
         setIsJumping(false);
         setJumpValue('');
     };
-
+    
     const renderBlock = () => {
         if (currentIndex >= totalBlocks) { return <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} />; }
         if (!currentBlock) { return <div className="text-white">正在加载...</div>; }
-        
         const type = currentBlock.type.toLowerCase();
         const props = {
             data: currentBlock.content,
@@ -215,7 +225,6 @@ export default function InteractiveLesson({ lesson }) {
             settings: { playTTS },
         };
 
-        // 为做题组件包裹一个“内容限宽”的容器
         const wrapInContentContainer = (component) => (
              <div className="w-full h-full flex flex-col items-center justify-center p-4">
                 <div className="w-full max-w-4xl bg-black/25 backdrop-blur-sm p-6 rounded-2xl shadow-lg">
@@ -224,31 +233,44 @@ export default function InteractiveLesson({ lesson }) {
             </div>
         );
 
-        switch (type) {
-            case 'teaching': return <TeachingBlock {...props} />;
-            case 'grammar_study':
-                if (!props.data || !props.data.grammarPoints) return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={nextStep} />;
-                return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} />;
-            case 'word_study': return <WordStudyBlock {...props} />;
+        try {
+            switch (type) {
+                case 'teaching': return <TeachingBlock {...props} />;
+                
+                // [最终修正] 正确调用 GrammarPointPlayer
+                case 'grammar_study':
+                    if (!props.data || !props.data.grammarPoints || props.data.grammarPoints.length === 0) {
+                        return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={nextStep} />;
+                    }
+                    return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
 
-            case 'image_match_blanks': return wrapInContentContainer(<TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />);
-            case 'choice':
-                const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
-                return wrapInContentContainer(<XuanZeTi {...xuanZeTiProps} />);
-            case 'lianxian':
-                return wrapInContentContainer(<LianXianTi title={props.data.prompt} pairs={props.data.pairs} onCorrect={props.onCorrect} />);
-            case 'paixu':
-                const paiXuProps = { title: props.data.prompt, items: props.data.items, correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id), onCorrect: props.onCorrect, };
-                return wrapInContentContainer(<PaiXuTi {...paiXuProps} />);
-            case 'panduan': return wrapInContentContainer(<PanDuanTi {...props} />);
-            case 'gaicuo': return wrapInContentContainer(<GaiCuoTi {...props} />);
-            
-            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
-            default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
+                case 'dialogue_cinematic': return <DuiHua {...props} />;
+                case 'word_study': return <WordStudyBlock {...props} />;
+                
+                case 'image_match_blanks': return wrapInContentContainer(<TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />);
+                case 'choice':
+                    const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
+                     if(xuanZeTiProps.data.narrationText){ xuanZeTiProps.isListeningMode = true; xuanZeTiProps.question.text = props.data.prompt; }
+                    return wrapInContentContainer(<XuanZeTi {...xuanZeTiProps} />);
+                case 'lianxian':
+                    if (!props.data.pairs) return <UnknownBlockHandler type="lianxian (no pairs)" onSkip={nextStep} />;
+                    return wrapInContentContainer(<LianXianTi title={props.data.prompt} pairs={props.data.pairs} onCorrect={props.onCorrect} />);
+                case 'paixu':
+                    if (!props.data.items) return <UnknownBlockHandler type="paixu (no items)" onSkip={nextStep} />;
+                    const paiXuProps = { title: props.data.prompt, items: props.data.items, correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id), onCorrect: props.onCorrect, };
+                    return wrapInContentContainer(<PaiXuTi {...paiXuProps} />);
+                case 'panduan': return wrapInContentContainer(<PanDuanTi {...props} />);
+                case 'gaicuo': return wrapInContentContainer(<GaiCuoTi {...props} />);
+                
+                case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+                default: return <UnknownBlockHandler type={type} onSkip={nextStep} />;
+            }
+        } catch (error) {
+            console.error(`渲染环节 "${type}" 时发生错误:`, error);
+            return <UnknownBlockHandler type={`${type} (渲染失败)`} onSkip={nextStep} />;
         }
     };
-
+    
     return (
         <div className="fixed inset-0 w-full h-full bg-cover bg-fixed bg-center flex flex-col" style={{ backgroundImage: "url(/background.jpg)" }}>
             {currentIndex < totalBlocks && (
@@ -287,4 +309,4 @@ export default function InteractiveLesson({ lesson }) {
             </div>
         </div>
     );
-                        }
+}
