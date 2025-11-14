@@ -56,7 +56,8 @@ import {
     Mic,
     Heart,
     List,
-    BookText
+    BookText,
+    SpellCheck2
 } from 'lucide-react'
 import { useAuth } from '@/lib/AuthContext'
 import dynamic from 'next/dynamic'
@@ -66,6 +67,9 @@ import HskContentBlock from '@/components/HskPageClient'
 import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
+
+// ✅ 核心修复：直接导入 AiChatAssistant 组件，因为它是一个抽屉，而不是一个页面
+import AiChatAssistant from '@/components/AiChatAssistant'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
@@ -177,54 +181,54 @@ const CustomScrollbarStyle = () => (
 // =================================================================================
 // ======================  关键修改区域: BottomNavBar 组件 ========================
 // =================================================================================
-const BottomNavBar = () => {
-    // 修复：按钮重命名、移除、新增和排序
+const BottomNavBar = ({ onOpenAiDrawer }) => {
+    // ✅ 核心修复：AI 助手是一个按钮，其他是链接
     const navItems = [
-        { href: '/', label: '学习', icon: 'fas fa-book-open', mainTabs: ['articles', 'hsk', 'speaking', 'books'], auth: false },
-        { href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check', auth: false },
-        { href: '/ai-assistant', label: 'AI助手', icon: 'fas fa-robot', auth: false },
-        { href: '/profile', label: '我', icon: 'fas fa-user', auth: true },
+        { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: ['articles', 'words', 'hsk', 'speaking', 'grammar'] },
+        { type: 'button', label: 'AI助手', icon: 'fas fa-robot' },
+        { type: 'link', href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check' },
+        { type: 'link', href: '/?tab=books', label: '书籍', icon: 'fas fa-book-open' },
     ];
     const router = useRouter();
-    const { user, authLoading } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
 
-    const handleLinkClick = (e, item) => {
-        if (item.auth && !authLoading && !user) {
-            e.preventDefault();
-            setShowLoginModal(true);
-        }
-    };
-
-    // 修复：改进 active 状态的判断逻辑
     const isActive = (item) => {
+        if (item.type === 'button') return false; // 按钮没有激活状态
+        const currentTab = router.query.tab || 'articles';
+
         if (item.href.startsWith('/?tab=')) {
             const tab = item.href.split('=')[1];
-            return router.query.tab === tab;
+            return currentTab === tab;
         }
         if (item.href === '/') {
-            return router.pathname === '/' && (item.mainTabs.includes(router.query.tab) || !router.query.tab);
+            return router.pathname === '/' && item.mainTabs.includes(currentTab);
         }
         return router.pathname === item.href;
     };
 
     return (
-        <>
-            <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
-            <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
-                {navItems.map(item => (
-                     <SmartLink key={item.label} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/4 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
+            {navItems.map(item => {
+                if (item.type === 'button') {
+                    return (
+                        <button key={item.label} onClick={onOpenAiDrawer} className='flex flex-col items-center justify-center w-1/4 text-gray-500 dark:text-gray-400'>
+                            <i className={`${item.icon} text-xl`}></i>
+                            <span className='text-xs mt-1'>{item.label}</span>
+                        </button>
+                    );
+                }
+                return (
+                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center w-1/4 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
+                        <i className={`${item.icon} text-xl`}></i>
+                        <span className={`text-xs mt-1`}>{item.label}</span>
                     </SmartLink>
-                ))}
-            </nav>
-        </>
+                );
+            })}
+        </nav>
     );
 };
 
 // =================================================================================
-// ======================  关键修改区域: ActionButtons 组件 =======================
+// ====================== ActionButtons 组件 (保持不变) =======================
 // =================================================================================
 const ActionButtons = ({ onOpenFavorites, onOpenContact }) => {
   const actions = [
@@ -291,7 +295,7 @@ async function getAllFavorites(storeName) {
 }
 
 // =================================================================================
-// ======================  新增: ContactPanel 组件 ============================
+// ======================  ContactPanel 组件 (保持不变) ============================
 // =================================================================================
 const ContactPanel = ({ isOpen, onClose }) => {
     const socialLinks = [
@@ -380,14 +384,19 @@ const LayoutIndex = props => {
   const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
-  // 定义 tab 映射，方便通过名字查找
+  // 定义所有标签页
   const tabs = [
     { name: '文章', key: 'articles', icon: <Newspaper size={22} /> },
+    { name: '单词', key: 'words', icon: <BookText size={22} /> },
     { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> },
     { name: '口语', key: 'speaking', icon: <Mic size={22} /> },
+    { name: '语法', key: 'grammar', icon: <SpellCheck2 size={22} /> },
     { name: '练习', key: 'practice', icon: <ClipboardCheck size={22} /> },
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
+  
+  // 顶部导航栏按要求排序和筛选
+  const displayTabs = tabs.filter(tab => ['文章', '单词', 'HSK', '口语', '语法'].includes(tab.name));
 
   const [activeTab, setActiveTab] = useState(null); 
 
@@ -423,8 +432,36 @@ const LayoutIndex = props => {
   const [wordCardData, setWordCardData] = useState(null);
   const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
-  // 新增：联系我们面板的状态
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
+  
+  // ✅ 核心修复：添加控制 AI 助手的 state 和 handler
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
+  const handleOpenAiDrawer = () => {
+      router.push(router.asPath + '#ai-chat', undefined, { shallow: true });
+      setIsAiDrawerOpen(true);
+  };
+  const handleCloseAiDrawer = () => {
+      // 检查 hash 是否存在，避免不必要的 router.back()
+      if (window.location.hash === '#ai-chat') {
+        router.back();
+      } else {
+        setIsAiDrawerOpen(false);
+      }
+  };
+
+  // 监听 popstate (浏览器后退按钮) 以关闭抽屉
+  useEffect(() => {
+    const handlePopState = () => {
+        if (window.location.hash !== '#ai-chat') {
+            setIsAiDrawerOpen(false);
+        }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
 
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
@@ -453,13 +490,13 @@ const LayoutIndex = props => {
   }, [router]);
 
   useEffect(() => {
-    const handlePopState = () => {
+    const handlePopStateFavorites = () => {
       if (!window.location.hash.startsWith('#favorite')) {
         setSentenceCardData(null);
         setWordCardData(null);
       }
     };
-    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handlePopStateFavorites);
 
     const backgrounds = [
         'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto-format&fit-crop&q=80&w=2070',
@@ -507,7 +544,7 @@ const LayoutIndex = props => {
     return () => { 
         container.removeEventListener('scroll', handleScroll);
         if (currentSentinel) observer.unobserve(currentSentinel);
-        window.removeEventListener('popstate', handlePopState);
+        window.removeEventListener('popstate', handlePopStateFavorites);
     };
   }, [isStickyActive, router]);
 
@@ -550,7 +587,7 @@ const LayoutIndex = props => {
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
-  const renderTabButtons = () => tabs.map(tab => (
+  const renderTabButtons = () => displayTabs.map(tab => (
     <button key={tab.name} onClick={() => handleTabChange(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
@@ -585,8 +622,8 @@ const LayoutIndex = props => {
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
                     <p className='mt-2 text-lg w-full md:w-2/3' style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.7)' }}>在这里可以写很长的价格介绍、Slogan 或者其他描述文字。</p>
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
-                        <a href="#" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/tiktok.jpg')" }}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
-                        <a href="#" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/facebook.jpg')" }}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
+                        <a href="https://www.tiktok.com/@mmzh.onlione?_r=1&_t=ZS-91OzyDddPu8" target="_blank" rel="noopener noreferrer" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/tiktok.jpg')" }}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
+                        <a href="https://www.facebook.com/share/1ErXyBbrZ1" target="_blank" rel="noopener noreferrer" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/facebook.jpg')" }}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
                         <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe title="YouTube" width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
                     </div>
                 </div>
@@ -616,62 +653,30 @@ const LayoutIndex = props => {
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                {tab.name === '文章' && (
-                                    <div className="lg:flex lg:gap-8 p-4">
-                                        <div className="lg:w-2/3 w-full">
-                                            <PostListComponent {...props} />
-                                        </div>
-                                        <aside className="hidden lg:block lg:w-1/3">
-                                            <div className="sticky top-20 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-sm">
-                                                <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-200">相关单词</h3>
-                                                <div className="space-y-2">
-                                                    <p className="text-gray-600 dark:text-gray-400">单词功能区待开发...</p>
-                                                    <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
-                                                        <p className="font-semibold">你好 (nǐ hǎo)</p>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-300">Hello</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </aside>
-                                    </div>
-                                )}
-                                {tab.name === '口语' && (
-                                    <div className="lg:flex lg:gap-8 p-4">
-                                        <div className="lg:w-2/3 w-full">
-                                            <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />
-                                        </div>
-                                        <aside className="hidden lg:block lg:w-1/3">
-                                            <div className="sticky top-20 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-sm">
-                                                <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-200">相关语法</h3>
-                                                <div className="space-y-2">
-                                                    <p className="text-gray-600 dark:text-gray-400">语法功能区待开发...</p>
-                                                    <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
-                                                        <p className="font-semibold">"的" 的用法</p>
-                                                        <p className="text-sm text-gray-500 dark:text-gray-300">The use of the particle "de" to indicate possession.</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </aside>
-                                    </div>
-                                )}
-                                {['HSK', '练习', '书籍'].includes(tab.name) && (
-                                    <div className='p-4'>
-                                        {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
-                                        {tab.name === '练习' && <PracticeContentBlock />}
-                                        {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
-                                    </div>
-                                )}
+                                <div className='p-4'> 
+                                    {tab.name === '文章' && <PostListComponent {...props} />}
+                                    {tab.name === '单词' && <div>单词内容区待开发...</div>}
+                                    {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
+                                    {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
+                                    {tab.name === '语法' && <div>语法内容区待开发...</div>}
+                                    {tab.name === '练习' && <PracticeContentBlock />}
+                                    {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
+                                </div>
                             </div>
                         ))}
                     </main>
                 </div>
             </div>
-            <BottomNavBar />
+            {/* ✅ 核心修复：传递 handler 给 BottomNavBar */}
+            <BottomNavBar onOpenAiDrawer={handleOpenAiDrawer} />
         </div>
 
         {sentenceCardData && <ShortSentenceCard sentences={sentenceCardData} isOpen={isSentenceFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-sentences" />}
         {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
         <ContactPanel isOpen={isContactPanelOpen} onClose={() => setIsContactPanelOpen(false)} />
+        
+        {/* ✅ 核心修复：渲染 AI 助手组件并用 state 控制 */}
+        <AiChatAssistant isOpen={isAiDrawerOpen} onClose={handleCloseAiDrawer} />
     </div>
   );
 };
