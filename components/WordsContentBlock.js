@@ -3,101 +3,28 @@
 import React, { useState } from 'react';
 import {
   GraduationCap, BookCopy, Users, Atom, Globe, ArrowLeft,
-  Quote, Link2, Sigma, Clock, Map, UserSquare, HeartPulse, Smile, BrainCircuit, Waves, UtensilsCrossed, Home, Bus, ShoppingCart, Briefcase, Banknote, Sun, Palette, Film
+  Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film
 } from 'lucide-react';
 import SmartLink from './SmartLink';
+import semanticData from '../../data/semantic_words.json'; // ✅ 导入真实数据
 
-// =================================================================================
-// ======================  数据中心：语义分类宝库  ========================
-// =================================================================================
+// ✅ 为每个大分类动态分配图标
+const mainCategoryIcons = {
+  1: Atom,
+  2: Users,
+  3: Home,
+  4: BrainCircuit,
+  5: Globe
+};
 
-const semanticCategories = [
-  // --- 第一部分：核心概念 ---
-  {
-    id: 1,
-    title: '核心概念',
-    description: '语言的基石，构建句子的必需元素',
-    Icon: Atom,
-    color: 'bg-indigo-500',
-    subCategories: [
-      { id: 101, title: '指代与关系', Icon: Quote },
-      { id: 102, title: '数字与度量', Icon: Sigma },
-      { id: 103, title: '时间与频率', Icon: Clock },
-      { id: 104, title: '空间与方位', Icon: Map }
-    ]
-  },
-  // --- 第二部分：个体与感知 ---
-  {
-    id: 2,
-    title: '个体与感知',
-    description: '围绕“人”本身，从身体到思想',
-    Icon: UserSquare,
-    color: 'bg-sky-500',
-    subCategories: [
-      { id: 201, title: '身体与健康', Icon: HeartPulse },
-      { id: 202, title: '感官与感受', Icon: Waves },
-      { id: 203, title: '情绪与情感', Icon: Smile },
-      { id: 204, title: '品格与状态', Icon: BrainCircuit }
-    ]
-  },
-  // --- 第三部分：社会与生活 ---
-  {
-    id: 3,
-    title: '社会与生活',
-    description: '个体在社会环境中的活动与关系',
-    Icon: Users,
-    color: 'bg-emerald-500',
-    subCategories: [
-      { id: 301, title: '日常行为', Icon: Home },
-      { id: 302, title: '家庭与人际关系', Icon: Users },
-      { id: 303, title: '饮食文化', Icon: UtensilsCrossed },
-      { id: 304, title: '居住与环境', Icon: Home },
-      { id: 305, title: '交通与出行', Icon: Bus }
-    ]
-  },
-  // --- 第四部分：抽象与认知 ---
-  {
-    id: 4,
-    title: '抽象与认知',
-    description: '超越具体事物，进入思想与知识领域',
-    Icon: BrainCircuit,
-    color: 'bg-amber-500',
-    subCategories: [
-      { id: 401, title: '思想与认知', Icon: BrainCircuit },
-      { id: 402, title: '语言与沟通', Icon: Quote },
-      { id: 403, title: '教育与学习', Icon: GraduationCap },
-      { id: 404, title: '工作与职业', Icon: Briefcase },
-      { id: 405, title: '经济与商业', Icon: Banknote }
-    ]
-  },
-  // --- 第五部分：世界与万物 ---
-  {
-    id: 5,
-    title: '世界与万物',
-    description: '扩展到人类社会之外的自然界',
-    Icon: Globe,
-    color: 'bg-rose-500',
-    subCategories: [
-      { id: 501, title: '自然与地理', Icon: Sun },
-      { id: 502, title: '物品、颜色与形状', Icon: Palette },
-      { id: 503, title: '文化与娱乐', Icon: Film }
-    ]
-  }
-];
-
-// 为了方便，我们将所有大分类和小分类整合到一个映射中
-const allCategories = {};
-semanticCategories.forEach(cat => {
-  allCategories[cat.id] = cat;
-  cat.subCategories.forEach(sub => {
-    allCategories[sub.id] = { ...sub, parentId: cat.id, color: cat.color };
-  });
-});
-
-
-// =================================================================================
-// ======================  UI 组件  ========================
-// =================================================================================
+// ✅ 为每个次分类动态分配图标
+const subCategoryIcons = {
+  101: Quote, 102: Sigma, 103: Clock, 104: Map,
+  201: HeartPulse, 202: Waves, 203: Smile, 204: BrainCircuit,
+  301: Home, 302: Users, 303: UtensilsCrossed, 304: Home, 305: Bus,
+  401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote,
+  501: Sun, 502: Palette, 503: Film
+};
 
 // HSK 等级数据和组件 (保持不变)
 const hskLevels = [
@@ -133,11 +60,19 @@ const HskLevelGrid = () => (
   </div>
 );
 
-// 主题分类视图组件 (全新重写)
+// 主题分类视图组件 (使用真实数据)
 const ThemeView = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
+  const mainCategoryColors = {
+    1: 'bg-indigo-500', 2: 'bg-sky-500', 3: 'bg-emerald-500',
+    4: 'bg-amber-500', 5: 'bg-rose-500'
+  };
+
   if (selectedCategory) {
+    const MainIcon = mainCategoryIcons[selectedCategory.main_category_id] || BookCopy;
+    const mainColor = mainCategoryColors[selectedCategory.main_category_id] || 'bg-gray-500';
+
     return (
       <div>
         <button
@@ -147,18 +82,24 @@ const ThemeView = () => {
           <ArrowLeft size={16} />
           返回主分类
         </button>
-        <h2 className={`text-2xl font-bold mb-4 ${selectedCategory.color.replace('bg-', 'text-')}`}>
-          {selectedCategory.title}
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {selectedCategory.subCategories.map(sub => (
-            <SmartLink href={`/words/theme/${sub.id}`} key={sub.id} className="group block">
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-                    <sub.Icon size={24} className={selectedCategory.color.replace('bg-', 'text-')} />
-                    <span className="font-semibold text-gray-800 dark:text-gray-200">{sub.title}</span>
+        <div className="flex items-center gap-3 mb-4">
+            <MainIcon className={`${mainColor.replace('bg-', 'text-')}`} />
+            <h2 className={`text-2xl font-bold text-gray-800 dark:text-gray-200`}>
+              {selectedCategory.main_category_title}
+            </h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {selectedCategory.sub_categories.map(sub => {
+            const SubIcon = subCategoryIcons[sub.sub_category_id] || BookCopy;
+            return (
+              <SmartLink href={`/words/theme/${sub.sub_category_id}`} key={sub.sub_category_id} className="group block">
+                <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3 transform hover:scale-105 duration-300">
+                    <SubIcon size={24} className={mainColor.replace('bg-', 'text-')} />
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
                 </div>
-            </SmartLink>
-          ))}
+              </SmartLink>
+            )
+          })}
         </div>
       </div>
     );
@@ -166,21 +107,25 @@ const ThemeView = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      {semanticCategories.map(cat => (
-        <button
-          key={cat.id}
-          onClick={() => setSelectedCategory(cat)}
-          className={`group text-left p-5 rounded-2xl shadow-lg text-white ${cat.color} overflow-hidden transform transition-transform duration-300 hover:scale-[1.03]`}
-        >
-          <div className="flex items-center gap-4">
-            <cat.Icon size={32} />
-            <div>
-              <h3 className="text-xl font-bold">{cat.title}</h3>
-              <p className="text-sm opacity-80 mt-1">{cat.description}</p>
+      {semanticData.map(cat => {
+        const MainIcon = mainCategoryIcons[cat.main_category_id] || BookCopy;
+        const mainColor = mainCategoryColors[cat.main_category_id] || 'bg-gray-500';
+        return(
+          <button
+            key={cat.main_category_id}
+            onClick={() => setSelectedCategory(cat)}
+            className={`group text-left p-5 rounded-2xl shadow-lg text-white ${mainColor} overflow-hidden transform transition-transform duration-300 hover:scale-[1.03]`}
+          >
+            <div className="flex items-center gap-4">
+              <MainIcon size={32} />
+              <div>
+                <h3 className="text-xl font-bold">{cat.main_category_title}</h3>
+                <p className="text-sm opacity-80 mt-1">{cat.main_category_description}</p>
+              </div>
             </div>
-          </div>
-        </button>
-      ))}
+          </button>
+        )
+      })}
     </div>
   );
 };
