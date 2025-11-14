@@ -68,7 +68,9 @@ import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
 
-// ✅ 核心修复：直接导入 AiChatAssistant 组件，因为它是一个抽屉，而不是一个页面
+// ✅ 更改 1：导入我们刚刚创建的 WordsContentBlock 组件
+import WordsContentBlock from '@/components/WordsContentBlock' 
+
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
@@ -179,10 +181,9 @@ const CustomScrollbarStyle = () => (
 );
 
 // =================================================================================
-// ======================  关键修改区域: BottomNavBar 组件 ========================
+// ======================  BottomNavBar 组件 (最终版) ========================
 // =================================================================================
 const BottomNavBar = ({ onOpenAiDrawer }) => {
-    // ✅ 核心修复：AI 助手是一个按钮，其他是链接
     const navItems = [
         { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: ['articles', 'words', 'hsk', 'speaking', 'grammar'] },
         { type: 'button', label: 'AI助手', icon: 'fas fa-robot' },
@@ -192,7 +193,7 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
     const router = useRouter();
 
     const isActive = (item) => {
-        if (item.type === 'button') return false; // 按钮没有激活状态
+        if (item.type === 'button') return false; 
         const currentTab = router.query.tab || 'articles';
 
         if (item.href.startsWith('/?tab=')) {
@@ -378,13 +379,12 @@ const ContactPanel = ({ isOpen, onClose }) => {
 
 
 // =================================================================================
-// ======================  关键修改区域: LayoutIndex 组件 ========================
+// ======================  LayoutIndex 组件 (最终版) ========================
 // =================================================================================
 const LayoutIndex = props => {
   const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
-  // 定义所有标签页
   const tabs = [
     { name: '文章', key: 'articles', icon: <Newspaper size={22} /> },
     { name: '单词', key: 'words', icon: <BookText size={22} /> },
@@ -395,7 +395,6 @@ const LayoutIndex = props => {
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
   
-  // 顶部导航栏按要求排序和筛选
   const displayTabs = tabs.filter(tab => ['文章', '单词', 'HSK', '口语', '语法'].includes(tab.name));
 
   const [activeTab, setActiveTab] = useState(null); 
@@ -434,14 +433,12 @@ const LayoutIndex = props => {
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
   
-  // ✅ 核心修复：添加控制 AI 助手的 state 和 handler
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const handleOpenAiDrawer = () => {
       router.push(router.asPath + '#ai-chat', undefined, { shallow: true });
       setIsAiDrawerOpen(true);
   };
   const handleCloseAiDrawer = () => {
-      // 检查 hash 是否存在，避免不必要的 router.back()
       if (window.location.hash === '#ai-chat') {
         router.back();
       } else {
@@ -449,7 +446,6 @@ const LayoutIndex = props => {
       }
   };
 
-  // 监听 popstate (浏览器后退按钮) 以关闭抽屉
   useEffect(() => {
     const handlePopState = () => {
         if (window.location.hash !== '#ai-chat') {
@@ -655,7 +651,8 @@ const LayoutIndex = props => {
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'> 
                                     {tab.name === '文章' && <PostListComponent {...props} />}
-                                    {tab.name === '单词' && <div>单词内容区待开发...</div>}
+                                    {/* ✅ 更改 2: 渲染我们漂亮的新单词组件 */}
+                                    {tab.name === '单词' && <WordsContentBlock />}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
                                     {tab.name === '语法' && <div>语法内容区待开发...</div>}
@@ -667,7 +664,6 @@ const LayoutIndex = props => {
                     </main>
                 </div>
             </div>
-            {/* ✅ 核心修复：传递 handler 给 BottomNavBar */}
             <BottomNavBar onOpenAiDrawer={handleOpenAiDrawer} />
         </div>
 
@@ -675,7 +671,6 @@ const LayoutIndex = props => {
         {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
         <ContactPanel isOpen={isContactPanelOpen} onClose={() => setIsContactPanelOpen(false)} />
         
-        {/* ✅ 核心修复：渲染 AI 助手组件并用 state 控制 */}
         <AiChatAssistant isOpen={isAiDrawerOpen} onClose={handleCloseAiDrawer} />
     </div>
   );
