@@ -1,0 +1,84 @@
+[
+  {
+    "main_category_id": 1,
+    "main_category_title": "核心概念",
+    "main_category_description": "语言的基石，构建句子的必需元素",
+    "sub_categories": [
+      {
+        "sub_category_id": 101,
+        "sub_category_title": "指代与关系",
+        "words": [
+          { "id": 10101, "word": "我", "pinyin": "wǒ", "meaning": "saya, aku" },
+          { "id": 10102, "word": "你", "pinyin": "nǐ", "meaning": "kamu, Anda" },
+          { "id": 10103, "word": "他", "pinyin": "tā", "meaning": "dia (laki-laki)" },
+          { "id": 10104, "word": "的", "pinyin": "de", "meaning": "partikel kepunyaan" }
+        ]
+      },
+      {
+        "sub_category_id": 102,
+        "sub_category_title": "数字与度量",
+        "words": [
+          { "id": 10201, "word": "一", "pinyin": "yī", "meaning": "satu" },
+          { "id": 10202, "word": "十", "pinyin": "shí", "meaning": "sepuluh" },
+          { "id": 10203, "word": "半", "pinyin": "bàn", "meaning": "setengah" },
+          { "id": 10204, "word": "个", "pinyin": "gè", "meaning": "kata bantu bilangan umum" }
+        ]
+      },
+      { "sub_category_id": 103, "sub_category_title": "时间与频率", "words": [] },
+      { "sub_category_id": 104, "sub_category_title": "空间与方位", "words": [] }
+    ]
+  },
+  {
+    "main_category_id": 2,
+    "main_category_title": "个体与感知",
+    "main_category_description": "围绕“人”本身，从身体到思想",
+    "sub_categories": [
+      {
+        "sub_category_id": 201,
+        "sub_category_title": "身体与健康",
+        "words": [
+          { "id": 20101, "word": "头", "pinyin": "tóu", "meaning": "kepala" },
+          { "id": 20102, "word": "手", "pinyin": "shǒu", "meaning": "tangan" },
+          { "id": 20103, "word": "生病", "pinyin": "shēng bìng", "meaning": "sakit" }
+        ]
+      },
+      { "sub_category_id": 202, "sub_category_title": "感官与感受", "words": [] },
+      { "sub_category_id": 203, "sub_category_title": "情绪与情感", "words": [] },
+      { "sub_category_id": 204, "sub_category_title": "品格与状态", "words": [] }
+    ]
+  },
+  {
+    "main_category_id": 3,
+    "main_category_title": "社会与生活",
+    "main_category_description": "个体在社会环境中的活动与关系",
+    "sub_categories": [
+      { "sub_category_id": 301, "sub_category_title": "日常行为", "words": [] },
+      { "sub_category_id": 302, "sub_category_title": "家庭与人际关系", "words": [] },
+      { "sub_category_id": 303, "sub_category_title": "饮食文化", "words": [] },
+      { "sub_category_id": 304, "sub_category_title": "居住与环境", "words": [] },
+      { "sub_category_id": 305, "sub_category_title": "交通与出行", "words": [] }
+    ]
+  },
+  {
+    "main_category_id": 4,
+    "main_category_title": "抽象与认知",
+    "main_category_description": "超越具体事物，进入思想与知识领域",
+    "sub_categories": [
+      { "sub_category_id": 401, "sub_category_title": "思想与认知", "words": [] },
+      { "sub_category_id": 402, "sub_category_title": "语言与沟通", "words": [] },
+      { "sub_category_id": 403, "sub_category_title": "教育与学习", "words": [] },
+      { "sub_category_id": 404, "sub_category_title": "工作与职业", "words": [] },
+      { "sub_category_id": 405, "sub_category_title": "经济与商业", "words": [] }
+    ]
+  },
+  {
+    "main_category_id": 5,
+    "main_category_title": "世界与万物",
+    "main_category_description": "扩展到人类社会之外的自然界",
+    "sub_categories": [
+      { "sub_category_id": 501, "sub_category_title": "自然与地理", "words": [] },
+      { "sub_category_id": 502, "sub_category_title": "物品、颜色与形状", "words": [] },
+      { "sub_category_id": 503, "sub_category_title": "文化与娱乐", "words": [] }
+    ]
+  }
+]
