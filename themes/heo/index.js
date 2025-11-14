@@ -67,10 +67,7 @@ import HskContentBlock from '@/components/HskPageClient'
 import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
-
-// ✅ 更改 1：导入我们刚刚创建的 WordsContentBlock 组件
-import WordsContentBlock from '@/components/WordsContentBlock' 
-
+import WordsContentBlock from '@/components/WordsContentBlock' // ✅ 导入新的单词组件
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
@@ -651,7 +648,6 @@ const LayoutIndex = props => {
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'> 
                                     {tab.name === '文章' && <PostListComponent {...props} />}
-                                    {/* ✅ 更改 2: 渲染我们漂亮的新单词组件 */}
                                     {tab.name === '单词' && <WordsContentBlock />}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
