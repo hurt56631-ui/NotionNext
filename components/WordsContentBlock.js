@@ -1,73 +1,74 @@
 // /components/WordsContentBlock.js
 
-import React, { useState } from 'react';
-import {
-  GraduationCap, BookCopy, Users, Atom, Globe, ArrowLeft,
-  Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film
-} from 'lucide-react';
-import SmartLink from './SmartLink';
-import semanticData from '../../data/semantic_words.json'; // ✅ 导入真实数据
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
+import { motion } from 'framer-motion';
+import { ArrowLeft, GraduationCap, BookCopy, Layers, Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film } from 'lucide-react';
 
-// ✅ 为每个大分类动态分配图标
-const mainCategoryIcons = {
-  1: Atom,
-  2: Users,
-  3: Home,
-  4: BrainCircuit,
-  5: Globe
-};
+// --- 动态导入 WordCard 组件 ---
+const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
 
-// ✅ 为每个次分类动态分配图标
-const subCategoryIcons = {
-  101: Quote, 102: Sigma, 103: Clock, 104: Map,
-  201: HeartPulse, 202: Waves, 203: Smile, 204: BrainCircuit,
-  301: Home, 302: Users, 303: UtensilsCrossed, 304: Home, 305: Bus,
-  401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote,
-  501: Sun, 502: Palette, 503: Film
-};
+// --- 数据中心 ---
 
-// HSK 等级数据和组件 (保持不变)
+// 1. HSK 单词数据
+let hskWordsData = {};
+try { hskWordsData[1] = require('@/data/hsk/hsk1.json'); } catch (e) {}
+try { hskWordsData[2] = require('@/data/hsk/hsk2.json'); } catch (e) {}
+try { hskWordsData[3] = require('@/data/hsk/hsk3.json'); } catch (e) {}
+try { hskWordsData[4] = require('@/data/hsk/hsk4.json'); } catch (e) {}
+try { hskWordsData[5] = require('@/data/hsk/hsk5.json'); } catch (e) {}
+try { hskWordsData[6] = require('@/data/hsk/hsk6.json'); } catch (e) {}
+
+// 2. 语义分类单词数据
+import semanticData from '@/data/semantic_words.json';
+
+// --- UI 数据与辅助函数 ---
+
+// a. HSK 等级 UI 数据
 const hskLevels = [
-  { level: 1, title: '入门级', wordCount: 150, progress: 75, color: 'from-green-400 to-cyan-500' },
-  { level: 2, title: '初级', wordCount: 300, progress: 40, color: 'from-sky-400 to-blue-500' },
-  { level: 3, title: '进阶级', wordCount: 600, progress: 15, color: 'from-indigo-400 to-purple-500' },
-  { level: 4, title: '中级', wordCount: 1200, progress: 5, color: 'from-orange-400 to-red-500' },
-  { level: 5, title: '高级', wordCount: 2500, progress: 0, color: 'from-rose-500 to-pink-600' },
-  { level: 6, title: '精通级', wordCount: 5000, progress: 0, color: 'from-gray-600 to-black' }
+  { level: 1, title: '入门级', wordCount: 150, color: 'from-green-400 to-cyan-500' },
+  { level: 2, title: '初级', wordCount: 300, color: 'from-sky-400 to-blue-500' },
+  { level: 3, title: '进阶级', wordCount: 600, color: 'from-indigo-400 to-purple-500' },
+  { level: 4, title: '中级', wordCount: 1200, color: 'from-orange-400 to-red-500' },
+  { level: 5, title: '高级', wordCount: 2500, color: 'from-rose-500 to-pink-600' },
+  { level: 6, title: '精通级', wordCount: 5000, color: 'from-gray-600 to-black' }
 ];
 
-const HskLevelGrid = () => (
-  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+// b. 语义分类图标和颜色映射
+const mainCategoryIcons = { 1: Atom, 2: Layers, 3: Home, 4: BrainCircuit, 5: Globe };
+const mainCategoryColors = { 1: 'bg-indigo-500', 2: 'bg-sky-500', 3: 'bg-emerald-500', 4: 'bg-amber-500', 5: 'bg-rose-500' };
+const subCategoryIcons = { 101: Quote, 102: Sigma, 103: Clock, 104: Map, 201: HeartPulse, 202: Waves, 203: Smile, 204: BrainCircuit, 301: Home, 302: Layers, 303: UtensilsCrossed, 304: Home, 305: Bus, 401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote, 501: Sun, 502: Palette, 503: Film };
+
+// --- 子组件 ---
+
+// 1. HSK 等级卡片网格
+const HskLevelGrid = ({ onVocabularyClick }) => (
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
     {hskLevels.map(level => (
-      <SmartLink href={`/words/hsk/${level.level}`} key={level.level} className="group block">
-        <div className={`relative p-6 rounded-2xl shadow-lg text-white bg-gradient-to-br ${level.color} overflow-hidden transform transition-transform duration-300 group-hover:scale-105`}>
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-2xl font-bold">HSK {level.level}</h3>
-              <p className="opacity-80">{level.title}</p>
-            </div>
-            <span className="bg-white/20 text-xs font-semibold px-2 py-1 rounded-full">{level.wordCount} 词汇</span>
+      <div 
+        key={level.level}
+        className={`relative p-6 rounded-2xl shadow-lg text-white bg-gradient-to-br ${level.color} overflow-hidden transform transition-transform duration-300 hover:scale-105 cursor-pointer`}
+        onClick={() => onVocabularyClick('hsk', level)}
+      >
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-2xl font-bold">HSK {level.level}</h3>
+            <p className="opacity-80">{level.title}</p>
           </div>
-          <div className="mt-8">
-            <p className="text-sm opacity-90 mb-1">{`学习进度 ${level.progress}%`}</p>
-            <div className="w-full bg-black/20 rounded-full h-2.5">
-              <div className="bg-white rounded-full h-2.5" style={{ width: `${level.progress}%` }}></div>
-            </div>
-          </div>
+          <span className="bg-white/20 text-xs font-semibold px-2 py-1 rounded-full">{level.wordCount} 词汇</span>
         </div>
-      </SmartLink>
+        <div className="mt-8 text-center bg-black/20 hover:bg-black/30 transition-colors p-2 rounded-lg">
+          点击开始学习
+        </div>
+      </div>
     ))}
   </div>
 );
 
-// 主题分类视图组件 (使用真实数据)
-const ThemeView = () => {
+// 2. 主题场景分类视图
+const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
-
-  const mainCategoryColors = {
-    1: 'bg-indigo-500', 2: 'bg-sky-500', 3: 'bg-emerald-500',
-    4: 'bg-amber-500', 5: 'bg-rose-500'
-  };
 
   if (selectedCategory) {
     const MainIcon = mainCategoryIcons[selectedCategory.main_category_id] || BookCopy;
@@ -92,12 +93,14 @@ const ThemeView = () => {
           {selectedCategory.sub_categories.map(sub => {
             const SubIcon = subCategoryIcons[sub.sub_category_id] || BookCopy;
             return (
-              <SmartLink href={`/words/theme/${sub.sub_category_id}`} key={sub.sub_category_id} className="group block">
-                <div className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3 transform hover:scale-105 duration-300">
-                    <SubIcon size={24} className={mainColor.replace('bg-', 'text-')} />
-                    <span className="font-semibold text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
-                </div>
-              </SmartLink>
+              <div 
+                key={sub.sub_category_id} 
+                className="group p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3 transform hover:scale-105 duration-300 cursor-pointer"
+                onClick={() => onVocabularyClick('theme', sub)}
+              >
+                  <SubIcon size={24} className={mainColor.replace('bg-', 'text-')} />
+                  <span className="font-semibold text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
+              </div>
             )
           })}
         </div>
@@ -130,36 +133,95 @@ const ThemeView = () => {
   );
 };
 
-// 主组件 WordsContentBlock
+// --- 主组件 WordsContentBlock ---
 const WordsContentBlock = () => {
   const [activeView, setActiveView] = useState('level');
+  const router = useRouter();
+  const [activeWords, setActiveWords] = useState(null);
+  const [progressKey, setProgressKey] = useState(null);
 
+  const isCardViewOpen = router.asPath.includes('#vocabulary');
+
+  const handleVocabularyClick = useCallback((type, data) => {
+    let words = [];
+    let key = '';
+
+    if (type === 'hsk') {
+      words = hskWordsData[data.level];
+      key = `hsk${data.level}`;
+    } else if (type === 'theme') {
+      words = data.words;
+      key = `theme_${data.sub_category_id}`;
+    }
+
+    if (words && words.length > 0) {
+      setActiveWords(words);
+      setProgressKey(key);
+      router.push('/?tab=words#vocabulary', undefined, { shallow: true });
+    } else {
+      alert(`该分类下的词汇列表正在准备中，敬请期待！`);
+    }
+  }, [router]);
+
+  const handleCloseCard = useCallback(() => {
+    setActiveWords(null);
+    setProgressKey(null);
+    if (window.location.hash.includes('#vocabulary')) {
+        router.back(); 
+    }
+  }, [router]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (!window.location.hash.includes('vocabulary')) {
+        setActiveWords(null);
+        setProgressKey(null);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+  
   const buttonBaseStyle = "w-1/2 py-2.5 text-sm font-semibold rounded-lg transition-colors duration-300 focus:outline-none";
   const activeButtonStyle = "bg-white dark:bg-gray-700 text-blue-500 shadow";
   const inactiveButtonStyle = "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-500/10";
 
   return (
-    <div className="max-w-5xl mx-auto p-2 sm:p-4">
-      <div className="mb-8 flex justify-center">
-        <div className="w-full max-w-xs p-1 bg-gray-100 dark:bg-gray-800 rounded-xl flex">
-          <button
-            onClick={() => setActiveView('level')}
-            className={`${buttonBaseStyle} ${activeView === 'level' ? activeButtonStyle : inactiveButtonStyle}`}
-          >
-            按 HSK 等级
-          </button>
-          <button
-            onClick={() => setActiveView('theme')}
-            className={`${buttonBaseStyle} ${activeView === 'theme' ? activeButtonStyle : inactiveButtonStyle}`}
-          >
-            按主题场景
-          </button>
+    <>
+      <div className="max-w-5xl mx-auto p-2 sm:p-4">
+        <div className="mb-8 flex justify-center">
+          <div className="w-full max-w-xs p-1 bg-gray-100 dark:bg-gray-800 rounded-xl flex">
+            <button
+              onClick={() => setActiveView('level')}
+              className={`${buttonBaseStyle} ${activeView === 'level' ? activeButtonStyle : inactiveButtonStyle}`}
+            >
+              按 HSK 等级
+            </button>
+            <button
+              onClick={() => setActiveView('theme')}
+              className={`${buttonBaseStyle} ${activeView === 'theme' ? activeButtonStyle : inactiveButtonStyle}`}
+            >
+              按主题场景
+            </button>
+          </div>
+        </div>
+        <div>
+          {activeView === 'level' 
+            ? <HskLevelGrid onVocabularyClick={handleVocabularyClick} /> 
+            : <ThemeView onVocabularyClick={handleVocabularyClick} />
+          }
         </div>
       </div>
-      <div>
-        {activeView === 'level' ? <HskLevelGrid /> : <ThemeView />}
-      </div>
-    </div>
+
+      <WordCard 
+        isOpen={isCardViewOpen}
+        words={activeWords || []}
+        onClose={handleCloseCard}
+        progressKey={progressKey || 'default-key'}
+      />
+    </>
   );
 };
 
