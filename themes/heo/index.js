@@ -1,7 +1,7 @@
 // themes/heo/index.js <-- 最终修复完整版：已解决初始加载吸顶问题和滑动冲突，并修复了手势返回问题
 
 // =================================================================================
-// ======================  所有 import 语句保持不变  ========================
+// ======================  所有 import 语句已更新  ========================
 // =================================================================================
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
@@ -15,10 +15,10 @@ import { siteConfig } from '@/lib/config'
 import { useGlobal } from '@/lib/global'
 import { loadWowJS } from '@/lib/plugins/wow'
 import { isBrowser } from '@/lib/utils'
-import { Transition } from '@headlessui/react'
+import { Transition, Dialog } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useSwipeable } from 'react-swipeable'
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
@@ -39,7 +39,7 @@ import CONFIG from './config'
 import { Style } from './style'
 import AISummary from '@/components/AISummary'
 import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
-import { FaTiktok, FaFacebook } from 'react-icons/fa'
+import { FaTiktok, FaFacebook, FaTelegramPlane } from 'react-icons/fa'
 import {
     Newspaper,
     GraduationCap,
@@ -174,13 +174,16 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
+// =================================================================================
+// ======================  关键修改区域: BottomNavBar 组件 ========================
+// =================================================================================
 const BottomNavBar = () => {
+    // 修复：按钮重命名、移除、新增和排序
     const navItems = [
-        { href: '/', icon: 'fas fa-home', label: '主页', auth: false },
-        { href: '/ai-assistant', icon: 'fas fa-robot', label: 'AI助手', auth: false },
-        { href: '/community', icon: 'fas fa-users', label: '社区', auth: true },
-        { href: '/messages', icon: 'fas fa-comment-dots', label: '消息', auth: true },
-        { href: '/profile', icon: 'fas fa-user', label: '我', auth: true },
+        { href: '/', label: '学习', icon: 'fas fa-book-open', mainTabs: ['articles', 'hsk', 'speaking', 'books'], auth: false },
+        { href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check', auth: false },
+        { href: '/ai-assistant', label: 'AI助手', icon: 'fas fa-robot', auth: false },
+        { href: '/profile', label: '我', icon: 'fas fa-user', auth: true },
     ];
     const router = useRouter();
     const { user, authLoading } = useAuth();
@@ -193,14 +196,26 @@ const BottomNavBar = () => {
         }
     };
 
+    // 修复：改进 active 状态的判断逻辑
+    const isActive = (item) => {
+        if (item.href.startsWith('/?tab=')) {
+            const tab = item.href.split('=')[1];
+            return router.query.tab === tab;
+        }
+        if (item.href === '/') {
+            return router.pathname === '/' && (item.mainTabs.includes(router.query.tab) || !router.query.tab);
+        }
+        return router.pathname === item.href;
+    };
+
     return (
         <>
             <AuthModal show={showLoginModal} onClose={() => setShowLoginModal(false)} />
             <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
                 {navItems.map(item => (
-                    <SmartLink key={item.href} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/5 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <i className={`${item.icon} text-xl ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}></i>
-                        <span className={`text-xs mt-1 ${router.pathname === item.href ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
+                     <SmartLink key={item.label} href={item.href} onClick={(e) => handleLinkClick(e, item)} className={`flex flex-col items-center justify-center w-1/4 ${authLoading && item.auth ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`${item.icon} text-xl ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}></i>
+                        <span className={`text-xs mt-1 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>{item.label}</span>
                     </SmartLink>
                 ))}
             </nav>
@@ -208,9 +223,12 @@ const BottomNavBar = () => {
     );
 };
 
-const ActionButtons = ({ onOpenFavorites }) => {
+// =================================================================================
+// ======================  关键修改区域: ActionButtons 组件 =======================
+// =================================================================================
+const ActionButtons = ({ onOpenFavorites, onOpenContact }) => {
   const actions = [
-    { icon: <Phone size={24} />, text: '联系我们', type: 'link', href: 'tel:YOUR_PHONE_NUMBER', color: 'from-blue-500 to-sky-500' },
+    { icon: <Phone size={24} />, text: '联系我们', type: 'contact', color: 'from-blue-500 to-sky-500' },
     { icon: <MessageSquare size={24} />, text: '在线客服', type: 'link', href: '#', color: 'from-green-500 to-emerald-500' },
     { icon: <Users size={24} />, text: '加入社群', type: 'link', href: '#', color: 'from-purple-500 to-indigo-500' },
     { icon: <Heart size={24} />, text: '收藏单词', type: 'words', color: 'from-orange-500 to-amber-500' },
@@ -222,8 +240,12 @@ const ActionButtons = ({ onOpenFavorites }) => {
       {actions.map((action, index) => {
         const content = ( <> <div className="mb-2">{action.icon}</div> <span className="text-sm font-semibold">{action.text}</span> </> );
         const className = `flex flex-col items-center justify-center p-4 rounded-xl shadow-lg hover:shadow-xl text-white bg-gradient-to-br ${action.color} transition-all duration-300 transform hover:-translate-y-1 w-full`;
+        
         if (action.type === 'link') {
           return ( <a key={index} href={action.href} className={className}> {content} </a> );
+        }
+        if (action.type === 'contact') {
+          return ( <button key={index} onClick={onOpenContact} className={className}> {content} </button> );
         }
         return ( <button key={index} onClick={() => onOpenFavorites(action.type)} className={className}> {content} </button> );
       })}
@@ -268,6 +290,88 @@ async function getAllFavorites(storeName) {
     }
 }
 
+// =================================================================================
+// ======================  新增: ContactPanel 组件 ============================
+// =================================================================================
+const ContactPanel = ({ isOpen, onClose }) => {
+    const socialLinks = [
+        { name: 'Facebook', href: 'https://www.facebook.com/share/1ErXyBbrZ1', icon: <FaFacebook size={32} />, color: 'text-blue-600' },
+        { name: 'TikTok', href: 'https://www.tiktok.com/@mmzh.onlione?_r=1&_t=ZS-91OzyDddPu8', icon: <FaTiktok size={32} />, color: 'text-black dark:text-white' },
+        { name: 'Telegram', href: 'https://t.me/hurt8888', icon: <FaTelegramPlane size={32} />, color: 'text-sky-500' }
+    ];
+
+    return (
+        <Transition show={isOpen} as={Fragment}>
+            <Dialog as="div" className="relative z-50" onClose={onClose}>
+                <Transition.Child
+                    as={Fragment}
+                    enter="ease-out duration-300"
+                    enterFrom="opacity-0"
+                    enterTo="opacity-100"
+                    leave="ease-in duration-200"
+                    leaveFrom="opacity-100"
+                    leaveTo="opacity-0"
+                >
+                    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" />
+                </Transition.Child>
+
+                <div className="fixed inset-0 overflow-y-auto">
+                    <div className="flex min-h-full items-center justify-center p-4 text-center">
+                        <Transition.Child
+                            as={Fragment}
+                            enter="ease-out duration-300"
+                            enterFrom="opacity-0 scale-95"
+                            enterTo="opacity-100 scale-100"
+                            leave="ease-in duration-200"
+                            leaveFrom="opacity-100 scale-100"
+                            leaveTo="opacity-0 scale-95"
+                        >
+                            <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 p-6 text-left align-middle shadow-xl transition-all">
+                                <Dialog.Title as="h3" className="text-lg font-bold leading-6 text-gray-900 dark:text-gray-100">
+                                    联系我们
+                                </Dialog.Title>
+                                <div className="mt-4">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        通过以下方式与我们取得联系，我们期待您的咨询。
+                                    </p>
+                                </div>
+
+                                <div className="mt-6 space-y-4">
+                                    {socialLinks.map(link => (
+                                        <a
+                                            key={link.name}
+                                            href={link.href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-4 p-4 rounded-lg bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                        >
+                                            <div className={link.color}>{link.icon}</div>
+                                            <div>
+                                                <p className="font-semibold text-gray-800 dark:text-gray-200">{link.name}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">点击跳转</p>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+
+                                <div className="mt-6">
+                                    <button
+                                        type="button"
+                                        className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 dark:bg-blue-900/50 px-4 py-2 text-sm font-medium text-blue-900 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800 w-full"
+                                        onClick={onClose}
+                                    >
+                                        关闭
+                                    </button>
+                                </div>
+                            </Dialog.Panel>
+                        </Transition.Child>
+                    </div>
+                </div>
+            </Dialog>
+        </Transition>
+    );
+};
+
 
 // =================================================================================
 // ======================  关键修改区域: LayoutIndex 组件 ========================
@@ -285,30 +389,23 @@ const LayoutIndex = props => {
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
 
-  // ✅ 1. activeTab 的状态现在由 URL 参数决定，而不是写死的初始值
-  // 只有当 router 准备好后，我们才从 URL 读取 tab 参数
   const [activeTab, setActiveTab] = useState(null); 
 
   useEffect(() => {
     if (router.isReady) {
       const tabFromQuery = router.query.tab;
       const validTab = tabs.find(t => t.key === tabFromQuery);
-      // 如果 URL 参数有效，则设置它，否则使用默认的第一个 tab
       setActiveTab(validTab ? validTab.name : tabs[0].name);
     }
-  }, [router.isReady, router.query.tab]); // 依赖 router 准备状态和 tab 参数
+  }, [router.isReady, router.query.tab]);
   
-  // ✅ 2. 创建一个函数来处理 tab 切换，这个函数会更新 URL
   const handleTabChange = (tabName) => {
     const newTabKey = tabs.find(t => t.name === tabName)?.key;
     if (newTabKey) {
-      // 使用 shallow routing 更新 URL，这样页面不会重新加载
       router.push(`/?tab=${newTabKey}`, undefined, { shallow: true });
     }
   };
 
-
-  // --- 您所有其他的 state 和 ref 保持不变 ---
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const scrollableContainerRef = useRef(null);
   const stickySentinelRef = useRef(null);
@@ -326,6 +423,8 @@ const LayoutIndex = props => {
   const [wordCardData, setWordCardData] = useState(null);
   const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
+  // 新增：联系我们面板的状态
+  const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
 
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
@@ -354,7 +453,6 @@ const LayoutIndex = props => {
   }, [router]);
 
   useEffect(() => {
-    // 这个 useEffect 里的所有其他逻辑保持不变
     const handlePopState = () => {
       if (!window.location.hash.startsWith('#favorite')) {
         setSentenceCardData(null);
@@ -413,7 +511,6 @@ const LayoutIndex = props => {
     };
   }, [isStickyActive, router]);
 
-  // 手势切换 tab 的逻辑现在也调用 handleTabChange
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = tabs.findIndex(t => t.name === activeTab);
@@ -428,7 +525,6 @@ const LayoutIndex = props => {
       delta: 50
   });
 
-  // 其他所有函数 (handleTouchStart, openSidebar, etc.) 保持不变
   const handleTouchStart = (e) => {
     if (!isSidebarOpen && mainContentRef.current?.contains(e.target)) return;
     const startX = e.touches[0].clientX;
@@ -454,7 +550,6 @@ const LayoutIndex = props => {
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
 
-  // ✅ 3. renderTabButtons 的 onClick 现在调用新的 handleTabChange 函数
   const renderTabButtons = () => tabs.map(tab => (
     <button key={tab.name} onClick={() => handleTabChange(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
@@ -463,16 +558,14 @@ const LayoutIndex = props => {
     </button>
   ));
 
-  // ✅ 4. 如果 activeTab 还没从 URL 中恢复，可以显示一个加载状态
   if (!activeTab) {
     return (
         <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
-            {/* 可以放一个简单的加载动画 */}
+            {/* 加载动画 */}
         </div>
     );
   }
 
-  // --- 最终的 JSX 结构保持不变 ---
   return (
     <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}>
         <Style/>
@@ -506,7 +599,7 @@ const LayoutIndex = props => {
                     <div className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
                         <div className='pt-6'>
                            <div className='px-4 mb-6'><GlosbeSearchCard /></div>
-                           <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} /></div>
+                           <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} onOpenContact={() => setIsContactPanelOpen(true)} /></div>
                         </div>
                         <div ref={stickySentinelRef}></div>
                         <div className={`${isStickyActive ? 'invisible h-0' : ''} border-b border-violet-200 dark:border-gray-700`}>
@@ -523,13 +616,51 @@ const LayoutIndex = props => {
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
-                                <div className='p-4'> 
-                                    {tab.name === '文章' && <PostListComponent {...props} />}
-                                    {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
-                                    {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
-                                    {tab.name === '练习' && <PracticeContentBlock />}
-                                    {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
-                                </div>
+                                {tab.name === '文章' && (
+                                    <div className="lg:flex lg:gap-8 p-4">
+                                        <div className="lg:w-2/3 w-full">
+                                            <PostListComponent {...props} />
+                                        </div>
+                                        <aside className="hidden lg:block lg:w-1/3">
+                                            <div className="sticky top-20 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-sm">
+                                                <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-200">相关单词</h3>
+                                                <div className="space-y-2">
+                                                    <p className="text-gray-600 dark:text-gray-400">单词功能区待开发...</p>
+                                                    <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
+                                                        <p className="font-semibold">你好 (nǐ hǎo)</p>
+                                                        <p className="text-sm text-gray-500 dark:text-gray-300">Hello</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </aside>
+                                    </div>
+                                )}
+                                {tab.name === '口语' && (
+                                    <div className="lg:flex lg:gap-8 p-4">
+                                        <div className="lg:w-2/3 w-full">
+                                            <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />
+                                        </div>
+                                        <aside className="hidden lg:block lg:w-1/3">
+                                            <div className="sticky top-20 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-sm">
+                                                <h3 className="font-bold text-xl mb-4 text-gray-800 dark:text-gray-200">相关语法</h3>
+                                                <div className="space-y-2">
+                                                    <p className="text-gray-600 dark:text-gray-400">语法功能区待开发...</p>
+                                                    <div className="p-2 bg-white dark:bg-gray-700 rounded-lg">
+                                                        <p className="font-semibold">"的" 的用法</p>
+                                                        <p className="text-sm text-gray-500 dark:text-gray-300">The use of the particle "de" to indicate possession.</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </aside>
+                                    </div>
+                                )}
+                                {['HSK', '练习', '书籍'].includes(tab.name) && (
+                                    <div className='p-4'>
+                                        {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
+                                        {tab.name === '练习' && <PracticeContentBlock />}
+                                        {tab.name === '书籍' && <BooksContentBlock notionBooks={books} />}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </main>
@@ -540,6 +671,7 @@ const LayoutIndex = props => {
 
         {sentenceCardData && <ShortSentenceCard sentences={sentenceCardData} isOpen={isSentenceFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-sentences" />}
         {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
+        <ContactPanel isOpen={isContactPanelOpen} onClose={() => setIsContactPanelOpen(false)} />
     </div>
   );
 };
