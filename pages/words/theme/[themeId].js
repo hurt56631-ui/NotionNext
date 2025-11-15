@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import WordCard from '../../../components/WordCard';
+import WordCard from '@/components/WordCard';
 import { Layers, BookOpen, ArrowLeft } from 'lucide-react';
-import semanticData from '../../../data/semantic_words.json'; // 导入我们创建的语义分类数据
+import semanticData from '@/data/semantic_words.json'; // 导入我们创建的语义分类数据
 
 // --- 数据中心 ---
 
