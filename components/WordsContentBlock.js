@@ -4,7 +4,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { ArrowLeft, GraduationCap, BookCopy, Layers, Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film } from 'lucide-react';
+
+// ✅ 核心修复：导入所有缺失的 Lucide React 图标
+import { 
+    ArrowLeft, GraduationCap, BookCopy, Layers, Quote, Sigma, Clock, Map, 
+    HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, 
+    Briefcase, Banknote, Sun, Palette, Film, Atom, Globe 
+} from 'lucide-react';
+
 
 // --- 动态导入 WordCard 组件 ---
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
