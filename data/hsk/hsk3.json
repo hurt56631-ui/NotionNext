@@ -1,1 +1,2394 @@
-[]
+[
+  {
+    "id": 301,
+    "chinese": "啊",
+    "pinyin": "a",
+    "burmese": "အာ။",
+    "mnemonic": "အာ",
+    "example": "你真漂亮啊！"
+  },
+  {
+    "id": 302,
+    "chinese": "阿姨",
+    "pinyin": "āyí",
+    "burmese": "ဒေါ်လေး။",
+    "mnemonic": "အာယီ",
+    "example": "阿姨，您好！"
+  },
+  {
+    "id": 303,
+    "chinese": "矮",
+    "pinyin": "ǎi",
+    "burmese": "ပုသော။",
+    "mnemonic": "အိုက်",
+    "example": "他比我矮一点儿。"
+  },
+  {
+    "id": 304,
+    "chinese": "爱好",
+    "pinyin": "àihào",
+    "burmese": "ဝါသနာ။",
+    "mnemonic": "အိုက်ဟောက်",
+    "example": "我的爱好是看书和听音乐。"
+  },
+  {
+    "id": 305,
+    "chinese": "安静",
+    "pinyin": "ānjìng",
+    "burmese": "တိတ်ဆိတ်သည်။ တည်ငြိမ်သော။",
+    "mnemonic": "အန်ကျင့်",
+    "example": "请安静，图书馆里不要说话。"
+  },
+  {
+    "id": 306,
+    "chinese": "把",
+    "pinyin": "bǎ",
+    "burmese": "(တစ်စုံတစ်ရာ) ကိုတစ်နေရာသို့ ထားသည်။",
+    "mnemonic": "ပါး",
+    "example": "请把书放在桌子上。"
+  },
+  {
+    "id": 307,
+    "chinese": "班",
+    "pinyin": "bān",
+    "burmese": "အတန်း။ အဖွဲ့။",
+    "mnemonic": "ပန်",
+    "example": "我们班有三十个学生。"
+  },
+  {
+    "id": 308,
+    "chinese": "搬",
+    "pinyin": "bān",
+    "burmese": "ရွှေ့သည်။ နေရာရွေ့ပြောင်းသည်။",
+    "mnemonic": "ပန်",
+    "example": "我下个月要搬家。"
+  },
+  {
+    "id": 309,
+    "chinese": "办法",
+    "pinyin": "bànfǎ",
+    "burmese": "နည်းလမ်း။",
+    "mnemonic": "ပန့်ဖာ",
+    "example": "你有什么好办法吗？"
+  },
+  {
+    "id": 310,
+    "chinese": "办公室",
+    "pinyin": "bàngōngshì",
+    "burmese": "ရုံးခန်း။",
+    "mnemonic": "ပန့်ကုံးရှိ",
+    "example": "经理正在办公室里开会。"
+  },
+  {
+    "id": 311,
+    "chinese": "半",
+    "pinyin": "bàn",
+    "burmese": "တစ်ဝက်။",
+    "mnemonic": "ပန့်",
+    "example": "现在是下午两点半。"
+  },
+  {
+    "id": 312,
+    "chinese": "帮忙",
+    "pinyin": "bāngmáng",
+    "burmese": "ကူညီသည်။",
+    "mnemonic": "ပန်မန်",
+    "example": "你能帮我一个忙吗？"
+  },
+  {
+    "id": 313,
+    "chinese": "包",
+    "pinyin": "bāo",
+    "burmese": "အိတ်။ ကုန်ပစ္စည်း။",
+    "mnemonic": "ပေါင်း",
+    "example": "我的包里有一本书。"
+  },
+  {
+    "id": 314,
+    "chinese": "饱",
+    "pinyin": "bǎo",
+    "burmese": "ဗိုက်ပြည့်သည်။",
+    "mnemonic": "ပေါင်",
+    "example": "我吃饱了，谢谢你。"
+  },
+  {
+    "id": 315,
+    "chinese": "北方",
+    "pinyin": "běifāng",
+    "burmese": "မြောက်ဘက်။",
+    "mnemonic": "ပေဖန်",
+    "example": "中国的北方冬天很冷。"
+  },
+  {
+    "id": 316,
+    "chinese": "被",
+    "pinyin": "bèi",
+    "burmese": "(တစ်စုံတစ်ရာဖြင့် တစ်စုံတစ်ရာ လုပ်ခြင်းခံရသည်)။",
+    "mnemonic": "ပေ",
+    "example": "我的自行车被偷了。"
+  },
+  {
+    "id": 317,
+    "chinese": "鼻子",
+    "pinyin": "bízi",
+    "burmese": "နှာခေါင်း။",
+    "mnemonic": "ပီစ့်",
+    "example": "大象的鼻子很长。"
+  },
+  {
+    "id": 318,
+    "chinese": "比较",
+    "pinyin": "bǐjiào",
+    "burmese": "နှိုင်းယှဉ်သည်။",
+    "mnemonic": "ပိကျောက်",
+    "example": "今天的天气比较好。"
+  },
+  {
+    "id": 319,
+    "chinese": "比赛",
+    "pinyin": "bǐsài",
+    "burmese": "ပြိုင်ဆိုင်သည်။",
+    "mnemonic": "ပိစိုက်",
+    "example": "明天有一场足球比赛。"
+  },
+  {
+    "id": 320,
+    "chinese": "笔记本",
+    "pinyin": "bǐjìběn",
+    "burmese": "မှတ်စုစာအုပ်။",
+    "mnemonic": "ပိကျိပင်",
+    "example": "请把这个词写在笔记本上。"
+  },
+  {
+    "id": 321,
+    "chinese": "必须",
+    "pinyin": "bìxū",
+    "burmese": "မဖြစ်မနေ။ လိုအပ်သည်။",
+    "mnemonic": "ပိရှူ",
+    "example": "你必须在八点前完成作业。"
+  },
+  {
+    "id": 322,
+    "chinese": "变化",
+    "pinyin": "biànhuà",
+    "burmese": "အပြောင်းအလဲ။",
+    "mnemonic": "ပျန့်ဟွား",
+    "example": "这个城市最近几年变化很大。"
+  },
+  {
+    "id": 323,
+    "chinese": "别人",
+    "pinyin": "biéren",
+    "burmese": "သူများ။",
+    "mnemonic": "ပျဲရန်",
+    "example": "这是别人的东西，不要拿。"
+  },
+  {
+    "id": 324,
+    "chinese": "冰箱",
+    "pinyin": "bīngxiāng",
+    "burmese": "ရေခဲသေတ္တာ။",
+    "mnemonic": "ပင်ရှန်",
+    "example": "请把水果放进冰箱里。"
+  },
+  {
+    "id": 325,
+    "chinese": "不但",
+    "pinyin": "bùdàn",
+    "burmese": "(ဒါ့)အပြင်။",
+    "mnemonic": "ပုတန့်",
+    "example": "他不但学习好，而且还喜欢帮助同学。"
+  },
+  {
+    "id": 326,
+    "chinese": "而且",
+    "pinyin": "érqiě",
+    "burmese": "ထို့အပြင်။",
+    "mnemonic": "အာချယ်",
+    "example": "他不但学习好，而且还喜欢帮助同学。"
+  },
+  {
+    "id": 327,
+    "chinese": "菜单",
+    "pinyin": "càidān",
+    "burmese": "ဟင်းအမှာစာ/Menu",
+    "mnemonic": "ချိုက်တန်",
+    "example": "服务员，请把菜单给我看一下。"
+  },
+  {
+    "id": 328,
+    "chinese": "参加",
+    "pinyin": "cānjiā",
+    "burmese": "ပါဝင်သည်။ ဆင်နွှဲသည်။",
+    "mnemonic": "ချန်ကျား",
+    "example": "我明天要参加一个重要的会议。"
+  },
+  {
+    "id": 329,
+    "chinese": "草",
+    "pinyin": "cǎo",
+    "burmese": "မြက်။",
+    "mnemonic": "ချောင်း",
+    "example": "公园的草地上有很多孩子在玩。"
+  },
+  {
+    "id": 330,
+    "chinese": "层",
+    "pinyin": "céng",
+    "burmese": "အထပ်။",
+    "mnemonic": "ချန်",
+    "example": "我的办公室在五层。"
+  },
+  {
+    "id": 331,
+    "chinese": "差",
+    "pinyin": "chà",
+    "burmese": "ကွာခြားသည်။ လွဲသည်။ အဆင့်မမှီသော။",
+    "mnemonic": "ချာ",
+    "example": "现在差五分十二点。"
+  },
+  {
+    "id": 332,
+    "chinese": "超市",
+    "pinyin": "chāoshì",
+    "burmese": "ကုန်တိုက်။",
+    "mnemonic": "ချောက်ရှိ",
+    "example": "妈妈去超市买菜了。"
+  },
+  {
+    "id": 333,
+    "chinese": "衬衫",
+    "pinyin": "chènshān",
+    "burmese": "ရှပ်အင်္ကျီ။",
+    "mnemonic": "ချန့်ရှန်",
+    "example": "这件白衬衫很适合你。"
+  },
+  {
+    "id": 334,
+    "chinese": "成绩",
+    "pinyin": "chéngjī",
+    "burmese": "အောင်မြင်မှု။",
+    "mnemonic": "ချန်ကျီး",
+    "example": "这次考试他的成绩很好。"
+  },
+  {
+    "id": 335,
+    "chinese": "城市",
+    "pinyin": "chéngshì",
+    "burmese": "မြို့။",
+    "mnemonic": "ချန်ရှိ",
+    "example": "上海是中国最大的城市之一。"
+  },
+  {
+    "id": 336,
+    "chinese": "迟到",
+    "pinyin": "chídào",
+    "burmese": "နောက်ကျသည်။",
+    "mnemonic": "ချိတောက်",
+    "example": "对不起，我今天上班迟到了。"
+  },
+  {
+    "id": 337,
+    "chinese": "除了",
+    "pinyin": "chúle",
+    "burmese": "မှလွဲပြီး။",
+    "mnemonic": "ချူလယ်",
+    "example": "除了他，我们都去过北京。"
+  },
+  {
+    "id": 338,
+    "chinese": "船",
+    "pinyin": "chuán",
+    "burmese": "လှေ။ သင်္ဘော။",
+    "mnemonic": "ချွမ်",
+    "example": "我们可以坐船去那个小岛。"
+  },
+  {
+    "id": 339,
+    "chinese": "春",
+    "pinyin": "chūn",
+    "burmese": "နွေဦး။",
+    "mnemonic": "ချွန်",
+    "example": "春天来了，天气变暖了。"
+  },
+  {
+    "id": 340,
+    "chinese": "词典",
+    "pinyin": "cídiǎn",
+    "burmese": "အဘိဓာန်။",
+    "mnemonic": "စစ်တျန့်",
+    "example": "遇到不认识的词，可以查词典。"
+  },
+  {
+    "id": 341,
+    "chinese": "聪明",
+    "pinyin": "cōngming",
+    "burmese": "ဥာဏ်ကောင်းသည်။",
+    "mnemonic": "ချုံးမိန့်",
+    "example": "他是一个非常聪明的孩子。"
+  },
+  {
+    "id": 342,
+    "chinese": "打扫",
+    "pinyin": "dǎsǎo",
+    "burmese": "သန့်ရှင်းရေး လုပ်သည်။",
+    "mnemonic": "ဒါးဆောင်း",
+    "example": "我每个周末都会打扫房间。"
+  },
+  {
+    "id": 343,
+    "chinese": "打算",
+    "pinyin": "dǎsuàn",
+    "burmese": "စီစဉ်သည်။ ဆုံးဖြတ်သည်။",
+    "mnemonic": "ဒါးစွမ်း",
+    "example": "你周末有什么打算？"
+  },
+  {
+    "id": 344,
+    "chinese": "带",
+    "pinyin": "dài",
+    "burmese": "(တစ်တစ်ရာ)ကိုသယ်ဆောင်သည်။",
+    "mnemonic": "တိုက်",
+    "example": "出门的时候别忘了带钥匙。"
+  },
+  {
+    "id": 345,
+    "chinese": "担心",
+    "pinyin": "dānxīn",
+    "burmese": "စိတ်ပူသည်။",
+    "mnemonic": "တန်ရှင်း",
+    "example": "妈妈很担心你的身体。"
+  },
+  {
+    "id": 346,
+    "chinese": "蛋糕",
+    "pinyin": "dàngāo",
+    "burmese": "ကိတ်မုန့်။",
+    "mnemonic": "တန့်ကော",
+    "example": "祝你生日快乐，这是给你的蛋糕。"
+  },
+  {
+    "id": 347,
+    "chinese": "当然",
+    "pinyin": "dāngrán",
+    "burmese": "သေချာသည်။",
+    "mnemonic": "တန်ရမ်",
+    "example": "甲：你能帮我吗？乙：当然可以。"
+  },
+  {
+    "id": 348,
+    "chinese": "地",
+    "pinyin": "de",
+    "burmese": "မြေကြီး။ (နာမ်ပုဒ်၊ သရုပ်ပြ ပုဒ်)။",
+    "mnemonic": "တိ / တဲ့",
+    "example": "他高兴地笑了。"
+  },
+  {
+    "id": 349,
+    "chinese": "灯",
+    "pinyin": "dēng",
+    "burmese": "လျှပ်စစ်မီး။",
+    "mnemonic": "တန်",
+    "example": "天黑了，请把灯打开。"
+  },
+  {
+    "id": 350,
+    "chinese": "地方",
+    "pinyin": "dìfang",
+    "burmese": "နေရာ။",
+    "mnemonic": "တိဖန်",
+    "example": "你觉得这个地方怎么样？"
+  },
+  {
+    "id": 351,
+    "chinese": "地铁",
+    "pinyin": "dìtiě",
+    "burmese": "မြေအောက်ရထား။",
+    "mnemonic": "တိထျယ်",
+    "example": "我每天坐地铁去上班。"
+  },
+  {
+    "id": 352,
+    "chinese": "地图",
+    "pinyin": "dìtú",
+    "burmese": "မြေပုံ။",
+    "mnemonic": "တိထူ",
+    "example": "我的手机上有电子地图。"
+  },
+  {
+    "id": 353,
+    "chinese": "电梯",
+    "pinyin": "diàntī",
+    "burmese": "ဓာတ်လှေကား။",
+    "mnemonic": "တျန့်ထီ",
+    "example": "我们坐电梯上楼吧。"
+  },
+  {
+    "id": 354,
+    "chinese": "电子邮件",
+    "pinyin": "diànzǐ yóujiàn",
+    "burmese": "အီးမေးလ်။",
+    "mnemonic": "တျန့်စ့်ယိုကျန့်",
+    "example": "我昨天给你发了一封电子邮件。"
+  },
+  {
+    "id": 355,
+    "chinese": "东",
+    "pinyin": "dōng",
+    "burmese": "အရှေ့အရပ်။",
+    "mnemonic": "တုံး",
+    "example": "太阳从东边升起。"
+  },
+  {
+    "id": 356,
+    "chinese": "冬",
+    "pinyin": "dōng",
+    "burmese": "ဆောင်းရာသီ။",
+    "mnemonic": "တုံး",
+    "example": "我最喜欢的季节是冬天。"
+  },
+  {
+    "id": 357,
+    "chinese": "动物",
+    "pinyin": "dòngwù",
+    "burmese": "တိရစ္ဆာန်။",
+    "mnemonic": "တုံးဝူ",
+    "example": "动物园里有很多可爱的动物。"
+  },
+  {
+    "id": 358,
+    "chinese": "短",
+    "pinyin": "duǎn",
+    "burmese": "တိုသော။ မကြာခဏ။",
+    "mnemonic": "တွမ်",
+    "example": "这条裤子太短了。"
+  },
+  {
+    "id": 359,
+    "chinese": "段",
+    "pinyin": "duàn",
+    "burmese": "တစ်ပိုင်း။ တစ်ရွတ်။",
+    "mnemonic": "တွန့်",
+    "example": "这段时间我非常忙。"
+  },
+  {
+    "id": 360,
+    "chinese": "锻炼",
+    "pinyin": "duànliàn",
+    "burmese": "လေ့ကျင့်ခန်း လုပ်သည်။ လေ့ကျင့်သည်။",
+    "mnemonic": "တွန့်လျန့်",
+    "example": "为了身体健康，我们应该多锻炼。"
+  },
+  {
+    "id": 361,
+    "chinese": "多么",
+    "pinyin": "duōme",
+    "burmese": "ဘယ်လောက်လဲ။",
+    "mnemonic": "တောမာ",
+    "example": "这里的风景多么美啊！"
+  },
+  {
+    "id": 362,
+    "chinese": "饿",
+    "pinyin": "è",
+    "burmese": "ဗိုက်ဆာသည်။",
+    "mnemonic": "အာ",
+    "example": "我饿了，我们去吃饭吧。"
+  },
+  {
+    "id": 363,
+    "chinese": "耳朵",
+    "pinyin": "ěrduo",
+    "burmese": "နားရွက်။",
+    "mnemonic": "အာတော",
+    "example": "兔子的耳朵很长。"
+  },
+  {
+    "id": 364,
+    "chinese": "发",
+    "pinyin": "fā",
+    "burmese": "ပေးပို့သည်။",
+    "mnemonic": "ဖာ / ဖာ",
+    "example": "请把文件发给我。"
+  },
+  {
+    "id": 365,
+    "chinese": "发烧",
+    "pinyin": "fāshāo",
+    "burmese": "အဖျားတက်သည်။",
+    "mnemonic": "ဖာရှော",
+    "example": "他昨天晚上开始发烧了。"
+  },
+  {
+    "id": 366,
+    "chinese": "发现",
+    "pinyin": "fāxiàn",
+    "burmese": "ရှာဖွေတွေ့ရှိသည်။",
+    "mnemonic": "ဖာရှန့်",
+    "example": "我发现我的钱包不见了。"
+  },
+  {
+    "id": 367,
+    "chinese": "方便",
+    "pinyin": "fāngbiàn",
+    "burmese": "အဆင်ပြေသော။",
+    "mnemonic": "ဖန်ပန့်",
+    "example": "现在用手机支付非常方便。"
+  },
+  {
+    "id": 368,
+    "chinese": "放",
+    "pinyin": "fàng",
+    "burmese": "ထားသည်။ လွှတ်သည်။",
+    "mnemonic": "ဖန့်",
+    "example": "我把书放在桌子上了。"
+  },
+  {
+    "id": 369,
+    "chinese": "放心",
+    "pinyin": "fàngxīn",
+    "burmese": "စိတ်ချပါပြီ။",
+    "mnemonic": "ဖန့်ရှင်း",
+    "example": "你放心吧，这件事我会处理好的。"
+  },
+  {
+    "id": 370,
+    "chinese": "分",
+    "pinyin": "fēn",
+    "burmese": "မိနစ်။ (ပိုက်ဆံ) (ကွဲပြားသည်)၊ ဖြင့်၊ အမှတ်။",
+    "mnemonic": "ဖန် / ဖန့်",
+    "example": "现在是八点十分。"
+  },
+  {
+    "id": 371,
+    "chinese": "附近",
+    "pinyin": "fùjìn",
+    "burmese": "အနီးအနား။",
+    "mnemonic": "ဖူကျင့်",
+    "example": "这附近有银行吗？"
+  },
+  {
+    "id": 372,
+    "chinese": "复习",
+    "pinyin": "fùxí",
+    "burmese": "(စာ) ပြန်လည်လေ့ကျင့်သည်။",
+    "mnemonic": "ဖူရှိ",
+    "example": "考试前，我们需要好好复习。"
+  },
+  {
+    "id": 373,
+    "chinese": "干净",
+    "pinyin": "gānjìng",
+    "burmese": "သန့်ရှင်းသော။",
+    "mnemonic": "ကန်ကျင့်",
+    "example": "请把桌子擦干净。"
+  },
+  {
+    "id": 374,
+    "chinese": "感冒",
+    "pinyin": "gǎnmào",
+    "burmese": "ဖျားနာသည်။",
+    "mnemonic": "ကန်မောက်",
+    "example": "天气冷了，小心感冒。"
+  },
+  {
+    "id": 375,
+    "chinese": "感兴趣",
+    "pinyin": "gǎn xìngqù",
+    "burmese": "စိတ်ဝင်စားသည်။",
+    "mnemonic": "ကန်ဆင့်ချွီ",
+    "example": "我对中国历史很感兴趣。"
+  },
+  {
+    "id": 376,
+    "chinese": "刚才",
+    "pinyin": "gāngcái",
+    "burmese": "အခုလေးတင်။",
+    "mnemonic": "ကန်ချိုက်",
+    "example": "刚才给你打电话的人是谁？"
+  },
+  {
+    "id": 377,
+    "chinese": "个子",
+    "pinyin": "gèzi",
+    "burmese": "(အမြင့်၊ တစ်ကိုယ်လုံး အရပ်) (တစ်စုံတစ်ရာ)",
+    "mnemonic": "ကဲစ့်",
+    "example": "他的个子很高。"
+  },
+  {
+    "id": 378,
+    "chinese": "根据",
+    "pinyin": "gēnjù",
+    "burmese": "(ဥပဒေ)အရ။ (တစ်စုံတစ်ရာ)ကို အခြေခံပြီး။",
+    "mnemonic": "ကန်ကျူ",
+    "example": "根据天气预报，明天会下雨。"
+  },
+  {
+    "id": 379,
+    "chinese": "跟",
+    "pinyin": "gēn",
+    "burmese": "(နောက်)၊ လိုက်သည်။",
+    "mnemonic": "ကန်",
+    "example": "周末你愿意跟我一起去看电影吗？"
+  },
+  {
+    "id": 380,
+    "chinese": "更",
+    "pinyin": "gèng",
+    "burmese": "ထပ်မံ။",
+    "mnemonic": "ကန်",
+    "example": "他跑得比我更快。"
+  },
+  {
+    "id": 381,
+    "chinese": "公斤",
+    "pinyin": "gōngjīn",
+    "burmese": "ကီလိုဂရမ်။",
+    "mnemonic": "ကုံးကျင့်",
+    "example": "这个西瓜有五公斤重。"
+  },
+  {
+    "id": 382,
+    "chinese": "公园",
+    "pinyin": "gōngyuán",
+    "burmese": "ပန်းခြံ။",
+    "mnemonic": "ကုံးယွမ်",
+    "example": "吃完晚饭，我们去公园散步吧。"
+  },
+  {
+    "id": 383,
+    "chinese": "故事",
+    "pinyin": "gùshi",
+    "burmese": "ပုံပြင်။",
+    "mnemonic": "ကူရှိ",
+    "example": "睡觉前，妈妈喜欢给我讲故事。"
+  },
+  {
+    "id": 384,
+    "chinese": "刮风",
+    "pinyin": "guāfēng",
+    "burmese": "လေပြင်းတိုက်သည်။",
+    "mnemonic": "ကွါဖုံး",
+    "example": "今天外面刮风了，你多穿件衣服。"
+  },
+  {
+    "id": 385,
+    "chinese": "关",
+    "pinyin": "guān",
+    "burmese": "ပိတ်သည်။",
+    "mnemonic": "ကွမ်း",
+    "example": "出去的时候请把门关上。"
+  },
+  {
+    "id": 386,
+    "chinese": "关系",
+    "pinyin": "guānxì",
+    "burmese": "ပတ်သက်သည်။",
+    "mnemonic": "ကွမ်းရှိ",
+    "example": "我和他的关系很好。"
+  },
+  {
+    "id": 387,
+    "chinese": "关心",
+    "pinyin": "guānxīn",
+    "burmese": "ဂရုစိုက်သည်။",
+    "mnemonic": "ကွမ်းရှင်း",
+    "example": "谢谢你的关心，我的身体好多了。"
+  },
+  {
+    "id": 388,
+    "chinese": "关于",
+    "pinyin": "guānyú",
+    "burmese": "ပတ်သက်။",
+    "mnemonic": "ကွမ်းယွီ",
+    "example": "关于这个问题，我们需要开会讨论一下。"
+  },
+  {
+    "id": 389,
+    "chinese": "国家",
+    "pinyin": "guójiā",
+    "burmese": "နိုင်ငံ။",
+    "mnemonic": "ကောကျား",
+    "example": "我爱我的国家。"
+  },
+  {
+    "id": 390,
+    "chinese": "过",
+    "pinyin": "guò",
+    "burmese": "ကျော်ဖြတ်သည်။ ပြီးဆုံးပြီ။ (အသုံးအနှုန်း)။",
+    "mnemonic": "ကော",
+    "example": "你以前来过这里吗？"
+  },
+  {
+    "id": 391,
+    "chinese": "过去",
+    "pinyin": "guòqù",
+    "burmese": "ပြီးခဲ့သော။",
+    "mnemonic": "ကောချွီ",
+    "example": "过去的事情就让它过去吧。"
+  },
+  {
+    "id": 392,
+    "chinese": "还是",
+    "pinyin": "háishi",
+    "burmese": "သို့မဟုတ် (ရွေးချယ်ရန်)။",
+    "mnemonic": "ဟိုက်ရှိ",
+    "example": "你喜欢喝茶还是咖啡？"
+  },
+  {
+    "id": 393,
+    "chinese": "害怕",
+    "pinyin": "hàipà",
+    "burmese": "ကြောက်သည်။",
+    "mnemonic": "ဟိုက်ပါ",
+    "example": "我有点害怕一个人走夜路。"
+  },
+  {
+    "id": 394,
+    "chinese": "黑板",
+    "pinyin": "hēibǎn",
+    "burmese": "ကျောက်သင်ပုန်း။",
+    "mnemonic": "ဟေးပန်",
+    "example": "老师把今天的作业写在黑板上了。"
+  },
+  {
+    "id": 395,
+    "chinese": "后来",
+    "pinyin": "hòulái",
+    "burmese": "နောက်ပိုင်း။",
+    "mnemonic": "ဟိုးလိုက်",
+    "example": "我们先去了商店，后来又去了公园。"
+  },
+  {
+    "id": 396,
+    "chinese": "护照",
+    "pinyin": "hùzhào",
+    "burmese": "ပတ်စ်ပို့။",
+    "mnemonic": "ဟူကျောက်",
+    "example": "出国旅游别忘了带护照。"
+  },
+  {
+    "id": 397,
+    "chinese": "花",
+    "pinyin": "huā",
+    "burmese": "ပန်း။",
+    "mnemonic": "ဟွား",
+    "example": "春天来了，公园里的花都开了。"
+  },
+  {
+    "id": 398,
+    "chinese": "画",
+    "pinyin": "huà",
+    "burmese": "ပန်းချီ။",
+    "mnemonic": "ဟွား",
+    "example": "我妹妹喜欢画画。"
+  },
+  {
+    "id": 399,
+    "chinese": "坏",
+    "pinyin": "huài",
+    "burmese": "မကောင်းသော။ ပျက်စီးသော။",
+    "mnemonic": "ဟွိုက်",
+    "example": "这个苹果坏了，不能吃了。"
+  },
+  {
+    "id": 400,
+    "chinese": "欢迎",
+    "pinyin": "huānyíng",
+    "burmese": "ကြိုဆိုသည်။",
+    "mnemonic": "ဟွမ်ယင်",
+    "example": "欢迎你来我家玩。"
+  },
+  {
+    "id": 401,
+    "chinese": "还",
+    "pinyin": "huán",
+    "burmese": "တန်းတူ။ ပြန်ပေးသည်။",
+    "mnemonic": "ဟိုင်",
+    "example": "我明天把钱还给你。"
+  },
+  {
+    "id": 402,
+    "chinese": "环境",
+    "pinyin": "huánjìng",
+    "burmese": "ပတ်ဝန်းကျင်။",
+    "mnemonic": "ဟွမ်ကျင့်",
+    "example": "这里的环境很好，很安静。"
+  },
+  {
+    "id": 403,
+    "chinese": "换",
+    "pinyin": "huàn",
+    "burmese": "လဲလှယ်သည်။ အစားထိုးသည်။",
+    "mnemonic": "ဟွမ်",
+    "example": "我想换一件大一点儿的衣服。"
+  },
+  {
+    "id": 404,
+    "chinese": "黄河",
+    "pinyin": "Huánghé",
+    "burmese": "မြစ်ဝါမြစ်။",
+    "mnemonic": "ဟွမ်ဟာ",
+    "example": "黄河是中国的第二大河。"
+  },
+  {
+    "id": 405,
+    "chinese": "回答",
+    "pinyin": "huídá",
+    "burmese": "ပြန်ဖြေသည်။",
+    "mnemonic": "ဟွေဒါ",
+    "example": "请你回答老师的问题。"
+  },
+  {
+    "id": 406,
+    "chinese": "会议",
+    "pinyin": "huìyì",
+    "burmese": "အစည်းအဝေး။",
+    "mnemonic": "ဟွေယိ",
+    "example": "我们下午三点有一个会议。"
+  },
+  {
+    "id": 407,
+    "chinese": "或者",
+    "pinyin": "huòzhě",
+    "burmese": "သို့မဟုတ်။ ဖြစ်နိုင်သည်။",
+    "mnemonic": "ဟွိုကျယ်",
+    "example": "你想喝茶或者咖啡？"
+  },
+  {
+    "id": 408,
+    "chinese": "几乎",
+    "pinyin": "jīhū",
+    "burmese": "နီးပါး။",
+    "mnemonic": "ကျီဟူ",
+    "example": "我几乎忘了今天的会议。"
+  },
+  {
+    "id": 409,
+    "chinese": "机会",
+    "pinyin": "jīhuì",
+    "burmese": "အခွင့်အရေး။",
+    "mnemonic": "ကျီဟွေ",
+    "example": "这是一个很好的学习机会。"
+  },
+  {
+    "id": 410,
+    "chinese": "极",
+    "pinyin": "jí",
+    "burmese": "အစွန်အဖျား။",
+    "mnemonic": "ကျိ",
+    "example": "这里的风景好极了。"
+  },
+  {
+    "id": 411,
+    "chinese": "记得",
+    "pinyin": "jìde",
+    "burmese": "မှတ်မိသည်။",
+    "mnemonic": "ကျိတဲ",
+    "example": "你还记得我吗？"
+  },
+  {
+    "id": 412,
+    "chinese": "季节",
+    "pinyin": "jìjié",
+    "burmese": "ဥတုရာသီ။",
+    "mnemonic": "ကျိကျယ်",
+    "example": "一年有四个季节：春、夏、秋、冬。"
+  },
+  {
+    "id": 413,
+    "chinese": "检查",
+    "pinyin": "jiǎnchá",
+    "burmese": "စစ်ဆေးသည်။",
+    "mnemonic": "ကျန့်ချာ",
+    "example": "出门前，请检查一下门窗是否关好。"
+  },
+  {
+    "id": 414,
+    "chinese": "简单",
+    "pinyin": "jiǎndān",
+    "burmese": "ရိုးရှင်းသော။",
+    "mnemonic": "ကျန်တန်",
+    "example": "这个问题很简单，我马上就能回答。"
+  },
+  {
+    "id": 415,
+    "chinese": "见面",
+    "pinyin": "jiànmiàn",
+    "burmese": "မျက်နှာချင်းဆိုင် တွေ့သည်။",
+    "mnemonic": "ကျန့်မျန့်",
+    "example": "我们明天下午三点在咖啡馆见面吧。"
+  },
+  {
+    "id": 416,
+    "chinese": "健康",
+    "pinyin": "jiànkāng",
+    "burmese": "ကျန်းမာသည်။",
+    "mnemonic": "ကျန့်ခန်",
+    "example": "祝你身体健康！"
+  },
+  {
+    "id": 417,
+    "chinese": "讲",
+    "pinyin": "jiǎng",
+    "burmese": "စကားပြောသည်။ ရှင်းပြသည်။",
+    "mnemonic": "ကျန်",
+    "example": "老师正在给我们讲一个有趣的故事。"
+  },
+  {
+    "id": 418,
+    "chinese": "教",
+    "pinyin": "jiāo",
+    "burmese": "သင်ကြားသည်။",
+    "mnemonic": "ကျောက်",
+    "example": "王老师教我们数学。"
+  },
+  {
+    "id": 419,
+    "chinese": "角",
+    "pinyin": "jiǎo",
+    "burmese": "ထောင့်။ (ငွေကြေး)။",
+    "mnemonic": "ကျောင်း",
+    "example": "这个苹果五角钱。"
+  },
+  {
+    "id": 420,
+    "chinese": "脚",
+    "pinyin": "jiǎo",
+    "burmese": "ခြေထောက်။",
+    "mnemonic": "ကျောင်း",
+    "example": "我的脚受伤了，不能走路。"
+  },
+  {
+    "id": 421,
+    "chinese": "接",
+    "pinyin": "jiē",
+    "burmese": "ဆက်သွယ်သည်။ ဖုန်းနံပါတ် သို့မဟုတ် (လူ) ကြိုဆိုသည်။",
+    "mnemonic": "ကျယ်",
+    "example": "下午我去机场接你。"
+  },
+  {
+    "id": 422,
+    "chinese": "街道",
+    "pinyin": "jiēdào",
+    "burmese": "လမ်း။",
+    "mnemonic": "ကျယ်တောက်",
+    "example": "这条街道很干净。"
+  },
+  {
+    "id": 423,
+    "chinese": "节目",
+    "pinyin": "jiémù",
+    "burmese": "အစီအစဉ်။",
+    "mnemonic": "ကျယ်မူ",
+    "example": "这个电视节目很受欢迎。"
+  },
+  {
+    "id": 424,
+    "chinese": "节日",
+    "pinyin": "jiérì",
+    "burmese": "ပွဲတော်။",
+    "mnemonic": "ကျယ်ရိ",
+    "example": "春节是中国最重要的节日。"
+  },
+  {
+    "id": 425,
+    "chinese": "结婚",
+    "pinyin": "jiéhūn",
+    "burmese": "မင်္ဂလာဆောင်သည်။",
+    "mnemonic": "ကျယ်ဟွန်",
+    "example": "他们打算明年结婚。"
+  },
+  {
+    "id": 426,
+    "chinese": "结束",
+    "pinyin": "jiéshù",
+    "burmese": "ပြီး။ (ပြီးဆုံးသည်။)",
+    "mnemonic": "ကျယ်ရှူ",
+    "example": "会议十一点半结束。"
+  },
+  {
+    "id": 427,
+    "chinese": "解决",
+    "pinyin": "jiějué",
+    "burmese": "ဖြေရှင်းသည်။",
+    "mnemonic": "ကျယ်ကျွဲ",
+    "example": "我们必须想办法解决这个问题。"
+  },
+  {
+    "id": 428,
+    "chinese": "借",
+    "pinyin": "jiè",
+    "burmese": "ချေးသည်။ ငှားသည်။",
+    "mnemonic": "ကျယ်",
+    "example": "我可以借你的笔用一下吗？"
+  },
+  {
+    "id": 429,
+    "chinese": "经常",
+    "pinyin": "jīngcháng",
+    "burmese": "အမြဲတမ်း။",
+    "mnemonic": "ကျင့်ချန်",
+    "example": "他经常去图书馆看书。"
+  },
+  {
+    "id": 430,
+    "chinese": "经过",
+    "pinyin": "jīngguò",
+    "burmese": "ဖြတ်သန်းသည်။",
+    "mnemonic": "ကျင့်ကော",
+    "example": "我每天上学都要经过这个公园。"
+  },
+  {
+    "id": 431,
+    "chinese": "经理",
+    "pinyin": "jīnglǐ",
+    "burmese": "မန်နေဂျာ။",
+    "mnemonic": "ကျင့်လိ",
+    "example": "王经理出差了，下周才回来。"
+  },
+  {
+    "id": 432,
+    "chinese": "久",
+    "pinyin": "jiǔ",
+    "burmese": "(အချိန်)ကြာသည်။",
+    "mnemonic": "ကျိုး",
+    "example": "好久不见，你最近怎么样？"
+  },
+  {
+    "id": 433,
+    "chinese": "旧",
+    "pinyin": "jiù",
+    "burmese": "အဟောင်း။ ဟောင်းနွမ်းသော။",
+    "mnemonic": "ကျို",
+    "example": "这件衣服太旧了，我不想穿了。"
+  },
+  {
+    "id": 434,
+    "chinese": "句子",
+    "pinyin": "jùzi",
+    "burmese": "ဝါကျ။",
+    "mnemonic": "ကျူစ့်",
+    "example": "请用这个词写一个句子。"
+  },
+  {
+    "id": 435,
+    "chinese": "决定",
+    "pinyin": "juédìng",
+    "burmese": "ဆုံးဖြတ်သည်။",
+    "mnemonic": "ကျွဲတင့်",
+    "example": "我决定明天去北京旅游。"
+  },
+  {
+    "id": 436,
+    "chinese": "可爱",
+    "pinyin": "kěài",
+    "burmese": "ချစ်စရာကောင်းသော။",
+    "mnemonic": "ခယ်အိုက်",
+    "example": "这只小猫真可爱！"
+  },
+  {
+    "id": 437,
+    "chinese": "渴",
+    "pinyin": "kě",
+    "burmese": "ရေငတ်သည်။",
+    "mnemonic": "ခယ်",
+    "example": "我渴了，想喝水。"
+  },
+  {
+    "id": 438,
+    "chinese": "刻",
+    "pinyin": "kè",
+    "burmese": "အချိန်တစ်ခု၊ ၁၅ မိနစ်။",
+    "mnemonic": "ခဲ",
+    "example": "现在是三点一刻。"
+  },
+  {
+    "id": 439,
+    "chinese": "客人",
+    "pinyin": "kèrén",
+    "burmese": "ဧည့်သည်။",
+    "mnemonic": "ခဲရန်",
+    "example": "家里来客人了，妈妈正在做饭。"
+  },
+  {
+    "id": 440,
+    "chinese": "空调",
+    "pinyin": "kōngtiáo",
+    "burmese": "အဲယားကွန်း။",
+    "mnemonic": "ခုံးထျောက်",
+    "example": "天气太热了，请把空调打开。"
+  },
+  {
+    "id": 441,
+    "chinese": "口",
+    "pinyin": "kǒu",
+    "burmese": "ပါးစပ်။ အပေါက်။",
+    "mnemonic": "ခို",
+    "example": "我们家一共三口人。"
+  },
+  {
+    "id": 442,
+    "chinese": "哭",
+    "pinyin": "kū",
+    "burmese": "ငိုသည်။",
+    "mnemonic": "ခူ",
+    "example": "那个小女孩为什么哭了？"
+  },
+  {
+    "id": 443,
+    "chinese": "裤子",
+    "pinyin": "kùzi",
+    "burmese": "ဘောင်းဘီ။",
+    "mnemonic": "ခူစ့်",
+    "example": "这条裤子有点儿长。"
+  },
+  {
+    "id": 444,
+    "chinese": "筷子",
+    "pinyin": "kuàizi",
+    "burmese": "တူ။",
+    "mnemonic": "ခွိုက်စ့်",
+    "example": "你会用筷子吃饭吗？"
+  },
+  {
+    "id": 445,
+    "chinese": "蓝",
+    "pinyin": "lán",
+    "burmese": "အပြာရောင်။",
+    "mnemonic": "လန်",
+    "example": "我喜欢蓝色的天空。"
+  },
+  {
+    "id": 446,
+    "chinese": "老",
+    "pinyin": "lǎo",
+    "burmese": "အိုသော။ ဟောင်းနွမ်းသော။",
+    "mnemonic": "လောင်း",
+    "example": "我的爷爷年纪很大了。"
+  },
+  {
+    "id": 447,
+    "chinese": "离开",
+    "pinyin": "líkāi",
+    "burmese": "ထွက်ခွာသည်။ ခွဲခွာသည်။",
+    "mnemonic": "လီခိုင်",
+    "example": "他已经离开北京去上海了。"
+  },
+  {
+    "id": 448,
+    "chinese": "礼物",
+    "pinyin": "lǐwù",
+    "burmese": "လက်ဆောင်။",
+    "mnemonic": "လိဝူ",
+    "example": "这是我送给你的生日礼物。"
+  },
+  {
+    "id": 449,
+    "chinese": "历史",
+    "pinyin": "lìshǐ",
+    "burmese": "သမိုင်း။",
+    "mnemonic": "လိရှိ",
+    "example": "我对中国历史很感兴趣。"
+  },
+  {
+    "id": 450,
+    "chinese": "脸",
+    "pinyin": "liǎn",
+    "burmese": "မျက်နှာ။",
+    "mnemonic": "လျန်",
+    "example": "她的脸红了。"
+  },
+  {
+    "id": 451,
+    "chinese": "练习",
+    "pinyin": "liànxí",
+    "burmese": "လေ့ကျင့်ခန်း။",
+    "mnemonic": "လျန့်ရှိ",
+    "example": "学好汉语需要多听多练习。"
+  },
+  {
+    "id": 452,
+    "chinese": "辆",
+    "pinyin": "liàng",
+    "burmese": "(ကား၊ စက်ဘီး)။",
+    "mnemonic": "လျန်",
+    "example": "这辆自行车是谁的？"
+  },
+  {
+    "id": 453,
+    "chinese": "聊天",
+    "pinyin": "liáotiān",
+    "burmese": "စကားပြောသည်။",
+    "mnemonic": "လျောက်ထျန့်",
+    "example": "我喜欢跟朋友聊天。"
+  },
+  {
+    "id": 454,
+    "chinese": "了解",
+    "pinyin": "liǎojiě",
+    "burmese": "နားလည်သည်။ သိသည်။ ကောင်းကောင်းသိသည်။",
+    "mnemonic": "လျောက်ကျယ်",
+    "example": "我很了解他，他不是那样的人。"
+  },
+  {
+    "id": 455,
+    "chinese": "邻居",
+    "pinyin": "línjū",
+    "burmese": "နီးစပ်ရာအိမ်နီးချင်း။",
+    "mnemonic": "လင်ကျူ",
+    "example": "我的邻居是一位医生。"
+  },
+  {
+    "id": 456,
+    "chinese": "留学",
+    "pinyin": "liúxué",
+    "burmese": "နိုင်ငံခြားမှာ ကျောင်းတက်သည်။",
+    "mnemonic": "လျိုရွှယ်",
+    "example": "他哥哥正在美国留学。"
+  },
+  {
+    "id": 457,
+    "chinese": "楼",
+    "pinyin": "lóu",
+    "burmese": "အထပ်။",
+    "mnemonic": "လို",
+    "example": "我家住在五楼。"
+  },
+  {
+    "id": 458,
+    "chinese": "绿",
+    "pinyin": "lǜ",
+    "burmese": "အစိမ်းရောင်။",
+    "mnemonic": "လွီ",
+    "example": "春天来了，树都变绿了。"
+  },
+  {
+    "id": 459,
+    "chinese": "马",
+    "pinyin": "mǎ",
+    "burmese": "မြင်း။",
+    "mnemonic": "မာ",
+    "example": "我喜欢骑马。"
+  },
+  {
+    "id": 460,
+    "chinese": "马上",
+    "pinyin": "mǎshàng",
+    "burmese": "ချက်ချင်း။",
+    "mnemonic": "မာရှန့်",
+    "example": "你等一下，我马上就来。"
+  },
+  {
+    "id": 461,
+    "chinese": "满意",
+    "pinyin": "mǎnyì",
+    "burmese": "ကျေနပ်သည်။",
+    "mnemonic": "မန်ယိ",
+    "example": "你对这个结果满意吗？"
+  },
+  {
+    "id": 462,
+    "chinese": "帽子",
+    "pinyin": "màozi",
+    "burmese": "ဦးထုပ်။",
+    "mnemonic": "မောက်စ့်",
+    "example": "外面风大，戴上帽子吧。"
+  },
+  {
+    "id": 463,
+    "chinese": "米",
+    "pinyin": "mǐ",
+    "burmese": "မီတာ။",
+    "mnemonic": "မိ",
+    "example": "他身高一米八。"
+  },
+  {
+    "id": 464,
+    "chinese": "面包",
+    "pinyin": "miànbāo",
+    "burmese": "ပေါင်မုန့်။",
+    "mnemonic": "မျန့်ပေါင်း",
+    "example": "我早饭喜欢吃面包和牛奶。"
+  },
+  {
+    "id": 465,
+    "chinese": "明白",
+    "pinyin": "míngbai",
+    "burmese": "ရှင်းရှင်းလင်းလင်း။ နားလည်သည်။",
+    "mnemonic": "မိန့်ပိုက်",
+    "example": "老师，我还不明白这个问题。"
+  },
+  {
+    "id": 466,
+    "chinese": "拿",
+    "pinyin": "ná",
+    "burmese": "ယူသည်။ ကိုင်သည်။ ဖမ်းသည်။ သိမ်းဆည်းသည်။",
+    "mnemonic": "နာ",
+    "example": "请帮我拿下那个杯子。"
+  },
+  {
+    "id": 467,
+    "chinese": "奶奶",
+    "pinyin": "nǎinai",
+    "burmese": "(ဖခင်ဘက်မှ) အဖွား။",
+    "mnemonic": "နိုက်နိုက်",
+    "example": "我奶奶今年八十岁了。"
+  },
+  {
+    "id": 468,
+    "chinese": "南",
+    "pinyin": "nán",
+    "burmese": "တောင်ဘက်။",
+    "mnemonic": "နန်",
+    "example": "我的家在中国的南方。"
+  },
+  {
+    "id": 469,
+    "chinese": "难",
+    "pinyin": "nán",
+    "burmese": "ခက်ခဲသော။",
+    "mnemonic": "နန်",
+    "example": "我觉得今天的考试有点儿难。"
+  },
+  {
+    "id": 470,
+    "chinese": "难过",
+    "pinyin": "nánguò",
+    "burmese": "စိတ်မကောင်းဖြစ်သည်။ အခက်အခဲကြုံတွေ့သည်။",
+    "mnemonic": "နန်ကော",
+    "example": "听到这个消息，我心里很难过。"
+  },
+  {
+    "id": 471,
+    "chinese": "年级",
+    "pinyin": "niánjí",
+    "burmese": "အတန်း။ (တက္ကသိုလ်) နှစ်။",
+    "mnemonic": "နျန့်ကျိ",
+    "example": "我弟弟现在上小学三年级。"
+  },
+  {
+    "id": 472,
+    "chinese": "年轻",
+    "pinyin": "niánqīng",
+    "burmese": "ငယ်ရွယ်သော။",
+    "mnemonic": "နျန့်ချင်း",
+    "example": "他看起来很年轻，不像四十岁的人。"
+  },
+  {
+    "id": 473,
+    "chinese": "鸟",
+    "pinyin": "niǎo",
+    "burmese": "ငှက်။",
+    "mnemonic": "နျောက်",
+    "example": "树上有很多鸟在唱歌。"
+  },
+  {
+    "id": 474,
+    "chinese": "努力",
+    "pinyin": "nǔlì",
+    "burmese": "ကြိုးစားသော။",
+    "mnemonic": "နူလိ",
+    "example": "只要努力，就一定能成功。"
+  },
+  {
+    "id": 475,
+    "chinese": "爬山",
+    "pinyin": "páshān",
+    "burmese": "တောင်တက်သည်။",
+    "mnemonic": "ပါးရှန်",
+    "example": "我们周末去爬山，怎么样？"
+  },
+  {
+    "id": 476,
+    "chinese": "盘子",
+    "pinyin": "pánzi",
+    "burmese": "ပန်းကန်။",
+    "mnemonic": "ပန်စ့်",
+    "example": "请把盘子洗干净。"
+  },
+  {
+    "id": 477,
+    "chinese": "胖",
+    "pinyin": "pàng",
+    "burmese": "ဝသော။",
+    "mnemonic": "ပန့်",
+    "example": "他最近吃得太多，长胖了。"
+  },
+  {
+    "id": 478,
+    "chinese": "皮鞋",
+    "pinyin": "píxié",
+    "burmese": "သားရေဖိနပ်။",
+    "mnemonic": "ပီရှယ်",
+    "example": "爸爸喜欢穿黑色的皮鞋。"
+  },
+  {
+    "id": 479,
+    "chinese": "啤酒",
+    "pinyin": "píjiǔ",
+    "burmese": "ဘီယာ။",
+    "mnemonic": "ပိကျိုး",
+    "example": "天气热的时候，喝点儿冰啤酒很舒服。"
+  },
+  {
+    "id": 480,
+    "chinese": "瓶子",
+    "pinyin": "píngzi",
+    "burmese": "ပုလင်း။",
+    "mnemonic": "ဖိန်စ့်",
+    "example": "桌子上有一个空瓶子。"
+  },
+  {
+    "id": 481,
+    "chinese": "其实",
+    "pinyin": "qíshí",
+    "burmese": "တကယ်တော့။",
+    "mnemonic": "ချီရှိ",
+    "example": "其实，我不太喜欢吃这个菜。"
+  },
+  {
+    "id": 482,
+    "chinese": "其他",
+    "pinyin": "qítā",
+    "burmese": "အခြား။",
+    "mnemonic": "ချီထာ",
+    "example": "我们班除了小明，其他同学都到了。"
+  },
+  {
+    "id": 483,
+    "chinese": "奇怪",
+    "pinyin": "qíguài",
+    "burmese": "အံ့သြဖွယ်။ ထူးခြားသော။",
+    "mnemonic": "ချီကွိုက်",
+    "example": "真奇怪，我的手机怎么不见了？"
+  },
+  {
+    "id": 484,
+    "chinese": "骑",
+    "pinyin": "qí",
+    "burmese": "(မြင်းစီး၊ စက်ဘီးစီး)။",
+    "mnemonic": "ချီ",
+    "example": "我每天骑自行车上班。"
+  },
+  {
+    "id": 485,
+    "chinese": "起飞",
+    "pinyin": "qǐfēi",
+    "burmese": "(လေယာဉ်) ပျံတက်သည်။",
+    "mnemonic": "ချီဖေ",
+    "example": "飞机马上就要起飞了。"
+  },
+  {
+    "id": 486,
+    "chinese": "起来",
+    "pinyin": "qǐlai",
+    "burmese": "(မတ်တပ်ရပ်)၊ စတင်သည်။",
+    "mnemonic": "ချီလိုက်",
+    "example": "天亮了，快起来吧！"
+  },
+  {
+    "id": 487,
+    "chinese": "清楚",
+    "pinyin": "qīngchu",
+    "burmese": "ရှင်းရှင်းလင်းလင်း။",
+    "mnemonic": "ချင်းချူ",
+    "example": "我说的话你听清楚了吗？"
+  },
+  {
+    "id": 488,
+    "chinese": "请假",
+    "pinyin": "qǐngjià",
+    "burmese": "ခွင့်ယူသည်။",
+    "mnemonic": "ချင့်ကျား",
+    "example": "我今天生病了，想请一天假。"
+  },
+  {
+    "id": 489,
+    "chinese": "秋",
+    "pinyin": "qiū",
+    "burmese": "ဆောင်းဦးရာသီ။",
+    "mnemonic": "ချို",
+    "example": "秋天是北京最美的季节。"
+  },
+  {
+    "id": 490,
+    "chinese": "裙子",
+    "pinyin": "qúnzi",
+    "burmese": "စကတ်။",
+    "mnemonic": "ချွမ်စ့်",
+    "example": "姐姐新买了一条漂亮的裙子。"
+  },
+  {
+    "id": 491,
+    "chinese": "然后",
+    "pinyin": "ránhòu",
+    "burmese": "အဲဒီနောက်။ နောက်ပိုင်းတွင်။",
+    "mnemonic": "ရန်ဟို",
+    "example": "我先做作业，然后再看电视。"
+  },
+  {
+    "id": 492,
+    "chinese": "热情",
+    "pinyin": "rèqíng",
+    "burmese": "နွေးထွေးသော။",
+    "mnemonic": "ရယ်ချင်း",
+    "example": "这里的人都很热情。"
+  },
+  {
+    "id": 493,
+    "chinese": "认为",
+    "pinyin": "rènwéi",
+    "burmese": "ယူဆသည်။",
+    "mnemonic": "ရန်ဝေ",
+    "example": "我认为这个计划很好。"
+  },
+  {
+    "id": 494,
+    "chinese": "认真",
+    "pinyin": "rènzhēn",
+    "burmese": "အလေးအနက်ထားသော။",
+    "mnemonic": "ရန်ကျန်",
+    "example": "他学习非常认真。"
+  },
+  {
+    "id": 495,
+    "chinese": "容易",
+    "pinyin": "róngyì",
+    "burmese": "လွယ်ကူသော။",
+    "mnemonic": "ရုန်ယိ",
+    "example": "这个问题很容易回答。"
+  },
+  {
+    "id": 496,
+    "chinese": "如果",
+    "pinyin": "rúguǒ",
+    "burmese": "တကယ်လို့။",
+    "mnemonic": "ရူကော",
+    "example": "如果明天不下雨，我们就去公园。"
+  },
+  {
+    "id": 497,
+    "chinese": "伞",
+    "pinyin": "sǎn",
+    "burmese": "ထီး။",
+    "mnemonic": "စန်",
+    "example": "外面下雨了，别忘了带伞。"
+  },
+  {
+    "id": 498,
+    "chinese": "上网",
+    "pinyin": "shàngwǎng",
+    "burmese": "အင်တာနက်သုံးသည်။",
+    "mnemonic": "ရှန့်ဝမ်",
+    "example": "我每天晚上都会上网看新闻。"
+  },
+  {
+    "id": 499,
+    "chinese": "生气",
+    "pinyin": "shēngqì",
+    "burmese": "စိတ်ဆိုးသည်။",
+    "mnemonic": "ရှန်ချိ",
+    "example": "你为什么生气了？"
+  },
+  {
+    "id": 500,
+    "chinese": "声音",
+    "pinyin": "shēngyīn",
+    "burmese": "အသံ။",
+    "mnemonic": "ရှန်ယင်",
+    "example": "我听到了一个奇怪的声音。"
+  },
+  {
+    "id": 501,
+    "chinese": "世界",
+    "pinyin": "shìjiè",
+    "burmese": "ကမ္ဘာ။",
+    "mnemonic": "ရှိကျယ်",
+    "example": "这个世界很大，我想去看看。"
+  },
+  {
+    "id": 502,
+    "chinese": "试",
+    "pinyin": "shì",
+    "burmese": "စမ်းသပ်သည်။ စမ်းကြည့်။",
+    "mnemonic": "ရှိ",
+    "example": "这件衣服很漂亮，你可以试一下。"
+  },
+  {
+    "id": 503,
+    "chinese": "瘦",
+    "pinyin": "shòu",
+    "burmese": "ပိန်သော။",
+    "mnemonic": "ရှောက်",
+    "example": "你最近瘦了很多，要注意身体。"
+  },
+  {
+    "id": 504,
+    "chinese": "叔叔",
+    "pinyin": "shūshu",
+    "burmese": "(ဖခင်ဘက်မှ) ဦးလေး။",
+    "mnemonic": "ရှူရှူ",
+    "example": "我叔叔是一位医生。"
+  },
+  {
+    "id": 505,
+    "chinese": "舒服",
+    "pinyin": "shūfu",
+    "burmese": "သက်သောင့်သက်သာ။",
+    "mnemonic": "ရှူဖု",
+    "example": "今天天气很好，很舒服。"
+  },
+  {
+    "id": 506,
+    "chinese": "树",
+    "pinyin": "shù",
+    "burmese": "သစ်ပင်။",
+    "mnemonic": "ရှူ",
+    "example": "公园里有很多高大的树。"
+  },
+  {
+    "id": 507,
+    "chinese": "数学",
+    "pinyin": "shùxué",
+    "burmese": "သင်္ချာ။",
+    "mnemonic": "ရှူရွှယ်",
+    "example": "我对数学很感兴趣。"
+  },
+  {
+    "id": 508,
+    "chinese": "刷牙",
+    "pinyin": "shuāyá",
+    "burmese": "သွားတိုက်သည်။",
+    "mnemonic": "ရွါယာ",
+    "example": "睡觉前要记得刷牙。"
+  },
+  {
+    "id": 509,
+    "chinese": "双",
+    "pinyin": "shuāng",
+    "burmese": "တစ်စုံ။",
+    "mnemonic": "ရွှမ်း",
+    "example": "我买了一双新鞋。"
+  },
+  {
+    "id": 510,
+    "chinese": "水平",
+    "pinyin": "shuǐpíng",
+    "burmese": "အဆင့်အတန်း။ အဆင့်။",
+    "mnemonic": "ရွှေ ဖိန်",
+    "example": "他的汉语水平很高。"
+  },
+  {
+    "id": 511,
+    "chinese": "司机",
+    "pinyin": "sījī",
+    "burmese": "ကားဆရာ။",
+    "mnemonic": "စီးကျီး",
+    "example": "司机先生，请在这里停车。"
+  },
+  {
+    "id": 512,
+    "chinese": "太阳",
+    "pinyin": "tàiyáng",
+    "burmese": "နေ။",
+    "mnemonic": "ထိုက်ယန်",
+    "example": "今天的太阳很好。"
+  },
+  {
+    "id": 513,
+    "chinese": "特别",
+    "pinyin": "tèbié",
+    "burmese": "ထူးခြားသော။",
+    "mnemonic": "ထယ်ပျဲ",
+    "example": "我特别喜欢吃中国菜。"
+  },
+  {
+    "id": 514,
+    "chinese": "疼",
+    "pinyin": "téng",
+    "burmese": "နာသည်။",
+    "mnemonic": "ထန်",
+    "example": "我的头有点儿疼。"
+  },
+  {
+    "id": 515,
+    "chinese": "提高",
+    "pinyin": "tígāo",
+    "burmese": "မြှင့်တင်သည်။ မြင့်တင်သည်။",
+    "mnemonic": "ထီကော",
+    "example": "为了提高汉语水平，我每天都学习。"
+  },
+  {
+    "id": 516,
+    "chinese": "体育",
+    "pinyin": "tǐyù",
+    "burmese": "အားကစား။",
+    "mnemonic": "ထီယွီ",
+    "example": "我喜欢上体育课。"
+  },
+  {
+    "id": 517,
+    "chinese": "甜",
+    "pinyin": "tián",
+    "burmese": "ချိုသည်။",
+    "mnemonic": "ထျန်",
+    "example": "这个西瓜很甜。"
+  },
+  {
+    "id": 518,
+    "chinese": "条",
+    "pinyin": "tiáo",
+    "burmese": "(တစ်ခု)။",
+    "mnemonic": "ထျောက်",
+    "example": "这条裤子太长了。"
+  },
+  {
+    "id": 519,
+    "chinese": "同事",
+    "pinyin": "tóngshì",
+    "burmese": "လုပ်ဖော်ကိုင်ဖက်။",
+    "mnemonic": "ထုံးရှိ",
+    "example": "我和同事们的关系很好。"
+  },
+  {
+    "id": 520,
+    "chinese": "同意",
+    "pinyin": "tóngyì",
+    "burmese": "သဘောတူသည်။",
+    "mnemonic": "ထုံးယိ",
+    "example": "我同意你的看法。"
+  },
+  {
+    "id": 521,
+    "chinese": "头发",
+    "pinyin": "tóufa",
+    "burmese": "ဆံပင်။",
+    "mnemonic": "ထိုးဖာ",
+    "example": "她的头发又黑又长。"
+  },
+  {
+    "id": 522,
+    "chinese": "突然",
+    "pinyin": "tūrán",
+    "burmese": "ရုတ်တရက်။",
+    "mnemonic": "ထူရမ်",
+    "example": "天突然下起了大雨。"
+  },
+  {
+    "id": 523,
+    "chinese": "图书馆",
+    "pinyin": "túshūguǎn",
+    "burmese": "စာကြည့်တိုက်။",
+    "mnemonic": "ထူရှူကွမ်း",
+    "example": "我下午要去图书馆还书。"
+  },
+  {
+    "id": 524,
+    "chinese": "腿",
+    "pinyin": "tuǐ",
+    "burmese": "ခြေထောက်။",
+    "mnemonic": "ထွေ",
+    "example": "我的腿有点儿酸。"
+  },
+  {
+    "id": 525,
+    "chinese": "完成",
+    "pinyin": "wánchéng",
+    "burmese": "ပြီးစီးသည်။",
+    "mnemonic": "ဝမ်ချန်",
+    "example": "你今天的作业完成了吗？"
+  },
+  {
+    "id": 526,
+    "chinese": "万",
+    "pinyin": "wàn",
+    "burmese": "တစ်သောင်း။",
+    "mnemonic": "ဝန့်",
+    "example": "这辆车要十万块钱。"
+  },
+  {
+    "id": 527,
+    "chinese": "碗",
+    "pinyin": "wǎn",
+    "burmese": "ပန်းကန်။",
+    "mnemonic": "ဝမ်",
+    "example": "请给我一个干净的碗。"
+  },
+  {
+    "id": 528,
+    "chinese": "忘记",
+    "pinyin": "wàngjì",
+    "burmese": "မေ့သွားသည်။",
+    "mnemonic": "ဝမ်ကျိ",
+    "example": "我忘记带钱包了。"
+  },
+  {
+    "id": 529,
+    "chinese": "为",
+    "pinyin": "wèi",
+    "burmese": "အတွက်။",
+    "mnemonic": "ဝေ",
+    "example": "我们都为你感到高兴。"
+  },
+  {
+    "id": 530,
+    "chinese": "为了",
+    "pinyin": "wèile",
+    "burmese": "အတွက်။",
+    "mnemonic": "ဝေလယ်",
+    "example": "为了健康，我们应该多运动。"
+  },
+  {
+    "id": 531,
+    "chinese": "位",
+    "pinyin": "wèi",
+    "burmese": "(တစ်နေရာ)။ (လူများအတွက် နေရာ)။",
+    "mnemonic": "ဝေ",
+    "example": "请问，您几位？"
+  },
+  {
+    "id": 532,
+    "chinese": "文化",
+    "pinyin": "wénhuà",
+    "burmese": "ယဉ်ကျေးမှု။",
+    "mnemonic": "ဝန်ဟွား",
+    "example": "我对中国文化很感兴趣。"
+  },
+  {
+    "id": 533,
+    "chinese": "西",
+    "pinyin": "xī",
+    "burmese": "အနောက်အရပ်။",
+    "mnemonic": "စီ",
+    "example": "太阳从西边落下。"
+  },
+  {
+    "id": 534,
+    "chinese": "习惯",
+    "pinyin": "xíguàn",
+    "burmese": "အလေ့အကျင့်။",
+    "mnemonic": "စီကွမ်း",
+    "example": "我已经习惯了这里的生活。"
+  },
+  {
+    "id": 535,
+    "chinese": "洗手间",
+    "pinyin": "xǐshǒujiān",
+    "burmese": "သန့်စင်ခန်း။",
+    "mnemonic": "စီရှောက်ကျန့်",
+    "example": "请问，洗手间在哪里？"
+  },
+  {
+    "id": 536,
+    "chinese": "洗澡",
+    "pinyin": "xǐzǎo",
+    "burmese": "ရေချိုးသည်။",
+    "mnemonic": "စီစောင်း",
+    "example": "我每天晚上都洗澡。"
+  },
+  {
+    "id": 537,
+    "chinese": "夏",
+    "pinyin": "xià",
+    "burmese": "နွေရာသီ။",
+    "mnemonic": "ရှာ",
+    "example": "夏天天气很热。"
+  },
+  {
+    "id": 538,
+    "chinese": "先",
+    "pinyin": "xiān",
+    "burmese": "အရင်၊ ရှေ့ဦးစွာ။",
+    "mnemonic": "ရှန်",
+    "example": "你先走，我一会儿就来。"
+  },
+  {
+    "id": 539,
+    "chinese": "相信",
+    "pinyin": "xiāngxìn",
+    "burmese": "ယုံကြည်သည်။",
+    "mnemonic": "ရှန်ရှင်း",
+    "example": "我相信你一定能成功。"
+  },
+  {
+    "id": 540,
+    "chinese": "香蕉",
+    "pinyin": "xiāngjiāo",
+    "burmese": "ငှက်ပျောသီး။",
+    "mnemonic": "ရှန်ကျောက်",
+    "example": "我喜欢吃香蕉。"
+  },
+  {
+    "id": 541,
+    "chinese": "向",
+    "pinyin": "xiàng",
+    "burmese": "ဦးတည်သည်။ လှည့်ပတ်သည်။ မျက်နှာမူသည်။",
+    "mnemonic": "ရှန်",
+    "example": "请向前走。"
+  },
+  {
+    "id": 542,
+    "chinese": "像",
+    "pinyin": "xiàng",
+    "burmese": "တူသည်။",
+    "mnemonic": "ရှန်",
+    "example": "他长得很像他爸爸。"
+  },
+  {
+    "id": 543,
+    "chinese": "小心",
+    "pinyin": "xiǎoxīn",
+    "burmese": "သတိထား။",
+    "mnemonic": "ရှောင်းရှင်း",
+    "example": "路上车多，走路要小心。"
+  },
+  {
+    "id": 544,
+    "chinese": "校长",
+    "pinyin": "xiàozhǎng",
+    "burmese": "ကျောင်းအုပ်ကြီး။",
+    "mnemonic": "ရှောက်ကျန်",
+    "example": "我们学校的校长姓王。"
+  },
+  {
+    "id": 545,
+    "chinese": "新闻",
+    "pinyin": "xīnwén",
+    "burmese": "သတင်း။",
+    "mnemonic": "စင်ဝန်",
+    "example": "我每天都看新闻联播。"
+  },
+  {
+    "id": 546,
+    "chinese": "新鲜",
+    "pinyin": "xīnxiān",
+    "burmese": "လတ်ဆတ်သော။",
+    "mnemonic": "စင်ရှန်",
+    "example": "这些水果很新鲜。"
+  },
+  {
+    "id": 547,
+    "chinese": "信用卡",
+    "pinyin": "xìnyòngkǎ",
+    "burmese": "အကြွေးဝယ်ကတ်။",
+    "mnemonic": "စင့်ယုန်ခါ",
+    "example": "你可以用信用卡支付。"
+  },
+  {
+    "id": 548,
+    "chinese": "行李箱",
+    "pinyin": "xínglixiāng",
+    "burmese": "ခရီးဆောင်အိတ်။",
+    "mnemonic": "ရှိန်လိရှန်",
+    "example": "我的行李箱太重了。"
+  },
+  {
+    "id": 549,
+    "chinese": "熊猫",
+    "pinyin": "xióngmāo",
+    "burmese": "ပန်ဒါဝက်ဝံ။",
+    "mnemonic": "ရှုံးမောင်း",
+    "example": "熊猫是中国的国宝。"
+  },
+  {
+    "id": 550,
+    "chinese": "需要",
+    "pinyin": "xūyào",
+    "burmese": "လိုအပ်သည်။",
+    "mnemonic": "ရှူယောက်",
+    "example": "我需要你的帮助。"
+  },
+  {
+    "id": 551,
+    "chinese": "选择",
+    "pinyin": "xuǎnzé",
+    "burmese": "ရွေးချယ်သည်။",
+    "mnemonic": "ရွှမ်စယ်",
+    "example": "你选择哪一个？"
+  },
+  {
+    "id": 552,
+    "chinese": "要求",
+    "pinyin": "yāoqiú",
+    "burmese": "လိုအပ်သောအရာ/အရည်အချင်း",
+    "mnemonic": "ယောက်ချို",
+    "example": "老师对我们的要求很高。"
+  },
+  {
+    "id": 553,
+    "chinese": "爷爷",
+    "pinyin": "yéye",
+    "burmese": "(ဖခင်ဘက်မှ) အဘိုး။",
+    "mnemonic": "ယယ်ယယ်",
+    "example": "我爷爷今年八十岁了。"
+  },
+  {
+    "id": 554,
+    "chinese": "一般",
+    "pinyin": "yībān",
+    "burmese": "သာမန်။",
+    "mnemonic": "ရီပန်",
+    "example": "我一般早上七点起床。"
+  },
+  {
+    "id": 555,
+    "chinese": "一边",
+    "pinyin": "yìbiān",
+    "burmese": "တစ်ဖက်တစ်ချက်။",
+    "mnemonic": "ရီပျန်",
+    "example": "他喜欢一边听音乐一边做作业。"
+  },
+  {
+    "id": 556,
+    "chinese": "一定",
+    "pinyin": "yídìng",
+    "burmese": "သေချာပါသည်။",
+    "mnemonic": "ရီတင့်",
+    "example": "明天我一定会来。"
+  },
+  {
+    "id": 557,
+    "chinese": "一共",
+    "pinyin": "yígòng",
+    "burmese": "စုစုပေါင်း။",
+    "mnemonic": "ရီကုံး",
+    "example": "我们班一共有三十个学生。"
+  },
+  {
+    "id": 558,
+    "chinese": "一会儿",
+    "pinyin": "yíhuìr",
+    "burmese": "တစ်ခဏ။",
+    "mnemonic": "ရီဟွေရ်",
+    "example": "请等我一会儿。"
+  },
+  {
+    "id": 559,
+    "chinese": "一样",
+    "pinyin": "yíyàng",
+    "burmese": "တူညီသည်။",
+    "mnemonic": "ရီယန်",
+    "example": "你的衣服跟我的不一样。"
+  },
+  {
+    "id": 560,
+    "chinese": "一直",
+    "pinyin": "yìzhí",
+    "burmese": "တစ်လျှောက်။",
+    "mnemonic": "ရီကျီ",
+    "example": "我一直很喜欢你。"
+  },
+  {
+    "id": 561,
+    "chinese": "以前",
+    "pinyin": "yǐqián",
+    "burmese": "အရင်က။",
+    "mnemonic": "ရီချန်",
+    "example": "我以前住在这里。"
+  },
+  {
+    "id": 562,
+    "chinese": "音乐",
+    "pinyin": "yīnyuè",
+    "burmese": "ဂီတ။",
+    "mnemonic": "ရင်ယွဲ့",
+    "example": "我喜欢听音乐。"
+  },
+  {
+    "id": 563,
+    "chinese": "银行",
+    "pinyin": "yínháng",
+    "burmese": "ဘဏ်။",
+    "mnemonic": "ရင်ဟန်",
+    "example": "这附近有银行吗？"
+  },
+  {
+    "id": 564,
+    "chinese": "饮料",
+    "pinyin": "yǐnliào",
+    "burmese": "အချိုရည်။",
+    "mnemonic": "ရင်လျောက်",
+    "example": "你想喝什么饮料？"
+  },
+  {
+    "id": 565,
+    "chinese": "应该",
+    "pinyin": "yīnggāi",
+    "burmese": "ဖြစ်သည်။ လုပ်သင့်သည်။",
+    "mnemonic": "ရင်ကိုက်",
+    "example": "我们应该互相帮助。"
+  },
+  {
+    "id": 566,
+    "chinese": "影响",
+    "pinyin": "yǐngxiǎng",
+    "burmese": "သက်ရောက်မှု။ လွှမ်းမိုးမှု။",
+    "mnemonic": "ယင်ရှန်",
+    "example": "请不要影响别人学习。"
+  },
+  {
+    "id": 567,
+    "chinese": "用",
+    "pinyin": "yòng",
+    "burmese": "သုံးသည်။",
+    "mnemonic": "ယုန်",
+    "example": "你会用筷子吗？"
+  },
+  {
+    "id": 568,
+    "chinese": "游戏",
+    "pinyin": "yóuxì",
+    "burmese": "ဂိမ်း။",
+    "mnemonic": "ရိုရှိ",
+    "example": "我喜欢玩电脑游戏。"
+  },
+  {
+    "id": 569,
+    "chinese": "有名",
+    "pinyin": "yǒumíng",
+    "burmese": "နာမည်ကြီးသော။",
+    "mnemonic": "ရိုမိန့်",
+    "example": "他是一位有名的作家。"
+  },
+  {
+    "id": 570,
+    "chinese": "又",
+    "pinyin": "yòu",
+    "burmese": "လည်း။ ထပ်ပြီး။",
+    "mnemonic": "ရို",
+    "example": "今天又下雨了。"
+  },
+  {
+    "id": 571,
+    "chinese": "遇到",
+    "pinyin": "yùdào",
+    "burmese": "ကြုံတွေ့သည်။",
+    "mnemonic": "ယွီတောက်",
+    "example": "我今天在街上遇到了一个老朋友。"
+  },
+  {
+    "id": 572,
+    "chinese": "元",
+    "pinyin": "yuán",
+    "burmese": "(ငွေကြေး)။",
+    "mnemonic": "ယွမ်",
+    "example": "这本书三十元。"
+  },
+  {
+    "id": 573,
+    "chinese": "愿意",
+    "pinyin": "yuànyì",
+    "burmese": "ဆန္ဒရှိသည်။",
+    "mnemonic": "ယွမ်ယိ",
+    "example": "你愿意和我一起去吗？"
+  },
+  {
+    "id": 574,
+    "chinese": "月亮",
+    "pinyin": "yuèliang",
+    "burmese": "လ။",
+    "mnemonic": "ယွဲ့လျန်",
+    "example": "今晚的月亮真圆。"
+  },
+  {
+    "id": 575,
+    "chinese": "越",
+    "pinyin": "yuè",
+    "burmese": "(ပို၍)။ ကျော်လွန်၍။",
+    "mnemonic": "ယွဲ့",
+    "example": "他越说越激动。"
+  },
+  {
+    "id": 576,
+    "chinese": "站",
+    "pinyin": "zhàn",
+    "burmese": "မှတ်တိုင်။ရပ်သည်။",
+    "mnemonic": "ကျန့်",
+    "example": "请站起来回答问题。"
+  },
+  {
+    "id": 577,
+    "chinese": "张",
+    "pinyin": "zhāng",
+    "burmese": "(တစ်ခု)။ (စာရွက်၊ စသည်တို့ကို ရေတွက်သော ယူနစ်)။",
+    "mnemonic": "ကျန်",
+    "example": "请给我一张纸。"
+  },
+  {
+    "id": 578,
+    "chinese": "着急",
+    "pinyin": "zháojí",
+    "burmese": "စိတ်ပူသည်။",
+    "mnemonic": "ကျောက်ကျိ",
+    "example": "别着急，慢慢说。"
+  },
+  {
+    "id": 579,
+    "chinese": "照顾",
+    "pinyin": "zhàogù",
+    "burmese": "စောင့်ရှောက်သည်။",
+    "mnemonic": "ကျောက်ကူ",
+    "example": "请帮我照顾一下我的小猫。"
+  },
+  {
+    "id": 580,
+    "chinese": "照片",
+    "pinyin": "zhàopiàn",
+    "burmese": "ဓာတ်ပုံ။",
+    "mnemonic": "ကျောက်ဖျန့်",
+    "example": "这张照片拍得真漂亮。"
+  },
+  {
+    "id": 581,
+    "chinese": "照相机",
+    "pinyin": "zhàoxiàngjī",
+    "burmese": "ကင်မရာ။",
+    "mnemonic": "ကျောက်ရှန်ကျီး",
+    "example": "我新买了一台照相机。"
+  },
+  {
+    "id": 582,
+    "chinese": "只",
+    "pinyin": "zhǐ",
+    "burmese": "(တစ်)။ (တစ်ခု)။",
+    "mnemonic": "ကျီ",
+    "example": "我只有十块钱了。"
+  },
+  {
+    "id": 583,
+    "chinese": "只有",
+    "pinyin": "zhǐyǒu",
+    "burmese": "(တစ်ခု)သာ။",
+    "mnemonic": "ကျီယို",
+    "example": "只有努力学习，才能取得好成绩。"
+  },
+  {
+    "id": 584,
+    "chinese": "才",
+    "pinyin": "cái",
+    "burmese": "(တစ်စုံတစ်ရာ)။ (ဒါ)၊ ပြီးမှ။",
+    "mnemonic": "ချိုက်",
+    "example": "他九点才来。"
+  },
+  {
+    "id": 585,
+    "chinese": "中间",
+    "pinyin": "zhōngjiān",
+    "burmese": "အလယ်။",
+    "mnemonic": "ကျုံးကျန့်",
+    "example": "我就站在他们两个中间。"
+  },
+  {
+    "id": 586,
+    "chinese": "中文",
+    "pinyin": "zhōngwén",
+    "burmese": "တရုတ်ဘာသာစကား။",
+    "mnemonic": "ကျုံးဝန်",
+    "example": "我会说一点儿中文。"
+  },
+  {
+    "id": 587,
+    "chinese": "终于",
+    "pinyin": "zhōngyú",
+    "burmese": "နောက်ဆုံးတွင်။",
+    "mnemonic": "ကျုံးယွီ",
+    "example": "我们终于完成了这个任务。"
+  },
+  {
+    "id": 588,
+    "chinese": "种",
+    "pinyin": "zhǒng",
+    "burmese": "အမျိုးအစား။",
+    "mnemonic": "ကျုံး",
+    "example": "你喜欢哪种颜色？"
+  },
+  {
+    "id": 589,
+    "chinese": "重要",
+    "pinyin": "zhòngyào",
+    "burmese": "အရေးကြီးသော။",
+    "mnemonic": "ကျုံးယောက်",
+    "example": "这是一个非常重要的会议。"
+  },
+  {
+    "id": 590,
+    "chinese": "周末",
+    "pinyin": "zhōumò",
+    "burmese": "စနေ၊ တနင်္ဂနွေ။",
+    "mnemonic": "ကျိုးမို",
+    "example": "你这个周末有什么安排？"
+  },
+  {
+    "id": 591,
+    "chinese": "主要",
+    "pinyin": "zhǔyào",
+    "burmese": "အဓိက။",
+    "mnemonic": "ကျူယောက်",
+    "example": "今天会议的主要内容是讨论明年的计划。"
+  },
+  {
+    "id": 592,
+    "chinese": "注意",
+    "pinyin": "zhùyì",
+    "burmese": "အာရုံစိုက်သည်။",
+    "mnemonic": "ကျူယိ",
+    "example": "请大家注意听。"
+  },
+  {
+    "id": 593,
+    "chinese": "自己",
+    "pinyin": "zìjǐ",
+    "burmese": "ကိုယ်တိုင်။",
+    "mnemonic": "စ့်ကျိ",
+    "example": "自己的事情自己做。"
+  },
+  {
+    "id": 594,
+    "chinese": "自行车",
+    "pinyin": "zìxíngchē",
+    "burmese": "စက်ဘီး။",
+    "mnemonic": "စ့်ရှိန်ချဲ",
+    "example": "我每天骑自行车上班。"
+  },
+  {
+    "id": 595,
+    "chinese": "总是",
+    "pinyin": "zǒngshì",
+    "burmese": "အမြဲတမ်း။ နောက်ဆုံးမှာတော့။",
+    "mnemonic": "စုံးရှိ",
+    "example": "他总是迟到。"
+  },
+  {
+    "id": 596,
+    "chinese": "嘴",
+    "pinyin": "zuǐ",
+    "burmese": "ပါးစပ်။",
+    "mnemonic": "စွေ",
+    "example": "他的嘴很大。"
+  },
+  {
+    "id": 597,
+    "chinese": "最后",
+    "pinyin": "zuìhòu",
+    "burmese": "နောက်ဆုံး။",
+    "mnemonic": "စွေဟို",
+    "example": "我们最后决定去北京。"
+  },
+  {
+    "id": 598,
+    "chinese": "最近",
+    "pinyin": "zuìjìn",
+    "burmese": "အခုလေးတင်/အနီးစပ်ဆုံး။",
+    "mnemonic": "စွေကျင့်",
+    "example": "你最近忙吗？"
+  },
+  {
+    "id": 600,
+    "chinese": "作业",
+    "pinyin": "zuòyè",
+    "burmese": "အိမ်စာ။",
+    "mnemonic": "စောယယ်",
+    "example": "今天的作业你做完了吗？"
+  }
+]
