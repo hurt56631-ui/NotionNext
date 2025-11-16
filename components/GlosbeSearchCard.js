@@ -1,9 +1,7 @@
-// /components/GlosbeSearchCard.js (或者你的文件名)
-
 import { useState, useEffect, useRef } from 'react';
-import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat } from 'lucide-react';
+import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
 
-// ✅ 采纳您提供的、稳定性极高的Prompt
+// ✅ 恢复您最初的中文 Prompt，并移除表情符号
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
 请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
@@ -22,72 +20,54 @@ const getAIPrompt = (word, fromLang, toLang) => `
 
 **通顺意译**，将句子翻译成符合${toLang === '缅甸语' ? '缅甸人' : '中国人'}日常表达习惯的、流畅自然的${toLang}。
 *   **[此处为加粗的${toLang}翻译]**
-*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${from-lang}，严禁使用英语或任何其他语言]
+*   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 `;
 
-// ✅ 【终极修复版】采纳您提供的、完全稳定的解析器
-const parseAIResponse = (rawText) => {
-    if (!rawText) return [];
+// ✅ 增强版、高容错的解析函数
+const parseAIResponse = (responseText) => {
+    if (!responseText) return [];
+    
+    // 使用更灵活的正则表达式匹配每个翻译块（无论有无表情符号）
+    const translationBlocks = responseText.split(/\*\*.*?\*\*.*?\n/g).slice(1);
+    const titles = responseText.match(/\*\*(.*?)\*\*/g);
 
-    // 统一格式：去除多余空格、替换不规则符号
-    const text = rawText
-        .replace(/\r/g, '')
-        .replace(/：/g, ':')
-        .replace(/【回译】/g, '回译:')
-        .replace(/\*\s+/g, '* ')
-        .replace(/- \*\*/g, '* **')
-        .trim();
-
-    // 四种翻译标题关键词
-    const titleKeywords = [
-        "自然直译版",
-        "口语版",
-        "自然意译版",
-        "通顺意译"
-    ];
-
-    const blocks = [];
-    let currentBlock = null;
-
-    text.split('\n').forEach(line => {
-        const cleanLine = line.trim();
-
-        // 匹配标题（支持各种格式：**标题**、标题:、标题）
-        const titleMatch = titleKeywords.find(t => cleanLine.includes(t));
-
-        if (titleMatch) {
-            if (currentBlock) blocks.push(currentBlock);
-            currentBlock = { title: titleMatch, lines: [] };
-        } else if (currentBlock && cleanLine) { // 只有在当前块存在且行不为空时才添加
-            currentBlock.lines.push(cleanLine);
-        }
-    });
-
-    if (currentBlock) blocks.push(currentBlock);
-
+    if (!translationBlocks || !titles || translationBlocks.length === 0) return [];
+    
     const results = [];
+    translationBlocks.forEach((block, index) => {
+        const lines = block.trim().split('\n');
+        const translationLine = lines.find(line => line.includes('*') && !line.includes('回译'));
+        const meaningLine = lines.find(line => line.includes('回译:'));
 
-    blocks.forEach(block => {
-        // 查找翻译行：优先找**加粗的，其次找*开头的，最后找非回译的第一行
-        const transLine = block.lines.find(l => l.includes('**')) || 
-                          block.lines.find(l => l.startsWith('*') && !l.toLowerCase().includes('回译')) ||
-                          block.lines.find(l => !l.toLowerCase().includes('回译'));
-        
-        // 查找回译行
-        const backLine = block.lines.find(l => l.toLowerCase().includes('回译'));
-
-        if (transLine && backLine) {
+        if (translationLine && meaningLine) {
             results.push({
-                title: block.title,
-                translation: transLine.replace(/^\*?\s*\**/, '').replace(/\*\*$/, '').trim(),
-                meaning: backLine.trim()
+                // 提取标题，去除**
+                title: titles[index]?.replace(/\*/g, '').trim(),
+                translation: translationLine.replace(/\*|\[|\]|-/g, '').trim(),
+                meaning: meaningLine.trim(),
             });
         }
     });
 
+    // 如果上述解析失败，尝试备用方案
+    if (results.length === 0) {
+        const sections = responseText.split(/\n\s*\n/);
+        sections.forEach(section => {
+             const titleMatch = section.match(/\*\*(.*?)\*\*/);
+             const translationMatch = section.match(/\*\s+\*\*(.*?)\*\*/);
+             const meaningMatch = section.match(/回译:\s*(.*)/);
+             if(titleMatch && translationMatch && meaningMatch) {
+                 results.push({
+                     title: titleMatch[1].trim(),
+                     translation: translationMatch[1].trim(),
+                     meaning: `回译: ${meaningMatch[1].trim()}`
+                 })
+             }
+        });
+    }
+
     return results;
 };
-
 
 // 语言检测辅助函数
 const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(text);
@@ -96,13 +76,9 @@ const GlosbeSearchCard = () => {
     const [word, setWord] = useState('');
     const [searchDirection, setSearchDirection] = useState('my2zh');
     const [isListening, setIsListening] = useState(false);
-    
-    // ✅ 修复：取消默认AI，默认使用Glosbe
-    const [useAI, setUseAI] = useState(false); 
-    
+    const [useAI, setUseAI] = useState(true);
     const [isAISearching, setIsAISearching] = useState(false);
-    const [aiResults, setAiResults] = useState([]); // 存储最终解析好的结果
-    const [streamingText, setStreamingText] = useState(''); // 存储实时流式文本
+    const [aiResults, setAiResults] = useState([]);
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -125,15 +101,12 @@ const GlosbeSearchCard = () => {
         }
     }, [word]);
 
-    // ✅ 自动切换翻译方向逻辑 (已存在且正确)
     useEffect(() => {
-        if (word) {
-            const detectedDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
-            if (detectedDirection !== searchDirection) {
-                setSearchDirection(detectedDirection);
-            }
+        const detectedDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
+        if (detectedDirection !== searchDirection) {
+            setSearchDirection(detectedDirection);
         }
-    }, [word, searchDirection]);
+    }, [word]);
 
     useEffect(() => {
         const savedSettings = localStorage.getItem('aiApiSettings_v9');
@@ -178,8 +151,7 @@ const GlosbeSearchCard = () => {
         }
 
         setIsAISearching(true);
-        setAiResults([]); // 清空旧的解析结果
-        setStreamingText(''); // 清空流式文本
+        setAiResults('');
         setAiError('');
 
         const currentDirection = containsChinese(trimmedWord) ? 'zh2my' : 'my2zh';
@@ -191,7 +163,9 @@ const GlosbeSearchCard = () => {
             model: apiModel,
             messages: [{ role: 'user', content: prompt }],
             stream: true,
-            // 思考模式参数可能因API而异，这里保持您的配置
+            generation_config: {
+                thinking_budget_tokens: apiSettings.disableThinking ? 0 : 1024
+            }
         };
 
         try {
@@ -213,9 +187,8 @@ const GlosbeSearchCard = () => {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value);
                 const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
-                
                 for (const line of lines) {
                     const jsonStr = line.replace(/^data: /, '');
                     if (jsonStr.includes('[DONE]')) continue;
@@ -224,27 +197,24 @@ const GlosbeSearchCard = () => {
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullResponse += delta;
-                            setStreamingText(fullResponse); // ✅ 只更新用于显示的流式文本
+                            setAiResults(fullResponse);
                         }
-                    } catch (e) { /* 忽略JSON解析错误 */ }
+                    } catch (e) { /* Ignore */ }
                 }
             }
             
-            // ✅ 流式结束后，使用稳定解析器进行最终解析
             const validResults = parseAIResponse(fullResponse);
-            if (validResults.length === 0 && fullResponse) {
+            if (validResults.length === 0) {
                 console.error("解析失败，原始输出: ", fullResponse);
-                throw new Error("AI未能按预期格式返回翻译。请检查Prompt或模型输出。");
+                throw new Error("AI未能按预期格式返回翻译和回译。");
             }
 
-            setAiResults(validResults); // 设置最终的、结构化的数据
-
+            setAiResults(validResults);
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
         } finally {
             setIsAISearching(false);
-            setStreamingText(''); // 清空临时流式文本
         }
     };
     
@@ -265,26 +235,20 @@ const GlosbeSearchCard = () => {
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
                 setWord(transcript);
-                // 语音识别后自动查询
-                if (useAI) {
-                    handleAiTranslate(transcript);
-                } else {
-                    handleLegacySearch(transcript);
-                }
+                if (useAI) handleAiTranslate(transcript);
+                else handleLegacySearch(transcript);
             };
             recognitionRef.current = recognition;
         }
-    }, [useAI, apiSettings]); // 依赖项保持不变
+    }, [useAI, apiSettings]);
 
     const toggleListening = () => {
         if (!recognitionRef.current) {
             alert('抱歉，您的浏览器不支持语音识别。');
             return;
         }
-        if (isListening) {
-            recognitionRef.current.stop();
-        } else {
-            // ✅ 自动根据当前输入框内容判断语音识别语言
+        if (isListening) recognitionRef.current.stop();
+        else {
             const lang = containsChinese(word) ? 'zh-CN' : 'my-MM';
             recognitionRef.current.lang = lang;
             recognitionRef.current.start();
@@ -293,15 +257,13 @@ const GlosbeSearchCard = () => {
     
     const handleCopy = (text) => navigator.clipboard.writeText(text);
     const handleSpeak = (textToSpeak) => { 
-        // 朗读语言根据当前翻译方向的“目标语言”确定
-        const lang = searchDirection === 'zh2my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaochenMultilingualNeural'; 
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${lang}&r=0`; 
+        const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${lang}&r=-20`; 
         new Audio(url).play(); 
     };
     const handleBackTranslate = (text) => { 
-        setWord(text);
+        setWord(text); 
         if (useAI) {
-            // 使用setTimeout确保state更新后再触发搜索
             setTimeout(() => handleAiTranslate(text), 50);
         }
     };
@@ -310,9 +272,7 @@ const GlosbeSearchCard = () => {
     const toLangText = searchDirection === 'my2zh' ? '中文' : '缅甸语';
 
     return (
-        // JSX部分保持不变，因为它已经很完善了
         <div className="w-full max-w-lg mx-auto bg-white/90 dark:bg-gray-800/80 backdrop-blur-xl border border-gray-200/80 dark:border-gray-700/50 shadow-lg rounded-2xl p-4 sm:p-6 transition-all duration-300">
-            {/* ... 顶部的 AI/Glosbe切换 和 设置按钮 ... */}
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Glosbe</span>
@@ -326,16 +286,14 @@ const GlosbeSearchCard = () => {
                     <Settings size={20} />
                 </button>
             </div>
-            {/* ... 设置面板 ... */}
+
             {settingsOpen && (
                 <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="text-md font-semibold text-gray-800 dark:text-white">API 设置</h3>
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
-                    {/* ... 省略设置项的具体JSX以保持简洁 ... */}
                     <div className="space-y-3">
-                        {/* 关闭思考模式 */}
                         <div className="flex items-center justify-between">
                             <label htmlFor="thinking-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
                                 <Bot size={14} /> 关闭思考模式
@@ -345,7 +303,6 @@ const GlosbeSearchCard = () => {
                                 <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
                             </label>
                         </div>
-                        {/* 第三方地址 */}
                         <div className="flex items-center justify-between">
                             <label htmlFor="third-party-toggle" className="text-xs font-medium text-gray-600 dark:text-gray-300">使用第三方 OpenAI 兼容地址</label>
                             <label htmlFor="third-party-toggle" className="relative inline-flex items-center cursor-pointer">
@@ -378,10 +335,9 @@ const GlosbeSearchCard = () => {
                     </button>
                 </div>
             )}
-            {/* ... 输入框和麦克风按钮 ... */}
             <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-                   <Search className="w-5 h-5 text-gray-400" />
+                 <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                    <Search className="w-5 h-5 text-gray-400" />
                 </div>
                 <textarea
                     ref={textareaRef}
@@ -409,7 +365,6 @@ const GlosbeSearchCard = () => {
                     </button>
                 </div>
             </div>
-            {/* ... 语言方向和查询按钮 ... */}
             <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
                     <span>{fromLangText}</span>
@@ -424,12 +379,11 @@ const GlosbeSearchCard = () => {
                     {isAISearching ? <Loader2 className="animate-spin" /> : "查询"}
                 </button>
             </div>
-            {/* ... AI 结果展示区 ... */}
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
-                    {isAISearching && streamingText && (
+                    {isAISearching && typeof aiResults === 'string' && (
                         <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white">
-                            {streamingText}
+                            {aiResults}
                             <Loader2 className="inline-block w-4 h-4 ml-2 animate-spin text-cyan-500" />
                         </div>
                     )}
@@ -450,7 +404,7 @@ const GlosbeSearchCard = () => {
                             <div className="flex items-center gap-1 mt-2 pt-2 border-t border-violet-200 dark:border-gray-700/50 -mx-4 px-3">
                               <button onClick={() => handleCopy(result.translation)} title="复制" className="p-1.5 rounded-full text-gray-500 hover:bg-violet-100 dark:hover:bg-gray-700 transition-colors"><Copy size={14}/></button>
                               <button onClick={() => handleSpeak(result.translation)} title="朗读" className="p-1.5 rounded-full text-gray-500 hover:bg-violet-100 dark:hover:bg-gray-700 transition-colors"><Volume2 size={14}/></button>
-                              <button onClick={() => handleBackTranslate(result.translation.replace(/\*\*|\[|\]/g, '').trim())} title="回译" className="p-1.5 rounded-full text-gray-500 hover:bg-violet-100 dark:hover:bg-gray-700 transition-colors"><Repeat size={14}/></button>
+                              <button onClick={() => handleBackTranslate(result.translation)} title="回译" className="p-1.5 rounded-full text-gray-500 hover:bg-violet-100 dark:hover:bg-gray-700 transition-colors"><Repeat size={14}/></button>
                             </div>
                           </div>
                         ))}
