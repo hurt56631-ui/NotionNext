@@ -49,31 +49,28 @@ const subCategoryIcons = { 101: Quote, 102: Sigma, 103: Clock, 104: Map, 201: He
 
 // --- 子组件 ---
 
-// 1. HSK 等级卡片网格
+// 1. HSK 等级卡片网格 (新样式：一排两个)
 const HskLevelGrid = ({ onVocabularyClick }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+  <div className="grid grid-cols-2 gap-4">
     {hskLevels.map(level => (
       <div 
         key={level.level}
-        className={`relative p-6 rounded-2xl shadow-lg text-white bg-gradient-to-br ${level.color} overflow-hidden transform transition-transform duration-300 hover:scale-105 cursor-pointer`}
+        className={`relative p-4 rounded-xl shadow-md text-white bg-gradient-to-br ${level.color} overflow-hidden transform transition-transform duration-300 hover:scale-105 cursor-pointer flex flex-col justify-between`}
         onClick={() => onVocabularyClick('hsk', level)}
       >
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-2xl font-bold">HSK {level.level}</h3>
-            <p className="opacity-80">{level.title}</p>
-          </div>
-          <span className="bg-white/20 text-xs font-semibold px-2 py-1 rounded-full">{level.wordCount} 词汇</span>
+        <div>
+          <h3 className="text-xl font-bold">HSK {level.level}</h3>
+          <p className="text-sm opacity-80">{level.title}</p>
         </div>
-        <div className="mt-8 text-center bg-black/20 hover:bg-black/30 transition-colors p-2 rounded-lg">
-          点击开始学习
+        <div className="mt-4 text-right">
+            <span className="bg-white/20 text-xs font-semibold px-2 py-1 rounded-full">{level.wordCount} 词汇</span>
         </div>
       </div>
     ))}
   </div>
 );
 
-// 2. 主题场景分类视图
+// 2. 主题场景分类视图 (新样式：一排两个)
 const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -85,18 +82,18 @@ const ThemeView = ({ onVocabularyClick }) => {
       <div>
         <button
           onClick={() => setSelectedCategory(null)}
-          className="flex items-center gap-2 mb-6 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          className="flex items-center gap-2 mb-4 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={14} />
           返回主分类
         </button>
         <div className="flex items-center gap-3 mb-4">
             <MainIcon className={`${mainColor.replace('bg-', 'text-')}`} />
-            <h2 className={`text-2xl font-bold text-gray-800 dark:text-gray-200`}>
+            <h3 className={`text-xl font-bold text-gray-800 dark:text-gray-200`}>
               {selectedCategory.main_category_title}
-            </h2>
+            </h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {selectedCategory.sub_categories.map(sub => {
             const SubIcon = subCategoryIcons[sub.sub_category_id] || BookCopy;
             return (
@@ -105,8 +102,8 @@ const ThemeView = ({ onVocabularyClick }) => {
                 className="group p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3 transform hover:scale-105 duration-300 cursor-pointer"
                 onClick={() => onVocabularyClick('theme', sub)}
               >
-                  <SubIcon size={24} className={mainColor.replace('bg-', 'text-')} />
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
+                  <SubIcon size={20} className={mainColor.replace('bg-', 'text-')} />
+                  <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
               </div>
             )
           })}
@@ -116,7 +113,7 @@ const ThemeView = ({ onVocabularyClick }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div className="grid grid-cols-2 gap-4">
       {semanticData.map(cat => {
         const MainIcon = mainCategoryIcons[cat.main_category_id] || BookCopy;
         const mainColor = mainCategoryColors[cat.main_category_id] || 'bg-gray-500';
@@ -124,14 +121,12 @@ const ThemeView = ({ onVocabularyClick }) => {
           <button
             key={cat.main_category_id}
             onClick={() => setSelectedCategory(cat)}
-            className={`group text-left p-5 rounded-2xl shadow-lg text-white ${mainColor} overflow-hidden transform transition-transform duration-300 hover:scale-[1.03]`}
+            className={`group text-left p-4 rounded-xl shadow-md text-white ${mainColor} overflow-hidden transform transition-transform duration-300 hover:scale-105 flex items-center gap-3`}
           >
-            <div className="flex items-center gap-4">
-              <MainIcon size={32} />
-              <div>
-                <h3 className="text-xl font-bold">{cat.main_category_title}</h3>
-                <p className="text-sm opacity-80 mt-1">{cat.main_category_description}</p>
-              </div>
+            <MainIcon size={24} />
+            <div>
+              <h3 className="text-md font-bold">{cat.main_category_title}</h3>
+              <p className="text-xs opacity-80 mt-1 hidden sm:block">{cat.main_category_description}</p>
             </div>
           </button>
         )
@@ -142,7 +137,6 @@ const ThemeView = ({ onVocabularyClick }) => {
 
 // --- 主组件 WordsContentBlock ---
 const WordsContentBlock = () => {
-  const [activeView, setActiveView] = useState('level');
   const router = useRouter();
   const [activeWords, setActiveWords] = useState(null);
   const [progressKey, setProgressKey] = useState(null);
@@ -191,34 +185,19 @@ const WordsContentBlock = () => {
     };
   }, []);
   
-  const buttonBaseStyle = "w-1/2 py-2.5 text-sm font-semibold rounded-lg transition-colors duration-300 focus:outline-none";
-  const activeButtonStyle = "bg-white dark:bg-gray-700 text-blue-500 shadow";
-  const inactiveButtonStyle = "bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-500/10";
-
   return (
     <>
       <div className="max-w-5xl mx-auto p-2 sm:p-4">
-        <div className="mb-8 flex justify-center">
-          <div className="w-full max-w-xs p-1 bg-gray-100 dark:bg-gray-800 rounded-xl flex">
-            <button
-              onClick={() => setActiveView('level')}
-              className={`${buttonBaseStyle} ${activeView === 'level' ? activeButtonStyle : inactiveButtonStyle}`}
-            >
-              按 HSK 等级
-            </button>
-            <button
-              onClick={() => setActiveView('theme')}
-              className={`${buttonBaseStyle} ${activeView === 'theme' ? activeButtonStyle : inactiveButtonStyle}`}
-            >
-              按主题场景
-            </button>
-          </div>
+        {/* HSK Section */}
+        <div className="mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4 px-2">按 HSK 等级</h2>
+            <HskLevelGrid onVocabularyClick={handleVocabularyClick} /> 
         </div>
+
+        {/* Theme Section */}
         <div>
-          {activeView === 'level' 
-            ? <HskLevelGrid onVocabularyClick={handleVocabularyClick} /> 
-            : <ThemeView onVocabularyClick={handleVocabularyClick} />
-          }
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4 px-2">按主题场景</h2>
+            <ThemeView onVocabularyClick={handleVocabularyClick} />
         </div>
       </div>
 
