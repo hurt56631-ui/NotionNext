@@ -41,11 +41,16 @@ class MyDocument extends Document {
     return (
       <Html lang={BLOG.LANG}>
         <Head>
-          {/* ✅ 新增：PWA配置开始 */}
+          {/* =================================================================== */}
+          {/* ✅ [新增] Google AdSense Account Meta 标签 */}
+          <meta name="google-adsense-account" content="ca-pub-5979923534004539" />
+          {/* =================================================================== */}
+
+          {/* PWA配置开始 */}
           <link rel='manifest' href='/manifest.json' />
           <meta name='theme-color' content='#000000' />
           <link rel='apple-touch-icon' href='/images/icons/icon-192x192.png' />
-          {/* ✅ 新增：PWA配置结束 */}
+          {/* PWA配置结束 */}
 
           {/* 预加载字体 */}
           {BLOG.FONT_AWESOME && (
