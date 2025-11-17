@@ -1,8 +1,8 @@
-// /components/InterstitialAd.js (重写后的可靠版本)
+// /components/InterstitialAd.js (修改为全屏样式)
 
 import React from 'react';
 import { AdSlot } from '@/components/GoogleAdsense';
-import { X } from 'lucide-react'; // 导入一个关闭图标，更美观
+import { X } from 'lucide-react'; 
 
 /**
  * 一个可控的全屏插页式广告容器组件
@@ -23,22 +23,18 @@ const InterstitialAd = ({ isOpen, onClose }) => {
   }, []);
 
   return (
-    // 使用 createPortal 将组件渲染到 body 的顶层，避免 z-index 问题
-    // (虽然此项目中 WordCard 已经是 portal, 但这是一个好习惯)
-    <div style={styles.overlay}>
-      <div style={styles.adPanel}>
-        {/* 关闭按钮 */}
-        <button onClick={onClose} style={styles.closeButton}>
-          <X size={24} color="#333" />
-        </button>
-        
-        {/* 广告容器 */}
+    <div style={styles.overlay} onClick={onClose}>
+      {/* 内容面板，阻止事件冒泡到上层 overlay */}
+      <div style={styles.adPanel} onClick={e => e.stopPropagation()}>
         <div style={styles.adContent}>
-          <p style={styles.adLabel}>广告</p>
-          {/* 调用我们已经存在的 AdSlot 组件来显示广告 */}
+          <p style={styles.adLabel}>Advertisement</p>
           <AdSlot />
         </div>
       </div>
+       {/* 关闭按钮放在面板之外，更清晰 */}
+       <button onClick={onClose} style={styles.closeButton}>
+          <X size={28} color="white" />
+        </button>
     </div>
   );
 };
@@ -51,28 +47,28 @@ const styles = {
     left: 0,
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    backdropFilter: 'blur(5px)',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)', // 更暗的背景
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 20000, // 确保在最顶层
+    zIndex: 20000, 
   },
   adPanel: {
-    position: 'relative',
     backgroundColor: 'white',
-    borderRadius: '16px',
-    padding: '20px',
-    width: '90%',
-    maxWidth: '400px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+    width: '100%', // 占据全部宽度
+    height: '100%', // 占据全部高度
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   adContent: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '250px', // 确保广告有足够的显示空间
+    width: '90%', // 广告内容区域宽度
+    maxWidth: '400px',
+    minHeight: '250px',
   },
   adLabel: {
     color: '#aaa',
@@ -81,18 +77,17 @@ const styles = {
   },
   closeButton: {
     position: 'absolute',
-    top: '-15px',
-    right: '-15px',
-    background: 'white',
+    top: '20px',
+    right: '20px',
+    background: 'rgba(0, 0, 0, 0.3)',
     border: 'none',
     borderRadius: '50%',
-    width: '36px',
-    height: '36px',
+    width: '40px',
+    height: '40px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
   },
 };
 
