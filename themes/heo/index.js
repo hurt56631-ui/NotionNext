@@ -182,7 +182,7 @@ const CustomScrollbarStyle = () => (
 // =================================================================================
 const BottomNavBar = ({ onOpenAiDrawer }) => {
     const navItems = [
-        { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: ['articles', 'words', 'hsk', 'speaking', 'grammar'] },
+        { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: ['words', 'hsk', 'speaking', 'grammar'] },
         { type: 'button', label: 'AI助手', icon: 'fas fa-robot' },
         { type: 'link', href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check' },
         { type: 'link', href: '/?tab=books', label: '书籍', icon: 'fas fa-book-open' },
@@ -191,7 +191,7 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
 
     const isActive = (item) => {
         if (item.type === 'button') return false; 
-        const currentTab = router.query.tab || 'articles';
+        const currentTab = router.query.tab || 'words'; // 默认值已更改
 
         if (item.href.startsWith('/?tab=')) {
             const tab = item.href.split('=')[1];
@@ -383,7 +383,6 @@ const LayoutIndex = props => {
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
   const tabs = [
-    { name: '文章', key: 'articles', icon: <Newspaper size={22} /> },
     { name: '单词', key: 'words', icon: <BookText size={22} /> },
     { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> },
     { name: '口语', key: 'speaking', icon: <Mic size={22} /> },
@@ -392,7 +391,7 @@ const LayoutIndex = props => {
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
   
-  const displayTabs = tabs.filter(tab => ['文章', '单词', 'HSK', '口语', '语法'].includes(tab.name));
+  const displayTabs = tabs.filter(tab => ['单词', 'HSK', '口语', '语法'].includes(tab.name));
 
   const [activeTab, setActiveTab] = useState(null); 
 
@@ -578,10 +577,9 @@ const LayoutIndex = props => {
   };
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
-  const PostListComponent = siteConfig('POST_LIST_STYLE') === 'page' ? BlogPostListPage : BlogPostListScroll;
-
+  
   const renderTabButtons = () => displayTabs.map(tab => (
-    <button key={tab.name} onClick={() => handleTabChange(tab.name)} className={`flex flex-col items-center justify-center w-1/5 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+    <button key={tab.name} onClick={() => handleTabChange(tab.name)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.name ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
         <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTab === tab.name ? 'bg-blue-500' : 'bg-transparent'}`}></div>
@@ -647,7 +645,6 @@ const LayoutIndex = props => {
                         {tabs.map(tab => (
                             <div key={tab.name} className={`${activeTab === tab.name ? 'block' : 'hidden'}`}>
                                 <div className='p-4'> 
-                                    {tab.name === '文章' && <PostListComponent {...props} />}
                                     {tab.name === '单词' && <WordsContentBlock />}
                                     {tab.name === 'HSK' && <HskContentBlock words={allWords} />}
                                     {tab.name === '口语' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
