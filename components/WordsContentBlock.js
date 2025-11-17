@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { AdSlot } from '@/components/GoogleAdsense'; // ✅ [修正] 导入正确的 AdSlot 组件
 
 // 导入所有需要的 Lucide React 图标
 import { 
@@ -188,9 +187,6 @@ const WordsContentBlock = () => {
   
   return (
     <>
-      {/* ✅ [添加] 在页面顶部添加广告位组件 */}
-      <AdSlot />
-
       <div className="max-w-5xl mx-auto p-2 sm:p-4">
         {/* HSK Section */}
         <div className="mb-6">
