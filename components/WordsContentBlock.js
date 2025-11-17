@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
+import { Adsense } from '@/components/GoogleAdsense';
 
 // ✅ 核心修复：导入所有缺失的 Lucide React 图标
 import { 
