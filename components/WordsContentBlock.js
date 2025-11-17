@@ -4,9 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
-import { Adsense } from '@/components/GoogleAdsense';
+import { AdSlot } from '@/components/GoogleAdsense'; // ✅ [修正] 导入正确的 AdSlot 组件
 
-// ✅ 核心修复：导入所有缺失的 Lucide React 图标
+// 导入所有需要的 Lucide React 图标
 import { 
     ArrowLeft, GraduationCap, BookCopy, Layers, Quote, Sigma, Clock, Map, 
     HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, 
@@ -50,7 +50,7 @@ const subCategoryIcons = { 101: Quote, 102: Sigma, 103: Clock, 104: Map, 201: He
 
 // --- 子组件 ---
 
-// 1. HSK 等级卡片网格 (新样式：一排两个)
+// 1. HSK 等级卡片网格
 const HskLevelGrid = ({ onVocabularyClick }) => (
   <div className="grid grid-cols-2 gap-4">
     {hskLevels.map(level => (
@@ -71,7 +71,7 @@ const HskLevelGrid = ({ onVocabularyClick }) => (
   </div>
 );
 
-// 2. 主题场景分类视图 (新样式：一排两个)
+// 2. 主题场景分类视图
 const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -188,6 +188,9 @@ const WordsContentBlock = () => {
   
   return (
     <>
+      {/* ✅ [添加] 在页面顶部添加广告位组件 */}
+      <AdSlot />
+
       <div className="max-w-5xl mx-auto p-2 sm:p-4">
         {/* HSK Section */}
         <div className="mb-6">
