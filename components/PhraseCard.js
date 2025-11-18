@@ -324,17 +324,12 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
           />
       )}
 
+      {/* MODIFIED: 所有按钮都移动到这个容器中 */}
       {currentCard && (
-        <>
-          {/* 设置按钮被移动到这里 */}
-          <div style={styles.settingsButton} data-no-gesture="true">
-              <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置">
-                  <FaCog size={20} />
-              </button>
-          </div>
-
-          {/* 其他按钮保留在右下角 */}
-          <div style={styles.rightControls} data-no-gesture="true">
+          <div style={styles.topRightControls} data-no-gesture="true">
+            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置">
+                <FaCog size={20} />
+            </button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
                 <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} />
             </button>
@@ -342,7 +337,6 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
                 <FaPenFancy size={20} />
             </button>
           </div>
-        </>
       )}
     </div>
   );
@@ -366,13 +360,13 @@ const styles = {
     burmesePhonetic: { fontSize: '1.2rem', color: '#8b5cf6', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
     
-    // MODIFIED: 新增设置按钮的样式
-    settingsButton: { position: 'fixed', top: '20px', right: '15px', zIndex: 100 },
-
-    // MODIFIED: 其他控制按钮的样式
-    rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
+    // MODIFIED: 新增右上角控制按钮容器样式
+    topRightControls: { position: 'fixed', top: '20px', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'row', gap: '15px' },
     
-    // MODIFIED: 修改 display: 'none' 为 display: 'flex' 使其可见
+    // MODIFIED: 移除了旧的 rightControls 和 settingsButton 样式
+    // rightControls 样式被 topRightControls 替代
+    // settingsButton 样式不再需要
+
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
