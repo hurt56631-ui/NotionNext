@@ -325,8 +325,16 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
       )}
 
       {currentCard && (
+        <>
+          {/* 设置按钮被移动到这里 */}
+          <div style={styles.settingsButton} data-no-gesture="true">
+              <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置">
+                  <FaCog size={20} />
+              </button>
+          </div>
+
+          {/* 其他按钮保留在右下角 */}
           <div style={styles.rightControls} data-no-gesture="true">
-            <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={20} /></button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
                 <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} />
             </button>
@@ -334,6 +342,7 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
                 <FaPenFancy size={20} />
             </button>
           </div>
+        </>
       )}
     </div>
   );
@@ -347,21 +356,25 @@ const styles = {
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', gap: '20px' },
-    // MODIFIED: Removed paddingRight for absolute centering
     contentBox: { width: '100%', textAlign: 'center', order: 1, boxSizing: 'border-box', cursor: 'pointer' },
-    // MODIFIED: Removed paddingRight and added maskImage for blurred edges
     imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', order: 2, marginTop: '20px', boxSizing: 'border-box', maskImage: 'radial-gradient(circle, black 80%, transparent 100%)' },
     cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
     skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
     shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
-    // MODIFIED: Darkened pinyin color
     pinyin: { fontSize: '1.2rem', color: '#475569', marginBottom: '8px' },
     textChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', wordBreak: 'break-word' },
-    // MODIFIED: Changed color to purple
     burmesePhonetic: { fontSize: '1.2rem', color: '#8b5cf6', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
+    
+    // MODIFIED: 新增设置按钮的样式
+    settingsButton: { position: 'fixed', top: '20px', right: '15px', zIndex: 100 },
+
+    // MODIFIED: 其他控制按钮的样式
     rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
-    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'none', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    
+    // MODIFIED: 修改 display: 'none' 为 display: 'flex' 使其可见
+    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
+    
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
     comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
