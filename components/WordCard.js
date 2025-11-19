@@ -1,4 +1,4 @@
-// components/WordCard.js (修复收藏显示与录音卡死问题)
+// components/WordCard.js (修复收藏显示与录音卡死问题 - 终极音频修复版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -70,49 +70,107 @@ const getTTSFromCache = async (key) => { const db = await openDB(); if (!db) ret
 const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).put(blob, key); };
 
 // =================================================================================
-// ===== 2. 音频播放系统 =====
+// ===== 2. 音频播放系统 (完全重构版) =====
 // =================================================================================
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
+
 let _howlInstance = null;
 let _currentTTSUrl = null; 
 
+// 强力解锁 AudioContext (兼容 iOS/Android)
 const unlockAudioContext = () => {
-    if (Howler.ctx && Howler.ctx.state === 'suspended') {
-        Howler.ctx.resume().then(() => { console.log('AudioContext Resumed'); });
+    const ctx = Howler.ctx;
+    if (ctx && ctx.state !== 'running') {
+        ctx.resume().then(() => console.log('AudioContext Resumed via unlock'));
     }
 };
 
-const playTTS = async (text, voice, rate, onEndCallback, e) => { 
-    if (e && e.stopPropagation) e.stopPropagation(); 
-    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } 
-    unlockAudioContext();
-    if (_howlInstance) { _howlInstance.stop(); _howlInstance.unload(); }
-    if (_currentTTSUrl) { URL.revokeObjectURL(_currentTTSUrl); _currentTTSUrl = null; }
-    const cacheKey = `${text}_${voice}_${rate}`;
-    const playBlob = (blob) => {
-        if (blob.size < 100) { console.error("Audio file too small"); if (onEndCallback) onEndCallback(); return; }
-        const audioUrl = URL.createObjectURL(blob);
-        _currentTTSUrl = audioUrl;
-        _howlInstance = new Howl({ 
-            src: [audioUrl], format: ['mp3', 'webm'], html5: true, 
-            onend: () => { if (onEndCallback) onEndCallback(); }, 
-            onloaderror: (id, err) => { console.error("Load Error", err); if (onEndCallback) onEndCallback(); }, 
-            onplayerror: (id, err) => { console.error("Play Error", err); unlockAudioContext(); if (onEndCallback) onEndCallback(); } 
-        }); 
-        _howlInstance.play(); 
-    };
-    try { 
-        const cachedBlob = await getTTSFromCache(cacheKey);
-        if (cachedBlob) { playBlob(cachedBlob); return; }
-        if (typeof navigator !== 'undefined' && !navigator.onLine) { if (onEndCallback) onEndCallback(); return; }
-        const apiUrl = 'https://libretts.is-an.org/api/tts'; 
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, rate: Math.round(rate / 2), pitch: 0 }), }); 
-        if (!response.ok) throw new Error(`API Error`); 
-        const audioBlob = await response.blob(); 
-        saveTTSToCache(cacheKey, audioBlob);
-        playBlob(audioBlob);
-    } catch (error) { console.error('TTS error:', error); if (onEndCallback) onEndCallback(); } 
+// 核心：返回 Promise 的 TTS 播放器，解决回调地狱和断链问题
+const playTTS = (text, voice, rate, e) => {
+    // 如果传入的是事件对象，阻止冒泡
+    if (e && e.stopPropagation) e.stopPropagation();
+    
+    return new Promise(async (resolve) => {
+        // 1. 基础参数检查
+        if (!text || !voice) return resolve();
+        
+        // 2. 尝试解锁音频环境
+        unlockAudioContext();
+
+        // 3. 清理上一段音频 (防止声音重叠)
+        if (_howlInstance) {
+            if (_howlInstance.playing()) _howlInstance.stop();
+            _howlInstance.unload();
+        }
+        if (_currentTTSUrl) { URL.revokeObjectURL(_currentTTSUrl); _currentTTSUrl = null; }
+
+        // 4. 定义失败/结束的统一处理 (保证 Promise 一定会 resolve，不会卡死 await)
+        const safeResolve = () => {
+            // 稍微延迟一点 resolve，给 Howler 状态重置留时间
+            setTimeout(resolve, 50);
+        };
+
+        try {
+            const cacheKey = `${text}_${voice}_${rate}`;
+            let audioBlob = await getTTSFromCache(cacheKey);
+
+            // 缓存未命中，请求网络
+            if (!audioBlob) {
+                if (typeof navigator !== 'undefined' && !navigator.onLine) return safeResolve();
+                
+                const apiUrl = 'https://libretts.is-an.org/api/tts';
+                // 设置 fetch 超时，防止网络挂死
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); 
+
+                const response = await fetch(apiUrl, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ text, voice, rate: Math.round(rate / 2), pitch: 0 }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) throw new Error(`API Error`);
+                audioBlob = await response.blob();
+                saveTTSToCache(cacheKey, audioBlob);
+            }
+
+            // 5. 校验 Blob
+            if (audioBlob.size < 100) { console.error("Audio too small"); return safeResolve(); }
+
+            const audioUrl = URL.createObjectURL(audioBlob);
+            _currentTTSUrl = audioUrl;
+
+            // 6. 创建 Howl 实例
+            _howlInstance = new Howl({
+                src: [audioUrl],
+                format: ['mp3', 'webm'],
+                html5: false, // 关键：改为 false 使用 Web Audio API，移动端响应更快，不易被系统挂起
+                autoplay: false, // 手动控制 play
+                onload: () => {
+                    _howlInstance.play();
+                },
+                onend: () => {
+                    safeResolve();
+                },
+                onloaderror: (id, err) => {
+                    console.error("Load Error", err);
+                    safeResolve(); // 即使出错也要继续流程
+                },
+                onplayerror: (id, err) => {
+                    console.error("Play Error", err);
+                    unlockAudioContext(); // 播放失败尝试再次唤醒
+                    safeResolve();
+                }
+            });
+
+        } catch (error) {
+            console.error('TTS Process Error:', error);
+            safeResolve();
+        }
+    });
 };
 
 const playSoundEffect = (type) => { 
@@ -284,7 +342,8 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
                             ))}
                         </div>
                         <div style={modalStyles.audioControls}>
-                            <button style={modalStyles.playBtn} onClick={() => playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese)}><FaPlay size={12} /> 标准音</button>
+                            {/* 使用新的 playTTS，确保参数匹配 */}
+                            <button style={modalStyles.playBtn} onClick={(e) => playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese, e)}><FaPlay size={12} /> 标准音</button>
                             <button style={modalStyles.playBtn} onClick={playUserAudio}><FaPlay size={12} /> 我的录音</button>
                         </div>
                     </div>
@@ -392,6 +451,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
       }
   }, [currentIndex, storageKey]);
 
+  // --- 核心修复：全方位监听用户第一次交互来解锁音频 ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
         setIsOnline(navigator.onLine);
@@ -400,13 +460,22 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         
-        const unlockHandler = () => { unlockAudioContext(); window.removeEventListener('click', unlockHandler); };
-        window.addEventListener('click', unlockHandler);
+        const robustUnlock = () => {
+            unlockAudioContext();
+            // 创建一个极短的静音来彻底激活 iOS 音频池
+            const silent = new Howl({src: ['data:audio/mp3;base64,//MkxAA........'], html5: false, volume: 0});
+            silent.play();
+            
+            // 解锁一次后移除监听，避免不必要的性能开销
+            ['click', 'touchstart', 'keydown'].forEach(evt => window.removeEventListener(evt, robustUnlock));
+        };
+        
+        ['click', 'touchstart', 'keydown'].forEach(evt => window.addEventListener(evt, robustUnlock));
         
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
-            window.removeEventListener('click', unlockHandler);
+            ['click', 'touchstart', 'keydown'].forEach(evt => window.removeEventListener(evt, robustUnlock));
         };
     }
   }, []);
@@ -447,29 +516,70 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
+  // =================================================================================
+  // ===== 核心修复：Async/Await 版自动朗读控制器 (解决回调地狱与断链) =====
+  // =================================================================================
   useEffect(() => {
     if (!isOpen || !currentCard) return;
-    clearTimeout(autoBrowseTimerRef.current);
     if (processingRef.current) return;
-    const playFullSequence = () => {
-        const thisCardId = currentCard.id; 
+
+    // 1. 标记当前副作用是否已过时 (用于处理竞态条件)
+    let isCancelled = false;
+    // 清除之前的定时器
+    clearTimeout(autoBrowseTimerRef.current);
+    // 停止之前可能还在播的声音
+    if (_howlInstance?.playing()) _howlInstance.stop();
+
+    const runAutoPlaySequence = async () => {
+        // 初始延迟，等待动画完成 + 避免太快触发
+        await new Promise(r => setTimeout(r, 600));
+        if (isCancelled) return;
+
+        const thisCardId = currentCard.id;
+
+        // --- 播放中文 ---
         if (settings.autoPlayChinese && currentCard.chinese) {
-            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
-                if (currentCard.id !== thisCardId) return; 
-                if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
-                    playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
-                        if (currentCard.id !== thisCardId) return;
-                        if (settings.autoPlayExample && currentCard.example && isRevealed) {
-                           playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
-                        } else { startAutoBrowseTimer(); }
-                    });
-                } else { startAutoBrowseTimer(); }
-            });
-        } else { startAutoBrowseTimer(); }
+            await playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese);
+            if (isCancelled || currentCard.id !== thisCardId) return; // 严防中途切卡
+        }
+
+        // --- 播放缅文 (仅在翻开时) ---
+        if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
+            // 稍微停顿一下让耳朵舒服点
+            await new Promise(r => setTimeout(r, 200));
+            if (isCancelled) return;
+            
+            await playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
+            if (isCancelled || currentCard.id !== thisCardId) return;
+        }
+
+        // --- 播放例句 (仅在翻开时) ---
+        if (settings.autoPlayExample && currentCard.example && isRevealed) {
+            await new Promise(r => setTimeout(r, 200));
+            if (isCancelled) return;
+            
+            await playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese);
+            if (isCancelled || currentCard.id !== thisCardId) return;
+        }
+
+        // --- 自动翻页逻辑 ---
+        if (settings.autoBrowse && !processingRef.current) {
+            autoBrowseTimerRef.current = setTimeout(() => {
+                if (!isCancelled && currentCard.id === thisCardId) {
+                    navigate(1);
+                }
+            }, settings.autoBrowseDelay);
+        }
     };
-    const startAutoBrowseTimer = () => { if (settings.autoBrowse && !processingRef.current) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
-    const initialPlayTimer = setTimeout(playFullSequence, 600);
-    return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
+
+    runAutoPlaySequence();
+
+    // 清理函数：组件卸载或依赖变更时触发
+    return () => {
+        isCancelled = true;
+        clearTimeout(autoBrowseTimerRef.current);
+        if (_howlInstance) _howlInstance.stop(); // 立即掐断声音
+    };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
   
   const handleKnow = () => {
@@ -519,15 +629,15 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
-                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e)}>
                             <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
-                                  <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
+                                  <div style={{ cursor: 'pointer', marginTop: '1.5rem' }} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e)}><div style={styles.textWordBurmese}>{cardData.burmese}</div></div>
                                   {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
-                                  {cardData.example && (<div style={styles.exampleBox} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}><div style={{ flex: 1, textAlign: 'center' }}><div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div><div style={styles.exampleText}>{cardData.example}</div></div></div>)}
+                                  {cardData.example && (<div style={styles.exampleBox} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, e)}><div style={{ flex: 1, textAlign: 'center' }}><div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div><div style={styles.exampleText}>{cardData.example}</div></div></div>)}
                               </animated.div>
                           )}
                       </div>
