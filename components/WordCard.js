@@ -1,13 +1,14 @@
-// components/WordCard.js (最终完美版：修复音频中断、美化完成页、精简交互)
+// components/WordCard.js (最终完整修正版：修复设置404、进度丢失、录音按钮、音频中断)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
-import { Howl, Howler } from 'howler'; // 引入 Howler 全局对象用于解锁
+import { Howl, Howler } from 'howler';
 import { 
-    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaArrowRight, 
-    FaHeart, FaRegHeart, FaPlay, FaStop, FaRedo
+    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, 
+    FaSortAmountDown, FaArrowRight, FaHeart, FaRegHeart, 
+    FaPlay, FaStop, FaRedo, FaTrashAlt
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -49,7 +50,7 @@ const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.
 let _howlInstance = null;
 let _currentTTSUrl = null; 
 
-// 🔥 新增：全局音频解锁函数
+// 🔥 全局音频解锁函数
 const unlockAudioContext = () => {
     if (Howler.ctx && Howler.ctx.state === 'suspended') {
         Howler.ctx.resume().then(() => {
@@ -65,7 +66,7 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
     // 1. 尝试解锁音频环境
     unlockAudioContext();
 
-    // 2. 清理旧实例，防止内存泄漏导致后续无声
+    // 2. 清理旧实例
     if (_howlInstance) { 
         _howlInstance.stop(); 
         _howlInstance.unload(); 
@@ -86,7 +87,7 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         _howlInstance = new Howl({ 
             src: [audioUrl], 
             format: ['mp3', 'webm'], 
-            html5: true, // 强制 HTML5 Audio，兼容性更好
+            html5: true, 
             onend: () => { if (onEndCallback) onEndCallback(); }, 
             onloaderror: (id, err) => { console.error("Load Error", err); if (onEndCallback) onEndCallback(); }, 
             onplayerror: (id, err) => { 
@@ -103,7 +104,6 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         if (cachedBlob) { playBlob(cachedBlob); return; }
         
         if (typeof navigator !== 'undefined' && !navigator.onLine) { 
-            // alert("网络已断开"); // 体验不好，建议注释掉
             if (onEndCallback) onEndCallback(); 
             return; 
         }
@@ -139,9 +139,7 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
     const chunksRef = useRef([]);
 
     const startRecording = async () => {
-        // 开始录音时，解锁音频环境
         unlockAudioContext();
-        
         try {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) { alert("您的浏览器不支持语音识别"); return; }
@@ -251,7 +249,7 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
     );
 };
 
-// --- 4. 设置面板 (修复按钮404问题：添加 type="button" 并阻止冒泡) ---
+// --- 4. 设置面板 (修复 ReferenceError: FaSortAmountDown) ---
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => { 
     const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; 
     const handleImageUpload = (e) => { 
@@ -262,18 +260,17 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
             reader.readAsDataURL(file); 
         } 
     }; 
+    // 🔥 关键修复：所有 button 加上 type="button"，防止触发页面默认提交
+    // 🔥 关键修复：确保 FaSortAmountDown 已在顶部导入
     return (
         <div style={styles.settingsModal} onClick={onClose}>
             <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
                 <button type="button" style={styles.closeButton} onClick={onClose}><FaTimes /></button>
                 <h2 style={{marginTop: 0}}>常规设置</h2>
-                {/* 学习顺序 */}
                 <div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button type="button" onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button type="button" onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div>
-                {/* 自动播放 */}
                 <div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div>
-                {/* 数据管理 */}
+                <h2 style={{marginTop: '30px'}}>外观设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>自定义背景</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button></div></div>
                 <h2 style={{marginTop: '30px'}}>数据管理</h2><div style={styles.settingGroup}><div style={styles.settingControl}><button type="button" style={{...styles.settingButton, color: '#ef4444', border: '1px solid #ef4444'}} onClick={clearAudioCache}><FaTrashAlt /> 清理音频缓存 (解决无声)</button></div></div>
-                {/* 发音设置 */}
                 <h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div>
             </div>
         </div>
@@ -281,7 +278,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 });
 
 // --- 5. 跳转弹窗 ---
-const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
+const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
 const useCardSettings = () => { const [settings, setSettings] = useState(() => { try { const savedSettings = localStorage.getItem('learningWordCardSettings'); const defaultSettings = { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '', }; return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; } catch (error) { return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' }; } }); useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) {} }, [settings]); return [settings, setSettings]; };
 
 // =================================================================================
@@ -292,6 +289,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
+  
   const processedCards = useMemo(() => {
     try {
         const mapped = words.map(w => ({ id: w.id, chinese: w.chinese, burmese: w.burmese, mnemonic: w.mnemonic, example: w.example }));
@@ -303,11 +301,57 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   }, [words, settings.order]);
 
   const [activeCards, setActiveCards] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  
+  // 🔥 关键修复：生成唯一的进度 Key (基于第一个单词的 ID 和总长度)
+  const storageKey = useMemo(() => {
+    if (progressKey !== 'default') return `progress_${progressKey}`;
+    // 自动生成：prog_首词ID_长度，这样 HSK1 Lesson1 和 HSK2 Lesson1 的 Key 会不同
+    if (words && words.length > 0) return `prog_${words[0].id}_${words.length}`;
+    return 'prog_default';
+  }, [progressKey, words]);
+
+  // 🔥 关键修复：初始化时优先读取本地存储的进度
+  const [currentIndex, setCurrentIndex] = useState(() => {
+      if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+              const idx = parseInt(saved, 10);
+              if (!isNaN(idx) && idx >= 0 && idx < words.length) return idx;
+          }
+      }
+      return 0;
+  });
+
   const [isOnline, setIsOnline] = useState(true);
 
-  useEffect(() => { setActiveCards(processedCards.length > 0 ? processedCards : []); setCurrentIndex(0); }, [processedCards]);
-  
+  // 当课程数据变化时，重置或加载进度
+  useEffect(() => {
+    const initialCards = processedCards.length > 0 ? processedCards : [];
+    setActiveCards(initialCards);
+    
+    // 加载进度
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+            const idx = parseInt(saved, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < initialCards.length) {
+                setCurrentIndex(idx);
+            } else {
+                setCurrentIndex(0);
+            }
+        } else {
+            setCurrentIndex(0);
+        }
+    }
+  }, [processedCards, storageKey]);
+
+  // 监听进度变化并保存
+  useEffect(() => {
+      if (typeof window !== 'undefined') {
+          localStorage.setItem(storageKey, currentIndex);
+      }
+  }, [currentIndex, storageKey]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
         setIsOnline(navigator.onLine);
@@ -316,7 +360,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
         
-        // 🔥 初始化时点击任何地方解锁音频
         const unlockHandler = () => { unlockAudioContext(); window.removeEventListener('click', unlockHandler); };
         window.addEventListener('click', unlockHandler);
         
@@ -448,7 +491,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
               );
             })
         ) : (
-            // 🔥 修复：学完界面改成居中卡片样式
+            // 🔥 修复：学完界面改成居中卡片样式，并在卡片内增加关闭按钮
             <div style={styles.completionOverlay}>
                 <div style={modalStyles.card}>
                     <h2 style={modalStyles.title}>🎉 本课完成！</h2>
@@ -461,7 +504,18 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                     ) : (
                         <p style={{color: '#10b981', fontWeight: 'bold'}}>太棒了！该等级所有单词已学完！</p>
                     )}
-                    <button style={{...modalStyles.retryBtn, width: '100%', marginTop: '15px', justifyContent: 'center'}} onClick={onClose}>
+                    {/* 居中关闭按钮 */}
+                    <button 
+                        style={{
+                            ...modalStyles.retryBtn, 
+                            width: '100%', 
+                            marginTop: '15px', 
+                            justifyContent: 'center',
+                            background: '#f3f4f6',
+                            color: '#333'
+                        }} 
+                        onClick={onClose}
+                    >
                         关闭
                     </button>
                 </div>
@@ -472,7 +526,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
             <div style={styles.rightControls} data-no-gesture="true">
                 <button type="button" style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={18} /></button>
                 <button type="button" style={styles.rightIconButton} onClick={() => setIsComparisonOpen(true)} title="发音评测"><FaMicrophone size={18} color="#e11d48" /></button>
-                {/* 🔥 修复：移除了重复的快速录音按钮 */}
                 {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button type="button" style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={18} /></button>)}
                 {<button type="button" style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>}
             </div>
@@ -519,7 +572,7 @@ const styles = {
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' },
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
-    completionOverlay: { position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 20 },
+    completionOverlay: { position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', zIndex: 10003 },
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
