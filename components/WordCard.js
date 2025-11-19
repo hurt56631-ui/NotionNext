@@ -1,4 +1,4 @@
-// components/WordCard.js (最终完整版 - 包含顶部悬浮广告和插页广告)
+// components/WordCard.js (最终完整版 - 智能缓存 + 离线支持 + 自动分页)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,16 +11,129 @@ import HanziModal from '@/components/HanziModal';
 import { AdSlot } from '@/components/GoogleAdsense';
 import InterstitialAd from './InterstitialAd'; // 导入插页广告组件
 
-// --- 数据库和辅助函数部分 (与您提供的代码一致，未修改) ---
+// --- 数据库和辅助函数部分 ---
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
-function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: 'id' }); } }; }); }
+const STORE_TTS_CACHE = 'ttsAudioCache'; // 新增：TTS 缓存仓库
+
+function openDB() { 
+    return new Promise((resolve, reject) => { 
+        // 如果是服务端渲染，直接返回 null
+        if (typeof window === 'undefined') return resolve(null);
+
+        const request = indexedDB.open(DB_NAME, 2); // 注意：版本号升级为 2
+        request.onerror = () => reject('数据库打开失败'); 
+        request.onsuccess = () => resolve(request.result); 
+        request.onupgradeneeded = (e) => { 
+            const db = e.target.result; 
+            if (!db.objectStoreNames.contains(STORE_NAME)) { 
+                db.createObjectStore(STORE_NAME, { keyPath: 'id' }); 
+            }
+            // 新增：创建音频缓存表
+            if (!db.objectStoreNames.contains(STORE_TTS_CACHE)) {
+                db.createObjectStore(STORE_TTS_CACHE); 
+            }
+        }; 
+    }); 
+}
+
 async function toggleFavorite(word) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readwrite'); const store = tx.objectStore(STORE_NAME); const existing = await new Promise((resolve) => { const getReq = store.get(word.id); getReq.onsuccess = () => resolve(getReq.result); getReq.onerror = () => resolve(null); }); if (existing) { store.delete(word.id); return false; } else { const wordToStore = { ...word }; store.put(wordToStore); return true; } }
 async function isFavorite(id) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readonly'); const store = tx.objectStore(STORE_NAME); return new Promise((resolve) => { const getReq = store.get(id); getReq.onsuccess = () => resolve(!!getReq.result); getReq.onerror = () => resolve(false); }); }
+
+// --- 新增：TTS 缓存读写函数 ---
+const getTTSFromCache = async (key) => {
+    const db = await openDB();
+    if (!db) return null;
+    return new Promise((resolve) => {
+        const tx = db.transaction(STORE_TTS_CACHE, 'readonly');
+        const req = tx.objectStore(STORE_TTS_CACHE).get(key);
+        req.onsuccess = () => resolve(req.result); // 返回 Blob 或 undefined
+        req.onerror = () => resolve(null);
+    });
+};
+
+const saveTTSToCache = async (key, blob) => {
+    const db = await openDB();
+    if (!db) return;
+    const tx = db.transaction(STORE_TTS_CACHE, 'readwrite');
+    tx.objectStore(STORE_TTS_CACHE).put(blob, key);
+};
+
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
+
 let _howlInstance = null;
-const playTTS = async (text, voice, rate, onEndCallback, e) => { if (e && e.stopPropagation) e.stopPropagation(); if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } if (_howlInstance?.playing()) _howlInstance.stop(); const apiUrl = 'https://libretts.is-an.org/api/tts'; const rateValue = Math.round(rate / 2); try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), }); if (!response.ok) throw new Error(`API Error: ${response.status}`); const audioBlob = await response.blob(); if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); const audioUrl = URL.createObjectURL(audioBlob); _howlInstance = new Howl({ src: [audioUrl], format: ['mpeg'], html5: true, onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onloaderror: (id, err) => { console.error('Howler load error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onplayerror: (id, err) => { console.error('Howler play error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } }); _howlInstance.play(); } catch (error) { console.error('TTS fetch error:', error); if (onEndCallback) onEndCallback(); } };
+let _currentTTSUrl = null; // 追踪当前的 Blob URL 以便释放
+
+// --- 修改后的 playTTS：支持缓存和离线播放 ---
+const playTTS = async (text, voice, rate, onEndCallback, e) => { 
+    if (e && e.stopPropagation) e.stopPropagation(); 
+    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } 
+    
+    // 清理上一条音频
+    if (_howlInstance) { _howlInstance.stop(); _howlInstance.unload(); }
+    if (_currentTTSUrl) { URL.revokeObjectURL(_currentTTSUrl); _currentTTSUrl = null; }
+
+    // 生成唯一缓存 Key
+    const cacheKey = `${text}_${voice}_${rate}`;
+
+    // 内部播放辅助函数
+    const playBlob = (blob) => {
+        const audioUrl = URL.createObjectURL(blob);
+        _currentTTSUrl = audioUrl;
+        _howlInstance = new Howl({ 
+            src: [audioUrl], 
+            format: ['mp3', 'webm'], 
+            html5: true, 
+            onend: () => { 
+                if (onEndCallback) onEndCallback(); 
+            }, 
+            onloaderror: (id, err) => { console.error('Howler load error:', err); if (onEndCallback) onEndCallback(); }, 
+            onplayerror: (id, err) => { console.error('Howler play error:', err); if (onEndCallback) onEndCallback(); } 
+        }); 
+        _howlInstance.play(); 
+    };
+
+    try { 
+        // 1. 先检查 IndexedDB 缓存 (离线可用)
+        const cachedBlob = await getTTSFromCache(cacheKey);
+        if (cachedBlob) {
+            playBlob(cachedBlob);
+            return;
+        }
+
+        // 2. 如果没有缓存且断网，提示错误
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            // 可以选择 alert 或者静默失败
+            console.warn("当前无网络且无缓存，无法播放 TTS");
+            if (onEndCallback) onEndCallback();
+            return;
+        }
+
+        // 3. 有网：请求 API 并缓存
+        const apiUrl = 'https://libretts.is-an.org/api/tts'; 
+        const rateValue = Math.round(rate / 2); 
+        const response = await fetch(apiUrl, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), 
+        }); 
+        
+        if (!response.ok) throw new Error(`API Error: ${response.status}`); 
+        const audioBlob = await response.blob(); 
+        if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); 
+        
+        // 存入缓存，供下次离线使用
+        saveTTSToCache(cacheKey, audioBlob);
+        
+        playBlob(audioBlob);
+
+    } catch (error) { 
+        console.error('TTS fetch error:', error); 
+        if (onEndCallback) onEndCallback(); 
+    } 
+};
+
 const playSoundEffect = (type) => { if (_howlInstance?.playing()) _howlInstance.stop(); if (sounds[type]) sounds[type].play(); };
 const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
@@ -34,7 +147,7 @@ const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, se
 // =================================================================================
 // ===== 主组件: WordCard ==========================================================
 // =================================================================================
-const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
+const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -59,11 +172,30 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [activeCards, setActiveCards] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // 新增：网络状态监听，用于控制广告显示
+  const [isOnline, setIsOnline] = useState(true);
+
   useEffect(() => {
-    const initialCards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", burmese: "..." }];
+    // 初始化数据
+    const initialCards = processedCards.length > 0 ? processedCards : [];
     setActiveCards(initialCards);
     setCurrentIndex(0);
   }, [processedCards]);
+
+  // 监听网络状态
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+        setIsOnline(navigator.onLine);
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }
+  }, []);
 
   const [isRevealed, setIsRevealed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -81,42 +213,55 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
-  const currentCard = activeCards.length > 0 ? activeCards[currentIndex] : null;
+  const processingRef = useRef(false); // 防止重复点击的锁
+
+  const currentCard = activeCards.length > 0 && currentIndex < activeCards.length ? activeCards[currentIndex] : null;
 
   useEffect(() => { 
-      if (currentCard?.id && currentCard.id !== 'fallback') { 
+      if (currentCard?.id) { 
           isFavorite(currentCard.id).then(setIsFavoriteCard); 
       }
       setIsRevealed(false);
   }, [currentCard]);
   
-  const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
+  const handleToggleFavorite = async () => { if (!currentCard) return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
   
   const navigate = useCallback((direction) => { 
     if (activeCards.length === 0) return;
     lastDirection.current = direction;
 
-    // 单词计数和广告触发逻辑
-    wordCounterRef.current += 1;
-    if (wordCounterRef.current >= 20) {
-        setShowInterstitial(true);
-        wordCounterRef.current = 0; // 重置计数器
+    // 单词计数和广告触发逻辑 (仅在有网络时触发)
+    if (isOnline && direction > 0) {
+        wordCounterRef.current += 1;
+        if (wordCounterRef.current >= 20) {
+            setShowInterstitial(true);
+            wordCounterRef.current = 0; // 重置计数器
+        }
     }
 
     setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); 
-  }, [activeCards.length]);
+  }, [activeCards.length, isOnline]);
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
+    
+    // 防止在处理移除动画时触发自动播放
+    if (processingRef.current) return;
 
     const playFullSequence = () => {
+        const thisCardId = currentCard.id; // 闭包捕获ID
+
         if (settings.autoPlayChinese && currentCard.chinese) {
             playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
+                if (currentCard.id !== thisCardId) return; // 切卡了就停止后续逻辑
+
                 if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                     playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
+                        if (currentCard.id !== thisCardId) return;
+
                         if (settings.autoPlayExample && currentCard.example && isRevealed) {
                            playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
                         } else {
@@ -132,7 +277,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         }
     };
     
-    const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
+    const startAutoBrowseTimer = () => { if (settings.autoBrowse && !processingRef.current) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
     
     const initialPlayTimer = setTimeout(playFullSequence, 600);
 
@@ -145,47 +290,54 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (isListening) { recognitionRef.current?.stop(); return; }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别。"); return; }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "zh-CN";
-    recognition.interimResults = false;
-    recognition.onstart = () => { setIsListening(true); setRecognizedText(""); };
-    recognition.onresult = (event) => { const result = event.results[event.results.length - 1][0].transcript; setRecognizedText(result.trim().replace(/[.,。，]/g, '')); };
-    recognition.onerror = (event) => { console.error("语音识别出错:", event.error); if (event.error !== 'aborted' && event.error !== 'no-speech') { alert(`语音识别错误: ${event.error}`); } };
-    recognition.onend = () => { setIsListening(false); recognitionRef.current = null; setIsComparisonOpen(true); };
-    recognitionRef.current = recognition;
-    recognition.start();
+    
+    try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = "zh-CN";
+        recognition.interimResults = false;
+        recognition.onstart = () => { setIsListening(true); setRecognizedText(""); };
+        recognition.onresult = (event) => { const result = event.results[event.results.length - 1][0].transcript; setRecognizedText(result.trim().replace(/[.,。，]/g, '')); };
+        recognition.onerror = (event) => { console.error("语音识别出错:", event.error); if (event.error !== 'aborted' && event.error !== 'no-speech') { /* 忽略常见错误 */ } };
+        recognition.onend = () => { setIsListening(false); recognitionRef.current = null; setIsComparisonOpen(true); };
+        recognitionRef.current = recognition;
+        recognition.start();
+    } catch (err) {
+        console.error("录音启动失败", err);
+    }
   }, [isListening]);
 
   const handleCloseComparison = useCallback(() => { setIsComparisonOpen(false); setRecognizedText(''); }, []);
   const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
   
-  useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
+  useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.abort(); } }; }, []);
   
   const handleKnow = () => {
+    if (processingRef.current) return;
     if (_howlInstance?.playing()) _howlInstance.stop();
     if (!currentCard) return;
 
-    // 触发导航和广告计数
+    processingRef.current = true;
+
+    // 触发导航
     navigate(1);
 
     // 延迟移除卡片以保证动画流畅
     setTimeout(() => {
         const newActiveCards = activeCards.filter(card => card.id !== currentCard.id);
         
-        if (newActiveCards.length === 0) {
-            setActiveCards([]);
-            return;
-        }
-        
+        // 更新卡片列表
         setActiveCards(newActiveCards);
 
+        // 修正索引，防止越界
         if (currentIndex >= newActiveCards.length) {
-            setCurrentIndex(newActiveCards.length - 1);
+            setCurrentIndex(Math.max(0, newActiveCards.length - 1));
         }
-    }, 400); // 延迟时间应与卡片离开动画时间接近
+        processingRef.current = false;
+    }, 400); 
   };
 
   const handleDontKnow = () => {
+    if (processingRef.current) return;
     if (isRevealed) {
       navigate(1);
     } else {
@@ -198,7 +350,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   });
 
   const cardTransitions = useTransition(currentIndex, {
-      key: currentCard ? currentCard.id : currentIndex,
+      key: currentCard ? currentCard.id : 'empty_key',
       from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
       enter: { opacity: 1, transform: 'translateY(0%)' }, 
       leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
@@ -209,6 +361,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
       if (event.target.closest('[data-no-gesture]')) return;
       if (down) return;
+      if (processingRef.current) return; 
       event.stopPropagation(); 
       const isHorizontal = Math.abs(mx) > Math.abs(my);
       if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); } 
@@ -221,20 +374,22 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     
     return item && (
       <animated.div style={{ ...styles.fullScreen, ...backgroundStyle, ...style }}>
-        {/* 调用插页广告组件 */}
-        <InterstitialAd 
+        {/* 调用插页广告组件 - 仅在线时显示 */}
+        {isOnline && <InterstitialAd 
             isOpen={showInterstitial} 
             onClose={() => {
                 setShowInterstitial(false);
             }} 
-        />
+        />}
 
-        {/* 顶部悬浮广告容器 */}
-        <div style={styles.adContainer} data-no-gesture="true">
-            <AdSlot />
-        </div>
+        {/* 顶部悬浮广告容器 - 仅在线时显示 */}
+        {isOnline && (
+            <div style={styles.adContainer} data-no-gesture="true">
+                <AdSlot />
+            </div>
+        )}
       
-        <div style={styles.gestureArea} {...bind()} onClick={() => setIsRevealed(prev => !prev)} />
+        <div style={styles.gestureArea} {...bind()} onClick={() => { if(!processingRef.current) setIsRevealed(prev => !prev) }} />
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         
@@ -288,10 +443,40 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               );
             })
         ) : (
+            // 完成状态界面
             <div style={styles.completionContainer}>
-                <h2>🎉 全部完成！</h2>
-                <p>你已学完本列表中的所有单词。</p>
-                <button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>关闭</button>
+                <h2>🎉 本课完成！</h2>
+                <p>你已学完本组所有单词。</p>
+                
+                {hasMore ? (
+                    <button 
+                        style={{
+                            ...styles.knowButton, 
+                            ...styles.knowButtonBase, 
+                            marginTop: '20px', 
+                            background: 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                        }} 
+                        onClick={() => {
+                            if (onFinishLesson) onFinishLesson();
+                        }}
+                    >
+                        进入下一课 <FaArrowRight style={{marginLeft: '8px'}}/>
+                    </button>
+                ) : (
+                    <p style={{marginTop: '10px', fontSize: '0.9rem', opacity: 0.8}}>太棒了！该等级所有单词已学完！</p>
+                )}
+
+                <button 
+                    style={{
+                        ...styles.knowButtonBase, 
+                        background: 'transparent', 
+                        border: '1px solid rgba(255,255,255,0.3)', 
+                        marginTop: '15px'
+                    }} 
+                    onClick={onClose}
+                >
+                    关闭
+                </button>
             </div>
         )}
 
@@ -328,6 +513,8 @@ const styles = {
         textAlign: 'center',
         padding: '5px 0',
         minHeight: '50px',
+        maxHeight: '15vh', // 限制广告高度
+        overflow: 'hidden',
     },
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
