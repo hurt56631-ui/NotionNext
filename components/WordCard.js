@@ -1,4 +1,4 @@
-// components/WordCard.js (最终完整修正版：修复设置404、进度丢失、录音按钮、音频中断)
+// components/WordCard.js (修复收藏显示与录音卡死问题)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -6,9 +6,9 @@ import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl, Howler } from 'howler';
 import { 
-    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, 
-    FaSortAmountDown, FaArrowRight, FaHeart, FaRegHeart, 
-    FaPlay, FaStop, FaRedo, FaTrashAlt
+    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaArrowRight, 
+    FaHeart, FaRegHeart, FaPlay, FaStop, FaRedo, FaTrashAlt, 
+    FaSortAmountDown, FaRandom
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -16,7 +16,7 @@ import { AdSlot } from '@/components/GoogleAdsense';
 import InterstitialAd from './InterstitialAd'; 
 
 // =================================================================================
-// ===== 1. 数据库与缓存逻辑 (保持不变) =====
+// ===== 1. 数据库与缓存逻辑 =====
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
@@ -36,78 +36,76 @@ function openDB() {
         }; 
     }); 
 }
-async function toggleFavorite(word) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readwrite'); const store = tx.objectStore(STORE_NAME); const existing = await new Promise((resolve) => { const getReq = store.get(word.id); getReq.onsuccess = () => resolve(getReq.result); getReq.onerror = () => resolve(null); }); if (existing) { store.delete(word.id); return false; } else { const wordToStore = { ...word }; store.put(wordToStore); return true; } }
+async function toggleFavorite(word) { 
+    const db = await openDB(); 
+    const tx = db.transaction(STORE_NAME, 'readwrite'); 
+    const store = tx.objectStore(STORE_NAME); 
+    
+    // 使用 Promise 包装 get 请求
+    const existing = await new Promise((resolve) => { 
+        const getReq = store.get(word.id); 
+        getReq.onsuccess = () => resolve(getReq.result); 
+        getReq.onerror = () => resolve(null); 
+    }); 
+    
+    if (existing) { 
+        store.delete(word.id); 
+        return false; // 返回 false 表示已取消收藏
+    } else { 
+        // 确保存储的对象是纯净的 JSON 数据
+        const wordToStore = { 
+            id: word.id, 
+            chinese: word.chinese, 
+            burmese: word.burmese, 
+            mnemonic: word.mnemonic, 
+            example: word.example 
+        }; 
+        store.put(wordToStore); 
+        return true; // 返回 true 表示已收藏
+    } 
+}
 async function isFavorite(id) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readonly'); const store = tx.objectStore(STORE_NAME); return new Promise((resolve) => { const getReq = store.get(id); getReq.onsuccess = () => resolve(!!getReq.result); getReq.onerror = () => resolve(false); }); }
 async function clearAudioCache() { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).clear(); alert("音频缓存已清理"); }
 const getTTSFromCache = async (key) => { const db = await openDB(); if (!db) return null; return new Promise((resolve) => { const tx = db.transaction(STORE_TTS_CACHE, 'readonly'); const req = tx.objectStore(STORE_TTS_CACHE).get(key); req.onsuccess = () => resolve(req.result); req.onerror = () => resolve(null); }); };
 const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).put(blob, key); };
 
 // =================================================================================
-// ===== 2. 音频播放系统 (修复经常无法朗读的问题) =====
+// ===== 2. 音频播放系统 =====
 // =================================================================================
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
 let _howlInstance = null;
 let _currentTTSUrl = null; 
 
-// 🔥 全局音频解锁函数
 const unlockAudioContext = () => {
     if (Howler.ctx && Howler.ctx.state === 'suspended') {
-        Howler.ctx.resume().then(() => {
-            console.log('AudioContext Resumed');
-        });
+        Howler.ctx.resume().then(() => { console.log('AudioContext Resumed'); });
     }
 };
 
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation(); 
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } 
-    
-    // 1. 尝试解锁音频环境
     unlockAudioContext();
-
-    // 2. 清理旧实例
-    if (_howlInstance) { 
-        _howlInstance.stop(); 
-        _howlInstance.unload(); 
-    }
-    if (_currentTTSUrl) { 
-        URL.revokeObjectURL(_currentTTSUrl); 
-        _currentTTSUrl = null; 
-    }
-
+    if (_howlInstance) { _howlInstance.stop(); _howlInstance.unload(); }
+    if (_currentTTSUrl) { URL.revokeObjectURL(_currentTTSUrl); _currentTTSUrl = null; }
     const cacheKey = `${text}_${voice}_${rate}`;
-    
     const playBlob = (blob) => {
         if (blob.size < 100) { console.error("Audio file too small"); if (onEndCallback) onEndCallback(); return; }
-        
         const audioUrl = URL.createObjectURL(blob);
         _currentTTSUrl = audioUrl;
-        
         _howlInstance = new Howl({ 
-            src: [audioUrl], 
-            format: ['mp3', 'webm'], 
-            html5: true, 
+            src: [audioUrl], format: ['mp3', 'webm'], html5: true, 
             onend: () => { if (onEndCallback) onEndCallback(); }, 
             onloaderror: (id, err) => { console.error("Load Error", err); if (onEndCallback) onEndCallback(); }, 
-            onplayerror: (id, err) => { 
-                console.error("Play Error", err); 
-                unlockAudioContext(); // 播放失败再次尝试解锁
-                if (onEndCallback) onEndCallback(); 
-            } 
+            onplayerror: (id, err) => { console.error("Play Error", err); unlockAudioContext(); if (onEndCallback) onEndCallback(); } 
         }); 
         _howlInstance.play(); 
     };
-
     try { 
         const cachedBlob = await getTTSFromCache(cacheKey);
         if (cachedBlob) { playBlob(cachedBlob); return; }
-        
-        if (typeof navigator !== 'undefined' && !navigator.onLine) { 
-            if (onEndCallback) onEndCallback(); 
-            return; 
-        }
-        
+        if (typeof navigator !== 'undefined' && !navigator.onLine) { if (onEndCallback) onEndCallback(); return; }
         const apiUrl = 'https://libretts.is-an.org/api/tts'; 
         const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, rate: Math.round(rate / 2), pitch: 0 }), }); 
         if (!response.ok) throw new Error(`API Error`); 
@@ -126,7 +124,7 @@ const playSoundEffect = (type) => {
 const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
 // =================================================================================
-// ===== 3. 语音对比弹窗组件 (UI重构版) =====
+// ===== 3. 语音对比弹窗组件 (修复录音卡死逻辑) =====
 // =================================================================================
 const PronunciationModal = ({ correctWord, settings, onClose }) => {
     const [recordingState, setRecordingState] = useState('idle');
@@ -140,13 +138,30 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
 
     const startRecording = async () => {
         unlockAudioContext();
+        setUserText(''); // 清空上一次的结果
+        
         try {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) { alert("您的浏览器不支持语音识别"); return; }
+            
             const recognition = new SpeechRecognition();
             recognition.lang = "zh-CN";
             recognition.interimResults = false;
-            recognition.onresult = (e) => setUserText(e.results[0][0].transcript.replace(/[.,。，]/g, ''));
+            recognition.maxAlternatives = 1;
+
+            recognition.onresult = (e) => {
+                if (e.results.length > 0) {
+                    const text = e.results[0][0].transcript.replace(/[.,。，]/g, '');
+                    console.log("识别结果:", text);
+                    setUserText(text);
+                }
+            };
+            
+            // 增加错误处理，防止静默失败
+            recognition.onerror = (e) => {
+                console.error("Recognition error:", e);
+            };
+
             recognitionRef.current = recognition;
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -165,7 +180,13 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
             mediaRecorder.start();
             setRecordingState('recording');
             
-            setTimeout(() => { if (recordingState === 'recording') stopRecording(); }, 5000);
+            // 5秒自动停止
+            setTimeout(() => { 
+                if (recognitionRef.current) { // 检查是否还在录音
+                    stopRecording(); 
+                }
+            }, 5000);
+
         } catch (err) {
             console.error("录音启动失败", err);
             alert("无法访问麦克风");
@@ -173,22 +194,46 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
-        if (recognitionRef.current) recognitionRef.current.stop();
+        // 停止媒体录制
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+        // 停止语音识别
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null; // 销毁引用
+        }
+        
         setRecordingState('analyzing');
     };
 
+    // 修复：监听状态变化进行分析
     useEffect(() => {
         if (recordingState === 'analyzing') {
-            if (userText) analyzeResult();
-            else setTimeout(() => { if (!userText) { setRecordingState('idle'); } }, 1500);
+            // 给一点时间让 onresult 回调执行 (部分浏览器 onresult 在 stop 后才触发)
+            const checkTimeout = setTimeout(() => {
+                if (userText) {
+                    analyzeResult();
+                } else {
+                    alert("未检测到清晰语音，请再试一次");
+                    setRecordingState('idle');
+                }
+            }, 1000); // 等待 1 秒
+            return () => clearTimeout(checkTimeout);
         }
     }, [recordingState, userText]);
 
     const analyzeResult = () => {
+        if (!userText) return; // 双重保险
+
         const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true });
         const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true });
-        if (!correctPinyin || !userPinyin || userPinyin.length === 0) { setRecordingState('idle'); return; }
+        
+        // 如果拼音转换失败
+        if (!correctPinyin || !userPinyin || userPinyin.length === 0) { 
+            setRecordingState('idle'); 
+            return; 
+        }
 
         let matchCount = 0;
         const details = correctPinyin.map((cpy, i) => {
@@ -199,9 +244,11 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
             if (isMatch) matchCount++;
             return { char: correctWord[i], pinyin: cParts.pinyinMark, isMatch, uPinyin: uParts.pinyinMark };
         });
+        
         const score = Math.round((matchCount / Math.max(correctPinyin.length, userPinyin.length)) * 100);
         setAnalysis({ score, details });
         setRecordingState('result');
+        
         if (score === 100) playSoundEffect('correct'); else playSoundEffect('incorrect');
     };
 
@@ -219,6 +266,9 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
                         <div style={modalStyles.wave}></div><div style={modalStyles.wave}></div><div style={modalStyles.wave}></div>
                         <p style={{color: '#ef4444', fontWeight: 'bold'}}>正在录音...</p>
                     </div>
+                )}
+                {recordingState === 'analyzing' && (
+                    <div style={{margin: '20px 0', color: '#666'}}>正在分析...</div>
                 )}
                 {recordingState === 'result' && analysis && (
                     <div style={modalStyles.resultContainer}>
@@ -249,7 +299,7 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
     );
 };
 
-// --- 4. 设置面板 (修复 ReferenceError: FaSortAmountDown) ---
+// --- 4. 设置面板 ---
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => { 
     const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; 
     const handleImageUpload = (e) => { 
@@ -260,8 +310,6 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
             reader.readAsDataURL(file); 
         } 
     }; 
-    // 🔥 关键修复：所有 button 加上 type="button"，防止触发页面默认提交
-    // 🔥 关键修复：确保 FaSortAmountDown 已在顶部导入
     return (
         <div style={styles.settingsModal} onClick={onClose}>
             <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
@@ -278,7 +326,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 });
 
 // --- 5. 跳转弹窗 ---
-const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
+const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
 const useCardSettings = () => { const [settings, setSettings] = useState(() => { try { const savedSettings = localStorage.getItem('learningWordCardSettings'); const defaultSettings = { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '', }; return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; } catch (error) { return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' }; } }); useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) {} }, [settings]); return [settings, setSettings]; };
 
 // =================================================================================
@@ -289,7 +337,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
-  
   const processedCards = useMemo(() => {
     try {
         const mapped = words.map(w => ({ id: w.id, chinese: w.chinese, burmese: w.burmese, mnemonic: w.mnemonic, example: w.example }));
@@ -302,15 +349,12 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
   const [activeCards, setActiveCards] = useState([]);
   
-  // 🔥 关键修复：生成唯一的进度 Key (基于第一个单词的 ID 和总长度)
   const storageKey = useMemo(() => {
     if (progressKey !== 'default') return `progress_${progressKey}`;
-    // 自动生成：prog_首词ID_长度，这样 HSK1 Lesson1 和 HSK2 Lesson1 的 Key 会不同
     if (words && words.length > 0) return `prog_${words[0].id}_${words.length}`;
     return 'prog_default';
   }, [progressKey, words]);
 
-  // 🔥 关键修复：初始化时优先读取本地存储的进度
   const [currentIndex, setCurrentIndex] = useState(() => {
       if (typeof window !== 'undefined') {
           const saved = localStorage.getItem(storageKey);
@@ -324,12 +368,9 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
   const [isOnline, setIsOnline] = useState(true);
 
-  // 当课程数据变化时，重置或加载进度
   useEffect(() => {
     const initialCards = processedCards.length > 0 ? processedCards : [];
     setActiveCards(initialCards);
-    
-    // 加载进度
     if (typeof window !== 'undefined') {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
@@ -345,7 +386,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
     }
   }, [processedCards, storageKey]);
 
-  // 监听进度变化并保存
   useEffect(() => {
       if (typeof window !== 'undefined') {
           localStorage.setItem(storageKey, currentIndex);
@@ -387,7 +427,13 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   const currentCard = activeCards.length > 0 && currentIndex < activeCards.length ? activeCards[currentIndex] : null;
 
   useEffect(() => { if (currentCard?.id) isFavorite(currentCard.id).then(setIsFavoriteCard); setIsRevealed(false); }, [currentCard]);
-  const handleToggleFavorite = async () => { if (!currentCard) return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
+  
+  // 🔥 修复：收藏/取消收藏后，立即更新当前卡片的状态
+  const handleToggleFavorite = async () => { 
+      if (!currentCard) return; 
+      const newStatus = await toggleFavorite(currentCard);
+      setIsFavoriteCard(newStatus); 
+  };
   
   const navigate = useCallback((direction) => { 
     if (activeCards.length === 0) return;
@@ -401,7 +447,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
-  // 自动播放逻辑
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
@@ -491,7 +536,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
               );
             })
         ) : (
-            // 🔥 修复：学完界面改成居中卡片样式，并在卡片内增加关闭按钮
             <div style={styles.completionOverlay}>
                 <div style={modalStyles.card}>
                     <h2 style={modalStyles.title}>🎉 本课完成！</h2>
@@ -504,18 +548,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                     ) : (
                         <p style={{color: '#10b981', fontWeight: 'bold'}}>太棒了！该等级所有单词已学完！</p>
                     )}
-                    {/* 居中关闭按钮 */}
-                    <button 
-                        style={{
-                            ...modalStyles.retryBtn, 
-                            width: '100%', 
-                            marginTop: '15px', 
-                            justifyContent: 'center',
-                            background: '#f3f4f6',
-                            color: '#333'
-                        }} 
-                        onClick={onClose}
-                    >
+                    <button style={{...modalStyles.retryBtn, width: '100%', marginTop: '15px', justifyContent: 'center', background: '#f3f4f6', color: '#333'}} onClick={onClose}>
                         关闭
                     </button>
                 </div>
