@@ -1,7 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap } from 'lucide-react';
+import { Search, Mic, ArrowLeftRight, Settings, X, Loader2, Bot, Copy, Volume2, Repeat, Zap, PlayCircle } from 'lucide-react';
 
-// ✅ 恢复您最初的中文 Prompt，并移除表情符号
+// 🟢 1. 定义微软语音列表常量
+const MS_VOICES = {
+    zh: [
+        { name: 'zh-CN-XiaoxiaoNeural', label: '晓晓 (女声 - 温暖/最常用)' },
+        { name: 'zh-CN-XiaoyuMultilingualNeural', label: '晓宇 (多语言 - 沉稳)' },
+        { name: 'zh-CN-YunzeNeural', label: '云哲 (男声 - 体育/生动)' },
+        { name: 'zh-CN-XiaoyiNeural', label: '晓伊 (女声 - 活泼)' },
+        { name: 'zh-CN-XiaochenMultilingualNeural', label: '晓辰 (多语言 - 默认)' },
+        { name: 'en-US-AvaMultilingualNeural', label: 'Ava (多语言 - 逼真)' },
+        { name: 'fr-FR-VivienneMultilingualNeural', label: 'Vivienne (vivie多语言 - 标准)' }
+    ],
+    my: [
+        { name: 'my-MM-NilarNeural', label: 'Nilar (女声 - 标准)' },
+        { name: 'my-MM-ThihaNeural', label: 'Thiha (男声 - 标准)' }
+    ]
+};
+
+// Prompt 保持不变
 const getAIPrompt = (word, fromLang, toLang) => `
 请将以下 ${fromLang} 内容翻译成 ${toLang}： "${word}"
 请严格按照下面的格式提供多种风格的翻译结果，不要有任何多余的解释或标题：
@@ -23,53 +40,33 @@ const getAIPrompt = (word, fromLang, toLang) => `
 *   回译: [此处为对上方翻译的回译结果]，精准地回译成 ${fromLang}，严禁使用英语或任何其他语言]
 `;
 
-// ✅ 增强版、高容错的解析函数
 const parseAIResponse = (responseText) => {
     if (!responseText) return [];
-    
-    // 使用更灵活的正则表达式匹配每个翻译块（无论有无表情符号）
-    const translationBlocks = responseText.split(/\*\*.*?\*\*.*?\n/g).slice(1);
-    const titles = responseText.match(/\*\*(.*?)\*\*/g);
-
-    if (!translationBlocks || !titles || translationBlocks.length === 0) return [];
-    
     const results = [];
-    translationBlocks.forEach((block, index) => {
-        const lines = block.trim().split('\n');
-        const translationLine = lines.find(line => line.includes('*') && !line.includes('回译'));
+    const regex = /\*\*(.*?)\*\*([\s\S]*?)(?=\n\*\*|$)/g;
+    let match;
+    while ((match = regex.exec(responseText)) !== null) {
+        const title = match[1].trim();
+        const content = match[2].trim();
+        const lines = content.split('\n');
+        let translationLine = lines.find(line => (line.trim().startsWith('*') || line.includes('**')) && !line.includes('回译'));
         const meaningLine = lines.find(line => line.includes('回译:'));
-
         if (translationLine && meaningLine) {
-            results.push({
-                // 提取标题，去除**
-                title: titles[index]?.replace(/\*/g, '').trim(),
-                translation: translationLine.replace(/\*|\[|\]|-/g, '').trim(),
-                meaning: meaningLine.trim(),
-            });
+            let cleanTranslation = translationLine.replace(/^\s*[\*\-]\s*/, '').replace(/\*\*/g, '').trim();
+            if (cleanTranslation.startsWith('[') && cleanTranslation.endsWith(']')) cleanTranslation = cleanTranslation.slice(1, -1);
+            const meaning = meaningLine.replace(/回译:\s*/, '').replace(/\]$/, '').trim();
+            if (cleanTranslation) {
+                results.push({
+                    title: title.replace(/\*/g, ''),
+                    translation: cleanTranslation,
+                    meaning: `回译: ${meaning}`
+                });
+            }
         }
-    });
-
-    // 如果上述解析失败，尝试备用方案
-    if (results.length === 0) {
-        const sections = responseText.split(/\n\s*\n/);
-        sections.forEach(section => {
-             const titleMatch = section.match(/\*\*(.*?)\*\*/);
-             const translationMatch = section.match(/\*\s+\*\*(.*?)\*\*/);
-             const meaningMatch = section.match(/回译:\s*(.*)/);
-             if(titleMatch && translationMatch && meaningMatch) {
-                 results.push({
-                     title: titleMatch[1].trim(),
-                     translation: translationMatch[1].trim(),
-                     meaning: `回译: ${meaningMatch[1].trim()}`
-                 })
-             }
-        });
     }
-
     return results;
 };
 
-// 语言检测辅助函数
 const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(text);
 
 const GlosbeSearchCard = () => {
@@ -78,10 +75,13 @@ const GlosbeSearchCard = () => {
     const [isListening, setIsListening] = useState(false);
     const [useAI, setUseAI] = useState(true);
     const [isAISearching, setIsAISearching] = useState(false);
-    const [aiResults, setAiResults] = useState([]);
+    
+    const [streamingText, setStreamingText] = useState(''); 
+    const [aiResults, setAiResults] = useState([]); 
     const [aiError, setAiError] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
 
+    // 🟢 2. 在设置状态中增加语音配置
     const [apiSettings, setApiSettings] = useState({
         url: 'https://open-gemini-api.deno.dev/v1/chat/completions',
         model: 'gemini-pro-flash',
@@ -89,6 +89,10 @@ const GlosbeSearchCard = () => {
         useThirdParty: false,
         thirdPartyUrl: 'https://gy.zenscaleai.com/v1',
         disableThinking: true,
+        // 语音设置默认值
+        voiceZh: 'zh-CN-XiaoxiaoNeural',
+        voiceMy: 'my-MM-NilarNeural',
+        voiceSpeed: 0 // 范围 -50 到 +50
     });
 
     const recognitionRef = useRef(null);
@@ -102,23 +106,31 @@ const GlosbeSearchCard = () => {
     }, [word]);
 
     useEffect(() => {
-        const detectedDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
-        if (detectedDirection !== searchDirection) {
-            setSearchDirection(detectedDirection);
+        if (!word || word.trim() === '') return;
+        const targetDirection = containsChinese(word) ? 'zh2my' : 'my2zh';
+        if (targetDirection !== searchDirection) {
+            setSearchDirection(targetDirection);
         }
     }, [word]);
 
     useEffect(() => {
-        const savedSettings = localStorage.getItem('aiApiSettings_v9');
+        const savedSettings = localStorage.getItem('aiApiSettings_v10'); // 升级版本号以重置旧设置
         if (savedSettings) {
-            setApiSettings(prevSettings => ({ ...prevSettings, ...JSON.parse(savedSettings) }));
+            // 合并新旧设置，防止新加的语音字段丢失
+            setApiSettings(prev => ({ ...prev, ...JSON.parse(savedSettings) }));
         }
     }, []);
 
     const handleSaveSettings = () => {
-        localStorage.setItem('aiApiSettings_v9', JSON.stringify(apiSettings));
+        localStorage.setItem('aiApiSettings_v10', JSON.stringify(apiSettings));
         setSettingsOpen(false);
-        alert('设置已保存！');
+        // alert('设置已保存！'); // 去掉烦人的弹窗，用UI反馈更好，或者静默保存
+    };
+
+    const handleSwapLanguages = () => {
+        setSearchDirection(prev => prev === 'my2zh' ? 'zh2my' : 'my2zh');
+        setAiResults([]);
+        setStreamingText('');
     };
 
     const handleLegacySearch = (searchText) => {
@@ -136,6 +148,7 @@ const GlosbeSearchCard = () => {
         if (!trimmedWord) return;
         if (!apiSettings.key) {
             setAiError('请点击设置图标，填写API密钥。');
+            setSettingsOpen(true);
             return;
         }
 
@@ -151,12 +164,12 @@ const GlosbeSearchCard = () => {
         }
 
         setIsAISearching(true);
-        setAiResults('');
+        setStreamingText(''); 
+        setAiResults([]);
         setAiError('');
 
-        const currentDirection = containsChinese(trimmedWord) ? 'zh2my' : 'my2zh';
-        const fromLang = currentDirection === 'my2zh' ? '缅甸语' : '中文';
-        const toLang = currentDirection === 'my2zh' ? '中文' : '缅甸语';
+        const fromLang = searchDirection === 'my2zh' ? '缅甸语' : '中文';
+        const toLang = searchDirection === 'my2zh' ? '中文' : '缅甸语';
         const prompt = getAIPrompt(trimmedWord, fromLang, toLang);
 
         const requestBody = {
@@ -182,34 +195,42 @@ const GlosbeSearchCard = () => {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let fullResponse = '';
+            let accumulatedText = '';
+            let buffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); 
+
                 for (const line of lines) {
-                    const jsonStr = line.replace(/^data: /, '');
-                    if (jsonStr.includes('[DONE]')) continue;
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine.startsWith('data: ')) continue;
+                    const jsonStr = trimmedLine.replace(/^data: /, '');
+                    if (jsonStr === '[DONE]') continue;
                     try {
                         const parsed = JSON.parse(jsonStr);
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
-                            fullResponse += delta;
-                            setAiResults(fullResponse);
+                            accumulatedText += delta;
+                            setStreamingText(accumulatedText);
                         }
-                    } catch (e) { /* Ignore */ }
+                    } catch (e) { console.warn(e); }
                 }
             }
             
-            const validResults = parseAIResponse(fullResponse);
+            const validResults = parseAIResponse(accumulatedText);
             if (validResults.length === 0) {
-                console.error("解析失败，原始输出: ", fullResponse);
-                throw new Error("AI未能按预期格式返回翻译和回译。");
+                 if (accumulatedText.length > 0) console.warn("显示原始内容");
+                 else throw new Error("AI 未返回有效内容");
+            } else {
+                setStreamingText('');
+                setAiResults(validResults);
             }
 
-            setAiResults(validResults);
         } catch (error) {
             console.error('AI翻译错误:', error);
             setAiError(`翻译失败: ${error.message}`);
@@ -229,6 +250,7 @@ const GlosbeSearchCard = () => {
             const recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = false;
+            recognitionRef.current = recognition;
             recognition.onstart = () => setIsListening(true);
             recognition.onend = () => setIsListening(false);
             recognition.onerror = (event) => console.error('语音识别错误:', event.error);
@@ -238,34 +260,42 @@ const GlosbeSearchCard = () => {
                 if (useAI) handleAiTranslate(transcript);
                 else handleLegacySearch(transcript);
             };
-            recognitionRef.current = recognition;
         }
-    }, [useAI, apiSettings]);
+    }, []);
 
     const toggleListening = () => {
         if (!recognitionRef.current) {
             alert('抱歉，您的浏览器不支持语音识别。');
             return;
         }
-        if (isListening) recognitionRef.current.stop();
-        else {
-            const lang = containsChinese(word) ? 'zh-CN' : 'my-MM';
+        if (isListening) {
+            recognitionRef.current.stop();
+        } else {
+            const lang = searchDirection === 'my2zh' ? 'my-MM' : 'zh-CN';
             recognitionRef.current.lang = lang;
             recognitionRef.current.start();
         }
     };
     
     const handleCopy = (text) => navigator.clipboard.writeText(text);
-    const handleSpeak = (textToSpeak) => { 
-        const lang = searchDirection === 'my2zh' ? 'zh-CN-XiaochenMultilingualNeural' : 'my-MM-NilarNeural'; 
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${lang}&r=-20`; 
-        new Audio(url).play(); 
+    
+    // 🟢 3. 升级朗读功能：支持自定义发音人和语速
+    const handleSpeak = (textToSpeak) => {
+        // 判断当前结果是中文还是缅甸语
+        // searchDirection 是 'my2zh' 时，结果是中文 -> 用 voiceZh
+        // searchDirection 是 'zh2my' 时，结果是缅语 -> 用 voiceMy
+        const isTargetChinese = searchDirection === 'my2zh';
+        const voice = isTargetChinese ? (apiSettings.voiceZh || 'zh-CN-XiaoxiaoNeural') : (apiSettings.voiceMy || 'my-MM-NilarNeural');
+        const speed = apiSettings.voiceSpeed || 0;
+        
+        // 这里的 r 参数控制语速 (rate)，范围通常 -100 到 100
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToSpeak)}&v=${voice}&r=${speed}`; 
+        new Audio(url).play().catch(e => alert("朗读服务连接失败，请检查网络"));
     };
+
     const handleBackTranslate = (text) => { 
         setWord(text); 
-        if (useAI) {
-            setTimeout(() => handleAiTranslate(text), 50);
-        }
+        if (useAI) setTimeout(() => handleAiTranslate(text), 50);
     };
 
     const fromLangText = searchDirection === 'my2zh' ? '缅甸语' : '中文';
@@ -282,52 +312,107 @@ const GlosbeSearchCard = () => {
                     </label>
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">AI</span>
                 </div>
-                <button onClick={() => setSettingsOpen(!settingsOpen)} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="API设置">
+                <button onClick={() => setSettingsOpen(!settingsOpen)} className="p-2 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" title="设置">
                     <Settings size={20} />
                 </button>
             </div>
 
+            {/* 🟢 4. 设置面板优化：加入语音选择 */}
             {settingsOpen && (
-                <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg">
+                <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 border dark:border-gray-700 rounded-lg max-h-[80vh] overflow-y-auto">
                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="text-md font-semibold text-gray-800 dark:text-white">API 设置</h3>
+                        <h3 className="text-md font-semibold text-gray-800 dark:text-white">全局设置</h3>
                         <button onClick={() => setSettingsOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><X size={18}/></button>
                     </div>
-                    <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                            <label htmlFor="thinking-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
-                                <Bot size={14} /> 关闭思考模式
-                            </label>
-                            <label htmlFor="thinking-toggle" className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="thinking-toggle" className="sr-only peer" checked={apiSettings.disableThinking} onChange={(e) => setApiSettings({...apiSettings, disableThinking: e.target.checked})} />
-                                <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
-                            </label>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <label htmlFor="third-party-toggle" className="text-xs font-medium text-gray-600 dark:text-gray-300">使用第三方 OpenAI 兼容地址</label>
-                            <label htmlFor="third-party-toggle" className="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="third-party-toggle" className="sr-only peer" checked={apiSettings.useThirdParty} onChange={(e) => setApiSettings({...apiSettings, useThirdParty: e.target.checked})} />
-                                <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500"></div>
-                            </label>
-                        </div>
-                        {apiSettings.useThirdParty ? (
-                             <div>
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">第三方兼容地址</label>
-                                <input type="text" value={apiSettings.thirdPartyUrl} onChange={(e) => setApiSettings({...apiSettings, thirdPartyUrl: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
-                             </div>
-                        ) : (
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Gemini 接口地址</label>
-                                <input type="text" value={apiSettings.url} onChange={(e) => setApiSettings({...apiSettings, url: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+                    
+                    <div className="space-y-4">
+                        {/* 语音设置区域 */}
+                        <div className="p-3 bg-white dark:bg-gray-800 rounded-md border dark:border-gray-700">
+                            <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                <Volume2 size={16}/> 语音朗读设置 (Microsoft)
+                            </h4>
+                            
+                            <div className="mb-3">
+                                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">中文发音人 (zh-CN)</label>
+                                <select 
+                                    value={apiSettings.voiceZh} 
+                                    onChange={(e) => setApiSettings({...apiSettings, voiceZh: e.target.value})}
+                                    className="w-full px-2 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border rounded focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                >
+                                    {MS_VOICES.zh.map(v => <option key={v.name} value={v.name}>{v.label}</option>)}
+                                </select>
                             </div>
-                        )}
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-300">模型</label>
-                            <input type="text" value={apiSettings.model} onChange={(e) => setApiSettings({...apiSettings, model: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+
+                            <div className="mb-3">
+                                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 block">缅甸语发音人 (my-MM)</label>
+                                <select 
+                                    value={apiSettings.voiceMy} 
+                                    onChange={(e) => setApiSettings({...apiSettings, voiceMy: e.target.value})}
+                                    className="w-full px-2 py-1.5 text-sm bg-gray-50 dark:bg-gray-700 border rounded focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                >
+                                    {MS_VOICES.my.map(v => <option key={v.name} value={v.name}>{v.label}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400">语速调节: {apiSettings.voiceSpeed > 0 ? '+' : ''}{apiSettings.voiceSpeed}%</label>
+                                    <span className="text-xs text-gray-400">正常: 0</span>
+                                </div>
+                                <input 
+                                    type="range" 
+                                    min="-50" 
+                                    max="50" 
+                                    step="5"
+                                    value={apiSettings.voiceSpeed} 
+                                    onChange={(e) => setApiSettings({...apiSettings, voiceSpeed: parseInt(e.target.value)})}
+                                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-cyan-500"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 dark:text-gray-300">密钥 (API Key)</label>
-                            <input type="password" value={apiSettings.key} onChange={(e) => setApiSettings({...apiSettings, key: e.target.value})} className="w-full mt-1 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500"/>
+
+                        {/* API 设置区域 (折叠或保持展开) */}
+                        <div className="p-3 bg-white dark:bg-gray-800 rounded-md border dark:border-gray-700">
+                             <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                <Zap size={16}/> API 连接设置
+                            </h4>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label htmlFor="thinking-toggle" className="flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                        <Bot size={14} /> 关闭思考模式 (加速)
+                                    </label>
+                                    <label htmlFor="thinking-toggle" className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="thinking-toggle" className="sr-only peer" checked={apiSettings.disableThinking} onChange={(e) => setApiSettings({...apiSettings, disableThinking: e.target.checked})} />
+                                        <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-cyan-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                    </label>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label htmlFor="third-party-toggle" className="text-xs font-medium text-gray-600 dark:text-gray-300">使用第三方兼容地址</label>
+                                    <label htmlFor="third-party-toggle" className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="third-party-toggle" className="sr-only peer" checked={apiSettings.useThirdParty} onChange={(e) => setApiSettings({...apiSettings, useThirdParty: e.target.checked})} />
+                                        <div className="w-9 h-5 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-checked:bg-cyan-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                                    </label>
+                                </div>
+                                {apiSettings.useThirdParty ? (
+                                     <div>
+                                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300">第三方地址</label>
+                                        <input type="text" value={apiSettings.thirdPartyUrl} onChange={(e) => setApiSettings({...apiSettings, thirdPartyUrl: e.target.value})} className="w-full mt-1 px-2 py-1.5 text-sm border rounded"/>
+                                     </div>
+                                ) : (
+                                    <div>
+                                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Gemini 地址</label>
+                                        <input type="text" value={apiSettings.url} onChange={(e) => setApiSettings({...apiSettings, url: e.target.value})} className="w-full mt-1 px-2 py-1.5 text-sm border rounded"/>
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">模型 (Model)</label>
+                                    <input type="text" value={apiSettings.model} onChange={(e) => setApiSettings({...apiSettings, model: e.target.value})} className="w-full mt-1 px-2 py-1.5 text-sm border rounded"/>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-gray-600 dark:text-gray-300">密钥 (Key)</label>
+                                    <input type="password" value={apiSettings.key} onChange={(e) => setApiSettings({...apiSettings, key: e.target.value})} className="w-full mt-1 px-2 py-1.5 text-sm border rounded"/>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <button onClick={handleSaveSettings} className="w-full mt-4 px-4 py-2 text-sm bg-cyan-500 text-white font-semibold rounded-md hover:bg-cyan-600 transition-colors">
@@ -335,6 +420,7 @@ const GlosbeSearchCard = () => {
                     </button>
                 </div>
             )}
+
             <div className="relative">
                  <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
                     <Search className="w-5 h-5 text-gray-400" />
@@ -350,14 +436,14 @@ const GlosbeSearchCard = () => {
                             handleSearch();
                         }
                     }}
-                    placeholder="输入要翻译的内容..."
+                    placeholder={isListening ? "正在聆听..." : "输入要翻译的内容..."}
                     className="w-full pl-12 pr-14 py-3 text-base text-gray-900 dark:text-gray-100 bg-gray-100/60 dark:bg-gray-900/60 border-2 border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-300 resize-none overflow-hidden"
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                     <button
                         onClick={toggleListening}
                         className={`p-2 rounded-full transition-colors ${
-                            isListening ? 'bg-red-500/20 text-red-500' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
+                            isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'
                         }`}
                         title="语音输入"
                     >
@@ -365,10 +451,17 @@ const GlosbeSearchCard = () => {
                     </button>
                 </div>
             </div>
+
             <div className="flex items-center justify-between mt-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-3 text-sm font-semibold text-gray-500 dark:text-gray-400">
                     <span>{fromLangText}</span>
-                    <ArrowLeftRight size={16} />
+                    <button 
+                        onClick={handleSwapLanguages} 
+                        className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        title="切换翻译方向"
+                    >
+                        <ArrowLeftRight size={16} />
+                    </button>
                     <span>{toLangText}</span>
                 </div>
                 <button
@@ -379,20 +472,23 @@ const GlosbeSearchCard = () => {
                     {isAISearching ? <Loader2 className="animate-spin" /> : "查询"}
                 </button>
             </div>
+            
             {useAI && (
                  <div className="mt-6 min-h-[50px]">
-                    {isAISearching && typeof aiResults === 'string' && (
-                        <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white">
-                            {aiResults}
+                    {isAISearching && streamingText && (
+                        <div className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50 whitespace-pre-wrap font-semibold text-gray-800 dark:text-white mb-4">
+                            {streamingText}
                             <Loader2 className="inline-block w-4 h-4 ml-2 animate-spin text-cyan-500" />
                         </div>
                     )}
+
                     {aiError && (
                         <div className="p-3 rounded-lg bg-red-100 dark:bg-red-800/20 text-red-700 dark:text-red-300 text-sm">
                             {aiError}
                         </div>
                     )}
-                    {Array.isArray(aiResults) && aiResults.length > 0 && (
+
+                    {!isAISearching && aiResults.length > 0 && (
                         <div className="space-y-3">
                         {aiResults.map((result, index) => (
                           <div key={index}  className="p-4 rounded-xl bg-violet-50 dark:bg-gray-900/50 border border-violet-200 dark:border-gray-700/50">
