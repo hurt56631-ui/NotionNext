@@ -1,14 +1,14 @@
-// components/WordCard.js (混合降级策略 + 预加载10个 + 播放按钮 + 双备用接口)
+// components/WordCard.js (混合降级 + 预加载10个 + 播放按钮 + 双备用接口 + 可视化日志调试版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
-import { Howl, Howler } from 'howler'; // 仅用于音效，TTS 改用原生 Audio
+import { Howl, Howler } from 'howler'; // 仅用于音效
 import { 
     FaMicrophone, FaPenFancy, FaCog, FaTimes, FaArrowRight, 
     FaHeart, FaRegHeart, FaPlay, FaStop, FaRedo, FaTrashAlt, 
-    FaSortAmountDown, FaRandom, FaVolumeUp
+    FaSortAmountDown, FaRandom, FaVolumeUp, FaBug
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -16,7 +16,49 @@ import { AdSlot } from '@/components/GoogleAdsense';
 import InterstitialAd from './InterstitialAd'; 
 
 // =================================================================================
-// ===== 1. 数据库与缓存逻辑 (保持不变) =====
+// ===== 0. 日志调试系统 (新增) =====
+// =================================================================================
+const DEBUG_LOGS = [];
+const MAX_LOGS = 50;
+
+function addLog(type, msg) {
+    const time = new Date().toLocaleTimeString();
+    const logEntry = `[${time}] [${type}] ${msg}`;
+    console.log(logEntry); // 同时也输出到控制台
+    DEBUG_LOGS.unshift(logEntry); // 新日志在最前
+    if (DEBUG_LOGS.length > MAX_LOGS) DEBUG_LOGS.pop();
+}
+
+// 日志弹窗组件
+const LogConsole = ({ onClose }) => {
+    const [logs, setLogs] = useState(DEBUG_LOGS);
+    // 实时更新日志
+    useEffect(() => {
+        const interval = setInterval(() => setLogs([...DEBUG_LOGS]), 500);
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div style={{position:'fixed', inset:0, zIndex:20000, background:'rgba(0,0,0,0.85)', color:'#0f0', fontFamily:'monospace', padding:'20px', display:'flex', flexDirection:'column'}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px', borderBottom:'1px solid #333', paddingBottom:'10px'}}>
+                <h3 style={{margin:0}}>🛠️ 调试日志</h3>
+                <button onClick={onClose} style={{background:'#ef4444', color:'white', border:'none', padding:'5px 15px', borderRadius:'4px'}}>关闭</button>
+            </div>
+            <div style={{flex:1, overflowY:'auto', fontSize:'12px', lineHeight:'1.5'}}>
+                {logs.length === 0 ? <div>暂无日志...</div> : logs.map((log, i) => (
+                    <div key={i} style={{marginBottom:'5px', borderBottom:'1px dashed #333'}}>{log}</div>
+                ))}
+            </div>
+            <div style={{marginTop:'10px', display:'flex', gap:'10px'}}>
+                <button onClick={() => { DEBUG_LOGS.length = 0; setLogs([]); }} style={{padding:'8px', flex:1, background:'#444', color:'white', border:'none'}}>清空日志</button>
+                <button onClick={() => navigator.clipboard.writeText(DEBUG_LOGS.join('\n')).then(()=>alert('已复制'))} style={{padding:'8px', flex:1, background:'#2563eb', color:'white', border:'none'}}>复制日志</button>
+            </div>
+        </div>
+    );
+};
+
+// =================================================================================
+// ===== 1. 数据库与缓存逻辑 =====
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
@@ -26,7 +68,7 @@ function openDB() {
     return new Promise((resolve, reject) => { 
         if (typeof window === 'undefined') return resolve(null);
         const request = indexedDB.open(DB_NAME, 3); 
-        request.onerror = () => reject('数据库打开失败'); 
+        request.onerror = () => { addLog('DB', '数据库打开失败'); reject('数据库打开失败'); }; 
         request.onsuccess = () => resolve(request.result); 
         request.onupgradeneeded = (e) => { 
             const db = e.target.result; 
@@ -43,53 +85,70 @@ async function toggleFavorite(word) {
     else { store.put({ id: word.id, chinese: word.chinese, burmese: word.burmese, mnemonic: word.mnemonic, example: word.example }); return true; } 
 }
 async function isFavorite(id) { const db = await openDB(); const tx = db.transaction(STORE_NAME, 'readonly'); const store = tx.objectStore(STORE_NAME); return new Promise(r => { const req = store.get(id); req.onsuccess = () => r(!!req.result); req.onerror = () => r(false); }); }
-async function clearAudioCache() { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).clear(); alert("音频缓存已清理"); }
-const getTTSFromCache = async (key) => { const db = await openDB(); if (!db) return null; return new Promise(r => { const tx = db.transaction(STORE_TTS_CACHE, 'readonly'); const req = tx.objectStore(STORE_TTS_CACHE).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); }); };
-const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).put(blob, key); };
+async function clearAudioCache() { 
+    const db = await openDB(); if (!db) return; 
+    const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); 
+    tx.objectStore(STORE_TTS_CACHE).clear(); 
+    addLog('CACHE', '用户手动清理缓存');
+    alert("音频缓存已清理"); 
+}
+const getTTSFromCache = async (key) => { 
+    const db = await openDB(); if (!db) return null; 
+    return new Promise(r => { 
+        const tx = db.transaction(STORE_TTS_CACHE, 'readonly'); 
+        const req = tx.objectStore(STORE_TTS_CACHE).get(key); 
+        req.onsuccess = () => r(req.result); 
+        req.onerror = () => r(null); 
+    }); 
+};
+const saveTTSToCache = async (key, blob) => { 
+    const db = await openDB(); if (!db) return; 
+    const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); 
+    tx.objectStore(STORE_TTS_CACHE).put(blob, key); 
+    addLog('CACHE', `已缓存音频: ${key.substring(0, 10)}...`);
+};
 
 // =================================================================================
-// ===== 2. 音频播放系统 (多接口轮询 + Google备用) =====
+// ===== 2. 音频播放系统 (带日志追踪) =====
 // =================================================================================
-const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoMultilingualNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
+const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { 
     switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.3, html5: false }), 
     correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8, html5: false }), 
     incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8, html5: false }), 
 };
 
-// 全局变量
 let _currentAudio = null; 
 let _currentAudioUrl = null;
-// ✅ 已修改：预加载数量设置为 10
 const PRELOAD_COUNT = 10; 
 
-// --- 定义 TTS 接口源 ---
 const TTS_SOURCES = [
-    // 1. 主接口 (Libretts)
-    { url: 'https://libretts.is-an.org/api/tts', type: 'edge' },
-    // 2. 备用接口 (Zwei - 需要鉴权)
-    { url: 'https://otts.api.zwei.de.eu.org/v1/tts', type: 'edge', key: 'sk-Zwei' },
-    // 3. 最后的防线 (Google TTS)
-    { type: 'google' }
+    { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Main' },
+    { url: 'https://otts.api.zwei.de.eu.org/v1/tts', type: 'edge', key: 'sk-Zwei', name: 'Backup(Zwei)' },
+    { type: 'google', name: 'Google' }
 ];
 
-// --- 核心：下载并返回 Blob (不播放) ---
+// --- 核心：下载并返回 Blob ---
 const fetchAudioBlob = async (text, voice, rate) => {
     const cacheKey = `${text}_${voice}_${rate}`;
+    
     // 1. 查缓存
     let blob = await getTTSFromCache(cacheKey);
-    if (blob) return blob;
+    if (blob) {
+        // 这是一个静默操作，预加载时不需要频繁弹日志，除非出错
+        return blob;
+    }
 
     // 2. 轮询下载
     const tryFetch = async (source) => {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+            const timeoutId = setTimeout(() => controller.abort(), 8000); 
 
             let response;
+            addLog('NET', `尝试请求: ${source.name}, 文本: ${text.substring(0,5)}`);
 
             if (source.type === 'edge') {
-                // 标准 Edge 格式接口 (Libretts / Zwei)
                 const headers = { 'Content-Type': 'application/json' };
                 if (source.key) headers['Authorization'] = `Bearer ${source.key}`;
 
@@ -100,78 +159,99 @@ const fetchAudioBlob = async (text, voice, rate) => {
                     signal: controller.signal
                 });
             } else if (source.type === 'google') {
-                // Google TTS (GET请求，备用)
                 let lang = 'en';
                 if (voice.startsWith('zh')) lang = 'zh-CN';
-                
                 if (lang === 'zh-CN') {
                     const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`;
                     response = await fetch(googleUrl, { signal: controller.signal });
                 } else {
-                    return null; // 非中文不使用 Google 兜底
+                    return null; 
                 }
             }
 
             clearTimeout(timeoutId);
             
-            if (!response || !response.ok) return null;
+            if (!response || !response.ok) {
+                addLog('NET', `请求失败 ${source.name}: Status ${response?.status}`);
+                return null;
+            }
+            
             const data = await response.blob();
-            // 校验文件大小，防止下载到报错文本
-            if (data.size < 1000) return null; 
+            if (data.size < 1000) {
+                addLog('NET', `文件过小 ${source.name}: ${data.size} bytes`);
+                return null; 
+            }
+            
+            addLog('NET', `下载成功 ${source.name}: ${Math.round(data.size/1024)}KB`);
             return data;
-        } catch (e) { return null; }
+        } catch (e) { 
+            addLog('NET', `异常 ${source.name}: ${e.message}`);
+            return null; 
+        }
     };
 
     for (const source of TTS_SOURCES) {
         const result = await tryFetch(source);
         if (result) {
-            saveTTSToCache(cacheKey, result); // 存入 IndexedDB
+            saveTTSToCache(cacheKey, result); 
             return result;
         }
     }
+    addLog('ERR', `所有接口都失败了: ${text}`);
     return null;
 };
 
-// --- 核心：播放逻辑 (使用 Blob + new Audio) ---
-// 彻底解决 Android 断流：只播放下载好的 Blob
+// --- 核心：播放逻辑 ---
 const playTTS = (text, voice, rate, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
 
     return new Promise(async (resolve) => {
         if (!text || !voice) return resolve();
 
-        // 停止当前
+        addLog('PLAY', `准备播放: ${text.substring(0, 8)}...`);
+
         if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
         if (_currentAudioUrl) { URL.revokeObjectURL(_currentAudioUrl); _currentAudioUrl = null; }
 
         try {
-            // 获取 Blob (如果预加载生效了，这里是 0 延迟直接从 IndexedDB 取)
             const blob = await fetchAudioBlob(text, voice, rate);
 
             if (!blob) {
-                console.warn("所有网络TTS接口均失败");
+                addLog('PLAY', '播放失败: 无法获取音频数据');
                 resolve(); 
                 return;
             }
 
-            // 播放 Blob
             const audioUrl = URL.createObjectURL(blob);
             _currentAudioUrl = audioUrl;
             const audio = new Audio(audioUrl);
             _currentAudio = audio;
             
-            audio.onended = resolve;
-            audio.onerror = (err) => { console.error(err); resolve(); };
+            audio.onended = () => {
+                addLog('PLAY', '播放完成');
+                resolve();
+            };
+            audio.onerror = (err) => { 
+                addLog('PLAY', `播放器错误: ${err.code || '未知'}`);
+                console.error(err); 
+                resolve(); 
+            };
             
-            await audio.play();
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    addLog('PLAY', `浏览器拦截/播放失败: ${error.message}`);
+                    resolve();
+                });
+            }
         } catch (err) {
-            console.error("Play error", err);
+            addLog('ERR', `播放流程异常: ${err.message}`);
             resolve();
         }
     });
 };
 
-// ... (parsePinyin 函数保持不变) ...
+// ... (parsePinyin 保持不变) ...
 const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
 // =================================================================================
@@ -194,8 +274,26 @@ const PronunciationModal = ({ correctWord, settings, onClose }) => {
     return ( <div style={modalStyles.overlay}> <div style={modalStyles.card}> <button onClick={onClose} style={modalStyles.closeBtn}><FaTimes /></button> <h3 style={modalStyles.title}>发音评测</h3> {recordingState !== 'result' && <div style={modalStyles.bigWord}>{correctWord}</div>} {recordingState === 'recording' && (<div style={modalStyles.waveContainer}><div style={modalStyles.wave}></div><div style={modalStyles.wave}></div><div style={modalStyles.wave}></div><p style={{color: '#ef4444', fontWeight: 'bold'}}>正在录音...</p></div>)} {recordingState === 'analyzing' && (<div style={{margin: '20px 0', color: '#666'}}>正在分析...</div>)} {recordingState === 'result' && analysis && ( <div style={modalStyles.resultContainer}> <div style={modalStyles.scoreCircle(analysis.score)}><span style={{fontSize: '2.5rem', fontWeight: 'bold'}}>{analysis.score}</span><span style={{fontSize: '0.8rem'}}>分</span></div> <div style={modalStyles.detailRow}>{analysis.details.map((item, i) => (<div key={i} style={modalStyles.charBlock}><div style={{color: item.isMatch ? '#10b981' : '#ef4444', fontSize: '0.9rem'}}>{item.pinyin}</div><div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>{item.char}</div></div>))}</div> <div style={modalStyles.audioControls}> <button style={modalStyles.playBtn} onClick={(e) => playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese, e)}><FaPlay size={12} /> 标准音</button> <button style={modalStyles.playBtn} onClick={playUserAudio}><FaPlay size={12} /> 我的录音</button> </div> </div> )} <div style={modalStyles.footer}> {recordingState === 'idle' && <button style={modalStyles.recordBtn} onClick={startRecording}><FaMicrophone size={24} /></button>} {recordingState === 'recording' && <button style={{...modalStyles.recordBtn, background: '#ef4444'}} onClick={stopRecording}><FaStop size={24} /></button>} {recordingState === 'result' && <button style={modalStyles.retryBtn} onClick={reset}><FaRedo /> 再试一次</button>} </div> </div> </div> );
 };
 
-// --- 4. 设置面板 (保持不变) ---
-const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => { const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; const handleImageUpload = (e) => { const file = e.target.files[0]; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (ev) => handleSettingChange('backgroundImage', ev.target.result); reader.readAsDataURL(file); } }; return ( <div style={styles.settingsModal} onClick={onClose}> <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}> <button type="button" style={styles.closeButton} onClick={onClose}><FaTimes /></button> <h2 style={{marginTop: 0}}>常规设置</h2> <div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button type="button" onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button type="button" onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div> <div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div> <h2 style={{marginTop: '30px'}}>外观设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>自定义背景</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button></div></div> <h2 style={{marginTop: '30px'}}>数据管理</h2><div style={styles.settingGroup}><div style={styles.settingControl}><button type="button" style={{...styles.settingButton, color: '#ef4444', border: '1px solid #ef4444'}} onClick={clearAudioCache}><FaTrashAlt /> 清理音频缓存 (解决无声)</button></div></div> <h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div> </div> </div> ); });
+// --- 4. 设置面板 (添加了查看日志按钮) ---
+const SettingsPanel = React.memo(({ settings, setSettings, onClose, onOpenLogs }) => { 
+    const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); }; 
+    const handleImageUpload = (e) => { const file = e.target.files[0]; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (ev) => handleSettingChange('backgroundImage', ev.target.result); reader.readAsDataURL(file); } }; 
+    return ( 
+        <div style={styles.settingsModal} onClick={onClose}> 
+            <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}> 
+                <button type="button" style={styles.closeButton} onClick={onClose}><FaTimes /></button> 
+                <h2 style={{marginTop: 0}}>常规设置</h2> 
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button type="button" onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button type="button" onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div> 
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}秒后自动切换</label></div></div> 
+                <h2 style={{marginTop: '30px'}}>外观设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>自定义背景</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>上传图片</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>恢复默认</button></div></div> 
+                <h2 style={{marginTop: '30px'}}>数据管理</h2><div style={styles.settingGroup}><div style={styles.settingControl}><button type="button" style={{...styles.settingButton, color: '#ef4444', border: '1px solid #ef4444'}} onClick={clearAudioCache}><FaTrashAlt /> 清理音频缓存 (解决无声)</button></div></div>
+                {/* 新增：调试按钮 */}
+                <div style={styles.settingGroup}><div style={styles.settingControl}><button type="button" style={{...styles.settingButton, background:'#111', color:'#0f0'}} onClick={onOpenLogs}><FaBug /> 打开调试日志</button></div></div>
+                <h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div> 
+            </div> 
+        </div> 
+    ); 
+});
 
 // ... (JumpModal, useCardSettings 保持不变) ...
 const JumpModal = ({ max, current, onJump, onClose }) => { const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null); useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } else { alert(`请输入 1 到 ${max} 之间的数字`); } }; return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div> ); };
@@ -270,6 +368,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   const [isRevealed, setIsRevealed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [showLogs, setShowLogs] = useState(false); // 控制日志弹窗
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
@@ -293,7 +392,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
     let isCancelled = false;
     clearTimeout(autoBrowseTimerRef.current);
     if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
-    // 移除系统TTS取消调用
     const runAutoPlaySequence = async () => {
         await new Promise(r => setTimeout(r, 500)); 
         if (isCancelled) return;
@@ -337,7 +435,8 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         {isOnline && <div style={styles.adContainer} data-no-gesture="true"><AdSlot /></div>}
         <div style={styles.gestureArea} {...bind()} onClick={() => { if(!processingRef.current) setIsRevealed(prev => !prev) }} />
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
-        {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
+        {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} onOpenLogs={() => setShowLogs(true)} />}
+        {showLogs && <LogConsole onClose={() => setShowLogs(false)} />}
         {isComparisonOpen && currentCard && <PronunciationModal correctWord={currentCard.chinese} settings={settings} onClose={() => setIsComparisonOpen(false)} />}
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
         {activeCards.length > 0 && currentCard ? (
