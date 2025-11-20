@@ -50,7 +50,7 @@ const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db
 // =================================================================================
 // ===== 2. 音频播放系统 (多接口轮询 + Google备用) =====
 // =================================================================================
-const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
+const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoMultilingualNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { 
     switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.3, html5: false }), 
     correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8, html5: false }), 
