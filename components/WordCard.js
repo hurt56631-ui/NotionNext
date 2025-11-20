@@ -1,4 +1,4 @@
-// components/WordCard.js (最终稳定版 - 已添加侧边朗读与新版对比界面)
+// components/WordCard.js (最终修复版 - 修复反面朗读连播，确保收藏可用)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,7 +9,7 @@ import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, F
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// --- 数据库和辅助函数部分 (保持不变) ---
+// --- 数据库和辅助函数部分 (保持完全一致) ---
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
 function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, 1); request.onerror = () => reject('数据库打开失败'); request.onsuccess = () => resolve(request.result); request.onupgradeneeded = (e) => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: 'id' }); } }; }); }
@@ -75,8 +75,6 @@ const useCardSettings = () => { const [settings, setSettings] = useState(() => {
 
 const PinyinVisualizer = React.memo(({ analysis, isCorrect, type }) => { 
     const { parts, errors } = analysis; 
-    // 对于"标准"(type='standard')，我们不显示错误红色，只显示正常黑色
-    // 对于"用户"(type='user')，如果有错误则标红
     const isUser = type === 'user';
     
     const initialStyle = isUser && !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {}; 
@@ -96,7 +94,7 @@ const PinyinVisualizer = React.memo(({ analysis, isCorrect, type }) => {
     ); 
 });
 
-// --- [新版] 发音对比界面 ---
+// --- 新版 发音对比界面 ---
 const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => { 
     const analysis = useMemo(() => { 
         if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; } 
@@ -152,7 +150,6 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
     return ( 
         <div style={styles.comparisonOverlay}> 
             <div style={styles.comparisonPanel}> 
-                {/* 头部结果区 */}
                 <div style={{
                     ...styles.resultHeader, 
                     background: analysis.isCorrect ? 'linear-gradient(135deg, #4ade80, #22c55e)' : 'linear-gradient(135deg, #f87171, #ef4444)'
@@ -163,7 +160,6 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                     <div style={styles.resultSubtitle}>{analysis.isCorrect ? '继续保持' : `准确率: ${analysis.accuracy}%`}</div> 
                 </div> 
 
-                {/* 详情内容区 */}
                 <div style={styles.errorDetailsContainer}>
                     {analysis.error ? (
                         <div style={styles.lengthError}>
@@ -194,7 +190,6 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
                     )}
                 </div> 
 
-                {/* 底部控制与操作区 */}
                 <div style={styles.comparisonFooter}>
                     <div style={styles.audioControls}>
                         <button style={styles.roundBtn} onClick={playCorrectTTS} title="播放标准音">
@@ -296,7 +291,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       setIsRevealed(false);
   }, [currentCard]);
   
-  const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
+  // --- 收藏逻辑 ---
+  const handleToggleFavorite = async () => { 
+      if (!currentCard || currentCard.id === 'fallback') return; 
+      setIsFavoriteCard(await toggleFavorite(currentCard)); 
+  };
   
   const navigate = useCallback((direction) => { 
     if (activeCards.length === 0) return;
@@ -306,7 +305,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
-  // --- 侧边栏手动朗读逻辑 ---
+  // --- [核心修改] 侧边栏手动朗读逻辑 ---
   const handleManualPlay = useCallback((e) => {
       if (e) e.stopPropagation();
       if (!currentCard) return;
@@ -315,8 +314,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
           // 正面：朗读中文
           playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese);
       } else {
-          // 反面：朗读缅甸语 (如果是反面，通常希望听答案/翻译)
-          playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese);
+          // 反面：先朗读缅甸语，如果有例句，读完缅甸语后自动读例句
+          playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
+              if (currentCard.example) {
+                   playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese);
+              }
+          });
       }
   }, [currentCard, isRevealed, settings]);
 
@@ -490,8 +493,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
-                {/* 新增：手动朗读按钮 */}
-                <button style={styles.rightIconButton} onClick={handleManualPlay} title={isRevealed ? "朗读缅语" : "朗读中文"}>
+                <button style={styles.rightIconButton} onClick={handleManualPlay} title={isRevealed ? "朗读缅语及例句" : "朗读中文"}>
                     <FaVolumeUp size={18} />
                 </button>
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置">
