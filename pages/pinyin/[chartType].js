@@ -1,9 +1,9 @@
-// /pages/pinyin/[chartType].js <-- 最终版 (逻辑已移至 PinyinChartClient)
+// /pages/pinyin/[chartType].js
 
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 
-// 动态导入客户端组件，禁用服务端渲染
+// 动态导入客户端组件
 const PinyinChartClient = dynamic(
   () => import('@/components/PinyinChartClient'),
   { 
@@ -12,11 +12,25 @@ const PinyinChartClient = dynamic(
   }
 );
 
-// --- 最终版拼音数据中心 (鼻韵母路径已统一) ---
+// --- 1. 定义谐音映射表 (在这里添加对应的缅甸语) ---
+const burmeseMap = {
+  'a': 'အား',
+  'o': 'အော(ဝ်)',
+  'e': '',      // 你留空了，暂时保持为空
+  'i': 'ယီး',
+  'u': 'ဝူး',
+  'ü': 'ယွီး'
+};
+
+// --- 最终版拼音数据中心 ---
 const pinyinData = {
   initials: { 
     title: '声母表', 
-    items: ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','ch','sh','r','z','c','s','y','w'].map(l => ({ letter: l, audio: `/audio/initials/${l}.mp3` })) 
+    items: ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','ch','sh','r','z','c','s','y','w'].map(l => ({ 
+      letter: l, 
+      audio: `/audio/initials/${l}.mp3`,
+      burmese: burmeseMap[l] || '' // 以后如果声母也要加，直接在 burmeseMap 里加即可
+    })) 
   },
   finals: { 
     title: '韵母表',
@@ -29,7 +43,9 @@ const pinyinData = {
       ...category,
       rows: category.rows.map(row => row.map(letter => ({
         letter,
-        audio: `/audio/finals/${letter}.mp3`
+        audio: `/audio/finals/${letter}.mp3`,
+        // --- 2. 注入谐音数据 ---
+        burmese: burmeseMap[letter] || '' 
       })))
     }))
   },
@@ -76,7 +92,9 @@ const pinyinData = {
       rows: category.rows.map(row => row.map(letter => {
         return {
           letter,
-          audio: `/audio/tones/${category.folder}/${letter}.mp3`
+          audio: `/audio/tones/${category.folder}/${letter}.mp3`,
+          // 如果带声调的也要加谐音，逻辑会比较复杂（需要匹配基础字母），目前先留空或后续添加
+          burmese: '' 
         };
       }))
     }))
@@ -95,7 +113,6 @@ export default function PinyinChartPage() {
   
   return (
     <div className="w-full min-h-screen">
-      {/* 将数据传递给客户端组件，并用 key 来确保切换页面时组件能重新渲染 */}
       <PinyinChartClient initialData={chartData} key={chartType} />
     </div>
   );
