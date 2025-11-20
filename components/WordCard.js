@@ -1,4 +1,4 @@
-// components/WordCard.js (最终完整版 - 含谷歌TTS备用接口)
+// components/WordCard.js (最终完整版 - 三级发音保障：LibreTTS -> OpenAI接口 -> 浏览器本地)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,20 +21,20 @@ const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓�
 const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
 let _howlInstance = null;
 
-// --- 修改后的播放逻辑，包含 Google TTS 备用 ---
+// --- 修改后的播放逻辑：主接口 -> OpenAI备用 -> 浏览器本地 ---
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation();
+    
+    // 停止之前的声音
+    if (_howlInstance?.playing()) _howlInstance.stop(); 
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
     if (!text || !voice) { 
         if (onEndCallback) onEndCallback(); 
         return; 
     } 
-    
-    if (_howlInstance?.playing()) _howlInstance.stop(); 
 
-    // 主接口参数
-    const apiUrl = 'https://libretts.is-an.org/api/tts'; 
-    const rateValue = Math.round(rate / 2); 
-    
+    // 1. 播放音频 Blob 的通用函数
     const playAudioBlob = (audioBlob) => {
         const audioUrl = URL.createObjectURL(audioBlob); 
         _howlInstance = new Howl({ 
@@ -45,22 +45,34 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
                 URL.revokeObjectURL(audioUrl); 
                 if (onEndCallback) onEndCallback(); 
             }, 
-            onloaderror: (id, err) => { 
-                console.error('Howler load error:', err); 
-                URL.revokeObjectURL(audioUrl); 
-                if (onEndCallback) onEndCallback(); 
-            }, 
-            onplayerror: (id, err) => { 
-                console.error('Howler play error:', err); 
-                URL.revokeObjectURL(audioUrl); 
-                if (onEndCallback) onEndCallback(); 
-            } 
+            onloaderror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
+            onplayerror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } 
         }); 
         _howlInstance.play();
     };
 
+    // 2. 浏览器本地 TTS 函数 (最终兜底)
+    const playBrowserTTS = () => {
+        if (!('speechSynthesis' in window)) {
+            console.warn('Browser does not support TTS');
+            if (onEndCallback) onEndCallback();
+            return;
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        let lang = 'en-US';
+        if (voice.includes('zh')) lang = 'zh-CN';
+        else if (voice.includes('my')) lang = 'my-MM';
+        utterance.lang = lang;
+        utterance.rate = Math.max(0.5, Math.min(2, 1 + (rate / 100)));
+        utterance.onend = () => { if (onEndCallback) onEndCallback(); };
+        utterance.onerror = (err) => { console.error('Browser TTS error:', err); if (onEndCallback) onEndCallback(); };
+        window.speechSynthesis.speak(utterance);
+    };
+
     try { 
-        // 尝试主接口
+        // === 尝试 1: 主接口 (LibreTTS) ===
+        const apiUrl = 'https://libretts.is-an.org/api/tts'; 
+        const rateValue = Math.round(rate / 2); 
         const response = await fetch(apiUrl, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -73,28 +85,45 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
         if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); 
         playAudioBlob(audioBlob);
 
-    } catch (error) { 
-        console.warn('Primary TTS failed, switching to Google Backup:', error); 
-        
-        // 备用接口逻辑 (Google Proxy)
+    } catch (primaryError) { 
+        console.warn('Primary TTS failed, trying OpenAI backup:', primaryError); 
+
         try {
-            // 根据 voice 判断语言代码
-            let lang = 'en';
-            if (voice.includes('zh')) lang = 'zh-CN';
-            else if (voice.includes('my')) lang = 'my';
+            // === 尝试 2: OpenAI 兼容接口 (oai-tts) ===
+            const backupUrl = 'https://oai-tts.zwei.de.eu.org/v1/audio/speech';
             
-            // 调用我们创建的本地 API 路由
-            const backupUrl = `/api/google-tts?text=${encodeURIComponent(text)}&lang=${lang}`;
-            
-            const backupResponse = await fetch(backupUrl);
+            // 映射 Voice 到 OpenAI 的模型 voice
+            // OpenAI voices: alloy, echo, fable, onyx, nova, shimmer
+            let aiVoice = 'alloy'; // 默认
+            if (voice.includes('Xiaoxiao') || voice.includes('Xiaoyou') || voice.includes('Nilar')) {
+                aiVoice = 'nova'; // 女声推荐
+            } else if (voice.includes('Thiha')) {
+                aiVoice = 'onyx'; // 男声推荐
+            }
+
+            const backupResponse = await fetch(backupUrl, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer any' // 通常这种接口需要一个 Dummy Token
+                },
+                body: JSON.stringify({
+                    model: 'tts-1',
+                    input: text,
+                    voice: aiVoice,
+                    response_format: 'mp3'
+                })
+            });
+
             if (!backupResponse.ok) throw new Error(`Backup API Error: ${backupResponse.status}`);
             
             const backupBlob = await backupResponse.blob();
             playAudioBlob(backupBlob);
-            
+
         } catch (backupError) {
-            console.error('All TTS attempts failed:', backupError);
-            if (onEndCallback) onEndCallback(); 
+            console.warn('OpenAI Backup failed, switching to Browser TTS:', backupError);
+            // === 尝试 3: 浏览器本地 TTS ===
+            playBrowserTTS();
         }
     } 
 };
@@ -235,6 +264,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
+    
+    // 清除之前的语音
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
     const playFullSequence = () => {
         if (settings.autoPlayChinese && currentCard.chinese) {
@@ -260,7 +292,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     
     const initialPlayTimer = setTimeout(playFullSequence, 600);
 
-    return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
+    return () => { 
+        clearTimeout(initialPlayTimer); 
+        clearTimeout(autoBrowseTimerRef.current); 
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // 卸载组件时停止浏览器TTS
+    };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
 
   // 侧边播放按钮逻辑
@@ -268,6 +304,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!currentCard) return;
     if (_howlInstance?.playing()) _howlInstance.stop();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 
     if (!isRevealed) {
         playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese);
@@ -283,6 +320,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const handleListen = useCallback((e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (_howlInstance?.playing()) _howlInstance.stop();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (isListening) { recognitionRef.current?.stop(); return; }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { alert("抱歉，您的浏览器不支持语音识别。"); return; }
@@ -304,6 +342,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   
   const handleKnow = () => {
     if (_howlInstance?.playing()) _howlInstance.stop();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     if (!currentCard) return;
     navigate(1);
     setTimeout(() => {
@@ -415,7 +454,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 </button>
             )}
             
-            <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"} data-no-gesture="true">
+            <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏" data-no-gesture="true"}>
                 {isFavoriteCard ? <FaHeart size={18} color="#f87171" style={{pointerEvents: 'none'}} /> : <FaRegHeart size={18} style={{pointerEvents: 'none'}} />}
             </button>
           </div>
