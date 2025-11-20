@@ -1,4 +1,4 @@
-// components/WordCard.js (无正反面 + 纯净手动播放 + 布局防遮挡)
+// components/WordCard.js (侧边播放按钮 + 布局防遮挡 + 稳定GET请求)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -100,7 +100,7 @@ const saveTTSToCache = async (key, blob) => {
 };
 
 // =================================================================================
-// ===== 2. 音频播放系统 (GET请求纯净版) =====
+// ===== 2. 音频播放系统 (稳定版) =====
 // =================================================================================
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { 
@@ -113,21 +113,17 @@ let _currentAudio = null;
 let _currentAudioUrl = null;
 const PRELOAD_COUNT = 10; 
 
-// 🚀 只保留最稳的接口配置
+// 接口列表 (使用 GET 请求)
 const TTS_SOURCES = [
-    // 你提供的 Zwei 接口 (GET请求)
-    { url: 'https://otts.api.zwei.de.eu.org/api/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' },
-    // 备用 Libretts
-    { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Libretts' }
+    { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Libretts' },
+    { url: 'https://otts.api.zwei.de.eu.org/api/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' }
 ];
 
 const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
-    // 生成不带时间戳的 Key，确保断网可用
     const cacheKey = `${text}_${voice}_${rate}`;
     let blob = await getTTSFromCache(cacheKey);
     if (blob) return blob;
 
-    // 纯数字参数
     const formatRate = (val) => parseInt(val, 10) || 0;
 
     const tryFetch = async (source) => {
@@ -135,9 +131,7 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
             
-            // 网络请求带时间戳，绕过浏览器缓存
             const timestamp = Date.now();
-            
             if (!isPreload) addLog('NET', `请求 ${source.name}: ${text.substring(0,5)}`);
 
             let reqUrl = source.url;
@@ -147,15 +141,14 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
                 const params = new URLSearchParams();
                 params.append('t', text);
                 params.append('v', voice);
-                params.append('r', formatRate(rate)); // 纯数字
+                params.append('r', formatRate(rate));
                 params.append('p', 0);
-                params.append('_', timestamp);
+                params.append('_', timestamp); 
 
                 reqUrl = `${source.url}?${params.toString()}`;
                 if (source.key) headers['Authorization'] = `Bearer ${source.key}`;
             }
 
-            // 强制使用 GET 请求
             const response = await fetch(reqUrl, { 
                 method: 'GET', 
                 headers: headers,
@@ -182,17 +175,12 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
 
     for (const source of TTS_SOURCES) {
         const result = await tryFetch(source);
-        if (result) { 
-            // 存入缓存
-            saveTTSToCache(cacheKey, result); 
-            return result; 
-        }
+        if (result) { saveTTSToCache(cacheKey, result); return result; }
     }
     return null;
 };
 
 const playTTS = (text, voice, rate, e, setLoadingState) => {
-    // 停止冒泡，防止触发任何其他事件
     if (e) {
         e.stopPropagation();
         if (e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
@@ -235,12 +223,11 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
             };
 
             audio.onerror = (err) => { 
-                addLog('ERR', `解码错`); 
+                addLog('ERR', `播放错误`); 
                 if (setLoadingState) setLoadingState(false);
                 resolve(); 
             };
             
-            // 兜底
             setTimeout(() => {
                  if (_currentAudio === audio && audio.paused && audio.readyState < 2) {
                      audio.play().catch(() => {});
@@ -248,7 +235,7 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
             }, 800);
 
         } catch (err) {
-            addLog('ERR', `异常: ${err.message}`);
+            addLog('ERR', `流程异常: ${err.message}`);
             if (setLoadingState) setLoadingState(false);
             resolve();
         }
@@ -340,6 +327,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
           for (const idx of indicesToLoad) {
               const card = activeCards[idx];
               if (!card) continue;
+              // 预加载时 isPreload=true
               if (card.chinese) await fetchAudioBlob(card.chinese, settings.voiceChinese, settings.speechRateChinese, true);
               if (card.burmese) await fetchAudioBlob(card.burmese, settings.voiceBurmese, settings.speechRateBurmese, true);
               if (card.example) await fetchAudioBlob(card.example, settings.voiceChinese, settings.speechRateChinese, true);
@@ -433,9 +421,10 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 } });
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : 'empty_key', from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) { if(sounds.switch) sounds.switch.play(); } } });
   
-  // 🔥 核心修复：彻底禁止点击屏幕翻面 (只允许拖拽)
+  // 🔥 核心修复：UseDrag 的白名单机制
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => { 
-      // 如果点在 audio 交互区，直接跳过
+      // 检查 target 是否属于 audio-interactive-area
+      // 如果是，直接 return，不执行任何拖拽逻辑，让点击事件穿透下去
       if (event.target.closest('.audio-interactive-area')) return;
 
       if (down) return; 
@@ -454,21 +443,23 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         {isOnline && <InterstitialAd isOpen={showInterstitial} onClose={() => setShowInterstitial(false)} />}
         {isOnline && <div style={styles.adContainer} data-no-gesture="true"><AdSlot /></div>}
         
-        {/* 🔥 这个区域现在只响应拖拽，点击无效 */}
-        <div style={styles.gestureArea} {...bind()} />
+        {/* 🔥 整个区域依然可以翻面 (除了下面明确标记 interactive 的区域) */}
+        <div style={styles.gestureArea} {...bind()} onClick={() => { if(!processingRef.current) setIsRevealed(prev => !prev) }} />
         
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} onOpenLogs={() => setShowLogs(true)} />}
         {showLogs && <LogConsole onClose={() => setShowLogs(false)} />}
         {isComparisonOpen && currentCard && <PronunciationModal correctWord={currentCard.chinese} settings={settings} onClose={() => setIsComparisonOpen(false)} />}
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
+        
         {activeCards.length > 0 && currentCard ? (
             cardTransitions((cardStyle, i) => {
               const cardData = activeCards[i];
               if (!cardData) return null;
               
               const handlePlay = (text, voice, rate, e, type) => {
-                  if (e) { e.stopPropagation(); e.preventDefault(); }
+                  // 🔥 强力阻止冒泡：只播放，不翻面
+                  e.stopPropagation(); 
                   playTTS(text, voice, rate, e, (isLoading) => {
                       setLoadingState(prev => ({ ...prev, [type]: isLoading }));
                   });
@@ -479,56 +470,52 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center', width: '100%' }}>
                           
-                          {/* --- 中文区域 --- */}
-                          <div style={styles.wordGroup} className="audio-interactive-area">
-                            <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>
-                            <div style={styles.mainWordRow}>
-                                <div style={styles.textWordChinese} onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}>
-                                    {cardData.chinese}
-                                </div>
-                                <button 
-                                    style={styles.audioBtn} 
-                                    onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}
-                                >
-                                    {loadingState.chinese ? <FaSpinner className="spin-anim" size={22} /> : <FaVolumeUp size={22} />}
-                                </button>
-                            </div>
+                          {/* --- 中文区域 (侧边按钮) --- */}
+                          <div style={styles.contentRow}>
+                              <button 
+                                  className="audio-interactive-area"
+                                  style={styles.sideAudioBtn} 
+                                  onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}
+                              >
+                                  {loadingState.chinese ? <FaSpinner className="spin-anim" size={20} /> : <FaVolumeUp size={20} />}
+                              </button>
+                              <div style={styles.textContent}>
+                                  <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>
+                                  <div style={styles.textWordChinese}>{cardData.chinese}</div>
+                              </div>
                           </div>
 
-                          <animated.div style={styles.revealedContent}>
-                              {/* --- 缅文区域 --- */}
-                              <div style={styles.wordGroup} className="audio-interactive-area">
-                                  <div style={styles.mainWordRow}>
-                                      <div style={styles.textWordBurmese} onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}>
-                                          {cardData.burmese}
-                                      </div>
-                                      <button 
-                                          style={{...styles.audioBtn, color: '#fce38a'}} 
-                                          onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}
-                                      >
-                                          {loadingState.burmese ? <FaSpinner className="spin-anim" size={20} /> : <FaVolumeUp size={20} />}
-                                      </button>
+                          {/* --- 缅文区域 (侧边按钮) --- */}
+                          <div style={styles.contentRow}>
+                              <button 
+                                  className="audio-interactive-area"
+                                  style={{...styles.sideAudioBtn, color: '#fce38a'}} 
+                                  onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}
+                              >
+                                  {loadingState.burmese ? <FaSpinner className="spin-anim" size={18} /> : <FaVolumeUp size={18} />}
+                              </button>
+                              <div style={styles.textContent}>
+                                  <div style={styles.textWordBurmese}>{cardData.burmese}</div>
+                              </div>
+                          </div>
+
+                          {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
+                          
+                          {/* --- 例句区域 (侧边按钮) --- */}
+                          {cardData.example && (
+                              <div style={styles.contentRow} className="audio-interactive-area" onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}>
+                                  <button 
+                                      style={styles.sideExampleBtn} 
+                                      onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}
+                                  >
+                                      {loadingState.example ? <FaSpinner className="spin-anim" size={14} /> : <FaVolumeUp size={14} />}
+                                  </button>
+                                  <div style={styles.textContent}>
+                                      <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
+                                      <div style={styles.exampleText}>{cardData.example}</div>
                                   </div>
                               </div>
-
-                              {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
-                              
-                              {/* --- 例句区域 --- */}
-                              {cardData.example && (
-                                  <div style={styles.exampleContainer} className="audio-interactive-area" onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}>
-                                      <div style={styles.exampleTextBox}>
-                                          <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
-                                          <div style={styles.exampleText}>{cardData.example}</div>
-                                      </div>
-                                      <button 
-                                          style={styles.exampleAudioBtn} 
-                                          onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}
-                                      >
-                                          {loadingState.example ? <FaSpinner className="spin-anim" size={16} /> : <FaVolumeUp size={16} />}
-                                      </button>
-                                  </div>
-                              )}
-                          </animated.div>
+                          )}
                       </div>
                   </div>
                 </animated.div>
@@ -563,31 +550,76 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   return null;
 };
 
-// ===== 样式表 =====
+// ===== 样式表 (侧边按钮布局) =====
 const styles = {
     adContainer: { position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 10, backgroundColor: 'rgba(0, 0, 0, 0.1)', backdropFilter: 'blur(2px)', textAlign: 'center', padding: '2px 0', minHeight: '30px', maxHeight: '60px', height: 'auto', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' }, 
-    gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px', pointerEvents: 'none' }, // 容器不阻挡，但内部内容会阻挡
     
-    // 🔥 重点：给内容区域加 padding-right 防止被右侧按钮遮挡
+    gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
+    
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px', pointerEvents: 'none' }, 
+    
+    // Padding-right 60px 防止右侧悬浮按钮遮挡
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden', pointerEvents: 'auto', paddingRight: '60px' },
     
-    wordGroup: { marginBottom: '1.2rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' },
-    mainWordRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', position: 'relative' },
+    // --- 侧边布局样式 ---
+    contentRow: {
+        display: 'flex',
+        alignItems: 'center', // 垂直居中
+        justifyContent: 'center', // 水平居中
+        width: '100%',
+        marginBottom: '1.5rem',
+        paddingLeft: '10px' // 稍微左偏一点视觉平衡
+    },
+    textContent: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center', // 文字居中
+        flex: 1
+    },
     
-    audioBtn: { zIndex: 100, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)', transition: 'background 0.2s', touchAction: 'manipulation', flexShrink: 0 },
-    exampleAudioBtn: { zIndex: 100, background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', flexShrink: 0 },
+    // 侧边大按钮
+    sideAudioBtn: { 
+        zIndex: 100, 
+        background: 'rgba(255,255,255,0.15)', 
+        border: 'none', 
+        borderRadius: '50%', 
+        width: '44px', 
+        height: '44px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        color: '#fff', 
+        cursor: 'pointer', 
+        backdropFilter: 'blur(4px)', 
+        transition: 'background 0.2s', 
+        marginRight: '15px', // 按钮和文字的间距
+        flexShrink: 0
+    },
     
+    // 侧边小按钮 (例句)
+    sideExampleBtn: { 
+        zIndex: 100, 
+        background: 'transparent', 
+        border: '1px solid rgba(255,255,255,0.3)', 
+        borderRadius: '50%', 
+        width: '32px', 
+        height: '32px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        color: '#fcd34d', 
+        marginRight: '12px', 
+        flexShrink: 0 
+    },
+
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '0.5rem', letterSpacing: '0.05em' }, 
-    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)', cursor: 'pointer' }, 
-    revealedContent: { marginTop: '0.5rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
-    textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)', cursor: 'pointer' },
-    mnemonicBox: { color: '#E0E0E0', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '10px 18px', borderRadius: '16px', maxWidth: '90%', border: '1px solid rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(3px)' },
+    textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     
-    // 🔥 布局优化：无背景色，右侧不会被遮挡
-    exampleContainer: { width: '100%', maxWidth: '100%', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 0', cursor: 'pointer' },
-    exampleTextBox: { flex: 1, textAlign: 'center' }, 
+    textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
+    
+    mnemonicBox: { color: '#E0E0E0', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '10px 18px', borderRadius: '16px', maxWidth: '90%', border: '1px solid rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(3px)', marginBottom: '1.5rem' },
+    
     examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5, color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.5)' },
     
