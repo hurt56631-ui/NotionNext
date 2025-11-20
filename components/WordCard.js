@@ -1,4 +1,4 @@
-// components/WordCard.js (最终完整版 - 包含顶部悬浮广告、插页广告、侧边播放逻辑及美化后的发音对比)
+// components/WordCard.js (最终完整版 - 修复收藏点击、统一按钮颜色、紧凑型对比界面)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -29,7 +29,7 @@ const useCardSettings = () => { const [settings, setSettings] = useState(() => {
 
 const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => { const { parts, errors } = analysis; const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {}; const finalStyle = !isCorrect && parts.final && errors.final ? styles.wrongPart : {}; const toneStyle = !isCorrect && parts.tone !== '0' && errors.tone ? styles.wrongPart : {}; let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', ''); if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; } finalDisplay = finalDisplay.replace(/[1-5]$/, ''); return ( <div style={styles.pinyinVisualizerContainer}><span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span><span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span><span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span></div> ); });
 
-// 修改后的发音对比组件 (样式美化版)
+// 修改后的发音对比组件 (紧凑型样式)
 const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => {
   const analysis = useMemo(() => { if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; } const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true }); const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true }); if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: '未能识别有效发音' }; if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `字数不对：应为 ${correctPinyin.length} 字，你读了 ${userPinyin.length} 字` }; const results = correctPinyin.map((correctPy, index) => { const userPy = userPinyin[index]; const correctParts = parsePinyin(correctPy); const userParts = parsePinyin(userPy); const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone }; const pinyinMatch = !errors.initial && !errors.final && !errors.tone; return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts }, user: { parts: userParts, errors } }; }); const isCorrect = results.every(r => r.pinyinMatch); const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0); return { isCorrect, results, accuracy }; }, [correctWord, userText]);
   const [isRecording, setIsRecording] = useState(false); const [userRecordingUrl, setUserRecordingUrl] = useState(null); const mediaRecorderRef = useRef(null); const streamRef = useRef(null);
@@ -42,19 +42,56 @@ const PronunciationComparison = ({ correctWord, userText, settings, onContinue, 
   return (
     <div style={styles.comparisonOverlay}>
       <div style={styles.comparisonPanel}>
-        <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #34d399, #059669)' : 'linear-gradient(135deg, #f87171, #dc2626)'}}>
-          <div style={{ fontSize: '3.5rem', marginBottom: '5px' }}>{analysis.isCorrect ? '🎉' : '💡'}</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: '800', letterSpacing: '1px' }}>{analysis.isCorrect ? '完美发音' : `准确率: ${analysis.accuracy}%`}</div>
-          <div style={{ fontSize: '1rem', opacity: 0.9, marginTop: '5px' }}>{analysis.isCorrect ? '继续保持！' : '请查看下方差异'}</div>
+        <div style={{...styles.resultHeader, background: analysis.isCorrect ? '#10b981' : '#ef4444'}}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: 'white' }}>
+            <div style={{ fontSize: '1.8rem' }}>{analysis.isCorrect ? '🎉' : '💡'}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: '800' }}>{analysis.isCorrect ? '完美' : `${analysis.accuracy}%`}</div>
+          </div>
         </div>
-        <div style={styles.errorDetailsContainer}>{analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (<div style={styles.comparisonGrid}>{analysis.results.map((result, index) => (<div key={index} style={styles.comparisonCell}><div style={styles.comparisonChar}>{result.char}</div><div style={styles.comparisonGroupWrapper}><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>标准</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div><div style={styles.separatorLine}></div><div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>你的</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div></div></div>))}</div>)}</div>
+        
+        <div style={styles.errorDetailsContainer}>
+          {analysis.error ? (
+             <div style={styles.lengthError}>{analysis.message}</div>
+          ) : (
+             <div style={styles.comparisonGrid}>
+               {analysis.results.map((result, index) => (
+                 <div key={index} style={styles.comparisonCell}>
+                   <div style={styles.comparisonChar}>{result.char}</div>
+                   <div style={styles.comparisonGroupWrapper}>
+                      <div style={styles.comparisonRow}>
+                        <span style={styles.tinyLabel}>标准</span>
+                        <PinyinVisualizer analysis={result.correct} isCorrect={true} />
+                      </div>
+                      <div style={styles.comparisonRow}>
+                        <span style={styles.tinyLabel}>你的</span>
+                        <PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} />
+                      </div>
+                   </div>
+                 </div>
+               ))}
+             </div>
+          )}
+        </div>
+
         <div style={styles.audioComparisonSection}>
-          <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={20} color="#4299e1"/> <span>听标准音</span></button>
-          <button style={{...styles.audioPlayerButton, ...(isRecording ? {borderColor: '#ef4444', color: '#ef4444', background: '#fef2f2'} : {})}} onClick={handleRecord}> {isRecording ? <FaStop size={20} /> : <FaMicrophone size={20} />} <span>{isRecording ? '停止录音' : '再次跟读'}</span> </button>
-          {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={20} color="#8b5cf6"/> <span>听回放</span></button>}
+          <button style={styles.compactAudioBtn} onClick={playCorrectTTS} title="播放标准音">
+             <FaPlayCircle size={16} color="#4299e1"/> 标准
+          </button>
+          <button style={{...styles.compactAudioBtn, ...(isRecording ? {color: '#ef4444', background: '#fef2f2'} : {})}} onClick={handleRecord} title="录音">
+             {isRecording ? <FaStop size={16} /> : <FaMicrophone size={16} />} {isRecording ? '停止' : '重录'}
+          </button>
+          {userRecordingUrl && (
+            <button style={styles.compactAudioBtn} onClick={playUserAudio} title="回放录音">
+              <FaPlayCircle size={16} color="#8b5cf6"/> 回放
+            </button>
+          )}
         </div>
+
         <div style={styles.comparisonActions}>
-          {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>下一题 <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>我再试试</button>)}
+          {analysis.isCorrect ? 
+            (<button style={{...styles.compactActionBtn, ...styles.continueButton}} onClick={onContinue}>下一题 <FaArrowRight size={14} /></button>) : 
+            (<button style={{...styles.compactActionBtn, ...styles.retryButton}} onClick={onClose}>再试一次</button>)
+          }
         </div>
       </div>
     </div>
@@ -123,7 +160,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       setIsRevealed(false);
   }, [currentCard]);
   
-  const handleToggleFavorite = async () => { if (!currentCard || currentCard.id === 'fallback') return; setIsFavoriteCard(await toggleFavorite(currentCard)); };
+  const handleToggleFavorite = async (e) => { 
+      // 修复：添加 stopPropagation 防止点击穿透或被手势捕获
+      e.stopPropagation();
+      if (!currentCard || currentCard.id === 'fallback') return; 
+      setIsFavoriteCard(await toggleFavorite(currentCard)); 
+  };
   
   const navigate = useCallback((direction) => { 
     if (activeCards.length === 0) return;
@@ -172,7 +214,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
 
-  // --- 新增：侧边播放按钮逻辑 ---
+  // 侧边播放按钮逻辑
   const handleSidePlay = useCallback((e) => {
     e.stopPropagation();
     if (!currentCard) return;
@@ -305,8 +347,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {currentCard && (
           <div style={styles.rightControls} data-no-gesture="true">
             <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置"><FaCog size={18} /></button>
-            {/* 新增：侧边播放按钮 */}
-            <button style={styles.rightIconButton} onClick={handleSidePlay} title="播放"> <FaVolumeUp size={18} color="#4299e1" /> </button>
+            {/* 修改：颜色改为 #4a5568 与其他按钮一致 */}
+            <button style={styles.rightIconButton} onClick={handleSidePlay} title="播放"> <FaVolumeUp size={18} color="#4a5568" /> </button>
             <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">{isListening ? <FaStop size={18} color={'#dc2626'}/> : <FaMicrophone size={18} color={'#4a5568'} />}</button>
             {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺"><FaPenFancy size={18} /></button>)}
             {<button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>}
@@ -355,28 +397,27 @@ const styles = {
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
-    comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px' },
-    comparisonPanel: { width: '100%', maxWidth: '550px', maxHeight: '85vh', background: 'white', borderRadius: '28px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeIn 0.3s ease-out' },
-    resultHeader: { color: 'white', padding: '30px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
-    errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1, background: '#f3f4f6' },
-    lengthError: { textAlign: 'center', color: '#ef4444', padding: '20px', background: '#fee2e2', borderRadius: '12px' },
-    comparisonGrid: { display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center' },
-    comparisonCell: { flex: '0 1 140px', padding: '15px', borderRadius: '16px', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)' },
-    comparisonChar: { fontSize: '2.2rem', fontWeight: 'bold', color: '#111827', lineHeight: 1 },
-    comparisonGroupWrapper: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' },
-    comparisonPinyinGroup: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-    separatorLine: { width: '80%', height: '1px', background: '#e5e7eb', margin: '2px 0' },
-    pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.2rem', height: '1.5rem', color: '#374151' },
-    pinyinPart: { transition: 'color 0.3s', fontWeight: 600 },
-    toneNumber: { fontSize: '0.8rem', fontWeight: 'bold', marginLeft: '2px', color: '#9ca3af', verticalAlign: 'super' },
-    wrongPart: { color: '#ef4444', textDecoration: 'underline', textDecorationThickness: '2px' },
-    pinyinLabel: { fontSize: '0.7rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' },
-    audioComparisonSection: { display: 'flex', gap: '12px', justifyContent: 'center', padding: '20px', borderTop: '1px solid #e5e7eb', background: 'white', flexWrap: 'wrap' },
-    audioPlayerButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', borderRadius: '9999px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '0.95rem', color: '#374151', fontWeight: 600, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', transition: 'all 0.2s' },
-    comparisonActions: { padding: '0 20px 20px 20px', background: 'white' },
-    actionButton: { width: '100%', padding: '16px', borderRadius: '20px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' },
-    continueButton: { background: 'linear-gradient(135deg, #10b981, #059669)' },
-    retryButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+    comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '10px' },
+    comparisonPanel: { width: '100%', maxWidth: '400px', maxHeight: '80vh', background: 'white', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out' },
+    resultHeader: { padding: '15px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+    errorDetailsContainer: { padding: '10px', overflowY: 'auto', flex: 1, background: '#f9fafb' },
+    lengthError: { textAlign: 'center', color: '#ef4444', padding: '15px', background: '#fee2e2', borderRadius: '10px', fontSize: '0.9rem' },
+    comparisonGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' },
+    comparisonCell: { padding: '8px', borderRadius: '10px', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+    comparisonChar: { fontSize: '1.6rem', fontWeight: 'bold', color: '#111827' },
+    comparisonGroupWrapper: { width: '100%', display: 'flex', flexDirection: 'column', gap: '2px' },
+    comparisonRow: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
+    tinyLabel: { fontSize: '0.6rem', color: '#9ca3af', transform: 'scale(0.9)' },
+    pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1rem', height: '1.2rem', color: '#374151' },
+    pinyinPart: { fontWeight: 600 },
+    toneNumber: { fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '1px', color: '#9ca3af', verticalAlign: 'super' },
+    wrongPart: { color: '#ef4444' },
+    audioComparisonSection: { display: 'flex', gap: '8px', justifyContent: 'center', padding: '10px', borderTop: '1px solid #f3f4f6', background: 'white' },
+    compactAudioBtn: { display: 'flex', alignItems: 'center', gap: '4px', padding: '8px 12px', borderRadius: '20px', border: '1px solid #e5e7eb', background: 'white', cursor: 'pointer', fontSize: '0.85rem', color: '#4b5563', fontWeight: 600 },
+    comparisonActions: { padding: '10px', background: 'white' },
+    compactActionBtn: { width: '100%', padding: '12px', borderRadius: '12px', border: 'none', fontSize: '1rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+    continueButton: { background: '#10b981' },
+    retryButton: { background: '#f59e0b' },
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
