@@ -1,4 +1,4 @@
-// components/WordCard.js (最终修正版 - 修复按钮点击穿透、颜色统一、紧凑对比)
+// components/WordCard.js (最终完整版 - 含谷歌TTS备用接口)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,7 +20,85 @@ async function isFavorite(id) { const db = await openDB(); const tx = db.transac
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }), correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }), };
 let _howlInstance = null;
-const playTTS = async (text, voice, rate, onEndCallback, e) => { if (e && e.stopPropagation) e.stopPropagation(); if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } if (_howlInstance?.playing()) _howlInstance.stop(); const apiUrl = 'https://libretts.is-an.org/api/tts'; const rateValue = Math.round(rate / 2); try { const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), }); if (!response.ok) throw new Error(`API Error: ${response.status}`); const audioBlob = await response.blob(); if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); const audioUrl = URL.createObjectURL(audioBlob); _howlInstance = new Howl({ src: [audioUrl], format: ['mpeg'], html5: true, onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onloaderror: (id, err) => { console.error('Howler load error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, onplayerror: (id, err) => { console.error('Howler play error:', err); URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } }); _howlInstance.play(); } catch (error) { console.error('TTS fetch error:', error); if (onEndCallback) onEndCallback(); } };
+
+// --- 修改后的播放逻辑，包含 Google TTS 备用 ---
+const playTTS = async (text, voice, rate, onEndCallback, e) => { 
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!text || !voice) { 
+        if (onEndCallback) onEndCallback(); 
+        return; 
+    } 
+    
+    if (_howlInstance?.playing()) _howlInstance.stop(); 
+
+    // 主接口参数
+    const apiUrl = 'https://libretts.is-an.org/api/tts'; 
+    const rateValue = Math.round(rate / 2); 
+    
+    const playAudioBlob = (audioBlob) => {
+        const audioUrl = URL.createObjectURL(audioBlob); 
+        _howlInstance = new Howl({ 
+            src: [audioUrl], 
+            format: ['mpeg', 'mp3'], 
+            html5: true, 
+            onend: () => { 
+                URL.revokeObjectURL(audioUrl); 
+                if (onEndCallback) onEndCallback(); 
+            }, 
+            onloaderror: (id, err) => { 
+                console.error('Howler load error:', err); 
+                URL.revokeObjectURL(audioUrl); 
+                if (onEndCallback) onEndCallback(); 
+            }, 
+            onplayerror: (id, err) => { 
+                console.error('Howler play error:', err); 
+                URL.revokeObjectURL(audioUrl); 
+                if (onEndCallback) onEndCallback(); 
+            } 
+        }); 
+        _howlInstance.play();
+    };
+
+    try { 
+        // 尝试主接口
+        const response = await fetch(apiUrl, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), 
+        }); 
+        
+        if (!response.ok) throw new Error(`Primary API Error: ${response.status}`); 
+        
+        const audioBlob = await response.blob(); 
+        if (!audioBlob.type.startsWith('audio/')) throw new Error('Invalid audio type'); 
+        playAudioBlob(audioBlob);
+
+    } catch (error) { 
+        console.warn('Primary TTS failed, switching to Google Backup:', error); 
+        
+        // 备用接口逻辑 (Google Proxy)
+        try {
+            // 根据 voice 判断语言代码
+            let lang = 'en';
+            if (voice.includes('zh')) lang = 'zh-CN';
+            else if (voice.includes('my')) lang = 'my';
+            
+            // 调用我们创建的本地 API 路由
+            const backupUrl = `/api/google-tts?text=${encodeURIComponent(text)}&lang=${lang}`;
+            
+            const backupResponse = await fetch(backupUrl);
+            if (!backupResponse.ok) throw new Error(`Backup API Error: ${backupResponse.status}`);
+            
+            const backupBlob = await backupResponse.blob();
+            playAudioBlob(backupBlob);
+            
+        } catch (backupError) {
+            console.error('All TTS attempts failed:', backupError);
+            if (onEndCallback) onEndCallback(); 
+        }
+    } 
+};
+
 const playSoundEffect = (type) => { if (_howlInstance?.playing()) _howlInstance.stop(); if (sounds[type]) sounds[type].play(); };
 const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
@@ -126,7 +204,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       setIsRevealed(false);
   }, [currentCard]);
   
-  // 核心修复：e.stopPropagation 必须配合 data-no-gesture 使用
+  // 修复核心：e.stopPropagation 必须配合 data-no-gesture 使用
   const handleToggleFavorite = async (e) => { 
       if (e && e.stopPropagation) e.stopPropagation();
       if (!currentCard || currentCard.id === 'fallback') return; 
@@ -185,7 +263,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
 
-  // 侧边播放按钮逻辑 (修复点击)
+  // 侧边播放按钮逻辑
   const handleSidePlay = useCallback((e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!currentCard) return;
@@ -323,7 +401,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <FaCog size={18} style={{pointerEvents: 'none'}} />
             </button>
             
-            {/* 播放按钮 - 颜色统一 #4a5568 */}
             <button style={styles.rightIconButton} onClick={handleSidePlay} title="播放" data-no-gesture="true"> 
                 <FaVolumeUp size={18} color="#4a5568" style={{pointerEvents: 'none'}} /> 
             </button>
@@ -338,7 +415,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 </button>
             )}
             
-            {/* 收藏按钮修复：添加 data-no-gesture 和 pointerEvents: none */}
             <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "取消收藏" : "收藏"} data-no-gesture="true">
                 {isFavoriteCard ? <FaHeart size={18} color="#f87171" style={{pointerEvents: 'none'}} /> : <FaRegHeart size={18} style={{pointerEvents: 'none'}} />}
             </button>
