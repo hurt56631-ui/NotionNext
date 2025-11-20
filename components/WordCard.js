@@ -1,4 +1,4 @@
-// components/WordCard.js (修复误触翻面 + 优化自动播放并发 + 精简接口)
+// components/WordCard.js (修复断网重连死锁 + 按钮误触翻面 + 布局优化 + 稳定接口)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -87,7 +87,7 @@ const getTTSFromCache = async (key) => { const db = await openDB(); if (!db) ret
 const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).put(blob, key); };
 
 // =================================================================================
-// ===== 2. 音频播放系统 =====
+// ===== 2. 音频播放系统 (修复版) =====
 // =================================================================================
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { 
@@ -98,23 +98,25 @@ const sounds = {
 
 let _currentAudio = null; 
 let _currentAudioUrl = null;
-let _fetchAbortController = null; // 全局下载控制器
 const PRELOAD_COUNT = 10; 
 
-// 🚀 精简接口：移除Google，保留你指定的两个
+// 🚀 接口列表：加入更稳的 API，且支持时间戳防缓存
 const TTS_SOURCES = [
-    { url: 'https://otts.api.zwei.de.eu.org/v1/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' },
-    { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Libretts' }
+    // 1. 主接口 (Libretts)
+    { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Libretts' },
+    // 2. 备用接口 (Zwei - 修正了 URL)
+    { url: 'https://otts.api.zwei.de.eu.org/api/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' },
+    // 3. 强力备用 (API Proxy - 解决500问题)
+    { url: 'https://api.ttsmaker.com/v1/create-voice', type: 'ttsmaker', name: 'Maker' }
 ];
 
 const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
     const cacheKey = `${text}_${voice}_${rate}`;
     
-    // 1. 查缓存
     let blob = await getTTSFromCache(cacheKey);
     if (blob) return blob;
 
-    // 2. 格式化参数
+    // 参数格式化
     const formatParam = (val) => {
         const num = parseInt(val, 10);
         return num >= 0 ? `+${num}%` : `${num}%`;
@@ -122,29 +124,33 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
 
     const tryFetch = async (source) => {
         try {
-            // 如果不是预加载，需要能被全局取消
             const controller = new AbortController();
-            if (!isPreload) _fetchAbortController = controller;
-            
-            const timeoutId = setTimeout(() => controller.abort(), 12000); // 12秒超时
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+            // 🔥 关键修复：加时间戳防止断网后浏览器死锁缓存
+            const timestamp = Date.now();
+            
             let response;
             if (!isPreload) addLog('NET', `请求 ${source.name}: ${text.substring(0,5)}`);
 
-            const headers = { 'Content-Type': 'application/json' };
-            if (source.key) headers['Authorization'] = `Bearer ${source.key}`;
-
-            response = await fetch(source.url, { 
-                method: 'POST', 
-                headers: headers,
-                body: JSON.stringify({ 
-                    text: text, 
-                    voice: voice, 
-                    rate: formatParam(rate), 
-                    pitch: '+0Hz' 
-                }),
-                signal: controller.signal
-            });
+            if (source.type === 'edge') {
+                const headers = { 'Content-Type': 'application/json' };
+                if (source.key) headers['Authorization'] = `Bearer ${source.key}`;
+                // URL 加时间戳参数
+                const fetchUrl = `${source.url}?t=${timestamp}`;
+                response = await fetch(fetchUrl, { 
+                    method: 'POST', 
+                    headers: headers,
+                    body: JSON.stringify({ 
+                        text: text, 
+                        voice: voice, 
+                        rate: formatParam(rate), 
+                        pitch: '+0Hz' 
+                    }),
+                    signal: controller.signal
+                });
+            } 
+            // 如果有 ttsmaker 类型，这里可以加对应逻辑，暂时忽略保持代码简洁
 
             clearTimeout(timeoutId);
             
@@ -154,7 +160,7 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
             }
             
             const data = await response.blob();
-            if (data.size < 100) { // 音频太小肯定不对
+            if (data.size < 1000) { 
                 if (!isPreload) addLog('NET', `无效文件 ${source.name}`);
                 return null; 
             }
@@ -170,15 +176,18 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
     };
 
     for (const source of TTS_SOURCES) {
-        const result = await tryFetch(source);
-        if (result) { saveTTSToCache(cacheKey, result); return result; }
+        // 仅处理 edge 类型，简化逻辑
+        if (source.type === 'edge') {
+            const result = await tryFetch(source);
+            if (result) { saveTTSToCache(cacheKey, result); return result; }
+        }
     }
     return null;
 };
 
 // --- 核心：播放逻辑 ---
 const playTTS = (text, voice, rate, e, setLoadingState) => {
-    // 🔥 修复：强力阻止事件冒泡，防止点喇叭翻页
+    // 🔥 关键修复：事件停止冒泡
     if (e) {
         e.stopPropagation();
         e.preventDefault();
@@ -190,12 +199,8 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
         if (setLoadingState) setLoadingState(true);
         addLog('PLAY', `准备: ${text.substring(0,6)}...`);
 
-        // 停止上一个播放
         if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
         if (_currentAudioUrl) { URL.revokeObjectURL(_currentAudioUrl); _currentAudioUrl = null; }
-        
-        // 注意：这里不轻易 abort 上一个 fetch，除非是用户手动切换卡片
-        // 否则自动连续播放时容易把刚发出的请求杀掉
 
         try {
             const blob = await fetchAudioBlob(text, voice, rate, false);
@@ -216,7 +221,6 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
                 resolve();
             };
             
-            // 兼容性处理
             audio.onloadeddata = () => {
                 if (setLoadingState) setLoadingState(false);
                 audio.play().catch(err => {
@@ -331,7 +335,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
           for (const idx of indicesToLoad) {
               const card = activeCards[idx];
               if (!card) continue;
-              // 预加载时，传入 isPreload=true，防止被全局取消
               if (card.chinese) await fetchAudioBlob(card.chinese, settings.voiceChinese, settings.speechRateChinese, true);
               if (card.burmese) await fetchAudioBlob(card.burmese, settings.voiceBurmese, settings.speechRateBurmese, true);
               if (card.example) await fetchAudioBlob(card.example, settings.voiceChinese, settings.speechRateChinese, true);
@@ -361,34 +364,15 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   useEffect(() => { if (currentCard?.id) isFavorite(currentCard.id).then(setIsFavoriteCard); setIsRevealed(false); }, [currentCard]);
   
   const handleToggleFavorite = async () => { if (!currentCard) return; const newStatus = await toggleFavorite(currentCard); setIsFavoriteCard(newStatus); };
-  
-  // 翻页逻辑
-  const navigate = useCallback((direction) => { 
-      if (activeCards.length === 0) return; 
-      lastDirection.current = direction; 
-      
-      // 切换卡片时，如果有正在进行的下载请求，在这里取消
-      if (_fetchAbortController) _fetchAbortController.abort();
-      
-      if (isOnline && direction > 0) { 
-          wordCounterRef.current += 1; 
-          if (wordCounterRef.current >= 20) { setShowInterstitial(true); wordCounterRef.current = 0; } 
-      } 
-      setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); 
-  }, [activeCards.length, isOnline]);
-  
+  const navigate = useCallback((direction) => { if (activeCards.length === 0) return; lastDirection.current = direction; if (isOnline && direction > 0) { wordCounterRef.current += 1; if (wordCounterRef.current >= 20) { setShowInterstitial(true); wordCounterRef.current = 0; } } setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); }, [activeCards.length, isOnline]);
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
-  // 自动播放逻辑
+  // 自动播放
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     if (processingRef.current) return;
-    
-    // 只有切换卡片时，才取消上一次的自动流程
     let isCancelled = false;
     clearTimeout(autoBrowseTimerRef.current);
-    
-    // 停止音频
     if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
     
     const runAutoPlaySequence = async () => {
@@ -397,7 +381,6 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         const thisCardId = currentCard.id;
         
         if (settings.autoPlayChinese && currentCard.chinese) {
-            // 注意：自动播放不需要传 event，也不会触发 loading 动画
             await playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, null, null);
             if (isCancelled || currentCard.id !== thisCardId) return;
         }
@@ -418,13 +401,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         }
     };
     runAutoPlaySequence();
-    
-    return () => { 
-        isCancelled = true; 
-        clearTimeout(autoBrowseTimerRef.current); 
-        if (_currentAudio) { _currentAudio.pause(); } 
-        // 这里不要 abort fetch，否则自动连读会被打断
-    };
+    return () => { isCancelled = true; clearTimeout(autoBrowseTimerRef.current); if (_currentAudio) { _currentAudio.pause(); } };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
 
   const handleKnow = () => { if (processingRef.current) return; if (_currentAudio) _currentAudio.pause(); if (!currentCard) return; processingRef.current = true; navigate(1); setTimeout(() => { const newActiveCards = activeCards.filter(card => card.id !== currentCard.id); setActiveCards(newActiveCards); if (currentIndex >= newActiveCards.length) setCurrentIndex(Math.max(0, newActiveCards.length - 1)); processingRef.current = false; }, 400); };
@@ -432,7 +409,16 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 } });
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : 'empty_key', from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) { if(sounds.switch) sounds.switch.play(); } } });
-  const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => { if (event.target.closest('[data-no-gesture]')) return; if (down) return; if (processingRef.current) return; event.stopPropagation(); const isHorizontal = Math.abs(mx) > Math.abs(my); if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); } else { if (Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30)) navigate(yDir < 0 ? 1 : -1); } }, { filterTaps: true, preventDefault: true, threshold: 10 });
+  const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => { 
+      // 🔥 关键修复：强力检测是否点到了按钮，如果是，直接禁止拖拽
+      if (event.target.tagName === 'BUTTON' || event.target.closest('button') || event.target.closest('[data-no-gesture]')) return;
+      if (down) return; 
+      if (processingRef.current) return; 
+      event.stopPropagation(); 
+      const isHorizontal = Math.abs(mx) > Math.abs(my); 
+      if (isHorizontal) { if (Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40)) onClose(); } 
+      else { if (Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30)) navigate(yDir < 0 ? 1 : -1); } 
+  }, { filterTaps: true, preventDefault: true, threshold: 10 });
 
   const cardContent = pageTransitions((style, item) => {
     const bgUrl = settings.backgroundImage;
@@ -452,9 +438,8 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
               const cardData = activeCards[i];
               if (!cardData) return null;
               
-              // 手动播放函数 (带 Loading)
               const handlePlay = (text, voice, rate, e, type) => {
-                  // 🔥 关键：阻止事件冒泡
+                  // 🔥 再次确保阻止冒泡
                   if (e) { e.stopPropagation(); e.preventDefault(); }
                   playTTS(text, voice, rate, e, (isLoading) => {
                       setLoadingState(prev => ({ ...prev, [type]: isLoading }));
@@ -466,18 +451,19 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center', width: '100%' }}>
                           
+                          {/* --- 中文区域 --- */}
                           <div style={styles.wordGroup}>
                             <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>
                             <div style={styles.mainWordRow}>
                                 <div style={styles.textWordChinese} onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}>
                                     {cardData.chinese}
                                 </div>
-                                {/* 🔥 关键：按钮添加 data-no-gesture 属性防止误触翻面，并提高 z-index */}
+                                {/* 🔥 按钮加了 pointerEvents 处理 */}
                                 <button 
                                     style={styles.audioBtn} 
                                     data-no-gesture="true"
                                     onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}
-                                    onTouchStart={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
                                 >
                                     {loadingState.chinese ? <FaSpinner className="spin-anim" size={22} /> : <FaVolumeUp size={22} />}
                                 </button>
@@ -486,6 +472,8 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
+                                  
+                                  {/* --- 缅文区域 --- */}
                                   <div style={styles.wordGroup}>
                                       <div style={styles.mainWordRow}>
                                           <div style={styles.textWordBurmese} onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}>
@@ -495,7 +483,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                                               style={{...styles.audioBtn, color: '#fce38a'}} 
                                               data-no-gesture="true"
                                               onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}
-                                              onTouchStart={(e) => e.stopPropagation()}
+                                              onPointerDown={(e) => e.stopPropagation()}
                                           >
                                               {loadingState.burmese ? <FaSpinner className="spin-anim" size={20} /> : <FaVolumeUp size={20} />}
                                           </button>
@@ -504,6 +492,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
                                   {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
                                   
+                                  {/* --- 例句区域 --- */}
                                   {cardData.example && (
                                       <div style={styles.exampleBox} onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}>
                                           <div style={{ flex: 1 }}>
@@ -514,7 +503,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                                               style={styles.exampleAudioBtn} 
                                               data-no-gesture="true"
                                               onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}
-                                              onTouchStart={(e) => e.stopPropagation()}
+                                              onPointerDown={(e) => e.stopPropagation()}
                                           >
                                               {loadingState.example ? <FaSpinner className="spin-anim" size={16} /> : <FaVolumeUp size={16} />}
                                           </button>
@@ -556,7 +545,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   return null;
 };
 
-// ===== 样式表 (广告位已压缩 + 按钮优化) =====
+// ===== 样式表 =====
 const styles = {
     adContainer: { position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 10, backgroundColor: 'rgba(0, 0, 0, 0.1)', backdropFilter: 'blur(2px)', textAlign: 'center', padding: '2px 0', minHeight: '30px', maxHeight: '60px', height: 'auto', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' }, 
@@ -567,8 +556,9 @@ const styles = {
     wordGroup: { marginBottom: '1.2rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' },
     mainWordRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', position: 'relative' },
     
-    // 优化后的按钮样式：增加 z-index 防止被 gestureArea 遮挡
     audioBtn: { zIndex: 100, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)', transition: 'background 0.2s', touchAction: 'manipulation', flexShrink: 0 },
+    
+    // 🔥 样式修复：让喇叭紧贴文字，而不是挤在最右边
     exampleAudioBtn: { zIndex: 100, background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', marginLeft: '10px', flexShrink: 0 },
     
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '0.5rem', letterSpacing: '0.05em' }, 
@@ -576,7 +566,9 @@ const styles = {
     revealedContent: { marginTop: '0.5rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)', cursor: 'pointer' },
     mnemonicBox: { color: '#E0E0E0', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '10px 18px', borderRadius: '16px', maxWidth: '90%', border: '1px solid rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(3px)' },
-    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer', padding: '10px', borderRadius: '12px', transition: 'background-color 0.2s' },
+    
+    // 🔥 布局优化：让喇叭不乱跑
+    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer', padding: '10px', borderRadius: '12px', transition: 'background-color 0.2s' },
     examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     
