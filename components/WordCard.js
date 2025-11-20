@@ -1,4 +1,4 @@
-// components/WordCard.js (修复断网重连死锁 + 按钮误触翻面 + 布局优化 + 稳定接口)
+// components/WordCard.js (GET请求修复版 + 按钮防穿透 + 界面优化)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -87,7 +87,7 @@ const getTTSFromCache = async (key) => { const db = await openDB(); if (!db) ret
 const saveTTSToCache = async (key, blob) => { const db = await openDB(); if (!db) return; const tx = db.transaction(STORE_TTS_CACHE, 'readwrite'); tx.objectStore(STORE_TTS_CACHE).put(blob, key); };
 
 // =================================================================================
-// ===== 2. 音频播放系统 (修复版) =====
+// ===== 2. 音频播放系统 (GET请求重构版) =====
 // =================================================================================
 const TTS_VOICES = [ { value: 'zh-CN-XiaoxiaoNeural', label: '中文女声 (晓晓)' }, { value: 'zh-CN-XiaoyouNeural', label: '中文女声 (晓悠)' }, { value: 'my-MM-NilarNeural', label: '缅甸语女声' }, { value: 'my-MM-ThihaNeural', label: '缅甸语男声' }, ];
 const sounds = { 
@@ -98,59 +98,57 @@ const sounds = {
 
 let _currentAudio = null; 
 let _currentAudioUrl = null;
+let _fetchAbortController = null;
 const PRELOAD_COUNT = 10; 
 
-// 🚀 接口列表：加入更稳的 API，且支持时间戳防缓存
+// 🚀 修正接口配置：去掉 Google，只留你指定的
 const TTS_SOURCES = [
-    // 1. 主接口 (Libretts)
     { url: 'https://libretts.is-an.org/api/tts', type: 'edge', name: 'Libretts' },
-    // 2. 备用接口 (Zwei - 修正了 URL)
-    { url: 'https://otts.api.zwei.de.eu.org/api/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' },
-    // 3. 强力备用 (API Proxy - 解决500问题)
-    { url: 'https://api.ttsmaker.com/v1/create-voice', type: 'ttsmaker', name: 'Maker' }
+    { url: 'https://otts.api.zwei.de.eu.org/api/tts', type: 'edge', key: 'sk-Zwei', name: 'Zwei' }
 ];
 
 const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
     const cacheKey = `${text}_${voice}_${rate}`;
-    
     let blob = await getTTSFromCache(cacheKey);
     if (blob) return blob;
 
-    // 参数格式化
-    const formatParam = (val) => {
-        const num = parseInt(val, 10);
-        return num >= 0 ? `+${num}%` : `${num}%`;
+    // 🛠️ 核心修正：根据你的curl，rate应该是纯数字整数
+    const formatRate = (val) => {
+        return parseInt(val, 10) || 0; 
     };
 
     const tryFetch = async (source) => {
         try {
             const controller = new AbortController();
+            if (!isPreload) _fetchAbortController = controller;
             const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            // 🔥 关键修复：加时间戳防止断网后浏览器死锁缓存
-            const timestamp = Date.now();
             
-            let response;
+            const timestamp = Date.now();
             if (!isPreload) addLog('NET', `请求 ${source.name}: ${text.substring(0,5)}`);
 
+            let response;
+
             if (source.type === 'edge') {
-                const headers = { 'Content-Type': 'application/json' };
+                // 构造 GET 请求参数 (完全匹配你的 curl 示例)
+                const params = new URLSearchParams();
+                params.append('t', text);
+                params.append('v', voice);
+                params.append('r', formatRate(rate)); // 传纯数字
+                params.append('p', 0);
+                params.append('_', timestamp); // 防止缓存
+
+                let reqUrl = `${source.url}?${params.toString()}`;
+
+                const headers = {};
                 if (source.key) headers['Authorization'] = `Bearer ${source.key}`;
-                // URL 加时间戳参数
-                const fetchUrl = `${source.url}?t=${timestamp}`;
-                response = await fetch(fetchUrl, { 
-                    method: 'POST', 
+
+                // 🔥 改为 GET 请求
+                response = await fetch(reqUrl, { 
+                    method: 'GET', 
                     headers: headers,
-                    body: JSON.stringify({ 
-                        text: text, 
-                        voice: voice, 
-                        rate: formatParam(rate), 
-                        pitch: '+0Hz' 
-                    }),
                     signal: controller.signal
                 });
-            } 
-            // 如果有 ttsmaker 类型，这里可以加对应逻辑，暂时忽略保持代码简洁
+            }
 
             clearTimeout(timeoutId);
             
@@ -160,7 +158,7 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
             }
             
             const data = await response.blob();
-            if (data.size < 1000) { 
+            if (data.size < 500) { 
                 if (!isPreload) addLog('NET', `无效文件 ${source.name}`);
                 return null; 
             }
@@ -176,21 +174,19 @@ const fetchAudioBlob = async (text, voice, rate, isPreload = false) => {
     };
 
     for (const source of TTS_SOURCES) {
-        // 仅处理 edge 类型，简化逻辑
-        if (source.type === 'edge') {
-            const result = await tryFetch(source);
-            if (result) { saveTTSToCache(cacheKey, result); return result; }
-        }
+        const result = await tryFetch(source);
+        if (result) { saveTTSToCache(cacheKey, result); return result; }
     }
     return null;
 };
 
 // --- 核心：播放逻辑 ---
 const playTTS = (text, voice, rate, e, setLoadingState) => {
-    // 🔥 关键修复：事件停止冒泡
+    // 🔥 强力阻止冒泡 (防止点喇叭翻面)
     if (e) {
         e.stopPropagation();
-        e.preventDefault();
+        if (e.preventDefault) e.preventDefault();
+        if (e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
     }
 
     return new Promise(async (resolve) => {
@@ -235,7 +231,6 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
                 resolve(); 
             };
             
-            // 兜底
             setTimeout(() => {
                  if (_currentAudio === audio && audio.paused && audio.readyState < 2) {
                      audio.play().catch(() => {});
@@ -253,7 +248,7 @@ const playTTS = (text, voice, rate, e, setLoadingState) => {
 const parsePinyin = (pinyinNum) => { if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); const toneMatch = rawPinyin.match(/[1-5]$/); const tone = toneMatch ? toneMatch[0] : '0'; const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }); const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; let initial = ''; let final = pinyinPlain; for (const init of initials) { if (pinyinPlain.startsWith(init)) { initial = init; final = pinyinPlain.slice(init.length); break; } } return { initial, final, tone, pinyinMark, rawPinyin }; };
 
 // =================================================================================
-// ===== 3. 语音对比弹窗组件 (保持不变) =====
+// ===== 3. 语音对比弹窗组件 =====
 // =================================================================================
 const PronunciationModal = ({ correctWord, settings, onClose }) => {
     const [recordingState, setRecordingState] = useState('idle');
@@ -335,6 +330,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
           for (const idx of indicesToLoad) {
               const card = activeCards[idx];
               if (!card) continue;
+              // 预加载时 isPreload=true
               if (card.chinese) await fetchAudioBlob(card.chinese, settings.voiceChinese, settings.speechRateChinese, true);
               if (card.burmese) await fetchAudioBlob(card.burmese, settings.voiceBurmese, settings.speechRateBurmese, true);
               if (card.example) await fetchAudioBlob(card.example, settings.voiceChinese, settings.speechRateChinese, true);
@@ -364,15 +360,31 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   useEffect(() => { if (currentCard?.id) isFavorite(currentCard.id).then(setIsFavoriteCard); setIsRevealed(false); }, [currentCard]);
   
   const handleToggleFavorite = async () => { if (!currentCard) return; const newStatus = await toggleFavorite(currentCard); setIsFavoriteCard(newStatus); };
-  const navigate = useCallback((direction) => { if (activeCards.length === 0) return; lastDirection.current = direction; if (isOnline && direction > 0) { wordCounterRef.current += 1; if (wordCounterRef.current >= 20) { setShowInterstitial(true); wordCounterRef.current = 0; } } setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); }, [activeCards.length, isOnline]);
+  
+  // 翻页逻辑
+  const navigate = useCallback((direction) => { 
+      if (activeCards.length === 0) return; 
+      lastDirection.current = direction; 
+      
+      if (_fetchAbortController) _fetchAbortController.abort();
+      
+      if (isOnline && direction > 0) { 
+          wordCounterRef.current += 1; 
+          if (wordCounterRef.current >= 20) { setShowInterstitial(true); wordCounterRef.current = 0; } 
+      } 
+      setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length); 
+  }, [activeCards.length, isOnline]);
+  
   const handleJumpToCard = (index) => { if (index >= 0 && index < activeCards.length) { lastDirection.current = index > currentIndex ? 1 : -1; setCurrentIndex(index); } setIsJumping(false); };
 
-  // 自动播放
+  // 自动播放逻辑
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     if (processingRef.current) return;
+    
     let isCancelled = false;
     clearTimeout(autoBrowseTimerRef.current);
+    
     if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
     
     const runAutoPlaySequence = async () => {
@@ -401,7 +413,12 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
         }
     };
     runAutoPlaySequence();
-    return () => { isCancelled = true; clearTimeout(autoBrowseTimerRef.current); if (_currentAudio) { _currentAudio.pause(); } };
+    
+    return () => { 
+        isCancelled = true; 
+        clearTimeout(autoBrowseTimerRef.current); 
+        if (_currentAudio) { _currentAudio.pause(); } 
+    };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
 
   const handleKnow = () => { if (processingRef.current) return; if (_currentAudio) _currentAudio.pause(); if (!currentCard) return; processingRef.current = true; navigate(1); setTimeout(() => { const newActiveCards = activeCards.filter(card => card.id !== currentCard.id); setActiveCards(newActiveCards); if (currentIndex >= newActiveCards.length) setCurrentIndex(Math.max(0, newActiveCards.length - 1)); processingRef.current = false; }, 400); };
@@ -410,8 +427,9 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 } });
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : 'empty_key', from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) { if(sounds.switch) sounds.switch.play(); } } });
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => { 
-      // 🔥 关键修复：强力检测是否点到了按钮，如果是，直接禁止拖拽
-      if (event.target.tagName === 'BUTTON' || event.target.closest('button') || event.target.closest('[data-no-gesture]')) return;
+      // 🔥 核心修复：检测目标是否是按钮，是则不翻面
+      if (event.target.closest('button') || event.target.closest('.no-gesture-target')) return;
+
       if (down) return; 
       if (processingRef.current) return; 
       event.stopPropagation(); 
@@ -439,7 +457,7 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
               if (!cardData) return null;
               
               const handlePlay = (text, voice, rate, e, type) => {
-                  // 🔥 再次确保阻止冒泡
+                  // 🔥 防止冒泡
                   if (e) { e.stopPropagation(); e.preventDefault(); }
                   playTTS(text, voice, rate, e, (isLoading) => {
                       setLoadingState(prev => ({ ...prev, [type]: isLoading }));
@@ -458,10 +476,10 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
                                 <div style={styles.textWordChinese} onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}>
                                     {cardData.chinese}
                                 </div>
-                                {/* 🔥 按钮加了 pointerEvents 处理 */}
+                                {/* 🔥 关键：添加 class 和 pointerDown 处理 */}
                                 <button 
+                                    className="no-gesture-target"
                                     style={styles.audioBtn} 
-                                    data-no-gesture="true"
                                     onClick={(e) => handlePlay(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, e, 'chinese')}
                                     onPointerDown={(e) => e.stopPropagation()}
                                 >
@@ -472,16 +490,14 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
-                                  
-                                  {/* --- 缅文区域 --- */}
                                   <div style={styles.wordGroup}>
                                       <div style={styles.mainWordRow}>
                                           <div style={styles.textWordBurmese} onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}>
                                               {cardData.burmese}
                                           </div>
                                           <button 
+                                              className="no-gesture-target"
                                               style={{...styles.audioBtn, color: '#fce38a'}} 
-                                              data-no-gesture="true"
                                               onClick={(e) => handlePlay(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, e, 'burmese')}
                                               onPointerDown={(e) => e.stopPropagation()}
                                           >
@@ -492,16 +508,16 @@ const WordCard = ({ words = [], isOpen, onClose, onFinishLesson, hasMore, progre
 
                                   {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
                                   
-                                  {/* --- 例句区域 --- */}
+                                  {/* 🔥 布局修复：flex 布局让按钮紧贴文字 */}
                                   {cardData.example && (
                                       <div style={styles.exampleBox} onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}>
-                                          <div style={{ flex: 1 }}>
+                                          <div style={{ flex: 1, textAlign: 'center' }}>
                                               <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' })}</div>
                                               <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                           <button 
+                                              className="no-gesture-target"
                                               style={styles.exampleAudioBtn} 
-                                              data-no-gesture="true"
                                               onClick={(e) => handlePlay(cardData.example, settings.voiceChinese, settings.speechRateChinese, e, 'example')}
                                               onPointerDown={(e) => e.stopPropagation()}
                                           >
@@ -557,8 +573,6 @@ const styles = {
     mainWordRow: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', position: 'relative' },
     
     audioBtn: { zIndex: 100, background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)', transition: 'background 0.2s', touchAction: 'manipulation', flexShrink: 0 },
-    
-    // 🔥 样式修复：让喇叭紧贴文字，而不是挤在最右边
     exampleAudioBtn: { zIndex: 100, background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fcd34d', marginLeft: '10px', flexShrink: 0 },
     
     pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '0.5rem', letterSpacing: '0.05em' }, 
@@ -567,8 +581,8 @@ const styles = {
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)', cursor: 'pointer' },
     mnemonicBox: { color: '#E0E0E0', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(0, 0, 0, 0.25)', padding: '10px 18px', borderRadius: '16px', maxWidth: '90%', border: '1px solid rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(3px)' },
     
-    // 🔥 布局优化：让喇叭不乱跑
-    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer', padding: '10px', borderRadius: '12px', transition: 'background-color 0.2s' },
+    // 🔥 布局修正：让例句和按钮一起居中
+    exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer', padding: '10px', borderRadius: '12px', transition: 'background-color 0.2s' },
     examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     
