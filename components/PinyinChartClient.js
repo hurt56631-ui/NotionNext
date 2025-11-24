@@ -273,4 +273,4 @@ export default function PinyinChartClient({ initialData }) {
         </div>
       </>
     );
-        }
+              }
