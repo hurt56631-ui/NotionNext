@@ -1,62 +1,63 @@
 {
-  "id": "hsk1-lesson12-final-rich",
-  "title": "第12课：天气怎么样？ (丰富版)",
+  "id": "hsk1-lesson12-final-optimized",
+  "title": "第12课：天气怎么样？",
   "globalConfig": {
     "themeColor": "#4A90E2",
-    "backgroundColor": "#F5F7FA",
-    "contentAlignment": "center-upper",
-    "fontStyle": "standard",
-    "paginationPosition": "bottom-center"
+    "backgroundColor": "#F5F7FA", 
+    "contentLayout": "center-upper", 
+    "autoAdvance": false, 
+    "navigationMode": "swipe_vertical"
   },
   "blocks": [
     {
       "type": "teaching",
       "id": "intro",
       "style": {
-        "marginTop": "10vh"
+        "layout": "center-upper",
+        "paddingTop": "15vh" 
       },
       "content": {
         "pinyin": "Dì shí'èr kè: Tiānqì zěnmeyàng?",
         "displayText": "第12课：天气怎么样？",
         "translation": "သင်ခန်းစာ ၁၂: ရာသီဥတုဘယ်လိုလဲ?",
         "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာ သင်ခန်းစာ ၁၂ ရဲ့ အဓိက သဒ္ဒါစည်းမျဉ်းတွေနဲ့ လေ့ကျင့်ခန်းတွေကို ပြုလုပ်ကြမှာပါ။",
-        "narrationLang": "my"
+        "narrationLang": "my",
+        "hintText": "👆 点击或上滑开始 (နှိပ်ပါ သို့မဟုတ် အပေါ်သို့ပွတ်ဆွဲပါ)"
       }
     },
     {
       "type": "word_study",
       "id": "new_words",
       "style": {
-        "cardMode": "expanded",
-        "highlightColor": "#E3F2FD"
+        "layout": "fullscreen", 
+        "backgroundColor": "#F5F7FA" 
       },
       "content": {
-        "title": "本课生词 (ဝေါဟာရများ)",
+        "title": "本课生词",
         "displayMode": "card_grid",
         "words": [
           { "id": "word1", "chinese": "天气", "pinyin": "tiānqì", "translation": "ရာသီဥတု", "example": "今天天气很好。", "rate": 0 },
-          { "id": "word2", "chinese": "怎么样", "pinyin": "zěnmeyàng", "translation": "ဘယ်လိုလဲ", "example": "你怎么样？", "rate": -5 },
-          { "id": "word3", "chinese": "太", "pinyin": "tài", "translation": "အရမ်း", "example": "太好了！", "rate": 0 },
-          { "id": "word4", "chinese": "热", "pinyin": "rè", "translation": "ပူတယ်", "example": "天气太热了。", "rate": 0 },
-          { "id": "word5", "chinese": "冷", "pinyin": "lěng", "translation": "အေးတယ်", "example": "天气太冷了。", "rate": 0 },
-          { "id": "word6", "chinese": "身体", "pinyin": "shēntǐ", "translation": "ခန္ဓာကိုယ် / ကျန်းမာရေး", "example": "身体怎么样？", "rate": 0 },
-          { "id": "word7", "chinese": "下雨", "pinyin": "xià yǔ", "translation": "မိုးရွာတယ်", "example": "明天会下雨。", "rate": 0 },
-          { "id": "word8", "chinese": "水果", "pinyin": "shuǐguǒ", "translation": "အသီးအနှံ", "example": "我想吃水果。", "rate": 0 }
+          { "id": "word2", "chinese": "怎么样", "pinyin": "zěnmeyàng", "translation": "ဘယ်လိုလဲ", "example": "你的身体怎么样？", "rate": -5 },
+          { "id": "word3", "chinese": "太", "pinyin": "tài", "translation": "အရမ်း", "example": "这个苹果太大了。", "rate": 0 },
+          { "id": "word4", "chinese": "热", "pinyin": "rè", "translation": "ပူတယ်", "example": "今天太热了。", "rate": 0 },
+          { "id": "word5", "chinese": "冷", "pinyin": "lěng", "translation": "အေးတယ်", "example": "我不喜欢冷。", "rate": 0 },
+          { "id": "word6", "chinese": "身体", "pinyin": "shēntǐ", "translation": "ခန္ဓာကိုယ်/ကျန်းမာရေး", "example": "祝你身体健康。", "rate": 0 },
+          { "id": "word7", "chinese": "下雨", "pinyin": "xià yǔ", "translation": "မိုးရွာတယ်", "example": "明天会下雨吗？", "rate": 0 },
+          { "id": "word8", "chinese": "水果", "pinyin": "shuǐguǒ", "translation": "အသီးအနှံ", "example": "多吃水果对身体好。", "rate": 0 }
         ]
       }
     },
     {
       "type": "grammar_study",
       "id": "grammar_zenmeyang",
-      "style": { "alignment": "top" },
       "content": {
         "grammarPoints": [
           {
             "id": "gp1_zenmeyang",
             "grammarPoint": "疑问代词 ‘怎么样’",
             "pattern": "Noun / Pronoun + 怎么样?",
-            "visibleExplanation": "“怎么样”用来询问人或事物的状况。\n💡 例如: 今天天气怎么样？\n(ဒီနေ့ရာသီဥတုဘယ်လိုလဲ။)",
-            "narrationScript": "ပထမဆုံး သဒ္ဒါစည်းမျဉ်းကတော့ {{怎么样}} ပါ။ တစ်ခုခုရဲ့ အခြေအနေကို သိချင်ရင် သူ့ကိုသုံးပြီး မေးရပါတယ်။",
+            "visibleExplanation": "“怎么样”用来询问人或事物的状况。\n💡 例如: 今天天气怎么样？(ဒီနေ့ရာသီဥတုဘယ်လိုလဲ။)",
+            "narrationScript": "ပထမဆုံး သဒ္ဒါစည်းမျဉ်းကတော့ {{怎么样}} ပါ။",
             "examples": [
               { "id": "ex1", "sentence": "今天天气怎么样？", "translation": "ဒီနေ့ ရာသီဥတု ဘယ်လိုလဲ။", "rate": 0 },
               { "id": "ex2", "sentence": "你身体怎么样？", "translation": "မင်း ကျန်းမာရေး ဘယ်လိုလဲ။", "rate": 0 }
@@ -68,15 +69,14 @@
     {
       "type": "grammar_study",
       "id": "grammar_tai_le",
-      "style": { "alignment": "top" },
       "content": {
         "grammarPoints": [
           {
             "id": "gp2_tai_le",
             "grammarPoint": "程度副词 ‘太...了’",
             "pattern": "太 + Adj. + 了",
-            "visibleExplanation": "“太”表示程度很高，常常和“了”一起使用。\n💡 例如: 天气太热了。\n(ရာသီဥတု အရမ်းပူတယ်။)",
-            "narrationScript": "နောက်တစ်ခုကတော့ {{太}} ပါ။ ဒါက 'အရမ်း' ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ {{太}} နဲ့ {{了}} ကို တွဲသုံးလေ့ရှိပါတယ်။",
+            "visibleExplanation": "“太”表示程度很高，常常和“了”一起使用。\n💡 例如: 天气太热了。(ရာသီဥတု အရမ်းပူတယ်။)",
+            "narrationScript": "နောက်တစ်ခုကတော့ {{太}} ပါ။ ဒါက အရမ်းဆိုတဲ့ အဓိပ္ပာယ်ပါ။",
             "examples": [
               { "id": "ex3", "sentence": "天气太冷了。", "translation": "ရာသီဥတု အရမ်းအေးတယ်။", "rate": 0 },
               { "id": "ex4", "sentence": "我身体不太好。", "translation": "ကျွန်တော် နေသိပ်မကောင်းဘူး။", "rate": -5 }
@@ -90,7 +90,7 @@
       "id": "dialogue_weather",
       "content": {
         "id": "dialogue-scene-weather",
-        "title": "谈论天气 (ရာသီဥတုအကြောင်းပြောခြင်း)",
+        "title": "谈论天气",
         "imageSrc": "https://images.unsplash.com/photo-1592210454359-9043f067919b?q=80&w=1974&auto=format&fit=crop",
         "characters": {
           "xiaoming": { "name": "小明", "voice": "zh-CN-YunxiNeural", "rate": -5 },
@@ -107,9 +107,10 @@
     {
       "type": "choice",
       "id": "q1_choice_tai",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { 
         "prompt": "今天天气 ______ 冷了。", 
+        "narrationScript": "请选择正确的词填空。",
         "choices": [{"id": "c1", "text": "很"}, {"id": "c2", "text": "太"}, {"id": "c3", "text": "不"}], 
         "correctId": "c2", 
         "explanation": "句尾有 '了'，表示程度很高，通常用 '太...了' 结构。" 
@@ -118,7 +119,7 @@
     {
       "type": "choice",
       "id": "q2_choice_listening",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { 
         "prompt": "听录音，选择你听到的句子。", 
         "narrationText": "明天不会下雨。", 
@@ -129,9 +130,10 @@
     {
       "type": "choice",
       "id": "q3_choice_response",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { 
         "prompt": "A: 你身体怎么样？\nB: ______", 
+        "narrationScript": "如果别人问你身体怎么样，你应该怎么回答？",
         "choices": [{"id": "c1", "text": "我身体不太好。"}, {"id": "c2", "text": "我身体太不好。"}, {"id": "c3", "text": "我身体怎么样？"}], 
         "correctId": "c1", 
         "explanation": "否定时，我们说 '不太好'，不说 '太不好'。" 
@@ -140,87 +142,61 @@
     {
       "type": "paixu",
       "id": "q4_paixu_health",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把词语组成正确的句子。", "items": [{ "id": "i1", "text": "你", "order": 1 }, { "id": "i2", "text": "身体", "order": 2 }, { "id": "i3", "text": "怎么样", "order": 3 }, { "id": "i4", "text": "？", "order": 4 }] }
     },
     {
       "type": "paixu",
       "id": "q5_paixu_weather",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把词语组成正确的句子。", "items": [{ "id": "i1", "text": "天气", "order": 1 }, { "id": "i2", "text": "太热了", "order": 2 }, { "id": "i3", "text": "。", "order": 3 }] }
     },
     {
       "type": "paixu",
       "id": "q6_paixu_rain",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把词语组成正确的句子。", "items": [{ "id": "i1", "text": "明天", "order": 1 }, { "id": "i2", "text": "会", "order": 2 }, { "id": "i3", "text": "下雨", "order": 3 }, { "id": "i4", "text": "吗", "order": 4 }, { "id": "i5", "text": "？", "order": 5 }] }
     },
     {
       "type": "lianxian",
       "id": "q7_lianxian_qa",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把问题和回答连起来。", "pairs": [ { "id": "p1", "left": "天气怎么样？", "right": "太热了。" }, { "id": "p2", "left": "下雨了吗？", "right": "没下雨。" }, { "id": "p3", "left": "你身体好吗？", "right": "我不太好。" } ] }
     },
     {
       "type": "lianxian",
       "id": "q8_lianxian_pinyin",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把汉字和拼音连起来。", "pairs": [ { "id": "p1", "left": "身体", "right": "shēntǐ" }, { "id": "p2", "left": "水果", "right": "shuǐguǒ" }, { "id": "p3", "left": "下雨", "right": "xià yǔ" } ] }
     },
     {
       "type": "lianxian",
       "id": "q9_lianxian_translation",
-      "style": { "position": "center-upper" },
+      "config": { "autoAdvance": false },
       "content": { "prompt": "把中文和缅甸语连起来。", "pairs": [ { "id": "p1", "left": "天气", "right": "ရာသီဥတု" }, { "id": "p2", "left": "太冷了", "right": "အရမ်းအေးတယ်" }, { "id": "p3", "left": "怎么样", "right": "ဘယ်လိုလဲ" } ] }
     },
     {
       "type": "image_match_blanks",
       "id": "q10_tiankong_weather",
-      "style": { "position": "center-upper" },
-      "content": { 
-        "title": "看图选词", 
-        "words": [ "天气", "下雨", "水果" ], 
-        "imageOptions": [ 
-          { "id": "weather_img", "src": "https://images.unsplash.com/photo-1561484930-998b6a7b22e8?w=800&h=800&fit=crop&q=80" }, 
-          { "id": "fruit_img", "src": "https://images.unsplash.com/photo-1574352224436-1e17a3e74b06?w=800&h=800&fit=crop&q=80" }, 
-          { "id": "rain_img", "src": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&h=800&fit=crop&q=80" } 
-        ], 
-        "correctAnswers": ["weather_img", "rain_img", "fruit_img"] 
-      }
+      "config": { "autoAdvance": false },
+      "content": { "title": "看图选词", "words": [ "天气", "下雨", "水果" ], "imageOptions": [ { "id": "weather_img", "src": "https://images.unsplash.com/photo-1561484930-998b6a7b22e8?w=800&h=800&fit=crop&q=80" }, { "id": "fruit_img", "src": "https://images.unsplash.com/photo-1574352224436-1e17a3e74b06?w=800&h=800&fit=crop&q=80" }, { "id": "rain_img", "src": "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&h=800&fit=crop&q=80" } ], "correctAnswers": ["weather_img", "rain_img", "fruit_img"] }
     },
     {
       "type": "image_match_blanks",
       "id": "q11_tiankong_people",
-      "style": { "position": "center-upper" },
-      "content": { 
-        "title": "看图选词", 
-        "words": [ "学生", "家", "女儿" ], 
-        "imageOptions": [ 
-          { "id": "student_img", "src": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=800&fit=crop&q=80" }, 
-          { "id": "daughter_img", "src": "https://images.unsplash.com/photo-1596648212624-41b3d5c61326?w=800&h=800&fit=crop&q=80" }, 
-          { "id": "home_img", "src": "https://images.unsplash.com/photo-1583845112123-239c0892a7e7?w=800&h=800&fit=crop&q=80" } 
-        ], 
-        "correctAnswers": ["student_img", "home_img", "daughter_img"] 
-      }
+      "config": { "autoAdvance": false },
+      "content": { "title": "看图选词", "words": [ "学生", "家", "女儿" ], "imageOptions": [ { "id": "student_img", "src": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=800&fit=crop&q=80" }, { "id": "daughter_img", "src": "https://images.unsplash.com/photo-1596648212624-41b3d5c61326?w=800&h=800&fit=crop&q=80" }, { "id": "home_img", "src": "https://images.unsplash.com/photo-1583845112123-239c0892a7e7?w=800&h=800&fit=crop&q=80" } ], "correctAnswers": ["student_img", "home_img", "daughter_img"] }
     },
     {
       "type": "image_match_blanks",
       "id": "q12_tiankong_hot_cold",
-      "style": { "position": "center-upper" },
-      "content": { 
-        "title": "看图选词", 
-        "words": [ "热", "冷" ], 
-        "imageOptions": [ 
-          { "id": "hot_img", "src": "https://images.unsplash.com/photo-1504370805625-d32c54b16100?w=800&h=800&fit=crop&q=80" }, 
-          { "id": "cold_img", "src": "https://images.unsplash.com/photo-1519944233342-9f3b5f838891?w=800&h=800&fit=crop&q=80" } 
-        ], 
-        "correctAnswers": ["hot_img", "cold_img"] 
-      }
+      "config": { "autoAdvance": false },
+      "content": { "title": "看图选词", "words": [ "热", "冷" ], "imageOptions": [ { "id": "hot_img", "src": "https://images.unsplash.com/photo-1504370805625-d32c54b16100?w=800&h=800&fit=crop&q=80" }, { "id": "cold_img", "src": "https://images.unsplash.com/photo-1519944233342-9f3b5f838891?w=800&h=800&fit=crop&q=80" } ], "correctAnswers": ["hot_img", "cold_img"] }
     },
     {
       "type": "complete",
       "id": "end",
-      "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၂ ပြီးဆုံးပါပြီ။" }
+      "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၂ ပြီးဆုံးပါပြီ。" }
     }
   ]
 }
