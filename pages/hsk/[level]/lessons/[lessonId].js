@@ -1,122 +1,89 @@
+// pages/hsk/[level]/lessons/[lessonId].js (已修正 "document is not defined" 错误的最终版本)
+
 import React from 'react';
 import { useRouter } from 'next/router';
 import fs from 'fs'; 
 import path from 'path'; 
-import dynamic from 'next/dynamic';
+import dynamic from 'next/dynamic'; // 导入 dynamic
 
-// 动态导入组件，关闭 SSR 以适应 PWA 和 浏览器 API
+// 【核心修复】: 使用 dynamic 导入 InteractiveLesson 并禁用 SSR
 const InteractiveLesson = dynamic(
-  () => import('@/components/Tixing/InteractiveLesson'), 
-  { ssr: false }
+  () => import('@/components/Tixing/InteractiveLesson'), // 确保路径正确
+  { ssr: false } // <--- 关键！告诉 Next.js 不要预渲染它
 );
 
-const WORDS_PER_LESSON = 45; // 🔥 这里控制每节课的单词数量，建议 20-50 之间
-
-export default function LessonPage({ lessonData, nextLessonId, level, error }) {
+export default function LessonPage({ lesson, error }) {
   const router = useRouter();
 
-  if (router.isFallback) return <div>加载中...</div>;
-
-  if (error) {
-    return <div style={{padding: 20, textAlign: 'center'}}>{error}</div>;
+  if (router.isFallback) {
+    return <div>正在加载...</div>;
   }
 
-  // 这是一个回调函数，当用户学完当前 30 个词后，WordCard 调用它
-  const handleFinish = () => {
-      if (nextLessonId) {
-          // 跳转到下一课
-          router.push(`/hsk/${level}/lessons/${nextLessonId}`);
-      } else {
-          alert("恭喜！你已经学完了该等级的所有单词！");
-          router.push('/'); // 回首页
-      }
-  };
+  if (error) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#4a0e0e', color: 'white', padding: '20px' }}>
+        <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>加载失败</h1>
+        <p style={{ color: '#fecaca', marginBottom: '2rem' }}>{error}</p>
+        <button onClick={() => router.back()} style={{ padding: '10px 20px', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          返回上一页
+        </button>
+      </div>
+    );
+  }
 
-  return (
-    <InteractiveLesson 
-        lesson={lessonData} 
-        onFinishLesson={handleFinish} // 传递完成回调
-        hasMore={!!nextLessonId}      // 告诉组件后面还有没有课
-    />
-  );
+  // 正常渲染课程
+  // 注意：在 ssr: false 模式下，组件在首次渲染时不会立即出现，
+  // 所以我们可以提供一个 fallback 占位符，但在这里我们依赖 InteractiveLesson 内部的加载逻辑
+  if (lesson) {
+    return <InteractiveLesson lesson={lesson} />;
+  }
+  
+  return null; // 如果没有 lesson 且没有 error，什么都不渲染
 }
 
-// --- 1. 自动计算需要生成多少个页面 ---
+
+// 第 1 步: getStaticPaths
 export async function getStaticPaths() {
-  const hskDir = path.join(process.cwd(), 'data/hsk');
+  const lessonsDirectory = path.join(process.cwd(), 'data/hsk/lessons');
   
-  // 1. 扫描目录下所有的 hskX.json 文件
-  // 假设你的文件命名是 hsk1.json, hsk4.json 等
-  const files = fs.readdirSync(hskDir).filter(file => file.match(/^hsk(\d+)\.json$/));
+  const filenames = fs.readdirSync(lessonsDirectory);
   
-  const paths = [];
-
-  files.forEach(file => {
-    const match = file.match(/^hsk(\d+)\.json$/);
-    const level = match[1]; // 获取等级，例如 "4"
-
-    // 读取文件内容，计算有多少个词
-    const filePath = path.join(hskDir, file);
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    const allWords = JSON.parse(fileContent);
-    
-    // 计算需要多少节课
-    // 例如 600 个词 / 30 = 20 节课
-    const totalLessons = Math.ceil(allWords.length / WORDS_PER_LESSON);
-
-    // 生成 1 到 20 的路径
-    for (let i = 1; i <= totalLessons; i++) {
-      paths.push({
-        params: { 
-            level: level, 
-            lessonId: i.toString() 
-        },
-      });
+  const paths = filenames.map((filename) => {
+    const match = filename.match(/hsk(\d+)-lesson(.+?)\.json/);
+    if (match) {
+      const [, level, lessonId] = match;
+      return {
+        params: { level, lessonId },
+      };
     }
-  });
+    return null;
+  }).filter(Boolean);
 
   return { paths, fallback: false };
 }
 
-// --- 2. 根据 lessonId 切割数据 ---
+
+// 第 2 步: getStaticProps
 export async function getStaticProps(context) {
   const { level, lessonId } = context.params;
-  const pageNum = parseInt(lessonId, 10);
 
   try {
-    // 读取完整的大文件
-    const filePath = path.join(process.cwd(), `data/hsk/hsk${level}.json`);
-    
-    if (!fs.existsSync(filePath)) {
-        throw new Error("文件不存在");
-    }
-
+    const filePath = path.join(process.cwd(), `data/hsk/lessons/hsk${level}-lesson${lessonId}.json`);
     const fileContent = fs.readFileSync(filePath, 'utf8');
-    const allWords = JSON.parse(fileContent);
-
-    // 🔥 核心切片逻辑 🔥
-    const startIndex = (pageNum - 1) * WORDS_PER_LESSON;
-    const endIndex = startIndex + WORDS_PER_LESSON;
-    
-    // 只取出当前页面需要的 30 个词
-    const slicedWords = allWords.slice(startIndex, endIndex);
-
-    // 计算是否有下一课
-    const totalLessons = Math.ceil(allWords.length / WORDS_PER_LESSON);
-    const nextLessonId = pageNum < totalLessons ? (pageNum + 1).toString() : null;
+    const lessonData = JSON.parse(fileContent);
 
     return {
       props: {
-        lessonData: slicedWords, // 前端只收到 30 个词，速度飞快
-        nextLessonId,            // 用于前端跳转
-        level,
+        lesson: lessonData,
       },
+      revalidate: 3600, // 1 hour in seconds
     };
   } catch (error) {
-    console.error(`生成 HSK${level} 第 ${lessonId} 课失败:`, error);
+    console.error(`构建时加载课程 hsk${level}-lesson${lessonId} 失败:`, error);
     return {
       props: {
-        error: `无法加载数据: ${error.message}`,
+        lesson: null,
+        error: `无法找到或解析课程 HSK ${level} - Lesson ${lessonId} 的数据文件。`,
       },
     };
   }
