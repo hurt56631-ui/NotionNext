@@ -1,4 +1,4 @@
-// components/WordCard.js (最终完整版 - 录音对比 + 浏览器TTS双模式)
+// components/WordCard.js (最终完整版 - 修复部署报错 + 录音对比 + 双TTS)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,6 +19,9 @@ const STORE_AUDIO = 'audioCache';
 
 // --- 数据库辅助函数 ---
 function openDB() {
+    // 确保在服务端不运行 IndexedDB 逻辑
+    if (typeof window === 'undefined') return Promise.reject("Server side");
+    
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onerror = () => reject('数据库打开失败');
@@ -37,6 +40,7 @@ function openDB() {
 
 // 收藏相关操作
 async function toggleFavorite(word) {
+    if (typeof window === 'undefined') return false;
     const db = await openDB();
     const tx = db.transaction(STORE_FAVORITES, 'readwrite');
     const store = tx.objectStore(STORE_FAVORITES);
@@ -56,14 +60,19 @@ async function toggleFavorite(word) {
 }
 
 async function isFavorite(id) {
-    const db = await openDB();
-    const tx = db.transaction(STORE_FAVORITES, 'readonly');
-    const store = tx.objectStore(STORE_FAVORITES);
-    return new Promise((resolve) => {
-        const getReq = store.get(id);
-        getReq.onsuccess = () => resolve(!!getReq.result);
-        getReq.onerror = () => resolve(false);
-    });
+    if (typeof window === 'undefined') return false;
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_FAVORITES, 'readonly');
+        const store = tx.objectStore(STORE_FAVORITES);
+        return new Promise((resolve) => {
+            const getReq = store.get(id);
+            getReq.onsuccess = () => resolve(!!getReq.result);
+            getReq.onerror = () => resolve(false);
+        });
+    } catch (e) {
+        return false;
+    }
 }
 
 // --- 音频管理与 TTS 逻辑 ---
@@ -71,6 +80,7 @@ const generateAudioKey = (text, voice, rate) => `${text}_${voice}_${rate}`;
 
 // 存入缓存
 async function cacheAudioData(key, blob) {
+    if (typeof window === 'undefined') return;
     try {
         const db = await openDB();
         const tx = db.transaction(STORE_AUDIO, 'readwrite');
@@ -83,6 +93,7 @@ async function cacheAudioData(key, blob) {
 
 // 读取缓存
 async function getCachedAudio(key) {
+    if (typeof window === 'undefined') return null;
     try {
         const db = await openDB();
         const tx = db.transaction(STORE_AUDIO, 'readonly');
@@ -104,9 +115,15 @@ const TTS_VOICES = [
     { value: 'my-MM-ThihaNeural', label: '缅甸语男声' },
 ];
 
-const sounds = {
-    switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
-    correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }), // 依然保留这些音效用于交互反馈
+// 音效加载放在客户端检查后，或者懒加载
+let sounds = null;
+const initSounds = () => {
+    if (!sounds && typeof window !== 'undefined') {
+        sounds = {
+            switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
+            correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
+        };
+    }
 };
 
 let _howlInstance = null;
@@ -114,18 +131,16 @@ let _currentAudioUrl = null;
 
 // --- 浏览器原生 TTS 播放函数 ---
 const playBrowserTTS = (text, lang, rate, onEndCallback) => {
-    // 停止之前的播放
-    window.speechSynthesis.cancel();
+    if (typeof window === 'undefined') return;
+    window.speechSynthesis.cancel(); // 停止之前的播放
 
     const utterance = new SpeechSynthesisUtterance(text);
     // 语言代码映射：zh-CN-xxx -> zh-CN, my-MM-xxx -> my-MM
-    // 如果是浏览器模式，voice 参数我们只取前缀作为 lang
     utterance.lang = lang.includes('my') ? 'my-MM' : 'zh-CN';
     
     // 速率映射： settings.rate (-100 to 100) -> 0.5 to 2.0
-    // 0 -> 1, 100 -> 2, -100 -> 0.5
     const browserRate = rate >= 0 ? 1 + (rate / 100) : 1 + (rate / 200); 
-    utterance.rate = Math.max(0.1, Math.min(browserRate, 2.0)); // 限制范围
+    utterance.rate = Math.max(0.1, Math.min(browserRate, 2.0)); 
 
     utterance.onend = () => {
         if (onEndCallback) onEndCallback();
@@ -140,6 +155,7 @@ const playBrowserTTS = (text, lang, rate, onEndCallback) => {
 
 // --- 核心播放函数 (统一入口) ---
 const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = false) => {
+    if (typeof window === 'undefined') return; // SSR Guard
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text) {
         if (onEndCallback && !onlyCache) onEndCallback();
@@ -148,24 +164,21 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
 
     // --- 分支 1：浏览器 TTS ---
     if (source === 'browser') {
-        if (onlyCache) return; // 浏览器 TTS 不需要预加载缓存
-        if (_howlInstance?.playing()) _howlInstance.stop(); // 停止可能的 Server 音频
+        if (onlyCache) return; 
+        if (_howlInstance?.playing()) _howlInstance.stop();
         playBrowserTTS(text, voice, rate, onEndCallback);
         return;
     }
 
-    // --- 分支 2：云端 TTS (原逻辑) ---
-    // 停止浏览器 TTS
+    // --- 分支 2：云端 TTS ---
     window.speechSynthesis.cancel();
     
     const cacheKey = generateAudioKey(text, voice, Math.round(rate / 2));
 
-    // 如果只是为了预加载
     if (onlyCache) {
         const existing = await getCachedAudio(cacheKey);
         if (existing) return;
     } else {
-        // 正常播放：停止当前 Howl
         if (_howlInstance?.playing()) _howlInstance.stop();
         if (_currentAudioUrl) {
             URL.revokeObjectURL(_currentAudioUrl);
@@ -239,18 +252,37 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
 };
 
 const playSoundEffect = (type) => {
-    // 音效通常很短，使用 Howl 即可，不依赖 TTS 设置
-    if (sounds[type]) sounds[type].play();
+    if (typeof window !== 'undefined') {
+        initSounds();
+        if (sounds && sounds[type]) sounds[type].play();
+    }
 };
 
 // --- 设置 Hook ---
 const useCardSettings = () => {
     const [settings, setSettings] = useState(() => {
+        // SSR 安全检查
+        if (typeof window === 'undefined') {
+            return {
+                order: 'sequential',
+                ttsSource: 'server',
+                autoPlayChinese: true,
+                autoPlayBurmese: true,
+                autoPlayExample: true,
+                autoBrowse: false,
+                autoBrowseDelay: 6000,
+                voiceChinese: 'zh-CN-XiaoyouNeural',
+                voiceBurmese: 'my-MM-NilarNeural',
+                speechRateChinese: 0,
+                speechRateBurmese: 0,
+                backgroundImage: '',
+            };
+        }
         try {
             const savedSettings = localStorage.getItem('learningWordCardSettings');
             const defaultSettings = {
                 order: 'sequential',
-                ttsSource: 'server', // 'server' | 'browser'
+                ttsSource: 'server',
                 autoPlayChinese: true,
                 autoPlayBurmese: true,
                 autoPlayExample: true,
@@ -270,43 +302,48 @@ const useCardSettings = () => {
     });
 
     useEffect(() => {
-        try {
-            localStorage.setItem('learningWordCardSettings', JSON.stringify(settings));
-        } catch (error) {
-            console.error("保存设置失败", error);
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('learningWordCardSettings', JSON.stringify(settings));
+            } catch (error) {
+                console.error("保存设置失败", error);
+            }
         }
     }, [settings]);
 
     return [settings, setSettings];
 };
 
-// --- 纯录音对比组件 ---
+// --- 关键组件：录音对比界面 ---
 const RecordingComparisonModal = ({ word, settings, onClose }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [userAudioUrl, setUserAudioUrl] = useState(null);
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
+    const localAudioRef = useRef(null); 
 
-    // 清理录音 URL
     useEffect(() => {
         return () => {
             if (userAudioUrl) URL.revokeObjectURL(userAudioUrl);
             if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+            if (localAudioRef.current) localAudioRef.current.unload();
             if (_howlInstance) _howlInstance.stop();
-            window.speechSynthesis.cancel();
+            if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         };
     }, [userAudioUrl]);
 
     const handleToggleRecord = async () => {
+        if (_howlInstance?.playing()) _howlInstance.stop();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
+        if (localAudioRef.current?.playing()) localAudioRef.current.stop();
+
         if (isRecording) {
-            // 停止录音
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
             }
             return;
         }
 
-        // 开始录音
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -319,7 +356,6 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                 const url = URL.createObjectURL(blob);
                 setUserAudioUrl(url);
                 setIsRecording(false);
-                // 停止轨道释放麦克风
                 stream.getTracks().forEach(track => track.stop());
             };
 
@@ -333,16 +369,18 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
     };
 
     const playStandard = () => {
+        if (localAudioRef.current?.playing()) localAudioRef.current.stop();
         playTTS(word.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource);
     };
 
     const playUser = () => {
         if (!userAudioUrl) return;
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         
-        const sound = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true });
-        sound.play();
+        if (localAudioRef.current) localAudioRef.current.unload();
+        localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true });
+        localAudioRef.current.play();
     };
 
     const deleteRecording = () => {
@@ -365,7 +403,6 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                     </div>
 
                     <div style={styles.recordControls}>
-                        {/* 标准音 */}
                         <div style={styles.controlRow}>
                             <span style={styles.label}>标准音:</span>
                             <button style={styles.circleBtnBlue} onClick={playStandard} title="播放标准音">
@@ -373,13 +410,13 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                             </button>
                         </div>
 
-                        {/* 录音控制 */}
                         <div style={styles.controlRow}>
                             <span style={styles.label}>你的发音:</span>
                             {!userAudioUrl ? (
                                 <button 
                                     style={{...styles.circleBtnRed, ...(isRecording ? styles.recordingPulse : {})}} 
                                     onClick={handleToggleRecord}
+                                    title="点击开始录音"
                                 >
                                     {isRecording ? <FaStop size={20} /> : <FaMicrophone size={20} />}
                                 </button>
@@ -394,7 +431,7 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                                 </div>
                             )}
                         </div>
-                        {isRecording && <div style={{color: '#ef4444', fontSize: '0.9rem', marginTop: 5}}>正在录音...</div>}
+                        {isRecording && <div style={{color: '#ef4444', fontSize: '0.9rem', marginTop: 5, textAlign: 'center'}}>正在录音... 点击停止</div>}
                     </div>
                 </div>
 
@@ -406,6 +443,7 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
     );
 };
 
+// --- 设置面板 ---
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
     const handleSettingChange = (key, value) => { setSettings(prev => ({ ...prev, [key]: value })); };
     const handleImageUpload = (e) => {
@@ -481,6 +519,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
     );
 });
 
+// --- 跳转弹窗 ---
 const JumpModal = ({ max, current, onJump, onClose }) => {
     const [inputValue, setInputValue] = useState(current + 1); const inputRef = useRef(null);
     useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []);
@@ -495,13 +534,29 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const [isMounted, setIsMounted] = useState(false);
     
-    // 清理音频与内存
+    // 初始化时注入 keyframes 样式 (修复部署报错)
     useEffect(() => {
         setIsMounted(true);
+        if (typeof document !== 'undefined') {
+            const styleId = 'wordcard-pulse-style';
+            if (!document.getElementById(styleId)) {
+                const styleSheet = document.createElement("style");
+                styleSheet.id = styleId;
+                styleSheet.innerText = `
+                @keyframes pulse {
+                    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+                    70% { transform: scale(1.0); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+                    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+                }
+                `;
+                document.head.appendChild(styleSheet);
+            }
+        }
+        
         return () => {
             if (_howlInstance) _howlInstance.stop();
             if (_currentAudioUrl) URL.revokeObjectURL(_currentAudioUrl);
-            window.speechSynthesis.cancel();
+            if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         };
     }, []);
 
@@ -525,15 +580,16 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
     const [activeCards, setActiveCards] = useState([]);
     
-    // 初始化索引：读取 localStorage
+    // 初始化索引：读取 localStorage (SSR 安全)
     const [currentIndex, setCurrentIndex] = useState(() => {
+        if (typeof window === 'undefined') return 0;
         const savedIndex = localStorage.getItem(`word_progress_${progressKey}`);
         const parsed = parseInt(savedIndex, 10);
         return (!isNaN(parsed) && parsed < words.length) ? parsed : 0;
     });
 
     useEffect(() => {
-        if (activeCards.length > 0) {
+        if (activeCards.length > 0 && typeof window !== 'undefined') {
             localStorage.setItem(`word_progress_${progressKey}`, currentIndex);
         }
     }, [currentIndex, progressKey, activeCards]);
@@ -618,7 +674,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
         // 清理音频
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 
         const playFullSequence = () => {
             if (settings.autoPlayChinese && currentCard.chinese) {
@@ -652,7 +708,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (e && e.stopPropagation) e.stopPropagation();
         if (!currentCard) return;
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 
         if (!isRevealed) {
             playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource);
@@ -665,24 +721,25 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         }
     }, [currentCard, isRevealed, settings]);
 
+    // 打开录音对比界面
     const handleOpenRecorder = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         // 停止当前播放
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         setIsRecordingOpen(true);
     }, []);
 
     const handleKnow = () => {
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         if (!currentCard) return;
         navigate(1);
     };
 
     const handleDontKnow = () => {
         if (_howlInstance?.playing()) _howlInstance.stop();
-        window.speechSynthesis.cancel();
+        if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         if (isRevealed) { navigate(1); } else { setIsRevealed(true); }
     };
 
@@ -864,16 +921,5 @@ const styles = {
     jumpModalInput: { width: '100px', padding: '10px', fontSize: '1.2rem', textAlign: 'center', border: '2px solid #ccc', borderRadius: '8px', marginBottom: '15px' },
     jumpModalButton: { width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#4299e1', color: 'white', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' },
 };
-
-// 添加全局 keyframes (通过 style 标签插入)
-const styleSheet = document.createElement("style");
-styleSheet.innerText = `
-@keyframes pulse {
-    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-    70% { transform: scale(1.0); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-`;
-document.head.appendChild(styleSheet);
 
 export default WordCard;
