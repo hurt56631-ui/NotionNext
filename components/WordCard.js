@@ -1,11 +1,11 @@
-// components/WordCard.js (最终完整版 - 修复部署报错 + 录音对比 + 双TTS)
+// components/WordCard.js (最终完整版 - 优化录音流程 + 浏览器模式屏蔽缅语)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaTrash, FaCheck } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaTrash, FaCheck, FaRedo } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 import { AdSlot } from '@/components/GoogleAdsense';
@@ -115,7 +115,7 @@ const TTS_VOICES = [
     { value: 'my-MM-ThihaNeural', label: '缅甸语男声' },
 ];
 
-// 音效加载放在客户端检查后，或者懒加载
+// 音效加载
 let sounds = null;
 const initSounds = () => {
     if (!sounds && typeof window !== 'undefined') {
@@ -132,13 +132,13 @@ let _currentAudioUrl = null;
 // --- 浏览器原生 TTS 播放函数 ---
 const playBrowserTTS = (text, lang, rate, onEndCallback) => {
     if (typeof window === 'undefined') return;
-    window.speechSynthesis.cancel(); // 停止之前的播放
+    window.speechSynthesis.cancel(); 
 
     const utterance = new SpeechSynthesisUtterance(text);
-    // 语言代码映射：zh-CN-xxx -> zh-CN, my-MM-xxx -> my-MM
+    // 语言代码映射
     utterance.lang = lang.includes('my') ? 'my-MM' : 'zh-CN';
     
-    // 速率映射： settings.rate (-100 to 100) -> 0.5 to 2.0
+    // 速率映射
     const browserRate = rate >= 0 ? 1 + (rate / 100) : 1 + (rate / 200); 
     utterance.rate = Math.max(0.1, Math.min(browserRate, 2.0)); 
 
@@ -153,9 +153,9 @@ const playBrowserTTS = (text, lang, rate, onEndCallback) => {
     window.speechSynthesis.speak(utterance);
 };
 
-// --- 核心播放函数 (统一入口) ---
+// --- 核心播放函数 ---
 const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = false) => {
-    if (typeof window === 'undefined') return; // SSR Guard
+    if (typeof window === 'undefined') return;
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text) {
         if (onEndCallback && !onlyCache) onEndCallback();
@@ -165,6 +165,14 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
     // --- 分支 1：浏览器 TTS ---
     if (source === 'browser') {
         if (onlyCache) return; 
+        
+        // 【修改点】如果是浏览器模式，且是缅甸语 (voice包含'my')，直接跳过
+        if (voice && voice.includes('my')) {
+            console.log("浏览器模式下跳过缅甸语播放");
+            if (onEndCallback) onEndCallback();
+            return;
+        }
+
         if (_howlInstance?.playing()) _howlInstance.stop();
         playBrowserTTS(text, voice, rate, onEndCallback);
         return;
@@ -192,7 +200,6 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
     // 2. 没命中则请求
     if (!audioBlob) {
         try {
-            // 主接口
             const apiUrl = 'https://libretts.is-an.org/api/tts';
             const rateValue = Math.round(rate / 2);
             
@@ -261,7 +268,6 @@ const playSoundEffect = (type) => {
 // --- 设置 Hook ---
 const useCardSettings = () => {
     const [settings, setSettings] = useState(() => {
-        // SSR 安全检查
         if (typeof window === 'undefined') {
             return {
                 order: 'sequential',
@@ -314,9 +320,10 @@ const useCardSettings = () => {
     return [settings, setSettings];
 };
 
-// --- 关键组件：录音对比界面 ---
+// --- 【修改点】重构后的录音对比组件 ---
 const RecordingComparisonModal = ({ word, settings, onClose }) => {
-    const [isRecording, setIsRecording] = useState(false);
+    // 状态：idle (初始), recording (录音中), review (对比回放)
+    const [status, setStatus] = useState('idle'); 
     const [userAudioUrl, setUserAudioUrl] = useState(null);
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
@@ -332,17 +339,11 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
         };
     }, [userAudioUrl]);
 
-    const handleToggleRecord = async () => {
+    // 开始录音
+    const startRecording = async () => {
+        // 停止其他声音
         if (_howlInstance?.playing()) _howlInstance.stop();
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        if (localAudioRef.current?.playing()) localAudioRef.current.stop();
-
-        if (isRecording) {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-            return;
-        }
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -355,17 +356,32 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                 const blob = new Blob(chunks, { type: 'audio/webm' });
                 const url = URL.createObjectURL(blob);
                 setUserAudioUrl(url);
-                setIsRecording(false);
+                // 录音结束，进入 review 状态
+                setStatus('review');
                 stream.getTracks().forEach(track => track.stop());
             };
 
             mediaRecorderRef.current = recorder;
             recorder.start();
-            setIsRecording(true);
+            setStatus('recording');
         } catch (err) {
             console.error("麦克风访问失败", err);
             alert("无法访问麦克风，请检查权限。");
         }
+    };
+
+    // 停止录音
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+    };
+
+    // 重置/重新录制
+    const resetRecording = () => {
+        if (userAudioUrl) URL.revokeObjectURL(userAudioUrl);
+        setUserAudioUrl(null);
+        setStatus('idle');
     };
 
     const playStandard = () => {
@@ -383,11 +399,6 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
         localAudioRef.current.play();
     };
 
-    const deleteRecording = () => {
-        if (userAudioUrl) URL.revokeObjectURL(userAudioUrl);
-        setUserAudioUrl(null);
-    };
-
     return (
         <div style={styles.comparisonOverlay} onClick={onClose}>
             <div style={styles.comparisonPanel} onClick={e => e.stopPropagation()}>
@@ -397,47 +408,67 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
                 </div>
                 
                 <div style={styles.recordContent}>
+                    {/* 单词显示区域 */}
                     <div style={styles.recordWordDisplay}>
                         <div style={styles.pinyin}>{pinyinConverter(word.chinese, { toneType: 'symbol', separator: ' ' })}</div>
                         <div style={styles.textWordChinese}>{word.chinese}</div>
                     </div>
 
-                    <div style={styles.recordControls}>
-                        <div style={styles.controlRow}>
-                            <span style={styles.label}>标准音:</span>
-                            <button style={styles.circleBtnBlue} onClick={playStandard} title="播放标准音">
-                                <FaVolumeUp size={20} />
-                            </button>
-                        </div>
-
-                        <div style={styles.controlRow}>
-                            <span style={styles.label}>你的发音:</span>
-                            {!userAudioUrl ? (
-                                <button 
-                                    style={{...styles.circleBtnRed, ...(isRecording ? styles.recordingPulse : {})}} 
-                                    onClick={handleToggleRecord}
-                                    title="点击开始录音"
-                                >
-                                    {isRecording ? <FaStop size={20} /> : <FaMicrophone size={20} />}
+                    {/* 操作区域：分状态显示 */}
+                    <div style={styles.actionArea}>
+                        
+                        {/* 状态 1: 初始状态 (显示大麦克风) */}
+                        {status === 'idle' && (
+                            <div style={styles.idleStateContainer}>
+                                <button style={styles.bigRecordBtn} onClick={startRecording}>
+                                    <FaMicrophone size={32} />
                                 </button>
-                            ) : (
-                                <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
-                                    <button style={styles.circleBtnGreen} onClick={playUser} title="回放录音">
-                                        <FaPlayCircle size={20} />
-                                    </button>
-                                    <button style={styles.circleBtnGray} onClick={deleteRecording} title="删除重录">
-                                        <FaTrash size={16} />
-                                    </button>
+                                <div style={styles.instructionText}>点击开始录音</div>
+                            </div>
+                        )}
+
+                        {/* 状态 2: 录音中 (显示停止按钮) */}
+                        {status === 'recording' && (
+                            <div style={styles.idleStateContainer}>
+                                <button style={{...styles.bigRecordBtn, ...styles.recordingPulse, background: '#ef4444'}} onClick={stopRecording}>
+                                    <FaStop size={32} />
+                                </button>
+                                <div style={{...styles.instructionText, color: '#ef4444'}}>正在录音... 点击停止</div>
+                            </div>
+                        )}
+
+                        {/* 状态 3: 对比回放 (显示两个播放按钮) */}
+                        {status === 'review' && (
+                            <div style={styles.reviewContainer}>
+                                <div style={styles.reviewRow}>
+                                    <div style={styles.reviewItem}>
+                                        <div style={styles.reviewLabel}>标准发音</div>
+                                        <button style={styles.circleBtnBlue} onClick={playStandard}>
+                                            <FaVolumeUp size={24} />
+                                        </button>
+                                    </div>
+                                    
+                                    <div style={styles.reviewItem}>
+                                        <div style={styles.reviewLabel}>你的发音</div>
+                                        <button style={styles.circleBtnGreen} onClick={playUser}>
+                                            <FaPlayCircle size={24} />
+                                        </button>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                        {isRecording && <div style={{color: '#ef4444', fontSize: '0.9rem', marginTop: 5, textAlign: 'center'}}>正在录音... 点击停止</div>}
+                                
+                                <button style={styles.retryLink} onClick={resetRecording}>
+                                    <FaRedo size={12} /> 不满意？点击重录
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <button style={styles.recordDoneBtn} onClick={onClose}>
-                    <FaCheck /> 完成
-                </button>
+                {status === 'review' && (
+                    <button style={styles.recordDoneBtn} onClick={onClose}>
+                        <FaCheck /> 完成练习
+                    </button>
+                )}
             </div>
         </div>
     );
@@ -474,13 +505,13 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
                         <button onClick={() => handleSettingChange('ttsSource', 'server')} style={{ ...styles.settingButton, background: settings.ttsSource === 'server' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.ttsSource === 'server' ? 'white' : '#4a5568' }}>云端高音质</button>
                         <button onClick={() => handleSettingChange('ttsSource', 'browser')} style={{ ...styles.settingButton, background: settings.ttsSource === 'browser' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.ttsSource === 'browser' ? 'white' : '#4a5568' }}>浏览器本地</button>
                     </div>
-                    <div style={{fontSize: '0.8rem', color: '#666', marginTop: 4}}>* 云端音质更好但需要网络；浏览器本地无网可用，音质取决于系统。</div>
+                    <div style={{fontSize: '0.8rem', color: '#666', marginTop: 4}}>* 浏览器本地模式仅支持中文朗读 (不支持缅甸语)。</div>
                 </div>
 
                 <div style={styles.settingGroup}>
                     <label style={styles.settingLabel}>自动播放</label>
                     <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div>
-                    <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div>
+                    <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语 (仅云端)</label></div>
                     <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> 自动朗读例句</label></div>
                     <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay / 1000}秒后自动切换</label></div>
                 </div>
@@ -496,7 +527,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
                 </div>
 
                 <h2 style={{ marginTop: '30px' }}>发音设置</h2>
-                {settings.ttsSource === 'browser' && <div style={{color: '#d97706', marginBottom: 10, fontSize: '0.9rem'}}>注意：浏览器模式下，发音人选择可能无效，将使用系统默认语音。</div>}
+                {settings.ttsSource === 'browser' && <div style={{color: '#d97706', marginBottom: 10, fontSize: '0.9rem'}}>注意：浏览器模式下，发音人选择无效，将使用系统默认语音。</div>}
                 
                 <div style={styles.settingGroup}>
                     <label style={styles.settingLabel}>中文发音人 (仅云端)</label>
@@ -679,6 +710,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         const playFullSequence = () => {
             if (settings.autoPlayChinese && currentCard.chinese) {
                 playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, () => {
+                    // 如果是浏览器模式，这里会自动跳过缅甸语播放 (回调立刻执行)
                     if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                         playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, settings.ttsSource, () => {
                             if (settings.autoPlayExample && currentCard.example && isRevealed) {
@@ -888,21 +920,25 @@ const styles = {
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
-    // 录音对比弹窗样式
+    // 录音对比弹窗样式 (新)
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '10px' },
     comparisonPanel: { width: '100%', maxWidth: '350px', background: 'white', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' },
     recordHeader: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' },
     closeButtonSimple: { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1.2rem' },
-    recordContent: { padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
-    recordWordDisplay: { textAlign: 'center' },
-    recordControls: { width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' },
-    controlRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb', padding: '10px 15px', borderRadius: '12px' },
-    label: { fontWeight: 'bold', color: '#4b5563', fontSize: '0.9rem' },
-    circleBtnBlue: { width: '45px', height: '45px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(59, 130, 246, 0.3)' },
-    circleBtnRed: { width: '45px', height: '45px', borderRadius: '50%', background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(239, 68, 68, 0.3)' },
-    circleBtnGreen: { width: '45px', height: '45px', borderRadius: '50%', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 5px rgba(16, 185, 129, 0.3)' },
-    circleBtnGray: { width: '35px', height: '35px', borderRadius: '50%', background: '#e5e7eb', color: '#6b7280', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
-    recordingPulse: { animation: 'pulse 1.5s infinite', boxShadow: '0 0 0 0 rgba(239, 68, 68, 0.7)' },
+    recordContent: { padding: '25px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px', minHeight: '250px' },
+    recordWordDisplay: { textAlign: 'center', marginBottom: '10px' },
+    actionArea: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 },
+    idleStateContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
+    bigRecordBtn: { width: '80px', height: '80px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: '4px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)', transition: 'transform 0.1s' },
+    instructionText: { color: '#6b7280', fontSize: '1rem', fontWeight: 500 },
+    recordingPulse: { animation: 'pulse 1.5s infinite', border: '4px solid #fee2e2', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)' },
+    reviewContainer: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
+    reviewRow: { display: 'flex', justifyContent: 'space-around', width: '100%', gap: '10px' },
+    reviewItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
+    reviewLabel: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 'bold' },
+    retryLink: { background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', cursor: 'pointer', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'underline' },
+    circleBtnBlue: { width: '60px', height: '60px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)' },
+    circleBtnGreen: { width: '60px', height: '60px', borderRadius: '50%', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' },
     recordDoneBtn: { width: '100%', padding: '15px', background: '#111827', color: 'white', border: 'none', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
     // 设置弹窗样式
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
