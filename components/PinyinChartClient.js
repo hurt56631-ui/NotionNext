@@ -3,10 +3,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import { 
-    ArrowLeft, PlayCircle, PauseCircle, ChevronsLeft, ChevronsRight, 
-    Volume2, Sparkles, Mic, Square, Ear, RefreshCcw, BarChart2, WifiOff
+    PlayCircle, PauseCircle, ChevronsLeft, ChevronsRight, 
+    Volume2, Sparkles, Mic, Square, Ear, RefreshCcw, BarChart2, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
@@ -55,7 +54,7 @@ const AudioCacheManager = {
                 if (request.result) {
                     // 命中缓存：将 Blob 转为本地 URL
                     const blobUrl = URL.createObjectURL(request.result);
-                    console.log('📦 Loaded from Cache:', url);
+                    // console.log('📦 Loaded from Cache:', url);
                     resolve(blobUrl);
                 } else {
                     resolve(null);
@@ -174,10 +173,11 @@ export default function PinyinChartClient({ initialData }) {
     const [isPlayingLetter, setIsPlayingLetter] = useState(null); 
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
-    const [isLoadingAudio, setIsLoadingAudio] = useState(false); // 新增：加载指示器
+    const [isLoadingAudio, setIsLoadingAudio] = useState(false); 
 
     // 录音状态
     const [isRecording, setIsRecording] = useState(false);
+    const [isMicLoading, setIsMicLoading] = useState(false); // 新增：麦克风初始化状态
     const [userAudioUrl, setUserAudioUrl] = useState(null);
     const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
 
@@ -211,25 +211,18 @@ export default function PinyinChartClient({ initialData }) {
 
         try {
             setIsLoadingAudio(true);
-            setIsPlayingLetter(item.letter); // 乐观更新 UI：先亮起来
+            setIsPlayingLetter(item.letter); 
 
-            // 1. 尝试从 IndexedDB 获取 Blob URL
             let srcToPlay = await AudioCacheManager.getAudioUrl(item.audio);
 
-            // 2. 如果缓存没有，则从网络获取并写入缓存
             if (!srcToPlay) {
-                console.log('⬇️ Fetching from network:', item.audio);
+                // console.log('⬇️ Fetching from network:', item.audio);
                 const response = await fetch(item.audio);
                 const blob = await response.blob();
-                
-                // 存入 IndexedDB
                 await AudioCacheManager.cacheAudio(item.audio, blob);
-                
-                // 生成 URL
                 srcToPlay = URL.createObjectURL(blob);
             }
 
-            // 3. 播放
             audioRef.current.src = srcToPlay;
             audioRef.current.playbackRate = playbackRate;
             
@@ -278,7 +271,6 @@ export default function PinyinChartClient({ initialData }) {
         }
     }, [isAutoPlaying, currentIndex, initialData]);
 
-    // 监听 currentIndex 以自动播放
     useEffect(() => {
         if (!isAutoPlaying) return;
 
@@ -314,13 +306,18 @@ export default function PinyinChartClient({ initialData }) {
     }, [isAutoPlaying, activeTab]);
 
     // ===========================
-    // 录音功能
+    // 录音功能 (优化版)
     // ===========================
 
     const startRecording = async () => {
         if (typeof window === "undefined") return;
+        
+        // 立即给予 UI 反馈，避免用户觉得卡顿
+        setIsMicLoading(true);
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            
             mediaRecorderRef.current = new MediaRecorder(stream);
             audioChunksRef.current = [];
 
@@ -332,19 +329,28 @@ export default function PinyinChartClient({ initialData }) {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 const url = URL.createObjectURL(audioBlob);
                 setUserAudioUrl(url);
+                
+                // 彻底释放流
                 stream.getTracks().forEach(track => track.stop());
             };
 
-            mediaRecorderRef.current.start();
+            // timeslice 设置为 100ms，防止非常短的点击导致数据为空
+            mediaRecorderRef.current.start(100);
+            
+            // 只有成功开始录音后才切换状态
             setIsRecording(true);
         } catch (error) {
             console.error("Microphone error:", error);
             alert("请允许麦克风权限以使用对比功能。");
+        } finally {
+            // 无论成功失败，都停止加载动画
+            setIsMicLoading(false);
         }
     };
 
     const stopRecording = () => {
-        if (mediaRecorderRef.current && isRecording) {
+        // 增加安全检查，防止未初始化完成就点击停止
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             mediaRecorderRef.current.stop();
             setIsRecording(false);
         }
@@ -499,12 +505,8 @@ export default function PinyinChartClient({ initialData }) {
                     <audio ref={audioRef} onEnded={handleAudioEnd} preload="none" />
                     <audio ref={userAudioRef} />
                     
+                    {/* Header (移除了返回箭头，文字和图标两端对齐) */}
                     <header className="flex items-center justify-between mb-6 pt-2">
-                        <Link href="/hsk" passHref>
-                            <a className="flex items-center justify-center w-12 h-12 rounded-full bg-white/80 backdrop-blur border border-slate-200 shadow-sm hover:shadow-md transition-all active:scale-95 text-slate-600 hover:text-slate-900">
-                                <ArrowLeft size={22} />
-                            </a>
-                        </Link>
                         <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight drop-shadow-sm flex items-center gap-2">
                             {initialData.title}
                         </h1>
@@ -556,13 +558,15 @@ export default function PinyinChartClient({ initialData }) {
                                                 <div className="flex flex-col items-end mr-2 hidden sm:flex">
                                                     {isRecording ? (
                                                         <SiriWaveform isActive={true} />
+                                                    ) : isMicLoading ? (
+                                                        <span className="text-xs text-slate-400 font-medium">启动麦克风...</span>
                                                     ) : (
                                                         <span className="text-xs text-slate-400 font-medium">点击麦克风跟读</span>
                                                     )}
                                                 </div>
 
                                                 <AnimatePresence>
-                                                    {userAudioUrl && !isRecording && (
+                                                    {userAudioUrl && !isRecording && !isMicLoading && (
                                                         <motion.button
                                                             initial={{ scale: 0, opacity: 0 }} 
                                                             animate={{ scale: 1, opacity: 1 }}
@@ -582,13 +586,20 @@ export default function PinyinChartClient({ initialData }) {
 
                                                 <button
                                                     onClick={isRecording ? stopRecording : startRecording}
+                                                    disabled={isMicLoading}
                                                     className={`relative flex items-center justify-center w-14 h-14 rounded-full transition-all duration-300 shadow-xl border-[3px] border-white
                                                     ${isRecording 
                                                         ? 'bg-red-500 text-white shadow-red-500/40 scale-110' 
-                                                        : 'bg-slate-900 text-white hover:scale-105 shadow-slate-900/30'}`}
+                                                        : isMicLoading
+                                                            ? 'bg-slate-200 text-slate-400'
+                                                            : 'bg-slate-900 text-white hover:scale-105 shadow-slate-900/30'}`}
                                                 >
                                                     <AnimatePresence mode="wait">
-                                                        {isRecording ? (
+                                                        {isMicLoading ? (
+                                                            <motion.div key="loading" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+                                                                <Loader2 size={24} className="animate-spin" />
+                                                            </motion.div>
+                                                        ) : isRecording ? (
                                                             <motion.div key="stop" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
                                                                 <Square size={20} fill="currentColor" className="rounded-sm" />
                                                                 <span className="absolute inset-0 rounded-full border-2 border-red-500 animate-ping opacity-60"></span>
