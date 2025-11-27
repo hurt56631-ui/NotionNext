@@ -1,20 +1,19 @@
 // /components/WordsContentBlock.js
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 
-// 导入图标 (修复了重复导入和缺少的 Star 图标)
+// 导入所有需要的 Lucide React 图标
 import { 
-    ArrowLeft, BookOpen, ChevronRight, LayoutGrid, 
-    Atom, Layers, Home, BrainCircuit, Globe,
-    Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, 
-    UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film,
-    GraduationCap, Star, Bookmark
+    ArrowLeft, GraduationCap, BookCopy, Layers, Quote, Sigma, Clock, Map, 
+    HeartPulse, Waves, Smile, BrainCircuit, Home, UtensilsCrossed, Bus, 
+    Briefcase, Banknote, Sun, Palette, Film, Atom, Globe 
 } from 'lucide-react';
 
-// --- 动态导入 WordCard 组件 (ssr: false 避免服务端渲染错误) ---
+
+// --- 动态导入 WordCard 组件 ---
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
 
 // --- 数据中心 ---
@@ -31,203 +30,105 @@ try { hskWordsData[6] = require('@/data/hsk/hsk6.json'); } catch (e) {}
 // 2. 语义分类单词数据
 import semanticData from '@/data/semantic_words.json';
 
-// --- 配置常量 ---
+// --- UI 数据与辅助函数 ---
 
-// !!! 关键配置：请确保这里的 key 与 WordCard 组件内保存收藏时使用的 localStorage key 一致 !!!
-const STORAGE_KEY = 'bookmarked_words'; 
-
+// a. HSK 等级 UI 数据
 const hskLevels = [
-  { level: 1, title: '入门级 (Introductory)', wordCount: 150 },
-  { level: 2, title: '初级 (Basic)', wordCount: 300 },
-  { level: 3, title: '进阶级 (Intermediate)', wordCount: 600 },
-  { level: 4, title: '中级 (Upper Intermediate)', wordCount: 1200 },
-  { level: 5, title: '高级 (Advanced)', wordCount: 2500 },
-  { level: 6, title: '精通级 (Proficiency)', wordCount: 5000 }
+  { level: 1, title: '入门级', wordCount: 150, color: 'from-green-400 to-cyan-500' },
+  { level: 2, title: '初级', wordCount: 300, color: 'from-sky-400 to-blue-500' },
+  { level: 3, title: '进阶级', wordCount: 600, color: 'from-indigo-400 to-purple-500' },
+  { level: 4, title: '中级', wordCount: 1200, color: 'from-orange-400 to-red-500' },
+  { level: 5, title: '高级', wordCount: 2500, color: 'from-rose-500 to-pink-600' },
+  { level: 6, title: '精通级', wordCount: 5000, color: 'from-gray-600 to-black' }
 ];
 
-// 图标映射
+// b. 语义分类图标和颜色映射
 const mainCategoryIcons = { 1: Atom, 2: Layers, 3: Home, 4: BrainCircuit, 5: Globe };
-// 颜色映射
-const mainCategoryColors = { 1: 'text-indigo-500', 2: 'text-sky-500', 3: 'text-emerald-500', 4: 'text-amber-500', 5: 'text-rose-500' };
-
-const subCategoryIcons = { 
-    101: Quote, 102: Sigma, 103: Clock, 104: Map, 
-    201: HeartPulse, 202: Waves, 203: Smile, 204: BrainCircuit, 
-    301: Home, 302: Layers, 303: UtensilsCrossed, 304: Home, 305: Bus, 
-    401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote, 
-    501: Sun, 502: Palette, 503: Film 
-};
-
-// --- 辅助函数：获取所有单词以便筛选收藏 ---
-const getAllWordsFlat = () => {
-    let all = [];
-    // 合并 HSK 数据
-    Object.values(hskWordsData).forEach(list => {
-        if (Array.isArray(list)) all = [...all, ...list];
-    });
-    // 合并主题数据
-    if (Array.isArray(semanticData)) {
-        semanticData.forEach(cat => {
-            if (cat.sub_categories) {
-                cat.sub_categories.forEach(sub => {
-                    if (Array.isArray(sub.words)) all = [...all, ...sub.words];
-                });
-            }
-        });
-    }
-    return all;
-};
+const mainCategoryColors = { 1: 'bg-indigo-500', 2: 'bg-sky-500', 3: 'bg-emerald-500', 4: 'bg-amber-500', 5: 'bg-rose-500' };
+const subCategoryIcons = { 101: Quote, 102: Sigma, 103: Clock, 104: Map, 201: HeartPulse, 202: Waves, 203: Smile, 204: BrainCircuit, 301: Home, 302: Layers, 303: UtensilsCrossed, 304: Home, 305: Bus, 401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote, 501: Sun, 502: Palette, 503: Film };
 
 // --- 子组件 ---
 
-// 0. 收藏入口组件 (新增)
-const FavoritesCard = ({ onClick }) => (
-  <motion.div 
-    initial={{ opacity: 0, y: -10 }}
-    animate={{ opacity: 1, y: 0 }}
-    className="mb-8"
-  >
-    <button
-      onClick={onClick}
-      className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] transition-all duration-300 text-left"
-    >
-      <div className="relative z-10 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-full">
-            <Star size={24} className="text-yellow-300 fill-yellow-300" />
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-white">我的收藏本 (My Favorites)</h3>
-            <p className="text-violet-100 text-sm mt-1">复习您标记为重点的单词</p>
-          </div>
+// 1. HSK 等级卡片网格
+const HskLevelGrid = ({ onVocabularyClick }) => (
+  <div className="grid grid-cols-2 gap-4">
+    {hskLevels.map(level => (
+      <div 
+        key={level.level}
+        className={`relative p-4 rounded-xl shadow-md text-white bg-gradient-to-br ${level.color} overflow-hidden transform transition-transform duration-300 hover:scale-105 cursor-pointer flex flex-col justify-between`}
+        onClick={() => onVocabularyClick('hsk', level)}
+      >
+        <div>
+          <h3 className="text-xl font-bold">HSK {level.level}</h3>
+          <p className="text-sm opacity-80">{level.title}</p>
         </div>
-        <div className="p-2 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">
-            <ChevronRight size={24} className="text-white" />
+        <div className="mt-4 text-right">
+            <span className="bg-white/20 text-xs font-semibold px-2 py-1 rounded-full">{level.wordCount} 词汇</span>
         </div>
       </div>
-      {/* 装饰背景 */}
-      <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
-    </button>
-  </motion.div>
-);
-
-// 1. HSK 列表组件
-const HskLevelList = ({ onVocabularyClick }) => (
-  <div className="flex flex-col gap-3">
-    {hskLevels.map((level, index) => (
-      <motion.div
-        key={level.level}
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3, delay: index * 0.05 }}
-      >
-        <button
-          onClick={() => onVocabularyClick('hsk', level)}
-          className="group w-full flex items-center justify-between p-4 rounded-xl 
-                     bg-pink-50 border border-pink-100 hover:bg-pink-100 
-                     transition-all duration-200 cursor-pointer text-left shadow-sm hover:shadow-md"
-        >
-          <div className="flex items-center gap-4">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-pink-500 border border-pink-100 shadow-sm font-serif font-bold text-lg group-hover:scale-110 transition-transform">
-              {level.level}
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-gray-800">HSK {level.level}</h3>
-              <p className="text-xs text-gray-500">{level.title}</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-             <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-white/60 text-xs text-gray-600">
-                <BookOpen size={12} className="text-pink-400" />
-                <span>{level.wordCount}</span>
-             </div>
-             <ChevronRight size={20} className="text-gray-300 group-hover:text-pink-500 transition-colors" />
-          </div>
-        </button>
-      </motion.div>
     ))}
   </div>
 );
 
-// 2. 主题场景视图
+// 2. 主题场景分类视图
 const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
-  // 子分类视图
   if (selectedCategory) {
-    const MainIcon = mainCategoryIcons[selectedCategory.main_category_id] || Layers;
-    const themeColorClass = mainCategoryColors[selectedCategory.main_category_id] || 'text-gray-500';
+    const MainIcon = mainCategoryIcons[selectedCategory.main_category_id] || BookCopy;
+    const mainColor = mainCategoryColors[selectedCategory.main_category_id] || 'bg-gray-500';
 
     return (
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div>
         <button
           onClick={() => setSelectedCategory(null)}
-          className="flex items-center gap-1 mb-4 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+          className="flex items-center gap-2 mb-4 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
         >
-          <ArrowLeft size={16} />
-          返回全部分类
+          <ArrowLeft size={14} />
+          返回主分类
         </button>
-        
-        <div className="flex items-center gap-3 mb-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
-            <MainIcon size={28} className={themeColorClass} />
-            <div>
-                <h3 className="text-lg font-bold text-gray-800">{selectedCategory.main_category_title}</h3>
-                <p className="text-xs text-gray-500">{selectedCategory.main_category_description}</p>
-            </div>
+        <div className="flex items-center gap-3 mb-4">
+            <MainIcon className={`${mainColor.replace('bg-', 'text-')}`} />
+            <h3 className={`text-xl font-bold text-gray-800 dark:text-gray-200`}>
+              {selectedCategory.main_category_title}
+            </h3>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {selectedCategory.sub_categories.map((sub, idx) => {
-            const SubIcon = subCategoryIcons[sub.sub_category_id] || BookOpen;
+        <div className="grid grid-cols-2 gap-4">
+          {selectedCategory.sub_categories.map(sub => {
+            const SubIcon = subCategoryIcons[sub.sub_category_id] || BookCopy;
             return (
-              <motion.button 
-                key={sub.sub_category_id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                className="group p-4 bg-white border border-gray-100 rounded-xl hover:border-indigo-100 hover:shadow-md transition-all flex items-center justify-between text-left"
+              <div 
+                key={sub.sub_category_id} 
+                className="group p-4 bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 flex items-center gap-3 transform hover:scale-105 duration-300 cursor-pointer"
                 onClick={() => onVocabularyClick('theme', sub)}
               >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-indigo-50 transition-colors">
-                        <SubIcon size={18} className="text-gray-600 group-hover:text-indigo-500" />
-                    </div>
-                    <span className="font-medium text-gray-700 group-hover:text-gray-900">{sub.sub_category_title}</span>
-                  </div>
-                  <ChevronRight size={16} className="text-gray-300 group-hover:text-indigo-400" />
-              </motion.button>
+                  <SubIcon size={20} className={mainColor.replace('bg-', 'text-')} />
+                  <span className="font-semibold text-sm text-gray-800 dark:text-gray-200">{sub.sub_category_title}</span>
+              </div>
             )
           })}
         </div>
-      </motion.div>
+      </div>
     );
   }
 
-  // 主分类列表
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {semanticData.map((cat, index) => {
-        const MainIcon = mainCategoryIcons[cat.main_category_id] || Layers;
-        const colorClass = mainCategoryColors[cat.main_category_id] || 'text-gray-500';
-        
+    <div className="grid grid-cols-2 gap-4">
+      {semanticData.map(cat => {
+        const MainIcon = mainCategoryIcons[cat.main_category_id] || BookCopy;
+        const mainColor = mainCategoryColors[cat.main_category_id] || 'bg-gray-500';
         return(
-          <motion.button
+          <button
             key={cat.main_category_id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
             onClick={() => setSelectedCategory(cat)}
-            className="group flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all text-left"
+            className={`group text-left p-4 rounded-xl shadow-md text-white ${mainColor} overflow-hidden transform transition-transform duration-300 hover:scale-105 flex items-center gap-3`}
           >
-            <div className={`p-3 rounded-full bg-gray-50 group-hover:bg-white border border-transparent group-hover:border-gray-100 transition-colors`}>
-                <MainIcon size={24} className={colorClass} />
-            </div>
+            <MainIcon size={24} />
             <div>
-              <h3 className="font-bold text-gray-800">{cat.main_category_title}</h3>
-              <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{cat.main_category_description}</p>
+              <h3 className="text-md font-bold">{cat.main_category_title}</h3>
+              <p className="text-xs opacity-80 mt-1 hidden sm:block">{cat.main_category_description}</p>
             </div>
-          </motion.button>
+          </button>
         )
       })}
     </div>
@@ -242,9 +143,6 @@ const WordsContentBlock = () => {
 
   const isCardViewOpen = router.asPath.includes('#vocabulary');
 
-  // 获取所有单词库（用于搜索收藏）
-  const allWordsCache = useMemo(() => getAllWordsFlat(), []);
-
   const handleVocabularyClick = useCallback((type, data) => {
     let words = [];
     let key = '';
@@ -255,32 +153,6 @@ const WordsContentBlock = () => {
     } else if (type === 'theme') {
       words = data.words;
       key = `theme_${data.sub_category_id}`;
-    } else if (type === 'favorites') {
-        // --- 核心修复逻辑：处理收藏 ---
-        try {
-            // 获取 localStorage 中保存的 ID 列表
-            const savedData = localStorage.getItem(STORAGE_KEY);
-            const savedIds = savedData ? JSON.parse(savedData) : [];
-            
-            if (!Array.isArray(savedIds) || savedIds.length === 0) {
-                alert("您还没有收藏任何单词哦！\n在学习时点击单词卡片上的星星即可收藏。");
-                return;
-            }
-
-            // 根据 ID 筛选出完整的单词对象
-            // 注意：这里假设单词对象里有 id 字段，且与保存的 ID 匹配
-            words = allWordsCache.filter(w => savedIds.includes(w.id || w.word)); // 兼容 id 或 word 本身作为 key
-            key = 'my_favorites';
-
-            if (words.length === 0) {
-                alert("收藏列表为空，或者未找到对应单词数据。");
-                return;
-            }
-        } catch (err) {
-            console.error("读取收藏失败", err);
-            alert("读取收藏失败，请重试");
-            return;
-        }
     }
 
     if (words && words.length > 0) {
@@ -288,9 +160,9 @@ const WordsContentBlock = () => {
       setProgressKey(key);
       router.push('/?tab=words#vocabulary', undefined, { shallow: true });
     } else {
-      alert(`数据准备中...`);
+      alert(`该分类下的词汇列表正在准备中，敬请期待！`);
     }
-  }, [router, allWordsCache]);
+  }, [router]);
 
   const handleCloseCard = useCallback(() => {
     setActiveWords(null);
@@ -300,7 +172,6 @@ const WordsContentBlock = () => {
     }
   }, [router]);
 
-  // 处理浏览器回退
   useEffect(() => {
     const handleHashChange = () => {
       if (!window.location.hash.includes('vocabulary')) {
@@ -316,31 +187,20 @@ const WordsContentBlock = () => {
   
   return (
     <>
-      <div className="max-w-4xl mx-auto p-4 sm:p-6 min-h-[60vh]">
-        
-        {/* 新增：收藏夹入口 */}
-        <FavoritesCard onClick={() => handleVocabularyClick('favorites')} />
-
+      <div className="max-w-5xl mx-auto p-2 sm:p-4">
         {/* HSK Section */}
-        <div className="mb-10">
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 px-1">
-                <div className="w-1 h-5 bg-pink-400 rounded-full"></div>
-                HSK 核心词汇
-            </h2>
-            <HskLevelList onVocabularyClick={handleVocabularyClick} /> 
+        <div className="mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4 px-2">按 HSK 等级</h2>
+            <HskLevelGrid onVocabularyClick={handleVocabularyClick} /> 
         </div>
 
         {/* Theme Section */}
         <div>
-            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 px-1">
-                <div className="w-1 h-5 bg-indigo-400 rounded-full"></div>
-                主题场景分类
-            </h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4 px-2">按主题场景</h2>
             <ThemeView onVocabularyClick={handleVocabularyClick} />
         </div>
       </div>
 
-      {/* 单词卡片 */}
       <WordCard 
         isOpen={isCardViewOpen}
         words={activeWords || []}
