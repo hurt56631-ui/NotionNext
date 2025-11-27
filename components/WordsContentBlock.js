@@ -1,16 +1,17 @@
 // /components/WordsContentBlock.js
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 
-// 导入图标
+// 导入图标 (修复了重复导入和缺少的 Star 图标)
 import { 
     ArrowLeft, BookOpen, ChevronRight, LayoutGrid, 
     Atom, Layers, Home, BrainCircuit, Globe,
     Quote, Sigma, Clock, Map, HeartPulse, Waves, Smile, 
-    UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film 
+    UtensilsCrossed, Bus, Briefcase, Banknote, Sun, Palette, Film,
+    GraduationCap, Star, Bookmark
 } from 'lucide-react';
 
 // --- 动态导入 WordCard 组件 (ssr: false 避免服务端渲染错误) ---
@@ -30,7 +31,10 @@ try { hskWordsData[6] = require('@/data/hsk/hsk6.json'); } catch (e) {}
 // 2. 语义分类单词数据
 import semanticData from '@/data/semantic_words.json';
 
-// --- UI 数据与配置 ---
+// --- 配置常量 ---
+
+// !!! 关键配置：请确保这里的 key 与 WordCard 组件内保存收藏时使用的 localStorage key 一致 !!!
+const STORAGE_KEY = 'bookmarked_words'; 
 
 const hskLevels = [
   { level: 1, title: '入门级 (Introductory)', wordCount: 150 },
@@ -43,7 +47,7 @@ const hskLevels = [
 
 // 图标映射
 const mainCategoryIcons = { 1: Atom, 2: Layers, 3: Home, 4: BrainCircuit, 5: Globe };
-// 颜色映射（改为文字颜色，而不是背景色，看起来更清爽）
+// 颜色映射
 const mainCategoryColors = { 1: 'text-indigo-500', 2: 'text-sky-500', 3: 'text-emerald-500', 4: 'text-amber-500', 5: 'text-rose-500' };
 
 const subCategoryIcons = { 
@@ -53,12 +57,61 @@ const subCategoryIcons = {
     401: BrainCircuit, 402: Quote, 403: GraduationCap, 404: Briefcase, 405: Banknote, 
     501: Sun, 502: Palette, 503: Film 
 };
-// 补充缺失的图标定义
-import { GraduationCap } from 'lucide-react';
+
+// --- 辅助函数：获取所有单词以便筛选收藏 ---
+const getAllWordsFlat = () => {
+    let all = [];
+    // 合并 HSK 数据
+    Object.values(hskWordsData).forEach(list => {
+        if (Array.isArray(list)) all = [...all, ...list];
+    });
+    // 合并主题数据
+    if (Array.isArray(semanticData)) {
+        semanticData.forEach(cat => {
+            if (cat.sub_categories) {
+                cat.sub_categories.forEach(sub => {
+                    if (Array.isArray(sub.words)) all = [...all, ...sub.words];
+                });
+            }
+        });
+    }
+    return all;
+};
 
 // --- 子组件 ---
 
-// 1. HSK 列表组件 (浅粉色，一排一个)
+// 0. 收藏入口组件 (新增)
+const FavoritesCard = ({ onClick }) => (
+  <motion.div 
+    initial={{ opacity: 0, y: -10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="mb-8"
+  >
+    <button
+      onClick={onClick}
+      className="w-full group relative overflow-hidden rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 p-6 text-white shadow-lg hover:shadow-xl hover:scale-[1.01] transition-all duration-300 text-left"
+    >
+      <div className="relative z-10 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/20 backdrop-blur-sm rounded-full">
+            <Star size={24} className="text-yellow-300 fill-yellow-300" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white">我的收藏本 (My Favorites)</h3>
+            <p className="text-violet-100 text-sm mt-1">复习您标记为重点的单词</p>
+          </div>
+        </div>
+        <div className="p-2 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">
+            <ChevronRight size={24} className="text-white" />
+        </div>
+      </div>
+      {/* 装饰背景 */}
+      <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+    </button>
+  </motion.div>
+);
+
+// 1. HSK 列表组件
 const HskLevelList = ({ onVocabularyClick }) => (
   <div className="flex flex-col gap-3">
     {hskLevels.map((level, index) => (
@@ -75,7 +128,6 @@ const HskLevelList = ({ onVocabularyClick }) => (
                      transition-all duration-200 cursor-pointer text-left shadow-sm hover:shadow-md"
         >
           <div className="flex items-center gap-4">
-            {/* 圆形数字标 */}
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white text-pink-500 border border-pink-100 shadow-sm font-serif font-bold text-lg group-hover:scale-110 transition-transform">
               {level.level}
             </div>
@@ -98,7 +150,7 @@ const HskLevelList = ({ onVocabularyClick }) => (
   </div>
 );
 
-// 2. 主题场景视图 (改为清爽卡片风格)
+// 2. 主题场景视图
 const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -152,7 +204,7 @@ const ThemeView = ({ onVocabularyClick }) => {
     );
   }
 
-  // 主分类列表 (清爽风格，取代之前的彩色块)
+  // 主分类列表
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {semanticData.map((cat, index) => {
@@ -190,6 +242,9 @@ const WordsContentBlock = () => {
 
   const isCardViewOpen = router.asPath.includes('#vocabulary');
 
+  // 获取所有单词库（用于搜索收藏）
+  const allWordsCache = useMemo(() => getAllWordsFlat(), []);
+
   const handleVocabularyClick = useCallback((type, data) => {
     let words = [];
     let key = '';
@@ -200,6 +255,32 @@ const WordsContentBlock = () => {
     } else if (type === 'theme') {
       words = data.words;
       key = `theme_${data.sub_category_id}`;
+    } else if (type === 'favorites') {
+        // --- 核心修复逻辑：处理收藏 ---
+        try {
+            // 获取 localStorage 中保存的 ID 列表
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            const savedIds = savedData ? JSON.parse(savedData) : [];
+            
+            if (!Array.isArray(savedIds) || savedIds.length === 0) {
+                alert("您还没有收藏任何单词哦！\n在学习时点击单词卡片上的星星即可收藏。");
+                return;
+            }
+
+            // 根据 ID 筛选出完整的单词对象
+            // 注意：这里假设单词对象里有 id 字段，且与保存的 ID 匹配
+            words = allWordsCache.filter(w => savedIds.includes(w.id || w.word)); // 兼容 id 或 word 本身作为 key
+            key = 'my_favorites';
+
+            if (words.length === 0) {
+                alert("收藏列表为空，或者未找到对应单词数据。");
+                return;
+            }
+        } catch (err) {
+            console.error("读取收藏失败", err);
+            alert("读取收藏失败，请重试");
+            return;
+        }
     }
 
     if (words && words.length > 0) {
@@ -209,7 +290,7 @@ const WordsContentBlock = () => {
     } else {
       alert(`数据准备中...`);
     }
-  }, [router]);
+  }, [router, allWordsCache]);
 
   const handleCloseCard = useCallback(() => {
     setActiveWords(null);
@@ -237,6 +318,9 @@ const WordsContentBlock = () => {
     <>
       <div className="max-w-4xl mx-auto p-4 sm:p-6 min-h-[60vh]">
         
+        {/* 新增：收藏夹入口 */}
+        <FavoritesCard onClick={() => handleVocabularyClick('favorites')} />
+
         {/* HSK Section */}
         <div className="mb-10">
             <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 px-1">
