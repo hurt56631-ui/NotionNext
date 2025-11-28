@@ -9,7 +9,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { Howl } from 'howler';
 import { 
     FaVolumeUp, FaStopCircle, FaSpinner, FaChevronUp, 
-    FaFont, FaChevronLeft, FaTimes 
+    FaFont, FaChevronLeft, FaTimes, FaLightbulb, FaLink 
 } from 'react-icons/fa';
 
 // --- 辅助函数 ---
@@ -34,7 +34,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const audioQueueRef = useRef([]);
     const audioCache = useRef({});
     const playbackIdRef = useRef(0);
-    const scrollContainerRef = useRef(null); // 用于检测滚动
+    const scrollContainerRef = useRef(null); 
 
     useEffect(() => {
         setIsMounted(true);
@@ -52,10 +52,15 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setIsAtBottom(false);
         if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop = 0;
+            // 如果内容很少不需要滚动，直接标记为到底部
+            const { scrollHeight, clientHeight } = scrollContainerRef.current;
+            if (scrollHeight <= clientHeight + 20) {
+                setIsAtBottom(true);
+            }
         }
     }, [currentIndex]);
 
-    // --- 音频逻辑 (保持原有逻辑，稍作优化) ---
+    // --- 音频逻辑 ---
     const stopPlayback = useCallback(() => {
         playbackIdRef.current += 1;
         audioQueueRef.current.forEach(sound => sound.stop());
@@ -79,7 +84,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const playMixedAudio = useCallback((text, type) => {
         const currentPlaybackId = playbackIdRef.current + 1;
         playbackIdRef.current = currentPlaybackId;
-        stopPlayback(); // 先停止之前的
+        stopPlayback(); 
 
         if (!text) return;
         
@@ -139,7 +144,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     },
                     onloaderror: () => { 
                         console.error('音频加载失败'); 
-                        checkLoad(); // 即使失败也继续，避免卡死
+                        checkLoad(); 
                     }
                 });
                 sounds[index] = sound;
@@ -159,7 +164,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     }, [currentIndex, grammarPoints, playMixedAudio]);
 
 
-    // --- 导航与交互逻辑 (核心修改) ---
+    // --- 导航与交互逻辑 ---
 
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
@@ -172,28 +177,30 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
     }, [grammarPoints.length, onComplete, stopPlayback]);
 
-    // 监听滚动事件，判断是否到底部
+    // 监听滚动事件
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.target;
-        // 允许 10px 的误差
+        // 判定触底 (允许 10px 误差)
         const isBottom = scrollHeight - scrollTop - clientHeight < 20;
         setIsAtBottom(isBottom);
     };
 
     const swipeHandlers = useSwipeable({
         onSwipedUp: (e) => {
-            // 只有当内容很少不需要滚动，或者已经滚动到底部时，才允许切下一页
             const el = scrollContainerRef.current;
             if (!el) return;
             
-            const isOverflowing = el.scrollHeight > el.clientHeight;
-            // 如果内容溢出且没到底部，阻止翻页，让原生滚动处理
-            if (isOverflowing && !isAtBottom) {
-                // 如果用户用力滑，也可以辅助滚动一下（可选）
-                el.scrollBy({ top: 200, behavior: 'smooth' });
-                return;
+            const isScrollable = el.scrollHeight > el.clientHeight;
+            
+            // 逻辑核心：
+            // 1. 如果内容短(不可滚动)，允许直接下一页
+            // 2. 如果内容长，必须先滚动到底部(isAtBottom 为 true)才允许下一页
+            if (!isScrollable || isAtBottom) {
+                navigate(1);
+            } else {
+                // 如果没到底部，用户上滑可能是为了看下面内容，这里给一个微小的滚动反馈，
+                // 或者什么都不做，让原生滚动处理 (preventDefaultTouchmoveEvent: false)
             }
-            navigate(1);
         },
         onSwipedDown: (e) => {
              const el = scrollContainerRef.current;
@@ -203,9 +210,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                  navigate(-1);
              }
         },
-        preventDefaultTouchmoveEvent: false, // 关键：允许内部文字滚动
+        preventDefaultTouchmoveEvent: false, // 允许浏览器原生滚动
         trackMouse: true,
-        delta: 50 // 滑动灵敏度
+        delta: 40 // 降低灵敏度，避免误触
     });
 
     const transitions = useTransition(currentIndex, {
@@ -213,19 +220,21 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` },
         enter: { opacity: 1, transform: 'translateY(0%)' },
         leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
-        config: { mass: 1, tension: 260, friction: 26 },
+        config: { mass: 1, tension: 280, friction: 30 },
     });
 
-    // --- 渲染辅助 ---
+    // --- 文本渲染 ---
     const renderMixedText = (text, pattern = "") => {
         const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
         const highlightIndices = new Set();
         
-        const mappedPartsWithIndices = parts.map((p, i) => ({ text: p, index: i }));
-        const chineseParts = mappedPartsWithIndices.filter(p => p.text.startsWith('{{'));
-        
-        // 简单的逻辑高亮第一个中文块，实际逻辑可按需复杂化
-        if (chineseParts.length > 0) highlightIndices.add(chineseParts[0].index);
+        // 简单逻辑：高亮第一个中文块
+        parts.forEach((p, i) => {
+            if (p.startsWith('{{')) {
+                // 这里可以根据 pattern 稍微做点匹配逻辑，目前简化为全部高亮
+                // highlightIndices.add(i); 
+            }
+        });
 
         return parts.map((part, pIndex) => {
             const isChinese = part.startsWith('{{');
@@ -233,11 +242,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             const isPunctuation = /^[,\.!?\s]+$/.test(content);
             
             let baseStyle = isChinese ? styles.textChinese : styles.textBurmese;
-            if (isPunctuation) baseStyle = { color: '#bbb' }; // 标点符号淡化
-
-            if (highlightIndices.has(pIndex)) {
-                baseStyle = { ...baseStyle, ...styles.textHighlight };
-            }
+            if (isPunctuation) baseStyle = { color: '#9ca3af' }; 
 
             return (
                 <span key={pIndex} style={{...baseStyle, fontSize: `${fontSizeLevel}rem`}}>
@@ -270,40 +275,72 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 if (!gp) return null;
                 const bgImage = gp.background?.imageUrl || '';
                 const bgGradient = gp.background?.imageUrl 
-                    ? `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.85)), url(${gp.background.imageUrl})`
+                    ? `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${gp.background.imageUrl})`
                     : `linear-gradient(135deg, ${gp.background?.gradientStart || '#1f2937'} 0%, ${gp.background?.gradientEnd || '#111827'} 100%)`;
 
                 return (
                     <animated.div style={{ ...styles.page, background: bgGradient, ...style }}>
-                        {/* 可滚动区域 */}
+                        {/* 可滚动区域 - 添加 overscroll-behavior 禁止下拉刷新 */}
                         <div 
                             ref={scrollContainerRef} 
                             style={styles.scrollContainer} 
                             onScroll={handleScroll}
                         >
                             <div style={styles.contentWrapper}>
-                                {/* 头部标题卡片 */}
+                                {/* 1. 标题卡片 */}
                                 <div style={styles.cardGlass}>
                                     <div style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
                                     {gp.pattern && <div style={styles.pattern}>{gp.pattern}</div>}
                                 </div>
                                 
-                                {/* 解释部分 */}
+                                {/* 2. 语法解释 */}
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
-                                        <span style={styles.sectionLabel}>语法解释</span>
+                                        <div style={styles.headerTitle}>
+                                            <FaLightbulb color="#fcd34d" />
+                                            <span style={styles.sectionLabel}>语法解释</span>
+                                        </div>
                                         <PlayButton 
                                             isActive={activeAudio?.type === `narration_${gp.id}`}
                                             isLoading={isLoadingAudio && activeAudio?.type === `narration_${gp.id}`}
                                             onClick={() => activeAudio?.type === `narration_${gp.id}` ? stopPlayback() : playMixedAudio(gp.narrationScript, `narration_${gp.id}`)}
                                         />
                                     </div>
-                                    <div style={{...styles.explanationText, fontSize: `${0.95 * fontSizeLevel}rem`}} 
+                                    <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
                                          dangerouslySetInnerHTML={{ __html: gp.visibleExplanation?.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>') }} 
                                     />
                                 </div>
+
+                                {/* 3. 常见搭配 (新) - 如果有才显示 */}
+                                {gp.collocations && (
+                                    <div style={styles.sectionContainer}>
+                                        <div style={styles.sectionHeader}>
+                                            <div style={styles.headerTitle}>
+                                                <FaLink color="#60a5fa" />
+                                                <span style={styles.sectionLabel}>常见搭配</span>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.collocations.replace(/\n/g, '<br/>') }} 
+                                        />
+                                    </div>
+                                )}
+
+                                {/* 4. 用法 (新) - 如果有才显示 */}
+                                {gp.usage && (
+                                    <div style={styles.sectionContainer}>
+                                        <div style={styles.sectionHeader}>
+                                            <div style={styles.headerTitle}>
+                                                <span style={styles.sectionLabel}>用法说明</span>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.usage.replace(/\n/g, '<br/>') }} 
+                                        />
+                                    </div>
+                                )}
                                 
-                                {/* 例句部分 */}
+                                {/* 5. 例句示范 */}
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <span style={styles.sectionLabel}>例句示范</span>
@@ -311,35 +348,48 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                     <div style={styles.examplesList}>
                                         {gp.examples.map((ex, index) => (
                                             <div key={ex.id} style={styles.exampleItem}>
-                                                <div style={styles.exampleHeader}>
-                                                    <span style={styles.exampleNumber}>{index + 1}</span>
-                                                    <PlayButton 
-                                                        mini
-                                                        isActive={activeAudio?.type === `example_${ex.id}`}
-                                                        isLoading={isLoadingAudio && activeAudio?.type === `example_${ex.id}`}
-                                                        onClick={() => activeAudio?.type === `example_${ex.id}` ? stopPlayback() : playMixedAudio(ex.narrationScript || ex.sentence, `example_${ex.id}`)}
-                                                    />
-                                                </div>
-                                                <div style={styles.exampleContent}>
-                                                    <div style={styles.sentenceRow}>{renderMixedText(ex.sentence, gp.pattern)}</div>
-                                                    <div style={{...styles.translation, fontSize: `${0.85 * fontSizeLevel}rem`}}>{ex.translation}</div>
+                                                <div style={styles.exampleRow}>
+                                                    {/* 编号与播放按钮 */}
+                                                    <div style={styles.exampleLeftCol}>
+                                                        <span style={styles.exampleNumber}>{index + 1}</span>
+                                                        <PlayButton 
+                                                            mini
+                                                            isActive={activeAudio?.type === `example_${ex.id}`}
+                                                            isLoading={isLoadingAudio && activeAudio?.type === `example_${ex.id}`}
+                                                            onClick={() => activeAudio?.type === `example_${ex.id}` ? stopPlayback() : playMixedAudio(ex.narrationScript || ex.sentence, `example_${ex.id}`)}
+                                                        />
+                                                    </div>
+                                                    
+                                                    {/* 句子与翻译 (并排显示) */}
+                                                    <div style={styles.exampleContent}>
+                                                        <div style={styles.sentenceRow}>
+                                                            {renderMixedText(ex.sentence, gp.pattern)}
+                                                        </div>
+                                                        <div style={{...styles.translation, fontSize: `${0.8 * fontSizeLevel}rem`}}>
+                                                            {ex.translation}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
-                                {/* 底部占位，防止内容贴底 */}
+                                {/* 底部占位 */}
                                 <div style={{height: '100px'}}></div>
                             </div>
                         </div>
 
-                        {/* 底部导航提示 - 浮动在上方 */}
-                        <div style={{...styles.footer, opacity: isAtBottom ? 1 : 0.3 }}>
+                        {/* 底部导航提示 - 仅在触底时高亮 */}
+                        <div style={{
+                            ...styles.footer, 
+                            opacity: isAtBottom ? 1 : 0,
+                            transform: isAtBottom ? 'translateY(0)' : 'translateY(10px)'
+                        }}>
                             <div className="bounce-icon">
-                                {isAtBottom ? <FaChevronUp size={24} color="#4ade80" /> : <FaChevronUp size={20} />}
+                                <FaChevronUp size={24} color="#4ade80" />
                             </div>
-                            <span>{isAtBottom ? "上滑切换下一个" : "滑动浏览内容"}</span>
+                            <span style={{textShadow: '0 1px 2px rgba(0,0,0,0.8)'}}>上滑进入下一课</span>
                         </div>
                     </animated.div>
                 );
@@ -371,38 +421,48 @@ const styles = {
     // Page Layout
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden' },
     
-    // Scroll Container (Critical for content scrolling)
-    scrollContainer: { flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '80px 20px 40px', scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' },
-    contentWrapper: { maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' },
+    // Scroll Container
+    scrollContainer: { 
+        flex: 1, 
+        overflowY: 'auto', 
+        overflowX: 'hidden', 
+        padding: '80px 16px 40px', // paddingReduced
+        scrollBehavior: 'smooth', 
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehaviorY: 'none' // 禁止下拉刷新关键代码
+    },
+    contentWrapper: { maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '14px' }, // 卡片间距减少
 
     // Components
-    cardGlass: { background: 'rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(12px)', padding: '24px', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.15)', textAlign: 'center', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)' },
-    grammarPointTitle: { fontSize: '2rem', fontWeight: 'bold', marginBottom: '8px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' },
-    pattern: { color: '#67e8f9', fontFamily: 'monospace', fontSize: '1.1rem', background: 'rgba(0,0,0,0.3)', padding: '4px 12px', borderRadius: '8px', display: 'inline-block' },
+    cardGlass: { background: 'rgba(255, 255, 255, 0.1)', backdropFilter: 'blur(12px)', padding: '14px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.15)', textAlign: 'center', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)' },
+    grammarPointTitle: { fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '6px', textShadow: '0 2px 4px rgba(0,0,0,0.5)', lineHeight: 1.3 }, // Font Reduced
+    pattern: { color: '#67e8f9', fontFamily: 'monospace', fontSize: '1rem', background: 'rgba(0,0,0,0.3)', padding: '2px 10px', borderRadius: '6px', display: 'inline-block', marginTop: '4px' },
 
-    sectionContainer: { background: 'rgba(0, 0, 0, 0.2)', borderRadius: '16px', padding: '20px', border: '1px solid rgba(255, 255, 255, 0.05)' },
-    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' },
-    sectionLabel: { fontSize: '1rem', fontWeight: 'bold', color: '#fcd34d', letterSpacing: '1px' },
+    sectionContainer: { background: 'rgba(0, 0, 0, 0.25)', borderRadius: '12px', padding: '14px', border: '1px solid rgba(255, 255, 255, 0.08)' }, // Padding reduced
+    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' },
+    headerTitle: { display: 'flex', alignItems: 'center', gap: '8px' },
+    sectionLabel: { fontSize: '0.9rem', fontWeight: 'bold', color: '#fcd34d', letterSpacing: '0.5px' },
     
-    explanationText: { lineHeight: 1.8, color: '#e5e7eb', textAlign: 'justify' },
+    explanationText: { lineHeight: 1.6, color: '#e5e7eb', textAlign: 'justify' }, // Font size handled in inline style
 
-    examplesList: { display: 'flex', flexDirection: 'column', gap: '24px' },
-    exampleItem: { display: 'flex', flexDirection: 'column', gap: '8px' },
-    exampleHeader: { display: 'flex', alignItems: 'center', gap: '10px' },
-    exampleNumber: { background: 'rgba(255,255,255,0.2)', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 'bold' },
-    exampleContent: { paddingLeft: '10px', borderLeft: '2px solid rgba(255,255,255,0.1)' },
-    sentenceRow: { lineHeight: 1.6, marginBottom: '6px' },
-    translation: { color: '#9ca3af', fontStyle: 'italic' },
+    examplesList: { display: 'flex', flexDirection: 'column', gap: '14px' }, // Gap reduced
+    exampleItem: { display: 'flex', flexDirection: 'column' },
+    exampleRow: { display: 'flex', gap: '10px', alignItems: 'flex-start' },
+    exampleLeftCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', paddingTop: '2px' },
+    exampleNumber: { background: 'rgba(255,255,255,0.15)', width: '18px', height: '18px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold', color: '#ddd' }, // Smaller number
+    
+    exampleContent: { flex: 1 },
+    sentenceRow: { lineHeight: 1.5, marginBottom: '4px' },
+    translation: { color: '#9ca3af', fontStyle: 'italic', marginTop: '2px' },
 
     // Buttons & Text
-    playButton: { background: 'rgba(59, 130, 246, 0.8)', border: 'none', color: 'white', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' },
-    playButtonMini: { background: 'rgba(255, 255, 255, 0.15)', border: 'none', color: 'white', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+    playButton: { background: 'rgba(59, 130, 246, 0.9)', border: 'none', color: 'white', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' },
+    playButtonMini: { background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
 
-    textChinese: { color: '#fff', marginRight: '4px' },
-    textBurmese: { color: '#5eead4', marginRight: '2px' },
-    textHighlight: { color: '#fde047', fontWeight: 'bold', textShadow: '0 0 10px rgba(253, 224, 71, 0.3)' },
-
-    footer: { position: 'absolute', bottom: '20px', left: 0, right: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#fff', pointerEvents: 'none', transition: 'opacity 0.3s' },
+    textChinese: { color: '#fff', marginRight: '6px', verticalAlign: 'middle' },
+    textBurmese: { color: '#5eead4', verticalAlign: 'middle' }, // Removed marginRight to keep tight
+    
+    footer: { position: 'absolute', bottom: '24px', left: 0, right: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#fff', pointerEvents: 'none', transition: 'all 0.4s ease-out' },
 };
 
 // --- CSS 动画注入 ---
@@ -411,13 +471,13 @@ styleTag.id = 'gp-player-styles';
 styleTag.innerHTML = `
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .bounce-icon { animation: bounce 2s infinite; }
-    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .bounce-icon { animation: bounce 1.5s infinite; }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
     
     /* 隐藏滚动条但保留功能 */
-    div::-webkit-scrollbar { width: 4px; }
+    div::-webkit-scrollbar { width: 3px; }
     div::-webkit-scrollbar-track { background: transparent; }
-    div::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); borderRadius: 2px; }
+    div::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); borderRadius: 2px; }
 `;
 if (!document.getElementById('gp-player-styles')) document.head.appendChild(styleTag);
 
