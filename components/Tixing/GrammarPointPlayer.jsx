@@ -6,24 +6,76 @@ import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { useSwipeable } from 'react-swipeable';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-import { Howl, Howler } from 'howler';
+import { Howl } from 'howler';
 import { 
     FaVolumeUp, FaStopCircle, FaSpinner, FaChevronUp, 
-    FaFont, FaLightbulb, FaLink, FaPlay, FaPause, FaStepForward 
+    FaFont, FaLightbulb, FaLink, FaPlay, FaPause, 
+    FaExclamationTriangle, FaComments, FaInfoCircle 
 } from 'react-icons/fa';
 
-// --- 辅助函数：生成拼音 HTML ---
+// =================================================================================
+// ===== 数据库与 TTS 核心逻辑 (移植自 WordCard.js) ==================================
+// =================================================================================
+
+const DB_NAME = 'ChineseLearningDB';
+const DB_VERSION = 2;
+const STORE_AUDIO = 'audioCache';
+
+// 1. 打开数据库
+function openDB() {
+    if (typeof window === 'undefined') return Promise.reject("Server side");
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject('数据库打开失败');
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_AUDIO)) {
+                db.createObjectStore(STORE_AUDIO);
+            }
+        };
+    });
+}
+
+// 2. 生成缓存 Key
+const generateAudioKey = (text, voice, rate) => `${text}_${voice}_${rate}`;
+
+// 3. 写入缓存
+async function cacheAudioData(key, blob) {
+    if (typeof window === 'undefined') return;
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_AUDIO, 'readwrite');
+        const store = tx.objectStore(STORE_AUDIO);
+        store.put(blob, key);
+    } catch (e) {
+        console.warn("缓存写入失败", e);
+    }
+}
+
+// 4. 读取缓存
+async function getCachedAudio(key) {
+    if (typeof window === 'undefined') return null;
+    try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_AUDIO, 'readonly');
+        const store = tx.objectStore(STORE_AUDIO);
+        return new Promise((resolve) => {
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+// --- 辅助函数 ---
 const generateRubyHTML = (text) => {
     if (!text) return '';
     return text.replace(/[\u4e00-\u9fa5]/g, char => `<ruby>${char}<rt>${pinyinConverter(char)}</rt></ruby>`);
 };
 
-// --- 辅助函数：生成TTS URL ---
-const getTTSUrl = (text, voice) => {
-    return `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
-};
-
-// --- 辅助函数：解析混合文本 ---
 const parseTextForAudio = (text) => {
     if (!text) return [];
     const matchedParts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
@@ -36,30 +88,33 @@ const parseTextForAudio = (text) => {
     }).filter(p => p.text.trim() !== '');
 };
 
-// --- 主组件 ---
+// =================================================================================
+// ===== 主组件 =====================================================================
+// =================================================================================
+
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [isMounted, setIsMounted] = useState(false);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [fontSizeLevel, setFontSizeLevel] = useState(1);
     const [isAtBottom, setIsAtBottom] = useState(false);
     
-    // --- Audio Player State ---
+    // --- 播放器状态 ---
     const [activeAudioId, setActiveAudioId] = useState(null); // 'narration_ID' or 'example_ID'
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
-    const [seekProgress, setSeekProgress] = useState(0); // 0-100 for current clip
+    const [seekProgress, setSeekProgress] = useState(0); // 0-100
     const [currentDuration, setCurrentDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
 
     // Refs
     const lastDirection = useRef(0);
-    const audioQueueRef = useRef([]); // 存放当前播放队列的 Howl 对象
-    const activeHowlRef = useRef(null); // 当前正在播放的那一个 Howl 实例
-    const audioCache = useRef({}); // 缓存已加载的 Howl 对象
+    const activeHowlRef = useRef(null); // 当前播放的 Howl 实例
+    const audioQueueRef = useRef([]); // 播放队列 (用于混合语言播放)
     const playbackIdRef = useRef(0);
-    const rafRef = useRef(null); // requestAnimationFrame for progress bar
+    const rafRef = useRef(null); // 进度条动画帧
     const scrollContainerRef = useRef(null);
+    const currentAudioUrlRef = useRef(null); // 记录当前 Blob URL 以便销毁
 
     useEffect(() => {
         setIsMounted(true);
@@ -67,11 +122,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         return () => {
             document.body.style.overflow = '';
             stopPlayback();
-            cancelAnimationFrame(rafRef.current);
         };
     }, []);
 
-    // 切换页面时重置
+    // 页面切换时的重置与预加载
     useEffect(() => {
         setIsAtBottom(false);
         if (scrollContainerRef.current) {
@@ -79,168 +133,193 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             const { scrollHeight, clientHeight } = scrollContainerRef.current;
             if (scrollHeight <= clientHeight + 20) setIsAtBottom(true);
         }
-        // 预加载后两页
-        preloadNextPages(currentIndex);
+        
+        // 预加载后两页 (Preload Logic)
+        const preloadNext = async () => {
+            const nextIndices = [currentIndex + 1, currentIndex + 2];
+            for (let idx of nextIndices) {
+                if (idx < grammarPoints.length) {
+                    const gp = grammarPoints[idx];
+                    // 预加载解说
+                    if (gp.narrationScript) {
+                        await playTTS(gp.narrationScript, gp.chineseVoice, gp.myanmarVoice, 1.0, null, true);
+                    }
+                    // 预加载前两个例句
+                    if (gp.examples && gp.examples.length > 0) {
+                        for (let i = 0; i < Math.min(2, gp.examples.length); i++) {
+                            const ex = gp.examples[i];
+                            await playTTS(ex.sentence, gp.chineseVoice, gp.myanmarVoice, 1.0, null, true);
+                        }
+                    }
+                }
+            }
+        };
+        preloadNext();
+
     }, [currentIndex, grammarPoints]);
 
-    // --- 预加载逻辑 ---
-    const preloadNextPages = (idx) => {
-        const pagesToLoad = [grammarPoints[idx + 1], grammarPoints[idx + 2]].filter(Boolean);
-        
-        pagesToLoad.forEach(gp => {
-            // 预加载解说
-            if (gp.narrationScript) {
-                const parts = parseTextForAudio(gp.narrationScript);
-                parts.forEach(part => {
-                    const voice = part.isChinese ? (gp.chineseVoice || 'zh-CN-XiaomengNeural') : (gp.myanmarVoice || 'my-MM-NilarNeural');
-                    const url = getTTSUrl(part.text, voice);
-                    if (!audioCache.current[url]) {
-                        const sound = new Howl({ src: [url], html5: true, preload: true });
-                        audioCache.current[url] = sound;
-                    }
-                });
-            }
-        });
-    };
-
-    // --- 音频控制核心 ---
+    // --- 核心播放控制 ---
     const stopPlayback = useCallback(() => {
         playbackIdRef.current += 1;
-        audioQueueRef.current.forEach(sound => sound.stop());
+        
+        if (activeHowlRef.current) {
+            activeHowlRef.current.stop();
+            activeHowlRef.current.unload();
+            activeHowlRef.current = null;
+        }
+        
+        // 停止队列中可能的后续播放
         audioQueueRef.current = [];
-        activeHowlRef.current = null;
+        
+        if (currentAudioUrlRef.current) {
+            URL.revokeObjectURL(currentAudioUrlRef.current);
+            currentAudioUrlRef.current = null;
+        }
+
+        cancelAnimationFrame(rafRef.current);
         setActiveAudioId(null);
         setIsPlaying(false);
         setIsLoadingAudio(false);
         setSeekProgress(0);
         setCurrentTime(0);
-        cancelAnimationFrame(rafRef.current);
     }, []);
 
-    const updateProgress = () => {
+    // 更新进度条循环
+    const updateProgress = useCallback(() => {
         if (activeHowlRef.current && activeHowlRef.current.playing()) {
             const seek = activeHowlRef.current.seek();
             const duration = activeHowlRef.current.duration();
+            
+            // 如果是队列播放，进度条逻辑比较复杂，这里简化为只显示当前片段的进度
+            // 或者如果是 narration，通常是一段长音频（如果合并了的话）。
+            // 鉴于 TTS 是分段的，我们只对当前活动的 Howl 显示进度。
+            
             setCurrentTime(seek);
             setCurrentDuration(duration);
             setSeekProgress((seek / duration) * 100);
             rafRef.current = requestAnimationFrame(updateProgress);
         }
-    };
+    }, []);
 
-    const playMixedAudio = useCallback((text, type) => {
-        // 如果点击的是当前正在播放的，则执行 暂停/播放 切换
-        if (activeAudioId === type) {
-            if (isPlaying) {
-                // 暂停
-                if (activeHowlRef.current) activeHowlRef.current.pause();
-                setIsPlaying(false);
-                cancelAnimationFrame(rafRef.current);
-            } else {
-                // 继续
-                if (activeHowlRef.current) {
+    // --- 强大的 playTTS 函数 (移植并适配) ---
+    // 支持混合文本 ({{中文}} 缅文) 解析播放
+    const playTTS = useCallback(async (text, cnVoice, mmVoice, rate, audioId, onlyCache = false) => {
+        if (!text) return;
+        
+        const currentPlaybackId = playbackIdRef.current + 1;
+        if (!onlyCache) {
+            // 如果点击同一个 ID 且正在播放，则暂停/恢复
+            if (activeAudioId === audioId && activeHowlRef.current) {
+                if (isPlaying) {
+                    activeHowlRef.current.pause();
+                    setIsPlaying(false);
+                    cancelAnimationFrame(rafRef.current);
+                } else {
                     activeHowlRef.current.play();
                     setIsPlaying(true);
                     rafRef.current = requestAnimationFrame(updateProgress);
-                } else {
-                    // 如果因为某种原因丢失了引用，重新开始
-                    stopPlayback();
-                    playMixedAudio(text, type);
                 }
+                return;
             }
-            return;
+            playbackIdRef.current = currentPlaybackId;
+            stopPlayback();
+            setActiveAudioId(audioId);
+            setIsLoadingAudio(true);
         }
 
-        const currentPlaybackId = playbackIdRef.current + 1;
-        playbackIdRef.current = currentPlaybackId;
-        stopPlayback(); 
-
-        if (!text) return;
-        
+        // 解析文本段落
         const parts = parseTextForAudio(text);
-        if (parts.length === 0) return;
-        
-        const currentGp = grammarPoints[currentIndex];
-        const chineseVoice = currentGp.chineseVoice || 'zh-CN-XiaomengNeural';
-        const myanmarVoice = currentGp.myanmarVoice || 'my-MM-NilarNeural';
+        let audioBlobs = [];
 
-        setActiveAudioId(type);
-        setIsLoadingAudio(true);
+        try {
+            // 串行获取所有音频 Blob (为了保证顺序和简单性，虽然并行更快但容易乱)
+            for (let part of parts) {
+                const voice = part.isChinese ? (cnVoice || 'zh-CN-XiaoxiaoNeural') : (mmVoice || 'my-MM-NilarNeural');
+                // 速率转换: WordCard 存的是 -100 到 100，这里我们用 0.5 - 1.5 倍率
+                // 为了兼容缓存 key，我们将 rate 转回整数存储。比如 1.0 -> 0, 1.5 -> 50
+                const cacheRate = Math.round((rate - 1) * 100); 
+                const cacheKey = generateAudioKey(part.text, voice, cacheRate);
 
-        let sounds = [];
-        let loadedCount = 0;
+                let blob = await getCachedAudio(cacheKey);
 
-        const startQueuePlayback = () => {
+                if (!blob) {
+                    // 请求 API
+                    const apiUrl = 'https://libretts.is-an.org/api/tts';
+                    let response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: part.text, voice, rate: cacheRate, pitch: 0 }),
+                    });
+
+                    if (!response.ok) {
+                        // 备用接口逻辑...
+                        throw new Error('TTS Fetch Failed');
+                    }
+                    blob = await response.blob();
+                    await cacheAudioData(cacheKey, blob);
+                }
+                audioBlobs.push(blob);
+            }
+
+            if (onlyCache) return; // 如果是预加载，到这里就结束了
+
             if (playbackIdRef.current !== currentPlaybackId) return;
+
+            // 开始播放逻辑
             setIsLoadingAudio(false);
             setIsPlaying(true);
-            audioQueueRef.current = sounds;
             
-            let currentSoundIndex = 0;
+            let currentBlobIndex = 0;
 
-            const playNext = () => {
-                if (playbackIdRef.current !== currentPlaybackId || currentSoundIndex >= sounds.length) {
-                    if (playbackIdRef.current === currentPlaybackId) stopPlayback();
+            const playNextBlob = () => {
+                if (playbackIdRef.current !== currentPlaybackId || currentBlobIndex >= audioBlobs.length) {
+                    setIsPlaying(false);
+                    setActiveAudioId(null);
+                    setSeekProgress(0);
                     return;
                 }
-                
-                const sound = sounds[currentSoundIndex];
-                activeHowlRef.current = sound;
-                
-                // 应用当前的倍速
-                sound.rate(playbackRate);
 
-                sound.off('end'); // 清除旧的监听器防止叠加
-                sound.once('end', () => {
-                    currentSoundIndex++;
-                    playNext();
-                });
+                const blob = audioBlobs[currentBlobIndex];
+                const url = URL.createObjectURL(blob);
                 
+                if (currentAudioUrlRef.current) URL.revokeObjectURL(currentAudioUrlRef.current);
+                currentAudioUrlRef.current = url;
+
+                const sound = new Howl({
+                    src: [url],
+                    format: ['mp3', 'webm'],
+                    html5: true,
+                    rate: rate, // 应用播放倍速
+                    onend: () => {
+                        currentBlobIndex++;
+                        playNextBlob();
+                    },
+                    onloaderror: (id, err) => console.error("Load Error", err),
+                    onplayerror: (id, err) => {
+                        sound.once('unlock', () => sound.play());
+                    }
+                });
+
+                activeHowlRef.current = sound;
                 sound.play();
                 rafRef.current = requestAnimationFrame(updateProgress);
             };
 
-            playNext();
-        };
-        
-        parts.forEach((part, index) => {
-            const voice = part.isChinese ? chineseVoice : myanmarVoice;
-            const url = getTTSUrl(part.text, voice);
-            
-            const checkLoad = () => {
-                loadedCount++;
-                if (loadedCount === parts.length) startQueuePlayback();
-            };
+            playNextBlob();
 
-            if (audioCache.current[url] && audioCache.current[url].state() === 'loaded') {
-                sounds[index] = audioCache.current[url];
-                checkLoad();
-            } else {
-                const sound = new Howl({
-                    src: [url],
-                    html5: true,
-                    onload: () => { 
-                        audioCache.current[url] = sound; 
-                        checkLoad(); 
-                    },
-                    onloaderror: () => { 
-                        console.error('音频加载失败'); 
-                        checkLoad(); 
-                    }
-                });
-                sounds[index] = sound;
-            }
-        });
-    }, [grammarPoints, currentIndex, stopPlayback, activeAudioId, isPlaying, playbackRate]);
+        } catch (error) {
+            console.error("TTS Playback Error:", error);
+            setIsLoadingAudio(false);
+            setActiveAudioId(null);
+        }
+    }, [activeAudioId, isPlaying, stopPlayback, updateProgress]);
 
     // 改变倍速
-    const handleRateChange = (rate) => {
-        setPlaybackRate(rate);
+    const handleRateChange = (newRate) => {
+        setPlaybackRate(newRate);
         if (activeHowlRef.current) {
-            activeHowlRef.current.rate(rate);
+            activeHowlRef.current.rate(newRate);
         }
-        // 同时更新队列中所有音频的倍速，以防切到下一句时失效
-        audioQueueRef.current.forEach(s => s.rate(rate));
     };
 
     // 拖动进度条
@@ -248,8 +327,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const percent = parseFloat(e.target.value);
         if (activeHowlRef.current) {
             const duration = activeHowlRef.current.duration();
-            activeHowlRef.current.seek(duration * (percent / 100));
+            const seekPos = duration * (percent / 100);
+            activeHowlRef.current.seek(seekPos);
             setSeekProgress(percent);
+            setCurrentTime(seekPos);
         }
     };
 
@@ -258,14 +339,14 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
-                playMixedAudio(gp.narrationScript, `narration_${gp.id}`);
+                playTTS(gp.narrationScript, gp.chineseVoice, gp.myanmarVoice, 1.0, `narration_${gp.id}`);
             }
         }, 800);
         return () => clearTimeout(timer);
-    }, [currentIndex, grammarPoints, playMixedAudio]);
+    }, [currentIndex, grammarPoints, playTTS]);
 
 
-    // --- 导航与交互逻辑 ---
+    // --- 导航与交互 ---
     const navigate = useCallback((direction) => {
         lastDirection.current = direction;
         stopPlayback();
@@ -288,9 +369,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             const el = scrollContainerRef.current;
             if (!el) return;
             const isScrollable = el.scrollHeight > el.clientHeight;
-            if (!isScrollable || isAtBottom) {
-                navigate(1);
-            }
+            if (!isScrollable || isAtBottom) navigate(1);
         },
         onSwipedDown: () => {
              const el = scrollContainerRef.current;
@@ -310,16 +389,14 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     });
 
     const renderMixedText = (text, pattern = "") => {
-        const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
+        const parts = parseTextForAudio(text);
         return parts.map((part, pIndex) => {
-            const isChinese = part.startsWith('{{');
-            const content = isChinese ? part.slice(2, -2) : part;
-            const isPunctuation = /^[,\.!?\s]+$/.test(content);
-            let baseStyle = isChinese ? styles.textChinese : styles.textBurmese;
+            const isPunctuation = /^[,\.!?\s]+$/.test(part.text);
+            let baseStyle = part.isChinese ? styles.textChinese : styles.textBurmese;
             if (isPunctuation) baseStyle = { color: '#9ca3af' }; 
             return (
                 <span key={pIndex} style={{...baseStyle, fontSize: `${fontSizeLevel}rem`}}>
-                    {isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> : content}
+                    {part.isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(part.text) }} /> : part.text}
                 </span>
             );
         });
@@ -329,7 +406,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     return createPortal(
         <div style={styles.fullScreen} {...swipeHandlers}>
-            {/* 顶部指示器 (无关闭按钮) */}
+            {/* 顶部指示器 */}
             <div style={styles.topBar}>
                 <div style={styles.progressBar}>
                     <div style={{...styles.progressFill, width: `${((currentIndex + 1) / grammarPoints.length) * 100}%`}} />
@@ -347,24 +424,24 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 if (!gp) return null;
                 const bgGradient = gp.background?.imageUrl 
                     ? `linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.95)), url(${gp.background.imageUrl})`
-                    : `linear-gradient(135deg, ${gp.background?.gradientStart || '#1f2937'} 0%, ${gp.background?.gradientEnd || '#111827'} 100%)`;
+                    : `linear-gradient(135deg, ${gp.background?.gradientStart || '#111827'} 0%, ${gp.background?.gradientEnd || '#000'} 100%)`;
 
                 return (
                     <animated.div style={{ ...styles.page, background: bgGradient, ...style }}>
                         <div ref={scrollContainerRef} style={styles.scrollContainer} onScroll={handleScroll}>
                             <div style={styles.contentWrapper}>
                                 
-                                {/* 1. 标题卡片 (紧凑型) */}
+                                {/* 1. 标题卡片 (磨砂白风格) */}
                                 <div style={styles.cardGlass}>
                                     <div style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
                                     {gp.pattern && <div style={styles.pattern}>{gp.pattern}</div>}
                                 </div>
                                 
-                                {/* 2. 语法解释 (带高级播放器) */}
+                                {/* 2. 语法解释 (带音乐播放器) */}
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <div style={styles.headerTitle}>
-                                            <FaLightbulb color="#fcd34d" />
+                                            <FaLightbulb color="#f59e0b" />
                                             <span style={styles.sectionLabel}>语法解释</span>
                                         </div>
                                     </div>
@@ -373,7 +450,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                          dangerouslySetInnerHTML={{ __html: gp.visibleExplanation?.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>') }} 
                                     />
                                     
-                                    {/* 音乐播放器控件区域 */}
+                                    {/* 音乐播放器控件 */}
                                     <div style={styles.playerControlBox}>
                                         <div style={styles.sliderRow}>
                                             <span style={styles.timeText}>{formatTime(currentTime)}</span>
@@ -386,13 +463,13 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                 style={styles.slider}
                                                 disabled={activeAudioId !== `narration_${gp.id}`}
                                             />
-                                            <span style={styles.timeText}>{formatTime(currentDuration)}</span>
+                                            <span style={styles.timeText}>{activeAudioId === `narration_${gp.id}` ? formatTime(currentDuration) : "--:--"}</span>
                                         </div>
                                         <div style={styles.controlRow}>
                                             <button 
                                                 style={styles.rateBtn} 
                                                 onClick={() => {
-                                                    const rates = [0.5, 0.75, 1.0, 1.25, 1.5];
+                                                    const rates = [0.5, 0.7, 1.0, 1.25, 1.5];
                                                     const nextIdx = (rates.indexOf(playbackRate) + 1) % rates.length;
                                                     handleRateChange(rates[nextIdx]);
                                                 }}
@@ -402,29 +479,73 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
                                             <button 
                                                 style={styles.mainPlayBtn} 
-                                                onClick={() => playMixedAudio(gp.narrationScript, `narration_${gp.id}`)}
+                                                onClick={() => playTTS(gp.narrationScript, gp.chineseVoice, gp.myanmarVoice, playbackRate, `narration_${gp.id}`)}
                                             >
                                                 {isLoadingAudio && activeAudioId === `narration_${gp.id}` ? 
                                                     <FaSpinner className="spin" size={20} /> : 
-                                                    (activeAudioId === `narration_${gp.id}` && isPlaying ? <FaPause size={20} /> : <FaPlay size={20} style={{marginLeft: '2px'}}/>)
+                                                    (activeAudioId === `narration_${gp.id}` && isPlaying ? <FaPause size={20} /> : <FaPlay size={20} style={{marginLeft: '4px'}}/>)
                                                 }
                                             </button>
 
-                                            <div style={{width: '32px'}}></div> {/* 占位平衡布局 */}
+                                            <div style={{width: '32px'}}></div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* 3. 补充模块 */}
+                                {/* 3. 补充模块 (回归!) */}
+                                {gp.attention && (
+                                    <div style={{...styles.sectionContainer, borderLeft: '4px solid #ef4444'}}>
+                                        <div style={styles.sectionHeader}>
+                                            <div style={styles.headerTitle}>
+                                                <FaExclamationTriangle color="#ef4444" />
+                                                <span style={{...styles.sectionLabel, color: '#ef4444'}}>易错点 (Attention)</span>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.attention.replace(/\n/g, '<br/>') }} 
+                                        />
+                                    </div>
+                                )}
+
+                                {gp.usage && (
+                                    <div style={styles.sectionContainer}>
+                                        <div style={styles.sectionHeader}>
+                                            <div style={styles.headerTitle}>
+                                                <FaInfoCircle color="#3b82f6" />
+                                                <span style={styles.sectionLabel}>用法说明 (Usage)</span>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.usage.replace(/\n/g, '<br/>') }} 
+                                        />
+                                    </div>
+                                )}
+
                                 {gp.collocations && (
                                     <div style={styles.sectionContainer}>
                                         <div style={styles.sectionHeader}>
                                             <div style={styles.headerTitle}>
-                                                <FaLink color="#60a5fa" />
-                                                <span style={styles.sectionLabel}>常见搭配</span>
+                                                <FaLink color="#10b981" />
+                                                <span style={styles.sectionLabel}>常见搭配 (Collocations)</span>
                                             </div>
                                         </div>
-                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} dangerouslySetInnerHTML={{ __html: gp.collocations.replace(/\n/g, '<br/>') }} />
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`, fontFamily: 'monospace'}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.collocations.replace(/\n/g, '<br/>') }} 
+                                        />
+                                    </div>
+                                )}
+
+                                {gp.dialogue && (
+                                     <div style={styles.sectionContainer}>
+                                        <div style={styles.sectionHeader}>
+                                            <div style={styles.headerTitle}>
+                                                <FaComments color="#8b5cf6" />
+                                                <span style={styles.sectionLabel}>场景对话 (Dialogue)</span>
+                                            </div>
+                                        </div>
+                                        <div style={{...styles.explanationText, fontSize: `${0.85 * fontSizeLevel}rem`}} 
+                                             dangerouslySetInnerHTML={{ __html: gp.dialogue.replace(/\n/g, '<br/>') }} 
+                                        />
                                     </div>
                                 )}
 
@@ -443,7 +564,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                             <span style={styles.exampleNumber}>{index + 1}</span>
                                                             <div style={styles.sentenceRow}>{renderMixedText(ex.sentence, gp.pattern)}</div>
                                                         </div>
-                                                        <div style={{...styles.translation, fontSize: `${0.8 * fontSizeLevel}rem`, paddingLeft: '26px'}}>
+                                                        <div style={{...styles.translation, fontSize: `${0.8 * fontSizeLevel}rem`, paddingLeft: '28px'}}>
                                                             {ex.translation}
                                                         </div>
                                                     </div>
@@ -453,7 +574,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                         isActive={activeAudioId === `example_${ex.id}`}
                                                         isPlaying={isPlaying}
                                                         isLoading={isLoadingAudio && activeAudioId === `example_${ex.id}`}
-                                                        onClick={() => playMixedAudio(ex.narrationScript || ex.sentence, `example_${ex.id}`)}
+                                                        onClick={() => playTTS(ex.sentence, gp.chineseVoice, gp.myanmarVoice, playbackRate, `example_${ex.id}`)}
                                                     />
                                                 </div>
                                             </div>
@@ -485,6 +606,7 @@ const PlayButton = ({ isActive, isPlaying, isLoading, onClick }) => (
 );
 
 const formatTime = (seconds) => {
+    if (!seconds) return "0:00";
     const min = Math.floor(seconds / 60);
     const sec = Math.floor(seconds % 60);
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
@@ -492,64 +614,64 @@ const formatTime = (seconds) => {
 
 // --- 样式定义 ---
 const styles = {
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#111827', color: '#fff', touchAction: 'none' },
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, background: '#111827', color: '#1f2937', touchAction: 'none' },
     
     // Top Bar
-    topBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: 'env(safe-area-inset-top) 16px 10px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.9), transparent)' },
-    progressBar: { height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', marginBottom: '8px' },
+    topBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, padding: 'env(safe-area-inset-top) 10px 10px', background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent)', pointerEvents: 'none' },
+    progressBar: { height: '3px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px', marginBottom: '6px' },
     progressFill: { height: '100%', background: '#4ade80', borderRadius: '2px', transition: 'width 0.3s' },
-    topControls: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '15px' },
-    pageIndicator: { fontSize: '0.8rem', fontFamily: 'monospace', opacity: 0.6 },
-    iconBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '6px', borderRadius: '50%', cursor: 'pointer' },
+    topControls: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', pointerEvents: 'auto' },
+    pageIndicator: { fontSize: '0.8rem', fontFamily: 'monospace', color: 'rgba(255,255,255,0.8)' },
+    iconBtn: { background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '6px', borderRadius: '50%', cursor: 'pointer', backdropFilter: 'blur(4px)' },
 
     // Layout
     page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', backgroundSize: 'cover', backgroundPosition: 'center', overflow: 'hidden' },
     scrollContainer: { 
         flex: 1, overflowY: 'auto', overflowX: 'hidden', 
-        padding: '60px 16px 40px', 
+        padding: '50px 16px 40px', 
         scrollBehavior: 'smooth', 
         WebkitOverflowScrolling: 'touch',
-        overscrollBehaviorY: 'none' 
+        overscrollBehaviorY: 'none' // 禁止下拉刷新
     },
-    contentWrapper: { maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '10px' }, // 间距更紧密
+    contentWrapper: { maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px' },
 
-    // Cards (Light Gray style)
-    cardGlass: { background: 'rgba(255, 255, 255, 0.08)', padding: '16px', borderRadius: '12px', textAlign: 'center' },
-    grammarPointTitle: { fontSize: '1.4rem', fontWeight: 'bold', marginBottom: '4px', lineHeight: 1.2 }, // 字体缩小
-    pattern: { color: '#67e8f9', fontFamily: 'monospace', fontSize: '0.9rem', background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' },
+    // Cards (White/Light Gray Frosted Glass)
+    cardGlass: { background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', padding: '16px', borderRadius: '16px', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)' },
+    grammarPointTitle: { fontSize: '1.3rem', fontWeight: 'bold', marginBottom: '4px', lineHeight: 1.2, color: '#111827' },
+    pattern: { color: '#0ea5e9', fontFamily: 'monospace', fontSize: '0.9rem', background: 'rgba(14, 165, 233, 0.1)', padding: '2px 8px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' },
 
-    // Sections
-    sectionContainer: { background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '16px' },
-    sectionHeader: { display: 'flex', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' },
+    // Sections (White/Light Gray)
+    sectionContainer: { background: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+    sectionHeader: { display: 'flex', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '6px' },
     headerTitle: { display: 'flex', alignItems: 'center', gap: '6px' },
-    sectionLabel: { fontSize: '0.85rem', fontWeight: 'bold', color: '#fcd34d' },
-    explanationText: { lineHeight: 1.5, color: '#e5e7eb', textAlign: 'justify' },
+    sectionLabel: { fontSize: '0.85rem', fontWeight: 'bold', color: '#4b5563' }, // Darker gray for headers
+    explanationText: { lineHeight: 1.5, color: '#374151', textAlign: 'justify' }, // Dark gray text
 
     // Player Control Box
-    playerControlBox: { marginTop: '15px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' },
+    playerControlBox: { marginTop: '12px', background: '#f3f4f6', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb' },
     sliderRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' },
     slider: { flex: 1, height: '4px', accentColor: '#4ade80', cursor: 'pointer' },
-    timeText: { fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'monospace', width: '30px', textAlign: 'center' },
+    timeText: { fontSize: '0.7rem', color: '#6b7280', fontFamily: 'monospace', width: '30px', textAlign: 'center' },
     controlRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 10px' },
-    mainPlayBtn: { width: '40px', height: '40px', borderRadius: '50%', background: '#4ade80', border: 'none', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)' },
-    rateBtn: { background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '4px', fontSize: '0.75rem', padding: '2px 6px', width: '40px' },
+    mainPlayBtn: { width: '40px', height: '40px', borderRadius: '50%', background: '#4ade80', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', cursor: 'pointer' },
+    rateBtn: { background: 'transparent', border: '1px solid #d1d5db', color: '#4b5563', borderRadius: '4px', fontSize: '0.75rem', padding: '2px 6px', width: '40px', cursor: 'pointer' },
 
     // Example List
-    examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
-    exampleItem: { borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' },
-    exampleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' },
+    examplesList: { display: 'flex', flexDirection: 'column', gap: '10px' },
+    exampleItem: { borderBottom: '1px solid #f3f4f6', paddingBottom: '8px' },
+    exampleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' },
     exampleContent: { flex: 1 },
-    exampleNumber: { background: 'rgba(255,255,255,0.15)', minWidth: '16px', height: '16px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 'bold', color: '#ddd' },
-    sentenceRow: { lineHeight: 1.4, wordBreak: 'break-word' },
-    translation: { color: '#9ca3af', fontStyle: 'italic', marginTop: '2px', lineHeight: 1.3 },
+    exampleNumber: { background: '#e5e7eb', minWidth: '18px', height: '18px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280' },
+    sentenceRow: { lineHeight: 1.4, wordBreak: 'break-word', color: '#1f2937' },
+    translation: { color: '#6b7280', fontStyle: 'italic', marginTop: '2px', lineHeight: 1.3 },
     
     // Side Play Button
-    playButtonSide: { background: 'rgba(255,255,255,0.1)', border: 'none', color: '#4ade80', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    playButtonSide: { background: '#e0f2fe', border: 'none', color: '#0ea5e9', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' },
 
-    textChinese: { color: '#fff', marginRight: '4px' },
-    textBurmese: { color: '#5eead4' },
+    textChinese: { color: '#111827', marginRight: '4px', fontWeight: 500 },
+    textBurmese: { color: '#059669' }, // Greenish for Burmese
     
-    footer: { position: 'absolute', bottom: '20px', left: 0, right: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: '#fff', pointerEvents: 'none', transition: 'all 0.3s' },
+    footer: { position: 'absolute', bottom: '20px', left: 0, right: 0, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: 'rgba(255,255,255,0.9)', pointerEvents: 'none', transition: 'all 0.3s' },
 };
 
 // --- Styles Injection ---
@@ -561,8 +683,8 @@ styleTag.innerHTML = `
     .bounce-icon { animation: bounce 1.5s infinite; }
     @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
     input[type=range] { -webkit-appearance: none; background: transparent; }
-    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: #4ade80; margin-top: -4px; }
-    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; border-radius: 50%; background: #4ade80; margin-top: -4px; cursor: pointer; }
+    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: #d1d5db; border-radius: 2px; }
 `;
 if (!document.getElementById('gp-player-styles')) document.head.appendChild(styleTag);
 
