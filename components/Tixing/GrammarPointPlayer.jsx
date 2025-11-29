@@ -11,7 +11,8 @@ import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight } from 're
 // --- 辅助函数：自动生成拼音 HTML ---
 const generateRubyHTML = (text) => {
   if (!text) return '';
-  return text.replace(/[\u4e-00-\u9fa5]+/g, word => {
+  // [FIXED] 修正了错误的正则表达式
+  return text.replace(/[\u4e00-\u9fa5]+/g, word => {
       const pinyin = pinyinConverter(word);
       return `<ruby>${word}<rt>${pinyin}</rt></ruby>`;
   });
@@ -194,10 +195,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         config: { mass: 1, tension: 280, friction: 30 },
     });
     
-    // [MODIFIED] 将渲染逻辑集成到主渲染函数中
     const renderMainContent = (htmlContent) => {
         if (!htmlContent) return null;
-        // 先给中文词加上拼音
         let processedHtml = htmlContent.replace(/\{\{(.*?)\}\}/g, (match, chineseWord) => {
             return generateRubyHTML(chineseWord);
         });
@@ -226,7 +225,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                     </div>
                                 )}
                                 
-                                {/* [MODIFIED] 统一的内容渲染区 */}
                                 <div style={styles.mainContentContainer}>
                                     {renderMainContent(gp.mainContent)}
                                 </div>
@@ -274,7 +272,7 @@ GrammarPointPlayer.propTypes = {
         grammarPoint: PropTypes.string,
         pattern: PropTypes.string,
         patternDetail: PropTypes.string,
-        mainContent: PropTypes.string, // 核心富文本字段
+        mainContent: PropTypes.string,
         narrationScript: PropTypes.string,
     })).isRequired,
     onComplete: PropTypes.func,
