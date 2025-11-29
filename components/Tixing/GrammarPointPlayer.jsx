@@ -1,5 +1,3 @@
-// components/Tixing/GrammarPointPlayer.jsx
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
@@ -17,6 +15,56 @@ const generateRubyHTML = (text) => {
       return `<ruby>${word}<rt>${pinyin}</rt></ruby>`;
   });
 };
+
+// --- 音频缓存与预加载模块 ---
+const audioCache = {
+    cache: new Map(),
+    async get(url) {
+        if (this.cache.has(url)) {
+            return this.cache.get(url);
+        }
+        try {
+            // 尝试从 sessionStorage 获取
+            const cachedBlobUrl = sessionStorage.getItem(url);
+            if (cachedBlobUrl) {
+                this.cache.set(url, cachedBlobUrl);
+                return cachedBlobUrl;
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`音频获取失败: ${response.statusText}`);
+            const blob = await response.blob();
+            
+            // 为了跨会话存储，需要将 blob 转换为 base64
+            const reader = new FileReader();
+            const promise = new Promise((resolve, reject) => {
+                reader.onloadend = () => {
+                    const base64data = reader.result;
+                    try {
+                        sessionStorage.setItem(url, base64data);
+                    } catch (e) {
+                        console.warn("SessionStorage 缓存失败:", e);
+                    }
+                    this.cache.set(url, base64data);
+                    resolve(base64data);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            return promise;
+
+        } catch (error) {
+            console.error("音频缓存模块错误:", error);
+            return url; // 发生错误时，回退到原始URL
+        }
+    },
+    preload(url) {
+        if (!this.cache.has(url) && !sessionStorage.getItem(url)) {
+            this.get(url).catch(err => console.error(`预加载失败: ${url}`, err));
+        }
+    }
+};
+
 
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [isMounted, setIsMounted] = useState(false);
@@ -39,53 +87,71 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     // 滚动交互状态
     const contentRef = useRef(null);
-    const [canGoNext, setCanGoNext] = useState(false); // 控制“下一条”按钮是否激活
+    const [canGoNext, setCanGoNext] = useState(false);
 
     // --- 音频控制逻辑 ---
     const stopPlayback = useCallback(() => {
         if (currentSoundRef.current) {
             currentSoundRef.current.stop();
+            currentSoundRef.current.unload(); // 卸载以释放内存
             currentSoundRef.current = null;
         }
         setActiveAudio(null);
         setIsLoadingAudio(false);
     }, []);
 
-    // [MODIFIED] 接受 voice 和 rate 参数
-    const playSingleAudio = useCallback((text, type, voice = 'zh-CN-XiaoxiaoMultilingualNeural', rate = 1.0) => {
+    const playSingleAudio = useCallback(async (text, type, voice = 'zh-CN-XiaoxiaoMultilingualNeural', rate = 1.0) => {
         stopPlayback();
         if (!text) return;
 
         setActiveAudio({ type });
         setIsLoadingAudio(true);
 
-        // 去除HTML标签和辅助符号，只留纯文本给TTS朗读
         let cleanText = text.replace(/<[^>]+>/g, ''); 
         cleanText = cleanText.replace(/\{\{| \}\}|\}\}/g, '');
         cleanText = cleanText.replace(/\n/g, '... ').replace(/[\r\n]+/g, '... ');
 
-        // 使用传入的 voice
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanText)}&v=${voice}`;
+        
+        try {
+            const audioSrc = await audioCache.get(url);
 
-        const sound = new Howl({
-            src: [url],
-            html5: true,
-            onload: () => { setIsLoadingAudio(false); },
-            onend: () => { setActiveAudio(null); currentSoundRef.current = null; },
-            onloaderror: (id, err) => {
-                console.error('Audio Load Error:', err);
-                setIsLoadingAudio(false);
-                setActiveAudio(null);
-            }
-        });
+            const sound = new Howl({
+                src: [audioSrc],
+                html5: true,
+                format: ['mp3'], // 明确格式
+                rate: rate, // 在初始化时设置速率
+                onload: () => { setIsLoadingAudio(false); },
+                onend: () => { setActiveAudio(null); currentSoundRef.current = null; },
+                onloaderror: (id, err) => {
+                    console.error('音频加载错误:', err);
+                    setIsLoadingAudio(false);
+                    setActiveAudio(null);
+                },
+                onplayerror: (id, err) => {
+                    console.error('音频播放错误:', err);
+                    // 尝试不使用缓存直接播放
+                    const fallbackSound = new Howl({
+                        src: [url],
+                        html5: true,
+                        rate: rate,
+                        onload: () => setIsLoadingAudio(false),
+                        onend: () => setActiveAudio(null),
+                    });
+                    fallbackSound.play();
+                    currentSoundRef.current = fallbackSound;
+                }
+            });
 
-        currentSoundRef.current = sound;
-        // 在播放前设置速率
-        sound.rate(rate);
-        sound.play();
+            currentSoundRef.current = sound;
+            sound.play();
+        } catch (error) {
+            console.error("播放音频失败:", error);
+            setIsLoadingAudio(false);
+            setActiveAudio(null);
+        }
     }, [stopPlayback]);
     
-    // [MODIFIED] 传递 voice 和 rate 参数
     const handlePlayButtonClick = (text, type, voice, rate) => {
         if (activeAudio?.type === type) {
             stopPlayback();
@@ -94,19 +160,19 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         }
     };
     
-    // --- 页面切换副作用 ---
+    // --- 页面切换副作用与音频预加载 ---
     useEffect(() => {
         stopPlayback();
         if (contentRef.current) contentRef.current.scrollTop = 0;
         setCanGoNext(false); 
 
-        // 自动播放解说（使用默认发音人和语速）
-        const timer = setTimeout(() => {
+        // 自动播放解说
+        const autoPlayTimer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
-                playSingleAudio(gp.narrationScript, `narration_${gp.id}`);
+                // 调用播放函数，并传入新的0.7速率
+                playSingleAudio(gp.narrationScript, `narration_${gp.id}`, 'zh-CN-XiaoxiaoMultilingualNeural', 0.7);
             }
-            // 如果内容很短，无需滚动，直接激活下一页
             if (contentRef.current) {
                 const { scrollHeight, clientHeight } = contentRef.current;
                 if (scrollHeight <= clientHeight + 50) { 
@@ -114,8 +180,32 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 }
             }
         }, 600);
+
+        // --- 预加载后面3个语法点的音频 ---
+        const preloadNextItems = (count) => {
+            for (let i = 1; i <= count; i++) {
+                const nextIndex = currentIndex + i;
+                if (nextIndex < grammarPoints.length) {
+                    const nextGp = grammarPoints[nextIndex];
+                    // 预加载详解音频
+                    if (nextGp.narrationScript) {
+                        const cleanText = nextGp.narrationScript.replace(/<[^>]+>/g, '').replace(/\n/g, '... ');
+                        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanText)}&v=zh-CN-XiaoxiaoMultilingualNeural`;
+                        audioCache.preload(url);
+                    }
+                    // 预加载例句音频
+                    nextGp.examples.forEach(ex => {
+                         const cleanText = (ex.narrationScript || ex.sentence).replace(/<[^>]+>/g, '').replace(/\n/g, '... ');
+                         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanText)}&v=zh-CN-YunxiNeural`;
+                         audioCache.preload(url);
+                    });
+                }
+            }
+        };
         
-        return () => { clearTimeout(timer); stopPlayback(); };
+        preloadNextItems(3); // 预加载数量
+        
+        return () => { clearTimeout(autoPlayTimer); stopPlayback(); };
     }, [currentIndex, grammarPoints, playSingleAudio, stopPlayback]);
     
     // --- 滚动监听 (到底部激活按钮) ---
@@ -130,7 +220,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     // --- 按钮点击切换逻辑 ---
     const handleNext = () => {
-        if (!canGoNext) return; // 如果还没读完（没滚到底），不让点
+        if (!canGoNext) return;
         if (currentIndex < grammarPoints.length - 1) {
             lastDirection.current = 1;
             setCurrentIndex(prev => prev + 1);
@@ -148,7 +238,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     const transitions = useTransition(currentIndex, {
         key: grammarPoints[currentIndex]?.id || currentIndex,
-        from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` }, // 改为左右平移动画
+        from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` },
         enter: { opacity: 1, transform: 'translateX(0%)' },
         leave: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
         config: { mass: 1, tension: 280, friction: 30 },
@@ -172,8 +262,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
     };
 
-    // --- 富文本渲染 (支持HTML标签) ---
-    // [MODIFIED] 添加了 className 以应用全局富文本样式
     const renderRichExplanation = (htmlContent) => {
         if (!htmlContent) return null;
         return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
@@ -195,29 +283,47 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 
                                 {gp.pattern && (
                                     <div style={styles.patternBox}>
-                                        <div style={styles.boxLabel}>核心公式</div>
+                                        {/* [MODIFIED] 标签修改 */}
+                                        <div style={styles.boxLabel}>句型结构</div>
                                         <div style={styles.patternContent}>{renderMixedText(gp.pattern, true)}</div>
                                     </div>
                                 )}
                                 
-                                {/* 💡 语法详解 (富文本) */}
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <span style={styles.sectionTitleText}>💡 详解</span>
                                         <button 
                                             className={`play-button ${activeAudio?.type === `narration_${gp.id}` ? 'playing' : ''}`} 
                                             style={styles.playButton} 
-                                            // [MODIFIED] 使用默认发音人和语速
-                                            onClick={() => handlePlayButtonClick(gp.narrationScript, `narration_${gp.id}`)}
+                                            // [MODIFIED] 传入指定发音人与0.7倍语速
+                                            onClick={() => handlePlayButtonClick(
+                                                gp.narrationScript, 
+                                                `narration_${gp.id}`,
+                                                'zh-CN-XiaoxiaoMultilingualNeural',
+                                                0.7
+                                            )}
                                         >
                                             {isLoadingAudio && activeAudio?.type === `narration_${gp.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `narration_${gp.id}` ? <FaStop/> : <FaVolumeUp/>) }
                                         </button>
                                     </div>
                                     <div style={styles.textBlock}>
-                                        {/* 使用新的富文本渲染方法 */}
                                         {renderRichExplanation(gp.visibleExplanation)}
                                     </div>
                                 </div>
+
+                                {/* [MODIFIED] 调整了“使用场景”和“易错点”的顺序 */}
+
+                                {/* 📌 使用场景 */}
+                                {gp.usage && (
+                                    <div style={styles.sectionContainer}>
+                                        <div style={styles.sectionHeader}>
+                                            <span style={{...styles.sectionTitleText, color: '#059669'}}>📌 使用场景？</span>
+                                        </div>
+                                        <div style={{...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0'}}>
+                                            {renderRichExplanation(gp.usage)}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* ⚠️ 易错点 */}
                                 {gp.attention && (
@@ -230,18 +336,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         </div>
                                     </div>
                                 )}
-
-                                {/* 📌 用法 */}
-                                {gp.usage && (
-                                    <div style={styles.sectionContainer}>
-                                        <div style={styles.sectionHeader}>
-                                            <span style={{...styles.sectionTitleText, color: '#059669'}}>📌 使用场景？</span>
-                                        </div>
-                                        <div style={{...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0'}}>
-                                            {renderRichExplanation(gp.usage)}
-                                        </div>
-                                    </div>
-                                )}
                                 
                                 {/* 🗣️ 例句部分 */}
                                 <div style={styles.sectionContainer}>
@@ -249,7 +343,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         <span style={styles.sectionTitleText}>🗣️ 例句</span>
                                     </div>
                                     <div style={styles.examplesList}>
-                                        {gp.examples.map((ex, index) => (
+                                        {gp.examples.map((ex) => (
                                             <div key={ex.id} style={styles.exampleItem}>
                                                 <div style={styles.exampleMain}>
                                                     <div style={styles.exampleSentence}>
@@ -260,7 +354,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                 <button 
                                                     className={`play-button ${activeAudio?.type === `example_${ex.id}` ? 'playing' : ''}`}
                                                     style={styles.playButtonSmall} 
-                                                    // [MODIFIED] 为例句指定新的发音人 'zh-CN-YunxiNeural' (男声) 和 0.85 的语速
                                                     onClick={() => handlePlayButtonClick(
                                                         ex.narrationScript || ex.sentence, 
                                                         `example_${ex.id}`,
@@ -281,7 +374,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
                         {/* --- 底部按钮控制栏 --- */}
                         <div style={styles.bottomBar}>
-                            {/* 上一条按钮 */}
                             <button 
                                 style={{
                                     ...styles.navButton, 
@@ -292,8 +384,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                             >
                                 <FaChevronLeft /> 上一条
                             </button>
-
-                            {/* 下一条按钮 */}
                             <button 
                                 style={{
                                     ...styles.navButton,
@@ -354,7 +444,7 @@ const styles = {
     },
     
     textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', fontSize: '1rem', lineHeight: 1.7, color: '#475569' },
-    richTextContainer: { whiteSpace: 'normal' }, // 允许正常换行
+    richTextContainer: { whiteSpace: 'normal' },
 
     examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
     exampleItem: { background: '#f8fafc', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #e2e8f0' },
@@ -380,7 +470,6 @@ const styles = {
 
 const styleTag = document.getElementById('grammar-player-styles') || document.createElement('style');
 styleTag.id = 'grammar-player-styles';
-// [MODIFIED] 注入了更丰富的富文本样式
 styleTag.innerHTML = `
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -412,7 +501,7 @@ styleTag.innerHTML = `
         color: #475569;
     }
     .rich-text-content strong, .rich-text-content b {
-        color: #0d46ba; /* 用深蓝色强调 */
+        color: #0d46ba;
         font-weight: 600;
     }
     .rich-text-content ul, .rich-text-content ol {
