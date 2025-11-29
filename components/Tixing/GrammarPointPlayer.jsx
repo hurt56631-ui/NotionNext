@@ -171,7 +171,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
                 // 调用播放函数，并传入新的0.7速率
-                playSingleAudio(gp.narrationScript, `narration_${gp.id}`, 'zh-CN-XiaoxiaoMultilingualNeural', 0.7);
+                playSingleAudio(gp.narrationScript, `narration_${gp.id}`, 'zh-CN-XiaoxiaoMultilingualNeural', 0.82);
             }
             if (contentRef.current) {
                 const { scrollHeight, clientHeight } = contentRef.current;
