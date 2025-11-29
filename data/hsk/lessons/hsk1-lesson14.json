@@ -1,5 +1,5 @@
 {
-  "课程ID": "hsk1-lesson10-ultimate-rich-version",
+  "课程ID": "hsk1-lesson10-ultimate-rich-version-beautified",
   "课程标题": "第10课核心语法深度解析 (做/去/会)",
   "全局配置": {
     "主题颜色": "#2C3E50",
@@ -26,9 +26,9 @@
             "语法点ID": "template1_zuo",
             "语法点标题": "模板1：主语 + 做 + 宾语",
             "句型模板": "[人] + 做 + [事情/工作/饭菜]",
-            "语法详解HTML": "<b>语法点 (yǔfǎ diǎn)：</b><br>“做 (zuò)” 表示进行某个动作或制作某个东西。它后面通常跟名词性宾语 (míngcí xìng bīnyǔ)。",
-            "适用情境": "<b>适用情境 (shìyòng qíngjìng)：</b><br>描述你正在做或经常做的事情，你的工作，或制作的东西。",
-            "注意事项": "<b>文化小贴士 (wénhuà xiǎo tiēshì):</b><br>中文用“做饭 (zuò fàn)”统称烹饪，但实际有更具体的动词。例如：<br><b>炒 (chǎo)</b> - 大火快烹 (ကြော်ခြင်း)<br><b>煮 (zhǔ)</b> - 水煮 (ပြုတ်ခြင်း)<br>简单说：“你会炒菜吗？”比“你会做饭吗？”更具体，更地道。",
+            "语法详解HTML": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法点 (yǔfǎ diǎn)</strong></div><div style='padding-left: 15px;'>“<b style='color:#E74C3C'>做</b> (zuò)” 表示进行某个动作或制作某个东西。<br>它后面通常跟名词性宾语 (míngcí xìng bīnyǔ)。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'>",
+            "适用情境": "<div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境 (shìyòng qíngjìng)</strong></div><div style='padding-left: 15px;'>描述你<b>正在做</b>或<b>经常做</b>的事情，你的<b>工作</b>，或<b>制作</b>的东西。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'>",
+            "注意事项": "<div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>文化小贴士 (wénhuà xiǎo tiēshì)</strong></div><div style='padding-left: 15px;'>中文用“<b>做饭</b> (zuò fàn)”统称烹饪，但实际有更具体的动词。例如：<br><ul style='margin: 5px 0 0 20px; padding:0;'><li><b>炒 (chǎo)</b> - 大火快烹 (ကြော်ခြင်း)</li><li><b>煮 (zhǔ)</b> - 水煮 (ပြုတ်ခြင်း)</li></ul>简单说：“你会<b style='color:#3498DB'>炒菜</b>吗？”比“你会<b style='color:#3498DB'>做饭</b>吗？”更具体，更地道。</div>",
             "例句列表": [
               {
                 "id": "ex_zuo_1_1_group",
