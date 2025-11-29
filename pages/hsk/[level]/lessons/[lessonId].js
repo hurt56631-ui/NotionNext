@@ -1,15 +1,15 @@
-// pages/hsk/[level]/lessons/[lessonId].js (已修正 "document is not defined" 错误的最终版本)
+// pages/hsk/[level]/lessons/[lessonId].js
 
 import React from 'react';
 import { useRouter } from 'next/router';
 import fs from 'fs'; 
 import path from 'path'; 
-import dynamic from 'next/dynamic'; // 导入 dynamic
+import dynamic from 'next/dynamic';
 
-// 【核心修复】: 使用 dynamic 导入 InteractiveLesson 并禁用 SSR
-const InteractiveLesson = dynamic(
-  () => import('@/components/Tixing/InteractiveLesson'), // 确保路径正确
-  { ssr: false } // <--- 关键！告诉 Next.js 不要预渲染它
+// 【修改】: 改为动态导入 GrammarPointPlayer
+const GrammarPointPlayer = dynamic(
+  () => import('@/components/Tixing/GrammarPointPlayer'),
+  { ssr: false }
 );
 
 export default function LessonPage({ lesson, error }) {
@@ -31,16 +31,49 @@ export default function LessonPage({ lesson, error }) {
     );
   }
 
-  // 正常渲染课程
-  // 注意：在 ssr: false 模式下，组件在首次渲染时不会立即出现，
-  // 所以我们可以提供一个 fallback 占位符，但在这里我们依赖 InteractiveLesson 内部的加载逻辑
+  // 【核心修改】: 从 lesson 数据中提取语法点并传递给 GrammarPointPlayer
   if (lesson) {
-    return <InteractiveLesson lesson={lesson} />;
+    // 从 lesson 数据中提取语法点
+    const grammarStudyBlock = lesson.blocks.find(block => block.type === 'grammar_study');
+    
+    if (grammarStudyBlock && grammarStudyBlock.content.grammarPoints) {
+      return (
+        <GrammarPointPlayer 
+          grammarPoints={grammarStudyBlock.content.grammarPoints}
+          onComplete={() => {
+            // 学习完成后的回调，可以返回课程列表或做其他操作
+            router.push(`/hsk/${router.query.level}`);
+          }}
+        />
+      );
+    } else {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '20px' }}>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#dc2626' }}>课程数据格式错误</h1>
+          <p style={{ color: '#6b7280', marginBottom: '2rem', textAlign: 'center' }}>
+            未找到语法点数据。<br/>
+            请检查课程数据文件格式。
+          </p>
+          <button 
+            onClick={() => router.back()} 
+            style={{ 
+              padding: '10px 20px', 
+              border: 'none', 
+              borderRadius: '8px', 
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              cursor: 'pointer' 
+            }}
+          >
+            返回上一页
+          </button>
+        </div>
+      );
+    }
   }
   
-  return null; // 如果没有 lesson 且没有 error，什么都不渲染
+  return null;
 }
-
 
 // 第 1 步: getStaticPaths
 export async function getStaticPaths() {
@@ -61,7 +94,6 @@ export async function getStaticPaths() {
 
   return { paths, fallback: false };
 }
-
 
 // 第 2 步: getStaticProps
 export async function getStaticProps(context) {
@@ -87,4 +119,4 @@ export async function getStaticProps(context) {
       },
     };
   }
-}
+      }
