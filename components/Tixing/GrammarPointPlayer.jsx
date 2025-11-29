@@ -51,7 +51,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setIsLoadingAudio(false);
     }, []);
 
-    const playSingleAudio = useCallback((text, type) => {
+    // [MODIFIED] 接受 voice 和 rate 参数
+    const playSingleAudio = useCallback((text, type, voice = 'zh-CN-XiaoxiaoMultilingualNeural', rate = 1.0) => {
         stopPlayback();
         if (!text) return;
 
@@ -63,7 +64,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         cleanText = cleanText.replace(/\{\{| \}\}|\}\}/g, '');
         cleanText = cleanText.replace(/\n/g, '... ').replace(/[\r\n]+/g, '... ');
 
-        const voice = 'zh-CN-XiaoxiaoMultilingualNeural';
+        // 使用传入的 voice
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(cleanText)}&v=${voice}`;
 
         const sound = new Howl({
@@ -79,14 +80,17 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
 
         currentSoundRef.current = sound;
+        // 在播放前设置速率
+        sound.rate(rate);
         sound.play();
     }, [stopPlayback]);
     
-    const handlePlayButtonClick = (text, type) => {
+    // [MODIFIED] 传递 voice 和 rate 参数
+    const handlePlayButtonClick = (text, type, voice, rate) => {
         if (activeAudio?.type === type) {
             stopPlayback();
         } else {
-            playSingleAudio(text, type);
+            playSingleAudio(text, type, voice, rate);
         }
     };
     
@@ -96,7 +100,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (contentRef.current) contentRef.current.scrollTop = 0;
         setCanGoNext(false); 
 
-        // 自动播放解说
+        // 自动播放解说（使用默认发音人和语速）
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
@@ -169,10 +173,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     };
 
     // --- 富文本渲染 (支持HTML标签) ---
+    // [MODIFIED] 添加了 className 以应用全局富文本样式
     const renderRichExplanation = (htmlContent) => {
         if (!htmlContent) return null;
-        // 这里直接渲染HTML，支持数据中的 <br>, <strong>, <div style="..."> 等标签
-        return <div style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+        return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
     };
 
     const content = (
@@ -203,6 +207,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         <button 
                                             className={`play-button ${activeAudio?.type === `narration_${gp.id}` ? 'playing' : ''}`} 
                                             style={styles.playButton} 
+                                            // [MODIFIED] 使用默认发音人和语速
                                             onClick={() => handlePlayButtonClick(gp.narrationScript, `narration_${gp.id}`)}
                                         >
                                             {isLoadingAudio && activeAudio?.type === `narration_${gp.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `narration_${gp.id}` ? <FaStop/> : <FaVolumeUp/>) }
@@ -230,7 +235,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 {gp.usage && (
                                     <div style={styles.sectionContainer}>
                                         <div style={styles.sectionHeader}>
-                                            <span style={{...styles.sectionTitleText, color: '#059669'}}>📌 什么时候用？</span>
+                                            <span style={{...styles.sectionTitleText, color: '#059669'}}>📌 使用场景？</span>
                                         </div>
                                         <div style={{...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0'}}>
                                             {renderRichExplanation(gp.usage)}
@@ -255,7 +260,13 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                 <button 
                                                     className={`play-button ${activeAudio?.type === `example_${ex.id}` ? 'playing' : ''}`}
                                                     style={styles.playButtonSmall} 
-                                                    onClick={() => handlePlayButtonClick(ex.narrationScript || ex.sentence, `example_${ex.id}`)}
+                                                    // [MODIFIED] 为例句指定新的发音人 'zh-CN-YunxiNeural' (男声) 和 0.85 的语速
+                                                    onClick={() => handlePlayButtonClick(
+                                                        ex.narrationScript || ex.sentence, 
+                                                        `example_${ex.id}`,
+                                                        'zh-CN-YunxiNeural',
+                                                        0.85
+                                                    )}
                                                 >
                                                      {isLoadingAudio && activeAudio?.type === `example_${ex.id}` ? <FaSpinner className="spin" /> : (activeAudio?.type === `example_${ex.id}` ? <FaStop/> : <FaVolumeUp/>) }
                                                 </button>
@@ -342,8 +353,7 @@ const styles = {
         width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
     },
     
-    // --- 富文本容器样式 ---
-    textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', fontSize: '1rem', lineHeight: 1.6, color: '#475569' },
+    textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', fontSize: '1rem', lineHeight: 1.7, color: '#475569' },
     richTextContainer: { whiteSpace: 'normal' }, // 允许正常换行
 
     examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
@@ -355,7 +365,6 @@ const styles = {
     textChinese: { color: '#1e293b' }, 
     textBurmese: { color: '#059669' }, 
 
-    // --- 底部固定按钮栏 ---
     bottomBar: {
         position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px',
         background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)',
@@ -371,17 +380,63 @@ const styles = {
 
 const styleTag = document.getElementById('grammar-player-styles') || document.createElement('style');
 styleTag.id = 'grammar-player-styles';
+// [MODIFIED] 注入了更丰富的富文本样式
 styleTag.innerHTML = `
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .play-button:active { transform: scale(0.9); }
-    .playing { animation: pulse-ring 2s infinite; background-color: rgba(37, 99, 235, 0.2) !important; color: #2563eb !important; border-color: #2563eb !important; }
-    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
     
-    /* 富文本内部样式，模拟文档排版 */
-    .indent-level-1 { margin-left: 20px; color: #555; font-size: 0.95em; margin-bottom: 5px; }
-    .indent-level-2 { margin-left: 40px; color: #777; font-size: 0.9em; margin-bottom: 5px; }
-    .highlight-bold { font-weight: bold; color: #333; }
+    .play-button:active { transform: scale(0.9); }
+    .playing { 
+      animation: pulse-ring 2s infinite; 
+      background-color: rgba(37, 99, 235, 0.2) !important; 
+      color: #2563eb !important; 
+      border-color: #2563eb !important;
+    }
+    @keyframes pulse-ring { 
+      0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); } 
+      70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 
+      100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } 
+    }
+    
+    /* --- 全局富文本样式 --- */
+    .rich-text-content h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin: 1.5em 0 0.8em 0;
+        padding-bottom: 0.3em;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .rich-text-content p {
+        margin: 0.8em 0;
+        color: #475569;
+    }
+    .rich-text-content strong, .rich-text-content b {
+        color: #0d46ba; /* 用深蓝色强调 */
+        font-weight: 600;
+    }
+    .rich-text-content ul, .rich-text-content ol {
+        margin: 0.8em 0;
+        padding-left: 1.8em;
+    }
+    .rich-text-content li {
+        margin: 0.5em 0;
+        color: #475569;
+    }
+    .rich-text-content code {
+        background-color: #f1f5f9;
+        color: #475569;
+        padding: 0.2em 0.4em;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    .rich-text-content blockquote {
+        border-left: 4px solid #93c5fd;
+        padding: 0.5em 1em;
+        margin: 1em 0;
+        background-color: #eff6ff;
+        color: #1e3a8a;
+    }
 `;
 if (!document.getElementById('grammar-player-styles')) document.head.appendChild(styleTag);
 
