@@ -61,7 +61,7 @@ import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
 import WordsContentBlock from '@/components/WordsContentBlock'
-import PinyinContentBlock from '@/components/PinyinContentBlock' // ✅ 新增：导入拼音组件
+import PinyinContentBlock from '@/components/PinyinContentBlock'
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 // 动态导入重组件
@@ -127,7 +127,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
-// LayoutBase 组件
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
@@ -175,7 +174,6 @@ const CustomScrollbarStyle = () => (
 
 const BottomNavBar = ({ onOpenAiDrawer }) => {
     const router = useRouter();
-    // 定义底部导航包含的主 Tab 键值
     const mainLearnTabs = ['pinyin', 'words', 'speaking']; 
 
     const navItems = [
@@ -187,8 +185,6 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
 
     const isActive = (item) => {
         if (item.type === 'button') return false; 
-        
-        // 默认 Tab 是 'pinyin'
         const currentTab = router.query.tab || 'pinyin'; 
 
         if (item.href.startsWith('/?tab=')) {
@@ -327,18 +323,18 @@ const ContactPanel = ({ isOpen, onClose }) => {
 
 
 // =================================================================================
-// ======================  LayoutIndex 组件 (核心逻辑修改) ========================
+// ======================  LayoutIndex 组件  ========================
 // =================================================================================
 const LayoutIndex = props => {
   const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
   const allTabs = [
-    { name: '拼音', key: 'pinyin', icon: <Type size={22} /> }, // 新增拼音
+    { name: '拼音', key: 'pinyin', icon: <Type size={22} /> },
     { name: '单词', key: 'words', icon: <BookText size={22} /> },
-    { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> }, // 将被隐藏
+    { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> },
     { name: '口语', key: 'speaking', icon: <Mic size={22} /> },
-    { name: '语法', key: 'grammar', icon: <SpellCheck2 size={22} /> }, // 将被隐藏
+    { name: '语法', key: 'grammar', icon: <SpellCheck2 size={22} /> },
     { name: '练习', key: 'practice', icon: <ClipboardCheck size={22} /> },
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
@@ -346,7 +342,7 @@ const LayoutIndex = props => {
   const visibleTabKeys = ['pinyin', 'words', 'speaking'];
   const displayTabs = allTabs.filter(tab => visibleTabKeys.includes(tab.key));
 
-  const [activeTabKey, setActiveTabKey] = useState('pinyin'); // 默认选中拼音
+  const [activeTabKey, setActiveTabKey] = useState('pinyin'); 
 
   useEffect(() => {
     if (router.isReady) {
@@ -530,9 +526,10 @@ const LayoutIndex = props => {
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   
   const renderTabButtons = () => displayTabs.map(tab => (
-    <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+    <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTabKey === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
+        {/* 🔥 修复点：这里原来是 activeTab，已改为 activeTabKey */}
         <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTabKey === tab.key ? 'bg-blue-500' : 'bg-transparent'}`}></div>
     </button>
   ));
@@ -591,10 +588,9 @@ const LayoutIndex = props => {
                     
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         <div className='p-4'>
-                            {/* ✅ 这里使用新组件替换了之前的占位符 */}
                             {activeTabKey === 'pinyin' && <PinyinContentBlock />}
                             {activeTabKey === 'words' && <WordsContentBlock />}
-                            {activeTabKey === 'speaking' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
+                            {activeTabKey === 'speaking' && <SpeakingContentBlock />}
                             {activeTabKey === 'practice' && <PracticeContentBlock />}
                             {activeTabKey === 'books' && <BooksContentBlock notionBooks={books} />}
                         </div>
