@@ -1,83 +1,189 @@
+{
+  "id": "hsk1-lesson13-final-optimized",
+  "title": "第13课：他在学做中国菜呢",
+  "globalConfig": {
+    "themeColor": "#F5A623",
+    "backgroundColor": "#F5F7FA",
+    "contentLayout": "center-upper",
+    "autoAdvance": false,
+    "navigationMode": "swipe_vertical"
+  },
+  "blocks": [
+    {
+      "type": "teaching",
+      "id": "intro",
+      "style": {
+        "layout": "center-upper",
+        "paddingTop": "15vh"
+      },
+      "content": {
+        "pinyin": "Dì shísān kè: Tā zài xué zuò Zhōngguó cài ne",
+        "displayText": "第13课：他在学做中国菜呢",
+        "translation": "သင်ခန်းစာ ၁၃: သူ တရုတ်ဟင်းချက်နည်း သင်နေတယ်။",
+        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ တစ်စုံတစ်ခုကို လုပ်ဆောင်နေဆဲဖြစ်ကြောင်း ဘယ်လိုပြောရမလဲဆိုတာကို သင်ယူကြမှာပါ။",
+        "narrationLang": "my",
+        "hintText": "👆 点击或上滑开始 (နှိပ်ပါ သို့မဟုတ် အပေါ်သို့ပွတ်ဆွဲပါ)"
+      }
+    },
+    {
+      "type": "word_study",
+      "id": "new_words",
+      "style": {
+        "layout": "fullscreen",
+        "backgroundColor": "#F5F7FA"
+      },
+      "content": {
+        "title": "本课生词",
+        "displayMode": "card_grid",
+        "words": [
+          { "id": "w1", "chinese": "喂", "pinyin": "wéi", "translation": "ဟလို (ဖုန်းဖြေရာတွင်)", "example": "喂，你是谁？", "rate": 0 },
+          { "id": "w2", "chinese": "也", "pinyin": "yě", "translation": "လည်းပဲ", "example": "我也喜欢吃中国菜。", "rate": 0 },
+          { "id": "w3", "chinese": "学习", "pinyin": "xuéxí", "translation": "လေ့လာသည် / သင်ယူသည်", "example": "他在学习汉语。", "rate": 0 },
+          { "id": "w4", "chinese": "睡觉", "pinyin": "shuìjiào", "translation": "အိပ်သည်", "example": "都几点了，还在睡觉？", "rate": 0 },
+          { "id": "w5", "chinese": "看电视", "pinyin": "kàn diànshì", "translation": "တီဗီကြည့်သည်", "example": "晚上我不看电视。", "rate": 0 },
+          { "id": "w6", "chinese": "给", "pinyin": "gěi", "translation": "သို့ / ပေးသည်", "example": "我给朋友打电话。", "rate": 0 },
+          { "id": "w7", "chinese": "打电话", "pinyin": "dǎ diànhuà", "translation": "ဖုန်းဆက်သည်", "example": "他在打电话呢。", "rate": 0 },
+          { "id": "w8", "chinese": "做", "pinyin": "zuò", "translation": "ပြုလုပ်သည်", "example": "你在做什么？", "rate": 0 },
+          { "id": "w9", "chinese": "菜", "pinyin": "cài", "translation": "ဟင်း", "example": "这个菜很好吃。", "rate": 0 }
+        ]
+      }
+    },
+    {
+      "type": "grammar_study",
+      "id": "grammar_zai_ne",
+      "content": {
+        "grammarPoints": [
+          {
+            "id": "gp13_1",
+            "grammarPoint": "正在进行时 (Action in Progress)",
+            "pattern": "{{主语}} + {{在}} + {{动作}} + {{呢}}",
+            
+            "visibleExplanation": "想告诉别人你 **现在正在** 做什么吗？\n就像英语的 \"-ing\"。\n很简单：在动作前面加 **“在”**，句子后面加 **“呢”** 就可以了。",
+            
+            "narrationScript": "我们来看看怎么说“正在做某事”。\nအခုလက်ရှိ လုပ်နေတဲ့အရာတစ်ခုကို ပြောချင်ရင် ဒီပုံစံကိုသုံးရပါမယ်။\n公式很简单：{{在}} 加 {{动作}} 加 {{呢}}。\nဖော်မြူလာက ရိုးရှင်းပါတယ် - {{在}} ၊ ကြိယာ နဲ့ {{呢}} ပေါင်းရုံပါပဲ။\n比如：{{我在睡觉呢}}。\nဥပမာ - {{我在睡觉呢}} (ကျွန်တော် အိပ်နေတယ်)။",
+            
+            "attention": "⚠️ **易错点 (Common Mistake)**：\n不要把“在”漏掉，也不要加“了”。\n❌ 错误：我睡觉呢。 (不够自然)\n❌ 错误：我在睡觉了。 (意思是变了)\n✅ 正确：我在睡觉呢。",
+            
+            "examples": [
+              { "id": "ex13_1_1", "sentence": "{{他}} {{在}} {{学习}} {{呢}}。", "translation": "သူ စာလေ့လာနေတယ်။", "narrationScript": "他在学习呢。\nသူ စာလေ့လာနေတယ်။" },
+              { "id": "ex13_1_2", "sentence": "{{我}} {{在}} {{看电视}} {{呢}}。", "translation": "ကျွန်တော် တီဗီကြည့်နေတယ်။", "narrationScript": "我在看电视呢。\nကျွန်တော် တီဗီကြည့်နေတယ်။" },
+              { "id": "ex13_1_3", "sentence": "{{妈妈}} {{在}} {{做饭}} {{呢}}。", "translation": "အမေ ထမင်းချက်နေတယ်။", "narrationScript": "妈妈在做饭呢。\nအမေ ထမင်းချက်နေတယ်။" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "grammar_study",
+      "id": "grammar_gei_phone",
+      "content": {
+        "grammarPoints": [
+          {
+            "id": "gp13_2",
+            "grammarPoint": "打电话 (Making a Phone Call)",
+            "pattern": "{{A}} + {{给}} + {{B}} + {{打电话}}",
+            
+            "visibleExplanation": "想给朋友打电话？\n中文的逻辑是：先说 **“给” (To)** 谁，再说 **“打电话” (Call)**。\n把“给 + 人” 放在动作的前面。",
+            
+            "narrationScript": "如果要给别人打电话，怎么说？\nတစ်ယောက်ယောက်ဆီ ဖုန်းဆက်ချင်ရင် ဘယ်လိုပြောမလဲ?\n记住：先说 {{给}} 谁，再说 {{打电话}}。\nမှတ်ထားပါ - ဘယ်သူ့ကို {{给}} လဲဆိုတာ အရင်ပြောပြီးမှ {{打电话}} လို့ပြောရပါမယ်။\n不能说“打电话给”哦！\n'打电话给' လို့ မပြောရပါဘူးနော်!",
+            
+            "attention": "⚠️ **语序警告 (Order Alert)**：\n中文和英语/缅语的语序可能不一样。\n❌ 错误：我打电话给妈妈。\n✅ 正确：我 **给妈妈** 打电话。",
 
-     {
-        "id": "hsk1-lesson13-final-optimized",
-        sentence: "{{我}} {{早上七点}} {{起床}}。",
-        translation: "ကျွန်တော်/ကျွန်မ မနက် ၇ နာရီ အိပ်ရာထတယ်။",
-        // 例句朗读：中文 + 缅文翻译
-        narrationScript: "我早上七点起床。\nကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။"
-      },
-      {
-        id: "ex_32_1_2",
-        sentence: "{{爸爸}} {{中午十二点}} {{吃午饭}}。",
-        translation: "အဖေ နေ့လည် ၁၂ နာရီ နေ့လယ်စာစားတယ်။",
-        narrationScript: "爸爸中午十二点吃午饭。\nအဖေ နေ့လည် ၁၂ နာရီ နေ့လယ်စာစားတယ်။"
-      },
-      {
-        id: "ex_32_1_3",
-        sentence: "{{我们}} {{下午六点}} {{下班}}。",
-        translation: "ကျွန်တော်တို့ ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။",
-        narrationScript: "我们下午六点下班。\nကျွန်တော်တို့ ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။"
+            "examples": [
+              { "id": "ex13_2_1", "sentence": "{{我}} {{给}} {{妈妈}} {{打电话}}。", "translation": "ကျွန်တော် အမေ့ဆီ ဖုန်းဆက်တယ်။", "narrationScript": "我给妈妈打电话。\nကျွန်တော် အမေ့ဆီ ဖုန်းဆက်တယ်။" },
+              { "id": "ex13_2_2", "sentence": "{{他}} {{在}} {{给}} {{朋友}} {{打电话}} {{呢}}。", "translation": "သူ သူငယ်ချင်းဆီ ဖုန်းဆက်နေတယ်။ (Combining Grammar 1 & 2)", "narrationScript": "他在给朋友打电话呢。\nသူ သူငယ်ချင်းဆီ ဖုန်းဆက်နေတယ်။" }
+            ]
+          }
+        ]
       }
-    ]
-  },
-  {
-    id: "gp_32_2",
-    grammarPoint: "询问时间 (Asking Time)",
-    pattern: "{{主语}} + {{几点}} + {{动作}}？",
-    
-    visibleExplanation: "想问别人“什么时候做某事”，用 **“几点”** (Jǐ diǎn)。\n位置和陈述句一样，也是放在**动作前面**。",
-    
-    narrationScript: "学会了怎么说，我们再来看看怎么问。\nပြောတတ်သွားပြီဆိုတော့ ဘယ်လိုမေးမလဲဆိုတာ ဆက်ကြည့်ရအောင်။\n如果你想问别人什么时候做某件事，要用疑问词：{{几点}}。\nတစ်ယောက်ယောက်က ဘယ်အချိန်မှာ ဘာလုပ်လဲဆိုတာ မေးချင်ရင် {{几点}} ကို သုံးရပါတယ်။\n比如你想问“几点上班”，可以说：{{你几点上班}}？\nဥပမာ - 'မင်း ဘယ်အချိန် အလုပ်စလဲ' လို့ မေးချင်ရင် {{你几点上班}} လို့ ပြောနိုင်ပါတယ်။",
-    
-    examples: [
-      {
-        id: "ex_32_2_1",
-        sentence: "{{你}} {{几点}} {{上班}}？",
-        translation: "မင်း ဘယ်အချိန် အလုပ်စလဲ?",
-        narrationScript: "你几点上班？\nမင်း ဘယ်အချိန် အလုပ်စလဲ?"
-      },
-      {
-        id: "ex_32_2_2",
-        sentence: "{{你}} {{几点}} {{睡觉}}？",
-        translation: "မင်း ဘယ်အချိန် အိပ်လဲ?",
-        narrationScript: "你几点睡觉？\nမင်း ဘယ်အချိန် အိပ်လဲ?"
-      },
-      {
-        id: "ex_32_2_3",
-        sentence: "{{学校}} {{几点}} {{放学}}？",
-        translation: "ကျောင်း ဘယ်အချိန် ဆင်းလဲ?",
-        narrationScript: "学校几点放学？\nကျောင်း ဘယ်အချိန် ဆင်းလဲ?"
+    },
+    {
+      "type": "dialogue_cinematic",
+      "id": "dialogue_cooking",
+      "content": {
+        "id": "dialogue-scene-cooking",
+        "title": "他在做什么？",
+        "imageSrc": "https://images.unsplash.com/photo-1556910103-1c02745a30bf?q=80&w=2070&auto=format&fit=crop",
+        "characters": {
+          "david": { "name": "大卫", "voice": "zh-CN-YunxiNeural", "rate": -5 },
+          "mary": { "name": "玛丽", "voice": "zh-CN-XiaoxiaoNeural", "rate": 10 }
+        },
+        "dialogue": [
+          { "speaker": "mary", "pinyin": "Wéi, nǐ zài zuò shénme ne?", "hanzi": "喂，你在做什么呢？", "myanmar": "ဟလို၊ နင်ဘာလုပ်နေလဲ?" },
+          { "speaker": "david", "pinyin": "Wǒ zài kàn shū ne.", "hanzi": "我在看书呢。", "myanmar": "ငါစာဖတ်နေတယ်။" },
+          { "speaker": "mary", "pinyin": "Dàwèi yě zài kàn shū ma?", "hanzi": "大卫也在看书吗？", "myanmar": "David လည်း စာဖတ်နေလား?" },
+          { "speaker": "david", "pinyin": "Tā méi kàn shū, tā zài xué zuò Zhōngguó cài ne.", "hanzi": "他没看书，他在学做中国菜呢。", "myanmar": "သူစာမဖတ်ဘူး၊ သူ တရုတ်ဟင်းချက်နည်း သင်နေတယ်။" }
+        ]
       }
-    ]
-  },
-  {
-    id: "gp_32_3",
-    grammarPoint: "每天都 (Every day)",
-    pattern: "{{主语}} + {{每天都}} + {{动作}}",
-    
-    visibleExplanation: "“每天”表示每一天。\n“都”在这里起**强调作用**，表示没有一天例外。\n口语中，“每天”和“都”经常连用。",
-    
-    narrationScript: "最后我们学习一个常用的短语：{{每天都}}。\nနောက်ဆုံးအနေနဲ့ နေ့စဉ်သုံး လေ့လာစရာတစ်ခုကတော့ {{每天都}} ဖြစ်ပါတယ်။\n如果你每天都做同一件事，比如每天都喝咖啡，就可以用这个结构。\nအကယ်၍ သင်က ကိစ္စတစ်ခုကို နေ့တိုင်းလုပ်တယ်ဆိုရင် ဒီပုံစံကို သုံးနိုင်ပါတယ်။\n虽然缅语里不需要翻译“都”字，但在汉语里加上它更自然。\nမြန်မာလို 'အကုန်လုံး' ဆိုတဲ့စကားလုံး ထည့်ပြောစရာမလိုပေမယ့် တရုတ်စကားပြောမှာတော့ ထည့်ပြောရင် ပိုသဘာဝကျပါတယ်။",
-    
-    examples: [
-      {
-        id: "ex_32_3_1",
-        sentence: "{{我}} {{每天都}} {{学习汉语}}。",
-        translation: "ကျွန်တော် နေ့တိုင်း တရုတ်စာ လေ့လာတယ်။",
-        narrationScript: "我每天都学习汉语。\nကျွန်တော် နေ့တိုင်း တရုတ်စာ လေ့လာတယ်။"
-      },
-      {
-        id: "ex_32_3_2",
-        sentence: "{{弟弟}} {{每天都}} {{喝牛奶}}。",
-        translation: "မောင်လေးက နေ့တိုင်း နွားနို့သောက်တယ်။",
-        narrationScript: "弟弟每天都喝牛奶。\nမောင်လေးက နေ့တိုင်း နွားနို့သောက်တယ်။"
-      },
-      {
-        id: "ex_32_3_3",
-        sentence: "{{爸爸}} {{每天都}} {{很忙}}。",
-        translation: "အဖေက နေ့တိုင်း အရမ်းအလုပ်ရှုပ်တယ်။",
-        narrationScript: "爸爸每天都很忙。\nအဖေက နေ့တိုင်း အရမ်းအလုပ်ရှုပ်တယ်။"
+    },
+    {
+      "type": "choice",
+      "id": "q1_choice_zai_ne",
+      "config": { "autoAdvance": false },
+      "content": { 
+        "prompt": "他 ______ 睡觉 ______。", 
+        "narrationScript": "选择词语，表示他正在睡觉。",
+        "choices": [{"id": "c1", "text": "在 ... 呢"}, {"id": "c2", "text": "不 ... 了"}, {"id": "c3", "text": "给 ... 呢"}], 
+        "correctId": "c1", 
+        "explanation": "表示正在进行，用结构：在 + 动作 + 呢。" 
       }
-    ]
-  }
-];
+    },
+    {
+      "type": "choice",
+      "id": "q2_choice_phone",
+      "config": { "autoAdvance": false },
+      "content": { 
+        "prompt": "我 ______ 老师打电话。", 
+        "narrationScript": "请选择正确的词填空。",
+        "choices": [{"id": "c1", "text": "在"}, {"id": "c2", "text": "给"}, {"id": "c3", "text": "对"}], 
+        "correctId": "c2", 
+        "explanation": "打电话的对象，用介词 '给' (to give/to)。" 
+      }
+    },
+    {
+      "type": "paixu",
+      "id": "q4_paixu_cooking",
+      "config": { "autoAdvance": false },
+      "content": { "prompt": "把词语组成正确的句子。", "items": [{ "id": "i1", "text": "妈妈", "order": 1 }, { "id": "i2", "text": "在", "order": 2 }, { "id": "i3", "text": "做饭", "order": 3 }, { "id": "i4", "text": "呢", "order": 4 }, { "id": "i5", "text": "。", "order": 5 }] }
+    },
+    {
+      "type": "paixu",
+      "id": "q5_paixu_call",
+      "config": { "autoAdvance": false },
+      "content": { "prompt": "把词语组成正确的句子。", "items": [{ "id": "i1", "text": "我", "order": 1 }, { "id": "i2", "text": "给", "order": 2 }, { "id": "i3", "text": "朋友", "order": 3 }, { "id": "i4", "text": "打电话", "order": 4 }, { "id": "i5", "text": "。", "order": 5 }] }
+    },
+    {
+      "type": "lianxian",
+      "id": "q7_lianxian_action",
+      "config": { "autoAdvance": false },
+      "content": { 
+        "prompt": "把动作和名词连起来。", 
+        "pairs": [ 
+          { "id": "p1", "left": "看", "right": "电视" }, 
+          { "id": "p2", "left": "打", "right": "电话" }, 
+          { "id": "p3", "left": "做", "right": "菜" } 
+        ] 
+      }
+    },
+    {
+      "type": "image_match_blanks",
+      "id": "q10_image_action",
+      "config": { "autoAdvance": false },
+      "content": { 
+        "title": "看图选词", 
+        "words": [ "看电视", "打电话", "睡觉" ], 
+        "imageOptions": [ 
+          { "id": "tv_img", "src": "https://images.unsplash.com/photo-1593359677879-a4bb92f82acb?w=800&h=800&fit=crop&q=80" }, 
+          { "id": "call_img", "src": "https://images.unsplash.com/photo-1520923642038-b4259acecbd7?w=800&h=800&fit=crop&q=80" }, 
+          { "id": "sleep_img", "src": "https://images.unsplash.com/photo-1541781777621-af13076e0774?w=800&h=800&fit=crop&q=80" } 
+        ], 
+        "correctAnswers": ["tv_img", "call_img", "sleep_img"] 
+      }
+    },
+    {
+      "type": "complete",
+      "id": "end",
+      "content": { "title": "🎉 ဂုဏ်ယူပါတယ်။", "text": "သင်ခန်းစာ ၁၃ ပြီးဆုံးပါပြီ。" }
+    }
+  ]
+}
