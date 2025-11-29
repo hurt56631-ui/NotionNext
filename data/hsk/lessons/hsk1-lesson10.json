@@ -1,64 +1,58 @@
 {
-  "id": "hsk1-lesson10-grammar-rich",
-  "title": "第10课核心语法深度解析 (做/去/会)",
-  "globalConfig": {
-    "themeColor": "#4A90E2",
-    "backgroundColor": "#F5F7FA"
+  "课程ID": "hsk1-lesson10-ultimate-rich-version-beautified",
+  "课程标题": "第10课核心语法深度解析 (做/去/会)",
+  "全局配置": {
+    "主题颜色": "#2C3E50",
+    "背景颜色": "#FFFFFF"
   },
-  "blocks": [
+  "内容区块": [
     {
-      "type": "teaching",
-      "id": "intro",
-      "content": {
-        "displayText": "第10课：核心动词 “做 / 去 / 会”",
-        "translation": "သင်ခန်းစာ ၁၀ - အဓိကကြိယာများ “ပြုလုပ်သည် / သွားသည် / တတ်သည်”",
-        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ တရုတ်စကားပြောမှာ အခြေခံအကျဆုံး ကြိယာတွေဖြစ်တဲ့ '做' (လုပ်သည်), '去' (သွားသည်), နဲ့ '会' (တတ်သည်) တို့ကို အသေးစိတ်လေ့လာကြပါမယ်။",
-        "narrationLang": "my"
+      "区块类型": "教学模块",
+      "区块ID": "intro",
+      "区块内容": {
+        "显示文本": "第10课深度精讲：做 / 去 / 会",
+        "中文注释": "(课程标题) 动词“做”、“去”与助动词“会”",
+        "朗读脚本": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ တရုတ်စကားပြောမှာ အခြေခံအကျဆုံး ကြိယာတွေဖြစ်တဲ့ '做' (လုပ်သည်), '去' (သွားသည်), နဲ့ '会' (တတ်သည်) တို့ကို အသေးစိတ်လေ့လာကြပါမယ်။",
+        "朗读语言": "my"
       }
     },
     {
-      "type": "grammar_study",
-      "id": "grammar_zuo",
-      "content": {
-        "title": "2.1. 动词“做” (To Do / To Make)",
-        "grammarPoints": [
+      "区块类型": "语法学习",
+      "区块ID": "grammar_zuo",
+      "区块内容": {
+        "标题": "动词“做” (dòngcí “zuò”)",
+        "语法点列表": [
           {
-            "id": "gp_zuo_1",
-            "grammarPoint": "模板1：主语 + 做 + 宾语",
-            "pattern": "{{人}} + 做 + {{事情/工作/饭菜}}",
-            "visibleExplanation": "<b>语法点：</b>“做”表示进行某个动作或制作某个东西。它后面通常跟名词性宾语。",
-            "usage": "<b>适用情境：</b>描述你正在做或经常做的事情，你的工作，或制作的东西。",
-            "attention": "<b>文化小贴士 (饮食文化):</b><br>中文用“做饭”统称烹饪，但实际有更具体的动词。例如：<br><b>炒 (chǎo)</b> - 大火快烹 (ကြော်ခြင်း)<br><b>煮 (zhǔ)</b> - 水煮 (ပြုတ်ခြင်း)<br>问“你会炒菜吗？”比“你会做饭吗？”更具体、更地道。",
-            "examples": [
+            "语法点ID": "template1_zuo",
+            "语法点标题": "模板1：主语 + 做 + 宾语",
+            "句型模板": "[人] + 做 + [事情/工作/饭菜]",
+            "语法详解HTML": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法点 (yǔfǎ diǎn)</strong></div><div style='padding-left: 15px;'>“<b style='color:#E74C3C'>做</b> (zuò)” 表示进行某个动作或制作某个东西。<br>它后面通常跟名词性宾语 (míngcí xìng bīnyǔ)。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'>",
+            "适用情境": "<div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境 (shìyòng qíngjìng)</strong></div><div style='padding-left: 15px;'>描述你<b>正在做</b>或<b>经常做</b>的事情，你的<b>工作</b>，或<b>制作</b>的东西。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'>",
+            "注意事项": "<div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>文化小贴士 (wénhuà xiǎo tiēshì)</strong></div><div style='padding-left: 15px;'>中文用“<b>做饭</b> (zuò fàn)”统称烹饪，但实际有更具体的动词。例如：<br><ul style='margin: 5px 0 0 20px; padding:0;'><li><b>炒 (chǎo)</b> - 大火快烹 (ကြော်ခြင်း)</li><li><b>煮 (zhǔ)</b> - 水煮 (ပြုတ်ခြင်း)</li></ul>简单说：“你会<b style='color:#3498DB'>炒菜</b>吗？”比“你会<b style='color:#3498DB'>做饭</b>吗？”更具体，更地道。</div>",
+            "例句列表": [
               {
-                "id": "ex_zuo_1_1",
-                "sentence": "我做饭。",
-                "pinyin": "Wǒ zuò fàn.",
-                "translation": "ကျွန်တော် ထမင်းချက်တယ်။<br><i>緬文諧音: (ဝေါ် ကျွဲ ဖန်.)</i>"
+                "id": "ex_zuo_1_1_group",
+                "分组标题": "例句1-1：(描述做的事情)",
+                "例句内容": [
+                  { "id": "ex_zuo_1_1_1", "句子": "我做饭。", "拼音": "Wǒ zuò fàn.", "面向学生翻译": "ကျွန်တော် ထမင်းချက်တယ်။" },
+                  { "id": "ex_zuo_1_1_2", "句子": "她做作业。", "拼音": "Tā zuò zuòyè.", "面向学生翻译": "သူမ အိမ်စာလုပ်တယ်။" }
+                ]
               },
               {
-                "id": "ex_zuo_1_2",
-                "sentence": "她做作业。",
-                "pinyin": "Tā zuò zuòyè.",
-                "translation": "သူမ အိမ်စာလုပ်တယ်။<br><i>緬文諧音: (ထာ ကျွဲ ကျွဲယဲ.)</i>"
+                "id": "ex_zuo_1_2_group",
+                "分组标题": "例句1-2：(询问他人工作/职业)",
+                "例句内容": [
+                  { "id": "ex_zuo_1_2_1", "句子": "你做什么工作？", "拼音": "Nǐ zuò shénme gōngzuò?", "面向学生翻译": "မင်းဘာအလုပ်လုပ်လဲ?" },
+                  { "id": "ex_zuo_1_2_2", "句子": "我是老师，我教书。", "拼音": "Wǒ shì lǎoshī, wǒ jiāo shū.", "面向学生翻译": "ကျွန်တော် ဆရာပါ၊ စာသင်တယ်။" }
+                ]
               },
               {
-                "id": "ex_zuo_1_3",
-                "sentence": "(询问工作) 你做什么工作？",
-                "pinyin": "Nǐ zuò shénme gōngzuò?",
-                "translation": "မင်းဘာအလုပ်လုပ်လဲ?<br><i>緬文諧音: (နီ့ ကျွဲ ရှန်မော့ ကုံးကျွဲ?)</i>"
-              },
-              {
-                "id": "ex_zuo_1_4",
-                "sentence": "(描述正在做) 我现在做练习。",
-                "pinyin": "Wǒ xiànzài zuò liànxí.",
-                "translation": "ကျွန်တော် အခု လေ့ကျင့်ခန်းလုပ်နေတယ်။<br><i>緬文諧音: (ဝေါ် ရှန့်စိုင် ကျွဲ လျန့်ရှီ.)</i>"
-              },
-              {
-                "id": "ex_zuo_1_5",
-                "sentence": "他每天都做运动。",
-                "pinyin": "Tā měitiān dōu zuò yùndòng.",
-                "translation": "သူ နေ့တိုင်း လေ့ကျင့်ခန်းလုပ်တယ်။<br><i>緬文諧音: (ထာ မေ့ထျန် တို ကျွဲ ယွင်တုံး.)</i>"
+                "id": "ex_zuo_1_3_group",
+                "分组标题": "例句1-3：(描述正在做的事情)",
+                "例句内容": [
+                  { "id": "ex_zuo_1_3_1", "句子": "我现在做练习。", "拼音": "Wǒ xiànzài zuò liànxí.", "面向学生翻译": "ကျွန်တော် အခု လေ့ကျင့်ခန်းလုပ်နေတယ်။" },
+                  { "id": "ex_zuo_1_3_2", "句子": "他每天都做运动。", "拼音": "Tā měitiān dōu zuò yùndòng.", "面向学生翻译": "သူ နေ့တိုင်း လေ့ကျင့်ခန်းလုပ်တယ်။" }
+                ]
               }
             ]
           }
@@ -66,143 +60,11 @@
       }
     },
     {
-      "type": "grammar_study",
-      "id": "grammar_qu",
-      "content": {
-        "title": "2.2. 动词“去” (To Go)",
-        "grammarPoints": [
-          {
-            "id": "gp_qu_1",
-            "grammarPoint": "模板2：主语 + 去 + 地点",
-            "pattern": "{{人}} + 去 + {{地方}}",
-            "visibleExplanation": "<b>语法点：</b>“去”表示从一个地方到另一个地方，强调方向和目的地。后面直接跟地点名词。",
-            "usage": "<b>适用情境：</b>表达你要前往的目的地。",
-            "examples": [
-              {
-                "id": "ex_qu_1_1",
-                "sentence": "我去学校。",
-                "pinyin": "Wǒ qù xuéxiào.",
-                "translation": "ကျွန်တော် ကျောင်းသွားမယ်။<br><i>緬文諧音: (ဝေါ် ချွီ ဆွေးရှောက်.)</i>"
-              },
-              {
-                "id": "ex_qu_1_2",
-                "sentence": "他去商店。",
-                "pinyin": "Tā qù shāngdiàn.",
-                "translation": "သူ ဆိုင်သွားမယ်။<br><i>緬文諧音: (ထာ ချွီ ရှန်တျန့်.)</i>"
-              },
-              {
-                "id": "ex_qu_1_3",
-                "sentence": "(询问目的地) A: 你去哪儿？",
-                "pinyin": "Nǐ qù nǎr?",
-                "translation": "မင်း ဘယ်သွားမလို့လဲ?<br><i>緬文諧音: (နီ့ ချွီ နာㄦ?)</i>"
-              },
-              {
-                "id": "ex_qu_1_4",
-                "sentence": "B: 我回家。",
-                "pinyin": "Wǒ huí jiā.",
-                "translation": "ကျွန်တော် အိမ်ပြန်မယ်။<br><i>緬文諧音: (ဝေါ် ဟွေ့ ကျာ.)</i>"
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "type": "grammar_study",
-      "id": "grammar_hui",
-      "content": {
-        "title": "2.3. 助动词“会” (Can / To be able to)",
-        "grammarPoints": [
-          {
-            "id": "gp_hui_1",
-            "grammarPoint": "模板3：主语 + 会 + 动词短语",
-            "pattern": "{{人}} + 会 + {{技能/能力}}",
-            "visibleExplanation": "<b>语法点：</b>“会”是助动词，表示通过学习或练习而掌握了某种技能。<br><b>【语法深度解析】“会” vs. “能”</b><br><b>会 (huì):</b> 强调学会的技能 (know how to)。<br><i>例: 我会游泳。(ကျွန်တော် ရေကူးတတ်တယ်)</i><br><b>能 (néng):</b> 强调客观能力或可能性 (can / be able to)。<br><i>例: 我不舒服，不能上班。(ကျွန်တော် နေမကောင်းလို့ အလုပ်မတက်နိုင်ဘူး)</i>",
-            "usage": "<b>适用情境：</b>介绍自己或询问别人掌握了什么技能。",
-            "examples": [
-              { "id": "ex_hui_1_1", "sentence": "我会说汉语。", "pinyin": "Wǒ huì shuō Hànyǔ.", "translation": "ကျွန်တော် တရုတ်စကား ပြောတတ်တယ်။<br><i>緬文諧音: (ဝေါ် ဟွေ့ ရှော ဟန်ယွီ.)</i>" },
-              { "id": "ex_hui_1_2", "sentence": "我会做饭。", "pinyin": "Wǒ huì zuò fàn.", "translation": "ကျွန်တော် ထမင်းချက်တတ်တယ်။<br><i>緬文諧音: (ဝေါ် ဟွေ့ ကျွဲ ဖန်.)</i>" },
-              { "id": "ex_hui_1_3", "sentence": "她会开车。", "pinyin": "Tā huì kāichē.", "translation": "သူမ ကားမောင်းတတ်တယ်။<br><i>緬文諧音: (ထာ ဟွေ့ ခိုင်ချဲ.)</i>" },
-              { "id": "ex_hui_1_4", "sentence": "我会弹钢琴。", "pinyin": "Wǒ huì tán gāngqín.", "translation": "ကျွန်တော် စန္ဒယားတီးတတ်တယ်။<br><i>緬文諧音: (ဝေါ် ဟွေ့ ထန် ကန်ချင်.)</i>" }
-            ]
-          },
-          {
-            "id": "gp_hui_2",
-            "grammarPoint": "模板4：主语 + 不会 + 动词短语 (否定)",
-            "pattern": "{{人}} + 不会 + {{技能/能力}}",
-            "visibleExplanation": "<b>语法点：</b>“不会”是“会”的否定形式，表示未掌握某项技能。",
-            "usage": "<b>适用情境：</b>说明自己或他人不具备某项技能。",
-            "examples": [
-              { "id": "ex_buhui_1", "sentence": "我不会说英语。", "pinyin": "Wǒ bú huì shuō Yīngyǔ.", "translation": "ကျွန်တော် အင်္ဂလိပ်စကား မပြောတတ်ဘူး။<br><i>緬文諧音: (ဝေါ် ပူ့ ဟွေ့ ရှော ယင်းယွီ.)</i>" },
-              { "id": "ex_buhui_2", "sentence": "他不会做中国菜。", "pinyin": "Tā bú huì zuò Zhōngguó cài.", "translation": "သူ တရုတ်ဟင်း မချက်တတ်ဘူး။<br><i>緬文諧音: (ထာ ပူ့ ဟွေ့ ကျွဲ ကျုံးကော် ချိုက်.)</i>" },
-              { "id": "ex_buhui_3", "sentence": "我不会开车。", "pinyin": "Wǒ bú huì kāichē.", "translation": "ကျွန်တော် ကားမောင်းမတတ်ဘူး။<br><i>緬文諧音: (ဝေါ် ပူ့ ဟွေ့ ခိုင်ချဲ.)</i>" }
-            ]
-          },
-          {
-            "id": "gp_hui_3",
-            "grammarPoint": "模板5：主语 + 会不会 + ...？ (正反问句)",
-            "pattern": "{{人}} + 会不会 + {{技能/能力}}？",
-            "visibleExplanation": "<b>语法点：</b>“会不会”是询问是否掌握某技能的常用正反问句。",
-            "usage": "<b>适用情境：</b>询问对方是否会某项技能。",
-            "examples": [
-              { "id": "ex_huibuhui_1", "sentence": "A: 你会不会说汉语？", "pinyin": "Nǐ huì bú huì shuō Hànyǔ?", "translation": "မင်း တရုတ်စကား ပြောတတ် မတတ်လား?<br><i>緬文諧音: (နီ့ ဟွေ့ ပူ့ ဟွေ့ ရှော ဟန်ယွီ?)</i>" },
-              { "id": "ex_huibuhui_2", "sentence": "B: 我会说。 / 我不会说。", "pinyin": "Wǒ huì shuō. / Wǒ bú huì shuō.", "translation": "ကျွန်တော် ပြောတတ်တယ်။ / မပြောတတ်ဘူး။" },
-              { "id": "ex_huibuhui_3", "sentence": "A: 你会不会做饭？", "pinyin": "Nǐ huì bú huì zuò fàn?", "translation": "မင်း ထမင်းချက်တတ် မတတ်လား?<br><i>緬文諧音: (နီ့ ဟွေ့ ပူ့ ဟွေ့ ကျွဲ ဖန်?)</i>" },
-              { "id": "ex_huibuhui_4", "sentence": "B: 我会。 / 我不会。", "pinyin": "Wǒ huì. / Wǒ bú huì.", "translation": "ကျွန်တော် တတ်တယ်။ / မတတ်ဘူး။" }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "type": "grammar_study",
-      "id": "grammar_combined",
-      "content": {
-        "title": "2.4. 综合动词使用 (Combined Usage)",
-        "grammarPoints": [
-          {
-            "id": "gp_combined_1",
-            "grammarPoint": "模板6：去 + 地点 + 做某事 (连动句)",
-            "pattern": "{{主语}} + 去 + {{地方}} + {{动词短语}}",
-            "visibleExplanation": "<b>语法点：</b>组合“去”和其它动词，表示去某地进行某活动。这是描述目的的常用句型。<br><b>【强化句型】</b> `[时间] + [主语] + 去 + [地点] + 做/动词 + [事情]`",
-            "usage": "<b>适用情境：</b>详细描述去某个地方的目的。",
-            "examples": [
-              { "id": "ex_combo_1_1", "sentence": "每天下午我去图书馆做作业。", "pinyin": "Měitiān xiàwǔ wǒ qù túshūguǎn zuò zuòyè.", "translation": "နေ့တိုင်းညနေမှာ ကျွန်တော် စာကြည့်တိုက်ကိုသွားပြီး အိမ်စာလုပ်တယ်။<br><i>緬文諧音: (မေ့ထျန် ရှာဝူ ဝေါ် ချွီ တူရှူကွမ်း ကျွဲ ကျွဲယဲ.)</i>" },
-              { "id": "ex_combo_1_2", "sentence": "她去商店买东西。", "pinyin": "Tā qù shāngdiàn mǎi dōngxi.", "translation": "သူမ ဆိုင်ကို ပစ္စည်းဝယ်ဖို့ သွားမယ်။<br><i>緬文諧音: (ထာ ချွီ ရှန်တျန့် မိုင် တုံးရှိ.)</i>" },
-              { "id": "ex_combo_1_3", "sentence": "我下课后去饭馆吃饭。", "pinyin": "Wǒ xiàkè hòu qù fànguǎn chīfàn.", "translation": "ကျွန်တော် အတန်းပြီးရင် စားသောက်ဆိုင်သွားပြီး ထမင်းစားမယ်။<br><i>緬文諧音: (ဝေါ် ရှာခဲ့ ဟိုး ချွီ ဖန်ကွမ်း ချီးဖန်.)</i>" }
-            ]
-          },
-          {
-            "id": "gp_combined_2",
-            "grammarPoint": "新增模板7：会...所以... (因果关系)",
-            "pattern": "{{主语}} + 会 + {{技能}}, 所以 + {{行动}}",
-            "visibleExplanation": "<b>语法点：</b>用“所以”连接原因（会某个技能）和结果（采取某个行动）。",
-            "usage": "<b>适用情境：</b>解释行动背后的能力原因。",
-            "examples": [
-              { "id": "ex_combo_2_1", "sentence": "我会开车，所以去公司上班。", "pinyin": "Wǒ huì kāichē, suǒyǐ qù gōngsī shàngbān.", "translation": "ကျွန်မ ကားမောင်းတတ်လို့ ကုမ္ပဏီကိုသွားပြီး အလုပ်လုပ်တယ်။<br><i>緬文諧音: (ဝေါ် ဟွေ့ ခိုင်ချဲ, ဆွောယီ ချွီ ကုံးစึ ရှန့်ပန်.)</i>" },
-              { "id": "ex_combo_2_2", "sentence": "他会说汉语，所以能和中国人交流。", "pinyin": "Tā huì shuō Hànyǔ, suǒyǐ néng hé Zhōngguó rén jiāoliú.", "translation": "သူ တရုတ်စကား ပြောတတ်လို့ တရုတ်လူမျိုးတွေနဲ့ ဆက်ဆံနိုင်တယ်။<br><i>緬文諧音: (ထာ ဟွေ့ ရှော ဟန်ယွီ, ဆွောယီ နန် ဟယ် ကျုံးကော် ရန် ကျောက်လျို.)</i>" }
-            ]
-          },
-          {
-            "id": "gp_combined_3",
-            "grammarPoint": "新增模板8：会不会...？能...吗？ (委婉请求)",
-            "pattern": "{{主语}} + 会不会 + {{技能}}？能 + {{请求}} 吗？",
-            "visibleExplanation": "<b>语法点：</b>结合正反问句和请求句，使询问更委婉、更礼貌。",
-            "usage": "<b>适用情境：</b>先确认对方能力，再提出请求。",
-            "examples": [
-              { "id": "ex_combo_3_1", "sentence": "你会不会做饭？能帮我吗？", "pinyin": "Nǐ huì bú huì zuò fàn? Néng bāng wǒ ma?", "translation": "မင်း ထမင်းချက်တတ် မတတ်လား? ကူညီပေးလို့ရမလား?<br><i>緬文諧音: (နီ့ ဟွေ့ ပူ့ ဟွေ့ ကျွဲ ဖန်? နန် ပန်း ဝေါ် မာ?)</i>" },
-              { "id": "ex_combo_3_2", "sentence": "你会不会用电脑？能给我修一下吗？", "pinyin": "Nǐ huì bú huì yòng diànnǎo? Néng gěi wǒ xiū yí xià ma?", "translation": "မင်း ကွန်ပျူတာ သုံးတတ် မတတ်လား? ကျွန်တော့်ကို ပြင်ပေးလို့ရမလား?<br><i>緬文諧音: (နီ့ ဟွေ့ ပူ့ ဟွေ့ ယုံး တျဲန်နောင်? နန် ကေ့ ဝေါ် ရှို ယီ ရှာ.)</i>" }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "type": "complete",
-      "id": "end",
-      "content": { 
-        "title": "🎉 恭喜完成！", 
-        "text": "你已经深度掌握了“做”、“去”、“会”的多种用法和句型！" 
+      "区块类型": "完成页面",
+      "区块ID": "end",
+      "区块内容": {
+        "标题": "🎉 第一部分学习完成！",
+        "文本": "你已经掌握了动词“做”的核心用法！"
       }
     }
   ]
