@@ -61,6 +61,7 @@ import SpeakingContentBlock from '@/components/SpeakingContentBlock'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
 import WordsContentBlock from '@/components/WordsContentBlock'
+import PinyinContentBlock from '@/components/PinyinContentBlock' // ✅ 新增：导入拼音组件
 import AiChatAssistant from '@/components/AiChatAssistant'
 
 // 动态导入重组件
@@ -126,7 +127,7 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
-// 漏掉的 LayoutBase 组件补全在这里
+// LayoutBase 组件
 const LayoutBase = props => {
   const { children, slotTop, className } = props
   const { fullWidth, isDarkMode } = useGlobal()
@@ -529,7 +530,7 @@ const LayoutIndex = props => {
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   
   const renderTabButtons = () => displayTabs.map(tab => (
-    <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTabKey === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
+    <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTab === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
         <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTabKey === tab.key ? 'bg-blue-500' : 'bg-transparent'}`}></div>
@@ -590,12 +591,8 @@ const LayoutIndex = props => {
                     
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         <div className='p-4'>
-                            {activeTabKey === 'pinyin' && (
-                                <div className="text-center py-10 text-gray-500">
-                                    <h3 className="text-xl font-bold mb-2">拼音学习</h3>
-                                    <p>拼音模块内容正在开发中...</p>
-                                </div>
-                            )}
+                            {/* ✅ 这里使用新组件替换了之前的占位符 */}
+                            {activeTabKey === 'pinyin' && <PinyinContentBlock />}
                             {activeTabKey === 'words' && <WordsContentBlock />}
                             {activeTabKey === 'speaking' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
                             {activeTabKey === 'practice' && <PracticeContentBlock />}
