@@ -1,6 +1,6 @@
 {
-  "id": "hsk1-lesson14-grammar-focus",
-  "title": "第14课：我早上七点起床",
+  "id": "hsk1-lesson14-grammar-rich",
+  "title": "第14课：描述日常活动和时间",
   "globalConfig": {
     "themeColor": "#4A90E2",
     "backgroundColor": "#F5F7FA",
@@ -17,12 +17,12 @@
         "paddingTop": "15vh"
       },
       "content": {
-        "pinyin": "Dì shísì kè: Wǒ zǎoshang qī diǎn qǐchuáng",
+        "pinyin": "Dì shísì kè: Miáoshù rìcháng huódòng",
         "displayText": "第14课：描述日常活动和时间",
         "translation": "သင်ခန်းစာ ၁၄ - နေ့စဉ်လှုပ်ရှားမှုနှင့် အချိန်ကို ဖော်ပြခြင်း",
-        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ တစ်နေ့တာ အချိန်ဇယားအကြောင်း ဘယ်လိုပြောရမလဲဆိုတာကို လေ့လာကြမှာပါ။",
+        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ နေ့စဉ်လှုပ်ရှားမှုတွေနဲ့ အချိန်ကို ဘယ်လိုပြောရမလဲဆိုတာ လေ့လာကြမှာပါ။",
         "narrationLang": "my",
-        "hintText": "👆 点击或上滑开始 (နှိပ်ပါ သို့မဟုတ် အပေါ်သို့ပွတ်ဆွဲပါ)"
+        "hintText": "👆 点击开始学习 (စတင်လေ့လာရန် နှိပ်ပါ)"
       }
     },
     {
@@ -36,15 +36,15 @@
         "title": "本课生词",
         "displayMode": "card_grid",
         "words": [
-          { "id": "w1", "chinese": "早上", "pinyin": "zǎo shang", "translation": "မနက်ခင်း", "example": "早上好！", "rate": 0 },
-          { "id": "w2", "chinese": "中午", "pinyin": "zhōng wǔ", "translation": "နေ့လည်", "example": "中午十二点。", "rate": 0 },
-          { "id": "w3", "chinese": "晚上", "pinyin": "wǎn shang", "translation": "ည", "example": "晚上见。", "rate": 0 },
-          { "id": "w4", "chinese": "起床", "pinyin": "qǐ chuáng", "translation": "အိပ်ရာထသည်", "example": "我七点起床。", "rate": 0 },
-          { "id": "w5", "chinese": "睡觉", "pinyin": "shuì jiào", "translation": "အိပ်သည်", "example": "你几点睡觉？", "rate": 0 },
-          { "id": "w6", "chinese": "吃饭", "pinyin": "chī fàn", "translation": "ထမင်းစားသည်", "example": "我们去吃饭吧。", "rate": 0 },
-          { "id": "w7", "chinese": "下班", "pinyin": "xià bān", "translation": "အလုပ်ဆင်းသည်", "example": "爸爸六点下班。", "rate": 0 },
-          { "id": "w8", "chinese": "洗澡", "pinyin": "xǐ zǎo", "translation": "ရေချိုးသည်", "example": "我先去洗澡。", "rate": 0 },
-          { "id": "w9", "chinese": "看新闻", "pinyin": "kàn xīn wén", "translation": "သတင်းကြည့်သည်", "example": "爷爷喜欢看新闻。", "rate": 0 }
+          { "id": "w1", "chinese": "早上", "translation": "မနက်ခင်း", "example": "早上好！" },
+          { "id": "w2", "chinese": "中午", "translation": "နေ့လည်", "example": "中午十二点。" },
+          { "id": "w3", "chinese": "晚上", "translation": "ည", "example": "晚上见。" },
+          { "id": "w4", "chinese": "起床", "translation": "အိပ်ရာထသည်", "example": "我七点起床。" },
+          { "id": "w5", "chinese": "睡觉", "translation": "အိပ်သည်", "example": "你几点睡觉？" },
+          { "id": "w6", "chinese": "吃饭", "translation": "ထမင်းစားသည်", "example": "我们去吃饭吧。" },
+          { "id": "w7", "chinese": "下班", "translation": "အလုပ်ဆင်းသည်", "example": "爸爸六点下班。" },
+          { "id": "w8", "chinese": "洗澡", "translation": "ရေချိုးသည်", "example": "我先去洗澡。" },
+          { "id": "w9", "chinese": "看新闻", "translation": "သတင်းကြည့်သည်", "example": "爷爷喜欢看新闻。" }
         ]
       }
     },
@@ -55,101 +55,82 @@
         "grammarPoints": [
           {
             "id": "gp14_1",
-            "grammarPoint": "描述日常活动和时间",
-            "pattern": "{{主语}} + {{时间}} + {{动作}}",
+            "grammarPoint": "模板1：我 + [时间] + [活动]",
+            "pattern": "{{我}} + {{时间}} + {{活动}}",
             
-            "visibleExplanation": "时间词（早上、上午、中午、下午、晚上）放在具体时间（几点）的前面，表示活动发生的大致时段。\n这个句型用来描述一天的作息安排或询问他人的作息。",
+            "visibleExplanation": "<div style='margin-bottom:10px;'><b>句型结构：</b><br><div class='indent-level-1'>主语 + 时间 + 动作</div></div><div style='margin-bottom:10px;'><b>语法解释：</b><br><div class='indent-level-1'>时间词（早上、上午、中午、下午、晚上）放在具体时间（几点）的前面，表示活动发生的大致时段。</div><div class='indent-level-1'>这个句型用来描述一天的作息安排或询问他人的作息。</div></div>",
             
-            "usage": "📌 **用法**：\n用来描述一天的行程。",
+            "usage": "<b>适用情境：</b><br><div class='indent-level-1'>用来描述一天的行程。</div>",
             
-            "attention": "⚠️ **易错点**：\n别把“早上”、“七点”这些时间词放在句子的最后！\n一定要放在动作的前面。",
+            "attention": "<b>⚠️ 易错点：</b><br><div class='indent-level-1'>别把“早上”、“七点”这些时间词放在句子的最后，一定要放在动作的前面。</div>",
             
-            "narrationScript": "我们来学习怎么描述时间。\nအချိန်အကြောင်း ဘယ်လိုပြောမလဲဆိုတာ လေ့လာကြရအောင်။\n中文里，时间一定要放在前面。\nတရုတ်စာမှာ အချိန်ကို ရှေ့မှာထားရပါမယ်။\n比如：{{我早上七点起床}}。\nဥပမာ - {{我早上七点起床}} (ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်)။",
+            "narrationScript": "我们来看第一个模板。时间要放在前面。\nအချိန်ကို ရှေ့မှာထားရပါမယ်။\n比如描述起床，说：我早上七点起床。\nဥပမာ - 我早上七点起床 (ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်)။",
             
             "examples": [
               { 
                 "id": "ex14_1_1", 
                 "sentence": "{{我}} {{早上七点}} {{起床}}。", 
-                "translation": "ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။", 
-                "narrationScript": "我早上七点起床。\nကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။" 
+                "translation": "（描述起床）ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။", 
+                "narrationScript": "我早上七点起床。" 
               },
               { 
                 "id": "ex14_1_2", 
                 "sentence": "{{我}} {{晚上十一点后}} {{睡觉}}。", 
-                "translation": "ကျွန်တော် ည ၁၁ နာရီကျော်မှ အိပ်တယ်။", 
-                "narrationScript": "我晚上十一点后睡觉。\nကျွန်တော် ည ၁၁ နာရီကျော်မှ အိပ်တယ်။" 
+                "translation": "（描述睡觉）ကျွန်တော် ည ၁၁ နာရီကျော်မှ အိပ်တယ်။", 
+                "narrationScript": "我晚上十一点后睡觉。" 
               },
               { 
                 "id": "ex14_1_3", 
                 "sentence": "{{我}} {{中午十一点半}} {{吃饭}}。", 
-                "translation": "ကျွန်တော် နေ့လည် ၁၁ နာရီခွဲ ထမင်းစားတယ်။", 
-                "narrationScript": "我中午十一点半吃饭。\nကျွန်တော် နေ့လည် ၁၁ နာရီခွဲ ထမင်းစားတယ်။" 
+                "translation": "（描述吃饭）ကျွန်တော် နေ့လည် ၁၁ နာရီခွဲ ထမင်းစားတယ်။", 
+                "narrationScript": "我中午十一点半吃饭。" 
               },
               { 
                 "id": "ex14_1_4", 
                 "sentence": "{{我}} {{下午六点}} {{下班}}。", 
-                "translation": "ကျွန်တော် ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။", 
-                "narrationScript": "我下午六点下班。\nကျွန်တော် ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။" 
+                "translation": "（描述下班）ကျွန်တော် ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။", 
+                "narrationScript": "我下午六点下班。" 
               },
               { 
                 "id": "ex14_1_5", 
                 "sentence": "{{我}} {{每天早上}} {{洗澡}}。", 
-                "translation": "ကျွန်တော် နေ့တိုင်းမနက် ရေချိုးတယ်။", 
-                "narrationScript": "我每天早上洗澡。\nကျွန်တော် နေ့တိုင်းမနက် ရေချိုးတယ်။" 
+                "translation": "（描述习惯）ကျွန်တော် နေ့တိုင်းမနက် ရေချိုးတယ်။", 
+                "narrationScript": "我每天早上洗澡。" 
               },
               { 
                 "id": "ex14_1_6", 
                 "sentence": "{{我}} {{每天七点}} {{看新闻}}。", 
-                "translation": "ကျွန်တော် နေ့တိုင်း ၇ နာရီ သတင်းကြည့်တယ်။", 
-                "narrationScript": "我每天七点看新闻。\nကျွန်တော် နေ့တိုင်း ၇ နာရီ သတင်းကြည့်တယ်။" 
+                "translation": "（描述习惯）ကျွန်တော် နေ့တိုင်း ၇ နာရီ သတင်းကြည့်တယ်။", 
+                "narrationScript": "我每天七点看新闻。" 
               }
             ]
           },
           {
             "id": "gp14_2",
-            "grammarPoint": "询问时间 (Asking Time)",
+            "grammarPoint": "模板2：你几点 + [活动]？",
             "pattern": "{{你}} + {{几点}} + {{活动}}？",
             
-            "visibleExplanation": "想知道别人什么时候做某事，用 **“几点”** 放在动作前面。",
+            "visibleExplanation": "<div style='margin-bottom:10px;'><b>句型结构：</b><br><div class='indent-level-1'>主语 + 几点 + 动作？</div></div><div style='margin-bottom:10px;'><b>语法解释：</b><br><div class='indent-level-1'>用“几点”来提问具体的时间。</div><div class='indent-level-1'>位置和陈述句一样，要放在动作前面。</div></div>",
             
-            "usage": "📌 **用法**：\n用来询问别人的作息时间。",
+            "usage": "<b>适用情境：</b><br><div class='indent-level-1'>用来询问别人的作息时间。</div>",
             
-            "narrationScript": "如果想问别人，就用 {{几点}}。\nတခြားသူကို မေးချင်ရင် {{几点}} ကို သုံးပါ။\n比如：{{你几点起床}}？\nဥပမာ - {{你几点起床}} (မင်း ဘယ်အချိန် အိပ်ရာထလဲ)?",
+            "narrationScript": "如果要问别人，就用“你几点”。\nတခြားသူကို မေးချင်ရင် '你几点' ကို သုံးပါ။\n比如：你几点起床？\nဥပမာ - 你几点起床 (မင်း ဘယ်အချိန် အိပ်ရာထလဲ)?",
             
             "examples": [
               { 
                 "id": "ex14_2_1", 
                 "sentence": "{{你}} {{几点}} {{起床}}？", 
                 "translation": "မင်း ဘယ်အချိန် အိပ်ရာထလဲ?", 
-                "narrationScript": "你几点起床？\nမင်း ဘယ်အချိန် အိပ်ရာထလဲ?" 
+                "narrationScript": "你几点起床？" 
               },
               { 
                 "id": "ex14_2_2", 
                 "sentence": "{{你}} {{几点}} {{上班}}？", 
                 "translation": "မင်း ဘယ်အချိန် အလုပ်တက်လဲ?", 
-                "narrationScript": "你几点上班？\nမင်း ဘယ်အချိန် အလုပ်တက်လဲ?" 
+                "narrationScript": "你几点上班？" 
               }
             ]
           }
-        ]
-      }
-    },
-    {
-      "type": "dialogue_cinematic",
-      "id": "dialogue_routine",
-      "content": {
-        "id": "dialogue-scene-14",
-        "title": "聊聊作息",
-        "imageSrc": "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?q=80&w=2068&auto=format&fit=crop",
-        "characters": {
-          "xiaowang": { "name": "小王", "voice": "zh-CN-YunxiNeural", "rate": -5 },
-          "xiaoli": { "name": "小李", "voice": "zh-CN-XiaoxiaoNeural", "rate": 10 }
-        },
-        "dialogue": [
-          { "speaker": "xiaowang", "pinyin": "Nǐ měitiān jǐ diǎn qǐchuáng?", "hanzi": "你每天几点起床？", "myanmar": "မင်း နေ့တိုင်း ဘယ်အချိန် အိပ်ရာထလဲ?" },
-          { "speaker": "xiaoli", "pinyin": "Wǒ zǎoshang qī diǎn qǐchuáng.", "hanzi": "我早上七点起床。", "myanmar": "ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။" },
-          { "speaker": "xiaowang", "pinyin": "Nǐ jǐ diǎn shuìjiào ne?", "hanzi": "你几点睡觉呢？", "myanmar": "မင်း ဘယ်အချိန် အိပ်လဲ?" },
-          { "speaker": "xiaoli", "pinyin": "Wǒ wǎnshang shíyī diǎn shuìjiào.", "hanzi": "我晚上十一点睡觉。", "myanmar": "ကျွန်တော် ည ၁၁ နာရီ အိပ်တယ်။" }
         ]
       }
     },
@@ -158,7 +139,7 @@
       "id": "end",
       "content": { 
         "title": "🎉 恭喜完成！", 
-        "text": "你学会了如何描述时间！" 
+        "text": "你已经学会了描述日常活动！" 
       }
     }
   ]
