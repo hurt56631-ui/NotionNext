@@ -1,8 +1,5 @@
-// themes/heo/index.js <-- 最终修复完整版：拼音独立最左侧，隐藏HSK/语法，修复滑动逻辑
+// themes/heo/index.js
 
-// =================================================================================
-// ======================  所有 import 语句  ========================
-// =================================================================================
 import Comment from '@/components/Comment'
 import { AdSlot } from '@/components/GoogleAdsense'
 import { HashTag } from '@/components/HeroIcons'
@@ -18,7 +15,7 @@ import { isBrowser } from '@/lib/utils'
 import { Transition, Dialog } from '@headlessui/react'
 import SmartLink from '@/components/SmartLink'
 import { useRouter } from 'next/router'
-import { useEffect, useState, useRef, useCallback, Fragment, useMemo } from 'react'
+import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useSwipeable } from 'react-swipeable'
 
 // 依赖于您项目中的 themes/heo/components/ 文件夹
@@ -29,7 +26,6 @@ import CategoryBar from './components/CategoryBar'
 import FloatTocButton from './components/FloatTocButton'
 import Footer from './components/Footer'
 import Header from './components/Header'
-// import { NoticeBar } from './components/NoticeBar' // 暂时未使用，可注释
 import PostHeader from './components/PostHeader'
 import { PostLock } from './components/PostLock'
 import SearchNav from './components/SearchNav'
@@ -37,8 +33,6 @@ import SideRight from './components/SideRight'
 
 import CONFIG from './config'
 import { Style } from './style'
-// import AISummary from '@/components/AISummary' // 暂时未使用
-// import ArticleExpirationNotice from '@/components/ArticleExpirationNotice' // 暂时未使用
 import { FaTiktok, FaFacebook, FaTelegramPlane } from 'react-icons/fa'
 import {
     GraduationCap,
@@ -57,7 +51,7 @@ import {
     List,
     BookText,
     SpellCheck2,
-    Type // 用于拼音图标
+    Type
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
@@ -76,7 +70,7 @@ const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
 
 // =================================================================================
-// ======================  辅助组件 (Sidebar, Navbar, etc.) ========================
+// ======================  辅助组件 ========================
 // =================================================================================
 
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
@@ -132,6 +126,43 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
+// 漏掉的 LayoutBase 组件补全在这里
+const LayoutBase = props => {
+  const { children, slotTop, className } = props
+  const { fullWidth, isDarkMode } = useGlobal()
+  const router = useRouter()
+  // 首页布局由 LayoutIndex 接管
+  if (router.route === '/') { return <>{children}</> }
+
+  const headerSlot = (
+    <header>
+      <Header {...props} />
+      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+    </header>
+  )
+
+  const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
+  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
+
+  useEffect(() => { loadWowJS() }, [])
+
+  return (
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
+      <Style />
+      {headerSlot}
+      <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
+        <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
+          <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
+          <div className='lg:px-2'></div>
+          <div className='hidden xl:block'>{slotRight}</div>
+        </div>
+      </main>
+      <Footer />
+      {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />}
+    </div>
+  )
+}
+
 const CustomScrollbarStyle = () => (
     <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -141,11 +172,9 @@ const CustomScrollbarStyle = () => (
     `}</style>
 );
 
-// 优化后的 BottomNavBar：移除 HSK 和 语法，加入 拼音
 const BottomNavBar = ({ onOpenAiDrawer }) => {
     const router = useRouter();
-    
-    // 定义底部导航包含的主 Tab 键值 (需与 LayoutIndex 中的 keys 对应)
+    // 定义底部导航包含的主 Tab 键值
     const mainLearnTabs = ['pinyin', 'words', 'speaking']; 
 
     const navItems = [
@@ -158,7 +187,7 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
     const isActive = (item) => {
         if (item.type === 'button') return false; 
         
-        // 默认 Tab 是 'pinyin' (原本是 words，现在把 pinyin 放第一位)
+        // 默认 Tab 是 'pinyin'
         const currentTab = router.query.tab || 'pinyin'; 
 
         if (item.href.startsWith('/?tab=')) {
@@ -166,7 +195,6 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
             return currentTab === tab;
         }
         if (item.href === '/') {
-            // 如果在首页且 tab 是学习类 tab，则高亮“学习”
             return router.pathname === '/' && item.mainTabs.includes(currentTab);
         }
         return router.pathname === item.href;
@@ -304,8 +332,6 @@ const LayoutIndex = props => {
   const router = useRouter();
   const { books, speakingCourses, sentenceCards, allWords } = props;
 
-  // 1. 定义所有可能的 Tab，包含 name, key 和 icon
-  // 注意：'pinyin' 是新增的，放在最左侧
   const allTabs = [
     { name: '拼音', key: 'pinyin', icon: <Type size={22} /> }, // 新增拼音
     { name: '单词', key: 'words', icon: <BookText size={22} /> },
@@ -316,18 +342,14 @@ const LayoutIndex = props => {
     { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
   ];
   
-  // 2. 筛选出需要在“学习”区域显示的 Tab (顶部 Tab 栏)
-  // 根据要求：隐藏 HSK 和 语法，拼音最左，单词独立
   const visibleTabKeys = ['pinyin', 'words', 'speaking'];
   const displayTabs = allTabs.filter(tab => visibleTabKeys.includes(tab.key));
 
   const [activeTabKey, setActiveTabKey] = useState('pinyin'); // 默认选中拼音
 
-  // 监听 URL 变化以同步 Tab 状态
   useEffect(() => {
     if (router.isReady) {
       const tabFromQuery = router.query.tab;
-      // 如果 URL 有 tab 参数且有效，则切换；否则默认为 displayTabs 的第一个 (pinyin)
       const validTab = allTabs.find(t => t.key === tabFromQuery);
       if (validTab) {
           setActiveTabKey(validTab.key);
@@ -338,12 +360,10 @@ const LayoutIndex = props => {
   }, [router.isReady, router.query.tab]);
   
   const handleTabChange = (key) => {
-    // 使用 shallow 路由更新，避免页面完全重载
     router.push(`/?tab=${key}`, undefined, { shallow: true });
     setActiveTabKey(key);
   };
 
-  // 状态管理
   const [backgroundUrl, setBackgroundUrl] = useState('');
   const scrollableContainerRef = useRef(null);
   const stickySentinelRef = useRef(null);
@@ -352,7 +372,6 @@ const LayoutIndex = props => {
   const [isNavVisible, setIsNavVisible] = useState(true);
   const mainContentRef = useRef(null);
   
-  // Sidebar 逻辑
   const sidebarWidth = 288;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarX, setSidebarX] = useState(-sidebarWidth);
@@ -360,14 +379,12 @@ const LayoutIndex = props => {
   const touchStartX = useRef(null);
   const currentSidebarX = useRef(-sidebarWidth);
 
-  // Favorites 逻辑
   const [sentenceCardData, setSentenceCardData] = useState(null);
   const [wordCardData, setWordCardData] = useState(null);
   const isSentenceFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-sentences' : false;
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
   
-  // AI Drawer 逻辑
   const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
   const handleOpenAiDrawer = () => {
       router.push(router.asPath + '#ai-chat', undefined, { shallow: true });
@@ -378,7 +395,6 @@ const LayoutIndex = props => {
       else setIsAiDrawerOpen(false);
   };
 
-  // 浏览器返回键处理 AI 窗口
   useEffect(() => {
     const handlePopState = () => {
         if (window.location.hash !== '#ai-chat') setIsAiDrawerOpen(false);
@@ -387,7 +403,6 @@ const LayoutIndex = props => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // 收藏夹打开逻辑
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
@@ -429,13 +444,11 @@ const LayoutIndex = props => {
     ];
     setBackgroundUrl(backgrounds[Math.floor(Math.random() * backgrounds.length)]);
 
-    // 滚动逻辑优化
     const container = scrollableContainerRef.current;
     if (!container) return;
 
     let ticking = false;
     const handleScroll = () => {
-      // 只有当头部吸顶后才需要计算导航栏的显示/隐藏，提升性能
       if (!isStickyActive) {
           lastScrollY.current = container.scrollTop;
           return;
@@ -444,7 +457,6 @@ const LayoutIndex = props => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const diff = currentY - lastScrollY.current;
-          // 向下滚动超过 10px 隐藏，向上滚动立即显示
           if (Math.abs(diff) > 10) {
             setIsNavVisible(diff <= 0);
           }
@@ -458,10 +470,9 @@ const LayoutIndex = props => {
     
     const observer = new IntersectionObserver(
         ([entry]) => {
-            // 当 sentinel 移出视图且在顶部上方时，触发吸顶
             const shouldBeSticky = !entry.isIntersecting && entry.boundingClientRect.top < 0;
             setIsStickyActive(shouldBeSticky);
-            if (!shouldBeSticky) setIsNavVisible(true); // 取消吸顶时确保导航可见
+            if (!shouldBeSticky) setIsNavVisible(true);
         }, { threshold: 0 }
     );
       
@@ -475,7 +486,6 @@ const LayoutIndex = props => {
     };
   }, [isStickyActive, router]);
 
-  // 3. 滑动逻辑修复：只在 displayTabs (可见 Tab) 中循环
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
           const currentIndex = displayTabs.findIndex(t => t.key === activeTabKey);
@@ -494,7 +504,6 @@ const LayoutIndex = props => {
       delta: 50
   });
 
-  // Sidebar 手势
   const handleTouchStart = (e) => {
     if (!isSidebarOpen && mainContentRef.current?.contains(e.target)) return;
     const startX = e.touches[0].clientX;
@@ -519,7 +528,6 @@ const LayoutIndex = props => {
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   
-  // 渲染 Tab 按钮
   const renderTabButtons = () => displayTabs.map(tab => (
     <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTabKey === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
@@ -528,7 +536,6 @@ const LayoutIndex = props => {
     </button>
   ));
 
-  // 初始加载渲染
   if (!activeTabKey) {
     return <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} h-screen w-screen bg-black flex flex-col overflow-hidden`}></div>;
   }
@@ -547,7 +554,6 @@ const LayoutIndex = props => {
                 <i className="fas fa-bars text-xl"></i>
             </button>
             
-            {/* 顶部 Hero 区域 */}
             <div className='absolute top-0 left-0 right-0 h-[40vh] z-10 p-4 flex flex-col justify-end text-white pointer-events-none'>
                 <div className='pointer-events-auto'>
                     <h1 className='text-4xl font-extrabold' style={{ textShadow: '2px 2px 8px rgba(0,0,0,0.7)' }}>中缅文培训中心</h1>
@@ -564,56 +570,43 @@ const LayoutIndex = props => {
                 <div className='h-[40vh] flex-shrink-0' />
                 <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
                     
-                    {/* 搜索与操作按钮区 */}
                     <div className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
                         <div className='pt-6'>
                            <div className='px-4 mb-6'><GlosbeSearchCard /></div>
                            <div className='pb-6'><ActionButtons onOpenFavorites={handleOpenFavorites} onOpenContact={() => setIsContactPanelOpen(true)} /></div>
                         </div>
-                        {/* 锚点 Sentinel */}
                         <div ref={stickySentinelRef}></div>
                         
-                        {/* 静态 Tab 栏 (当吸顶激活时隐藏内容以占位，避免布局跳动，或完全隐藏) */}
                         <div className={`${isStickyActive ? 'opacity-0 pointer-events-none h-0 overflow-hidden' : ''} border-b border-violet-200 dark:border-gray-700 transition-all duration-200`}>
                             <div className='flex justify-around'>{renderTabButtons()}</div>
                        </div>
                     </div>
 
-                    {/* 吸顶 Tab 栏 (fixed) */}
                     <div className={`transition-transform duration-300 ease-in-out fixed w-full top-0 z-30 ${isStickyActive ? 'block' : 'hidden'} ${isNavVisible ? 'translate-y-0' : '-translate-y-full'}`}>
                         <div className='bg-violet-50/95 dark:bg-gray-800/95 backdrop-blur-lg border-b border-violet-200 dark:border-gray-700 shadow-sm'>
                             <div className='flex justify-around max-w-[86rem] mx-auto'>{renderTabButtons()}</div>
                         </div>
                     </div>
                     
-                    {/* 主要内容区域 */}
                     <main ref={mainContentRef} {...contentSwipeHandlers}>
                         <div className='p-4'>
-                            {/* 根据 activeTabKey 渲染对应组件 */}
                             {activeTabKey === 'pinyin' && (
                                 <div className="text-center py-10 text-gray-500">
-                                    {/* 这里暂时放置一个占位符，或者您可以复用 WordsContentBlock 并传入特定参数 */}
                                     <h3 className="text-xl font-bold mb-2">拼音学习</h3>
                                     <p>拼音模块内容正在开发中...</p>
                                 </div>
                             )}
                             {activeTabKey === 'words' && <WordsContentBlock />}
-                            {/* HSK 被隐藏，不渲染 */}
-                            {/* activeTabKey === 'hsk' && <HskContentBlock words={allWords} /> */}
                             {activeTabKey === 'speaking' && <SpeakingContentBlock speakingCourses={speakingCourses} sentenceCards={sentenceCards} />}
-                            {/* 语法 被隐藏，不渲染 */}
-                            {/* activeTabKey === 'grammar' && <div>语法内容区...</div> */}
                             {activeTabKey === 'practice' && <PracticeContentBlock />}
                             {activeTabKey === 'books' && <BooksContentBlock notionBooks={books} />}
                         </div>
                     </main>
                 </div>
             </div>
-            {/* 底部导航栏 */}
             <BottomNavBar onOpenAiDrawer={handleOpenAiDrawer} />
         </div>
 
-        {/* 弹窗组件 */}
         {sentenceCardData && <ShortSentenceCard sentences={sentenceCardData} isOpen={isSentenceFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-sentences" />}
         {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
         <ContactPanel isOpen={isContactPanelOpen} onClose={() => setIsContactPanelOpen(false)} />
@@ -625,7 +618,7 @@ const LayoutIndex = props => {
 
 
 // =================================================================================
-// ======================  其他 Layout 组件 (保持原样，未修改) ========================
+// ======================  其他组件  ========================
 // =================================================================================
 const LayoutPostList = props => (
     <div id='post-outer-wrapper' className='px-5  md:px-0'>
