@@ -6,43 +6,25 @@ import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { Howl } from 'howler';
-import { FaVolumeUp, FaStop, FaSpinner, FaChevronRight, FaChevronLeft } from 'react-icons/fa';
+import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 
-// --- 辅助函数：生成注音 HTML ---
+// --- 辅助函数：自动生成拼音 HTML ---
 const generateRubyHTML = (text) => {
   if (!text) return '';
-  return text.replace(/[\u4e00-\u9fa5]/g, char => `<ruby>${char}<rt>${pinyinConverter(char)}</rt></ruby>`);
+  // 排除掉HTML标签，只给汉字加拼音
+  return text.replace(/[\u4e00-\u9fa5]+/g, word => {
+      const pinyin = pinyinConverter(word);
+      return `<ruby>${word}<rt>${pinyin}</rt></ruby>`;
+  });
 };
 
-// --- 主组件 ---
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [isMounted, setIsMounted] = useState(false);
     
     useEffect(() => {
         setIsMounted(true);
-        // 允许页面内部滚动，但禁止整体橡皮筋效果
         document.body.style.overscrollBehavior = 'none';
-        
-        const metaTags = [
-            { name: 'apple-mobile-web-app-capable', content: 'yes' },
-            { name: 'apple-mobile-web-app-status-bar-style', content: 'default' }
-        ];
-        
-        metaTags.forEach(tagInfo => {
-            let meta = document.createElement('meta');
-            meta.name = tagInfo.name;
-            meta.content = tagInfo.content;
-            meta.id = `gp-player-meta-${tagInfo.name}`;
-            document.head.appendChild(meta);
-        });
-
-        return () => {
-            document.body.style.overscrollBehavior = 'auto';
-            metaTags.forEach(tagInfo => {
-                const meta = document.getElementById(`gp-player-meta-${tagInfo.name}`);
-                if (meta) document.head.removeChild(meta);
-            });
-        };
+        return () => { document.body.style.overscrollBehavior = 'auto'; };
     }, []);
 
     if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) return null;
@@ -57,7 +39,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
     // 滚动交互状态
     const contentRef = useRef(null);
-    const [canGoNext, setCanGoNext] = useState(false); // 是否允许点击下一页
+    const [canGoNext, setCanGoNext] = useState(false); // 控制“下一条”按钮是否激活
 
     // --- 音频控制逻辑 ---
     const stopPlayback = useCallback(() => {
@@ -76,8 +58,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setActiveAudio({ type });
         setIsLoadingAudio(true);
 
-        // 处理文本：去格式 + 加停顿
-        let cleanText = text.replace(/\{\{| \}\}|\}\}/g, '');
+        // 去除HTML标签和辅助符号，只留纯文本给TTS朗读
+        let cleanText = text.replace(/<[^>]+>/g, ''); 
+        cleanText = cleanText.replace(/\{\{| \}\}|\}\}/g, '');
         cleanText = cleanText.replace(/\n/g, '... ').replace(/[\r\n]+/g, '... ');
 
         const voice = 'zh-CN-XiaoxiaoMultilingualNeural';
@@ -97,7 +80,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
         currentSoundRef.current = sound;
         sound.play();
-
     }, [stopPlayback]);
     
     const handlePlayButtonClick = (text, type) => {
@@ -112,17 +94,18 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     useEffect(() => {
         stopPlayback();
         if (contentRef.current) contentRef.current.scrollTop = 0;
-        setCanGoNext(false); // 重置下一页状态
+        setCanGoNext(false); 
 
+        // 自动播放解说
         const timer = setTimeout(() => {
             const gp = grammarPoints[currentIndex];
             if (gp?.narrationScript) {
                 playSingleAudio(gp.narrationScript, `narration_${gp.id}`);
             }
+            // 如果内容很短，无需滚动，直接激活下一页
             if (contentRef.current) {
                 const { scrollHeight, clientHeight } = contentRef.current;
-                // 如果内容很少，直接允许下一页
-                if (scrollHeight <= clientHeight + 60) { 
+                if (scrollHeight <= clientHeight + 50) { 
                     setCanGoNext(true);
                 }
             }
@@ -131,52 +114,52 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         return () => { clearTimeout(timer); stopPlayback(); };
     }, [currentIndex, grammarPoints, playSingleAudio, stopPlayback]);
     
-    // --- 滚动监听 ---
+    // --- 滚动监听 (到底部激活按钮) ---
     const handleScroll = () => {
         if (!contentRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
-        const isBottom = scrollTop + clientHeight >= scrollHeight - 20;
+        const isBottom = scrollTop + clientHeight >= scrollHeight - 30;
         if (isBottom && !canGoNext) {
             setCanGoNext(true);
         }
     };
 
-    // --- 导航逻辑 (按钮点击) ---
-    const navigate = useCallback((direction) => {
-        // 如果是下一页，必须满足条件
-        if (direction > 0 && !canGoNext) return;
+    // --- 按钮点击切换逻辑 ---
+    const handleNext = () => {
+        if (!canGoNext) return; // 如果还没读完（没滚到底），不让点
+        if (currentIndex < grammarPoints.length - 1) {
+            lastDirection.current = 1;
+            setCurrentIndex(prev => prev + 1);
+        } else {
+            onComplete();
+        }
+    };
 
-        lastDirection.current = direction;
-        setCurrentIndex(prev => {
-            const newIndex = prev + direction;
-            if (newIndex >= 0 && newIndex < grammarPoints.length) return newIndex;
-            if (newIndex >= grammarPoints.length) onComplete();
-            return prev;
-        });
-    }, [grammarPoints.length, onComplete, canGoNext]);
+    const handlePrev = () => {
+        if (currentIndex > 0) {
+            lastDirection.current = -1;
+            setCurrentIndex(prev => prev - 1);
+        }
+    };
 
     const transitions = useTransition(currentIndex, {
         key: grammarPoints[currentIndex]?.id || currentIndex,
-        from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '40px' : '-40px'})` },
-        enter: { opacity: 1, transform: 'translateY(0px)' },
-        leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-40px' : '40px'})`, position: 'absolute' },
-        config: { mass: 1, tension: 220, friction: 26 },
+        from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` }, // 改为左右平移动画
+        enter: { opacity: 1, transform: 'translateX(0%)' },
+        leave: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
+        config: { mass: 1, tension: 280, friction: 30 },
     });
     
     // --- 渲染文本辅助函数 ---
     const renderMixedText = (text, isPattern = false) => {
-        const visualText = text.replace(/\\n/g, ' '); 
-        const parts = visualText.match(/\{\{.*?\}\}|[^{}]+/g) || [];
-        
+        const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
         return parts.map((part, pIndex) => {
             const isChinese = part.startsWith('{{');
             const content = isChinese ? part.slice(2, -2) : part;
-            let partStyle;
-            if (isPattern) {
-                partStyle = isChinese ? styles.patternChinese : styles.patternMyanmar;
-            } else {
-                partStyle = isChinese ? styles.textChinese : styles.textBurmese;
-            }
+            let partStyle = isPattern 
+                ? (isChinese ? styles.patternChinese : styles.patternMyanmar)
+                : (isChinese ? styles.textChinese : styles.textBurmese);
+            
             return (
                 <span key={pIndex} style={partStyle}>
                     {isChinese ? <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} /> : content}
@@ -185,18 +168,11 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         });
     };
 
-    const renderExplanation = (text) => {
-        if (!text) return null;
-        return text.split('\n').map((line, index) => {
-            if (line.trim() === '') return <div key={index} style={{height: '10px'}} />;
-            let formattedLine = line
-                .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #2563eb; background: rgba(37, 99, 235, 0.1); padding: 0 4px; border-radius: 4px;">$1</strong>')
-                .replace(/❌/g, '<span style="color: #ef4444; margin-right: 4px;">❌</span>')
-                .replace(/✅/g, '<span style="color: #10b981; margin-right: 4px;">✅</span>')
-                .replace(/⚠️/g, '<span style="margin-right: 4px;">⚠️</span>');
-
-            return <p key={index} style={styles.explanationText} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
-        });
+    // --- 富文本渲染 (支持HTML标签) ---
+    const renderRichExplanation = (htmlContent) => {
+        if (!htmlContent) return null;
+        // 这里直接渲染HTML，支持数据中的 <br>, <strong>, <div style="..."> 等标签
+        return <div style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
     };
 
     const content = (
@@ -210,7 +186,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                         <div style={styles.scrollContainer} ref={contentRef} onScroll={handleScroll}>
                             <div style={styles.contentWrapper}>
                                 <div style={styles.header}>
-                                    <h2 style={styles.grammarPointTitle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(gp.grammarPoint) }} />
+                                    <h2 style={styles.grammarPointTitle}>{gp.grammarPoint}</h2>
                                 </div>
                                 
                                 {gp.pattern && (
@@ -220,7 +196,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                     </div>
                                 )}
                                 
-                                {/* 💡 详解部分 */}
+                                {/* 💡 语法详解 (富文本) */}
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <span style={styles.sectionTitleText}>💡 详解</span>
@@ -233,7 +209,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                         </button>
                                     </div>
                                     <div style={styles.textBlock}>
-                                        {renderExplanation(gp.visibleExplanation)}
+                                        {/* 使用新的富文本渲染方法 */}
+                                        {renderRichExplanation(gp.visibleExplanation)}
                                     </div>
                                 </div>
 
@@ -244,7 +221,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                             <span style={{...styles.sectionTitleText, color: '#ef4444'}}>⚠️ 易错点</span>
                                         </div>
                                         <div style={{...styles.textBlock, background: '#fff1f2', border: '1px solid #fecaca'}}>
-                                            {renderExplanation(gp.attention)}
+                                            {renderRichExplanation(gp.attention)}
                                         </div>
                                     </div>
                                 )}
@@ -256,7 +233,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                             <span style={{...styles.sectionTitleText, color: '#059669'}}>📌 什么时候用？</span>
                                         </div>
                                         <div style={{...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0'}}>
-                                            {renderExplanation(gp.usage)}
+                                            {renderRichExplanation(gp.usage)}
                                         </div>
                                     </div>
                                 )}
@@ -287,39 +264,39 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                     </div>
                                 </div>
 
-                                {/* 底部留白，防止按钮遮挡内容 */}
                                 <div style={{ height: '100px' }}></div>
                             </div>
                         </div>
 
-                        {/* --- 导航按钮 (悬浮融入背景) --- */}
-                        <div style={styles.navContainer}>
-                            {/* 上一页按钮 */}
-                            <div 
+                        {/* --- 底部按钮控制栏 --- */}
+                        <div style={styles.bottomBar}>
+                            {/* 上一条按钮 */}
+                            <button 
                                 style={{
-                                    ...styles.navBtn, 
-                                    opacity: i === 0 ? 0 : 1, 
-                                    pointerEvents: i === 0 ? 'none' : 'auto'
+                                    ...styles.navButton, 
+                                    visibility: i === 0 ? 'hidden' : 'visible',
+                                    background: '#f1f5f9', color: '#64748b'
                                 }}
-                                onClick={() => navigate(-1)}
+                                onClick={handlePrev}
                             >
-                                <FaChevronLeft size={24} color="#64748b" />
-                            </div>
+                                <FaChevronLeft /> 上一条
+                            </button>
 
-                            {/* 下一页按钮 */}
-                            <div 
+                            {/* 下一条按钮 */}
+                            <button 
                                 style={{
-                                    ...styles.navBtn, 
-                                    // 没滚到底部时：半透明 (0.4)，滚到底部后：实心 (1)
-                                    opacity: canGoNext ? 1 : 0.4,
-                                    transform: canGoNext ? 'scale(1.1)' : 'scale(1)',
-                                    boxShadow: canGoNext ? '0 4px 15px rgba(37, 99, 235, 0.3)' : 'none',
-                                    backgroundColor: canGoNext ? '#2563eb' : 'rgba(255,255,255,0.5)'
+                                    ...styles.navButton,
+                                    background: canGoNext ? '#2563eb' : '#cbd5e1',
+                                    color: 'white',
+                                    transform: canGoNext ? 'scale(1.05)' : 'scale(1)',
+                                    boxShadow: canGoNext ? '0 4px 12px rgba(37, 99, 235, 0.3)' : 'none',
+                                    opacity: canGoNext ? 1 : 0.7
                                 }}
-                                onClick={() => navigate(1)}
+                                onClick={handleNext}
+                                disabled={!canGoNext}
                             >
-                                <FaChevronRight size={24} color={canGoNext ? '#ffffff' : '#64748b'} />
-                            </div>
+                                {i === grammarPoints.length - 1 ? '完成学习' : '下一条'} <FaChevronRight />
+                            </button>
                         </div>
 
                     </animated.div>
@@ -339,73 +316,56 @@ GrammarPointPlayer.propTypes = {
 
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden', background: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
-    page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'linear-gradient(180deg, #ffffff 0%, #f0f4f8 100%)', willChange: 'transform, opacity' },
+    page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'white', willChange: 'transform, opacity' },
     scrollContainer: { flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 20px' },
     contentWrapper: { maxWidth: '800px', margin: '0 auto', paddingTop: 'env(safe-area-inset-top, 20px)', minHeight: '100%' },
     
-    header: { textAlign: 'center', marginTop: '20px', marginBottom: '20px', position: 'relative' },
-    grammarPointTitle: { fontSize: '1.6rem', fontWeight: '800', color: '#1e293b', margin: 0, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+    header: { textAlign: 'center', marginTop: '20px', marginBottom: '20px' },
+    grammarPointTitle: { fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', margin: 0, lineHeight: 1.3 },
     
-    patternBox: { background: '#ffffff', borderRadius: '16px', padding: '20px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(148, 163, 184, 0.15)', border: '1px solid #e2e8f0', textAlign: 'center' },
-    boxLabel: { fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#64748b', marginBottom: '10px', fontWeight: '600' },
-    patternContent: { fontSize: '1.2rem', fontWeight: 'bold', lineHeight: 1.6 },
+    patternBox: { background: '#f8fafc', borderRadius: '12px', padding: '16px', marginBottom: '24px', border: '1px solid #e2e8f0', textAlign: 'center' },
+    boxLabel: { fontSize: '0.8rem', color: '#64748b', marginBottom: '8px', fontWeight: '600', letterSpacing: '1px' },
+    patternContent: { fontSize: '1.2rem', fontWeight: 'bold' },
     patternChinese: { color: '#2563eb', margin: '0 4px' }, 
     patternMyanmar: { color: '#059669', margin: '0 4px' }, 
     
     sectionContainer: { marginBottom: '24px' },
-    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+    sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
     sectionTitleText: { fontSize: '1rem', fontWeight: '700', color: '#334155' },
     
-    // --- 播放按钮样式 ---
     playButton: { 
         background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: 'none', borderRadius: '50%', 
-        width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-        transition: 'all 0.2s ease', position: 'relative'
+        width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s'
     },
     playButtonSmall: { 
         background: 'transparent', border: '1px solid #cbd5e1', color: '#64748b', borderRadius: '50%', 
-        width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.2s ease', position: 'relative'
+        width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
     },
     
-    textBlock: { background: 'rgba(255,255,255,0.6)', borderRadius: '12px', padding: '12px', border: '1px solid rgba(255,255,255,0.8)' },
-    explanationText: { fontSize: '1rem', lineHeight: 1.7, color: '#475569', margin: '0 0 10px 0', textAlign: 'justify' },
-    
-    examplesList: { display: 'flex', flexDirection: 'column', gap: '16px' },
-    exampleItem: { background: '#ffffff', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' },
+    // --- 富文本容器样式 ---
+    textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e2e8f0', fontSize: '1rem', lineHeight: 1.6, color: '#475569' },
+    richTextContainer: { whiteSpace: 'normal' }, // 允许正常换行
+
+    examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
+    exampleItem: { background: '#f8fafc', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #e2e8f0' },
     exampleMain: { flex: 1 },
     exampleSentence: { fontSize: '1.1rem', fontWeight: 500, marginBottom: '4px', lineHeight: 1.5 },
-    exampleTranslation: { fontSize: '0.9rem', color: '#64748b', fontStyle: 'normal' },
+    exampleTranslation: { fontSize: '0.9rem', color: '#64748b' },
     
     textChinese: { color: '#1e293b' }, 
     textBurmese: { color: '#059669' }, 
 
-    // --- 导航按钮容器 (底部悬浮) ---
-    navContainer: {
-        position: 'absolute',
-        bottom: '30px',
-        left: '0',
-        right: '0',
-        padding: '0 30px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        pointerEvents: 'none', // 让中间区域可以点击穿透
-        zIndex: 20
+    // --- 底部固定按钮栏 ---
+    bottomBar: {
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px',
+        background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)',
+        borderTop: '1px solid #e2e8f0',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px',
+        paddingBottom: 'env(safe-area-inset-bottom, 10px)'
     },
-    navBtn: {
-        width: '56px',
-        height: '56px',
-        borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        pointerEvents: 'auto', // 按钮自身可点击
-        backgroundColor: 'rgba(255, 255, 255, 0.8)', // 默认背景
-        backdropFilter: 'blur(8px)',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' // 弹性动画
+    navButton: {
+        border: 'none', borderRadius: '30px', padding: '10px 20px', fontSize: '0.95rem', fontWeight: '600',
+        display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
     }
 };
 
@@ -414,22 +374,14 @@ styleTag.id = 'grammar-player-styles';
 styleTag.innerHTML = `
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    
     .play-button:active { transform: scale(0.9); }
-
-    /* 播放时的波纹呼吸动画 */
-    .playing {
-        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-        background-color: rgba(37, 99, 235, 0.2) !important;
-        color: #2563eb !important;
-        border-color: #2563eb !important;
-    }
+    .playing { animation: pulse-ring 2s infinite; background-color: rgba(37, 99, 235, 0.2) !important; color: #2563eb !important; border-color: #2563eb !important; }
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
     
-    @keyframes pulse-ring {
-        0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5); }
-        70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-    }
+    /* 富文本内部样式，模拟文档排版 */
+    .indent-level-1 { margin-left: 20px; color: #555; font-size: 0.95em; margin-bottom: 5px; }
+    .indent-level-2 { margin-left: 40px; color: #777; font-size: 0.9em; margin-bottom: 5px; }
+    .highlight-bold { font-weight: bold; color: #333; }
 `;
 if (!document.getElementById('grammar-player-styles')) document.head.appendChild(styleTag);
 
