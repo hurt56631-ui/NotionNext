@@ -6,7 +6,7 @@
     "backgroundColor": "#F5F7FA",
     "contentLayout": "center-upper",
     "autoAdvance": false,
-    "navigationMode": "swipe_vertical"
+    "navigationMode": "button_only"
   },
   "blocks": [
     {
