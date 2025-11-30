@@ -1,9 +1,10 @@
-// AIChatDrawer.js (最终终极版 - 富文本、划词工具、流式朗读、API修正)
+// AIChatDrawer.js (最终终极版 - 富文本增强、微软高质量流式朗读、API 修正)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import imageCompression from 'browser-image-compression';
 import { pinyin } from 'pinyin-pro'; // 需安装: npm install pinyin-pro
+import { v4 as uuidv4 } from 'uuid'; // 建议安装 uuid 库，或者使用下方内置的简单生成器
 import AiTtsButton from './AiTtsButton';
 
 // 1. 导入你的题型组件
@@ -14,9 +15,102 @@ const componentMap = {
   PaiXuTi: PaiXuTi
 };
 
-// --- 工具函数 ---
+// --- [核心工具类] 音频播放队列 (解决 TTS 网络延迟导致的重叠问题) ---
+class AudioQueue {
+    constructor() {
+        this.queue = [];
+        this.isPlaying = false;
+    }
+
+    add(audioBlobUrl) {
+        this.queue.push(audioBlobUrl);
+        this.process();
+    }
+
+    process() {
+        if (this.isPlaying || this.queue.length === 0) return;
+
+        this.isPlaying = true;
+        const audioUrl = this.queue.shift();
+        const audio = new Audio(audioUrl);
+
+        audio.onended = () => {
+            this.isPlaying = false;
+            URL.revokeObjectURL(audioUrl); // 播放完释放内存
+            this.process(); // 播放下一句
+        };
+
+        audio.onerror = () => {
+            console.error("Audio playback error");
+            this.isPlaying = false;
+            this.process();
+        };
+
+        audio.play().catch(e => {
+            console.warn("Autoplay blocked or error:", e);
+            this.isPlaying = false;
+            this.process();
+        });
+    }
+    
+    clear() {
+        this.queue = [];
+        this.isPlaying = false;
+        // 注意：无法停止正在播放的 Audio 对象，除非保存引用。
+        // 为保持简单，这里只清空待播放队列。
+    }
+}
+// 全局单例队列
+const globalAudioQueue = new AudioQueue();
+
+
+// --- [核心工具函数] 微软 Edge TTS 接口调用 ---
+const fetchEdgeTTS = async (text, voice, rate, pitch) => {
+    try {
+        // 构建 SSML
+        // rate: +0% ~ +100%, pitch: +0Hz
+        const rateStr = rate >= 0 ? `+${rate}%` : `${rate}%`;
+        const pitchStr = pitch >= 0 ? `+${pitch}Hz` : `${pitch}Hz`;
+        const requestId = generateSimpleId('req');
+        
+        const ssml = `
+        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
+            <voice name='${voice}'>
+                <prosody pitch='${pitchStr}' rate='${rateStr}'>
+                    ${text}
+                </prosody>
+            </voice>
+        </speak>`.trim();
+
+        // 使用微软 Edge Read Aloud 免费接口
+        // 注意：此接口在纯前端可能会遇到 CORS 问题。
+        // 如果遇到 CORS，需要在服务端做一层反代，或者使用浏览器插件环境。
+        // 这里提供标准 Fetch 实现。
+        const url = `https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/ssml+xml',
+                'X-Edge-TTS-Client': 'Microsoft Edge',
+                'X-RequestId': requestId
+            },
+            body: ssml
+        });
+
+        if (!response.ok) throw new Error(`TTS Error: ${response.status}`);
+        
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.error("Edge TTS Fetch Error:", error);
+        return null;
+    }
+};
+
+
+// --- 数据清洗逻辑 ---
 const sanitizeQuizData = (props) => {
-    // ... (保持原有逻辑不变)
     if (!props || !props.items || !props.correctOrder) return props;
     let items = [...props.items];
     const correctOrder = [...props.correctOrder];
@@ -54,10 +148,11 @@ const CHAT_MODELS_LIST = [
     { id: 'model-5', name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro-latest', maxContextTokens: 1048576 },
 ];
 
+// 关键修改：默认提示词中强制要求 Markdown 格式
 const DEFAULT_PROMPTS = [
-    { id: 'default-grammar-correction', name: '纠正中文语法', description: '纠正语法、优化用词，并提供详细说明。', content: '你是一位专业的中文老师。请纠正用户发送的中文句子中的语法错误，并给出修改建议。输出格式请使用Markdown，关键修改处请加粗。', openingLine: '你好，请发送你需要我纠正的中文句子。', model: 'gemini-2.5-flash', ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' },
-    { id: 'explain-word', name: '解释中文词语', description: '简单易懂地解释词语。', content: '你是一位中文老师。请用简单易懂的方式解释用户发送的中文词语，并提供例句。', openingLine: '你好，想了解哪个词？', model: 'gemini-1.5-pro-latest', ttsVoice: 'zh-CN-YunxiNeural', avatarUrl: '' },
-    { id: 'translate-myanmar', name: '中缅互译', description: '中缅互译助手。', content: '你是一位翻译助手。请将用户发送的内容在中文和缅甸语之间互译。', openingLine: '你好！请发送内容进行翻译。', model: 'gemini-2.5-flash', ttsVoice: 'my-MM-NilarNeural', avatarUrl: '' }
+    { id: 'default-grammar-correction', name: '纠正中文语法', description: '纠正语法、优化用词。', content: '你是一位专业的中文老师。请纠正用户发送的中文句子中的语法错误。\n\n**重要要求**：\n1. 请务必使用 **Markdown** 格式。\n2. 错误的地方请用 `代码块` 或 **加粗** 标记。\n3. 使用列表展示修改建议。', openingLine: '你好，请发送你需要我纠正的中文句子。', model: 'gemini-2.5-flash', ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' },
+    { id: 'explain-word', name: '解释中文词语', description: '解释词语并造句。', content: '你是一位中文老师。请解释用户发送的中文词语。\n\n**格式要求**：\n- 使用 ### 标题 分隔含义和例句。\n- 关键解释请 **加粗**。', openingLine: '你好，想了解哪个词？', model: 'gemini-1.5-pro-latest', ttsVoice: 'zh-CN-YunxiNeural', avatarUrl: '' },
+    { id: 'translate-myanmar', name: '中缅互译', description: '中缅互译助手。', content: '你是一位翻译助手。请将用户发送的内容在中文和缅甸语之间互译。请直接输出翻译结果。', openingLine: '你好！请发送内容进行翻译。', model: 'gemini-2.5-flash', ttsVoice: 'my-MM-NilarNeural', avatarUrl: '' }
 ];
 
 const DEFAULT_SETTINGS = {
@@ -74,11 +169,18 @@ const DEFAULT_SETTINGS = {
 
 const MICROSOFT_TTS_VOICES = [ { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' }, { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' }, { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' }, { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' }, { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' }, { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' }, { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' }, { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' }, { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' }, { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' }, { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' }, { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' }, { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' }, { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' }, { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' }, ];
 
-// --- 【重构】流式朗读打字机效果 ---
+// --- [重构] 流式朗读与打字机效果 ---
 const TypingEffect = ({ text, settings, onComplete, onUpdate }) => {
     const [displayedText, setDisplayedText] = useState('');
     const lastReadIndex = useRef(0);
-    const synthRef = useRef(window.speechSynthesis);
+
+    // 组件挂载时清空队列
+    useEffect(() => {
+        globalAudioQueue.clear();
+        return () => {
+            globalAudioQueue.clear(); // 卸载时停止
+        };
+    }, []);
 
     useEffect(() => {
         if (!text) return;
@@ -86,159 +188,145 @@ const TypingEffect = ({ text, settings, onComplete, onUpdate }) => {
         lastReadIndex.current = 0;
         let index = 0;
 
-        const intervalId = setInterval(() => {
-            // 更新显示的文本
+        const intervalId = setInterval(async () => {
             const char = text.charAt(index);
             setDisplayedText(prev => prev + char);
             index++;
 
-            // --- 流式朗读核心逻辑 ---
+            // --- 边写边读核心逻辑 ---
             if (settings.autoRead) {
                 // 检测句子结束符
-                if (['。', '！', '？', '!', '?', '\n', '.', ';'].includes(char)) {
+                if (['。', '！', '？', '!', '?', '\n', ';'].includes(char)) {
                     const sentence = text.substring(lastReadIndex.current, index).trim();
-                    if (sentence.length > 1) { // 避免朗读空字符或符号
-                         speakSentence(sentence, settings);
+                    if (sentence.length > 1) {
+                        // 触发朗读
+                        await handleStreamRead(sentence, settings);
                     }
                     lastReadIndex.current = index;
                 }
             }
 
-            if (onUpdate && index % 2 === 0) onUpdate();
+            if (onUpdate && index % 3 === 0) onUpdate(); // 减少滚动频率
 
             if (index >= text.length) {
                 clearInterval(intervalId);
-                // 朗读剩余部分
+                // 朗读最后剩余的部分
                 if (settings.autoRead && lastReadIndex.current < text.length) {
-                    const remaining = text.substring(lastReadIndex.current);
-                     if (remaining.trim().length > 0) speakSentence(remaining, settings);
+                    const remaining = text.substring(lastReadIndex.current).trim();
+                    if (remaining.length > 0) {
+                        await handleStreamRead(remaining, settings);
+                    }
                 }
                 if (onComplete) onComplete();
             }
         }, 20); // 打字速度
 
-        return () => {
-            clearInterval(intervalId);
-            if (synthRef.current) synthRef.current.cancel(); // 组件卸载时停止朗读
-        };
-    }, [text, onComplete, onUpdate, settings]); // 移除 speakSentence 依赖，避免闭包问题
+        return () => clearInterval(intervalId);
+    }, [text, settings, onComplete, onUpdate]);
 
     return <RichMarkdown text={displayedText} />;
 };
 
-// 辅助朗读函数（不仅用于打字机，也用于划词）
-const speakSentence = (text, settings) => {
-    if (!text) return;
-    const synth = window.speechSynthesis;
-    // 如果正在读，加入队列，而不是取消（为了连贯性）
-    // 但为了避免队列过长，可以做一个简单的管理，这里为了简化直接调 speak
-    
-    // 如果是微软语音，这里需要简单模拟，因为浏览器原生 API 不支持直接调微软云。
-    // 这里使用原生 API 作为流式朗读的基础，因为流式调用云端 API 延迟会很高。
-    // 如果用户非要用微软 TTS，建议只在最后读全文，或者接受一定延迟。
-    // 这里的实现为了“低延迟”，优先使用浏览器 API 配合设置的语速。
-    
-    // *修正策略*：为了响应用户“延迟高”的抱怨，流式朗读阶段强制使用浏览器本地 TTS (System)，
-    // 只有点击小喇叭时才用高质量的微软 TTS。或者我们尽量匹配本地声音。
-    
-    const u = new SpeechSynthesisUtterance(text);
-    // 尝试匹配语言
-    u.lang = settings.speechLanguage || 'zh-CN';
-    u.rate = 1 + (settings.ttsRate / 100); 
-    u.pitch = 1 + (settings.ttsPitch / 100);
-    
-    // 如果设置了系统声音，尝试使用
-    if (settings.ttsEngine === TTS_ENGINE.SYSTEM && settings.systemTtsVoiceURI) {
-        const voices = synth.getVoices();
-        const v = voices.find(x => x.voiceURI === settings.systemTtsVoiceURI);
-        if (v) u.voice = v;
+// 处理流式朗读请求
+const handleStreamRead = async (text, settings) => {
+    // 移除 markdown 符号，避免朗读 "* * 星号"
+    const cleanText = text.replace(/[*#`>]/g, ''); 
+
+    if (settings.ttsEngine === TTS_ENGINE.THIRD_PARTY) {
+        // 使用高质量微软 TTS
+        const audioUrl = await fetchEdgeTTS(cleanText, settings.ttsVoice, settings.ttsRate, settings.ttsPitch);
+        if (audioUrl) {
+            globalAudioQueue.add(audioUrl);
+        } else {
+            // 如果获取失败（如CORS），回退到系统语音
+            const u = new SpeechSynthesisUtterance(cleanText);
+            u.lang = settings.speechLanguage;
+            window.speechSynthesis.speak(u);
+        }
+    } else {
+        // 系统内置语音 (零延迟)
+        const u = new SpeechSynthesisUtterance(cleanText);
+        u.lang = settings.speechLanguage;
+        if (settings.systemTtsVoiceURI) {
+             const voices = window.speechSynthesis.getVoices();
+             const v = voices.find(x => x.voiceURI === settings.systemTtsVoiceURI);
+             if (v) u.voice = v;
+        }
+        u.rate = 1 + (settings.ttsRate / 100);
+        window.speechSynthesis.speak(u);
     }
-    
-    synth.speak(u);
 };
 
 
-// --- 【重构】富文本渲染 (RichMarkdown) ---
+// --- [重构] 增强版富文本渲染 (RichMarkdown) ---
+// 样式增强：让富文本看起来更明显
 const RichMarkdown = ({ text }) => {
     if (!text) return null;
 
-    // 1. 代码块处理
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-        // 添加代码块前的文本
-        if (match.index > lastIndex) {
-            parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
-        }
-        // 添加代码块
-        parts.push({ type: 'code', lang: match[1], content: match[2] });
-        lastIndex = codeBlockRegex.lastIndex;
-    }
-    // 添加剩余文本
-    if (lastIndex < text.length) {
-        parts.push({ type: 'text', content: text.substring(lastIndex) });
-    }
+    // 分割代码块
+    const parts = text.split(/(```[\s\S]*?```)/g);
 
     return (
-        <div className="markdown-body">
+        <div className="markdown-body space-y-3 font-sans">
             {parts.map((part, i) => {
-                if (part.type === 'code') {
+                // 代码块渲染
+                if (part.startsWith('```') && part.endsWith('```')) {
+                    const content = part.replace(/^```\w*\n?/, '').replace(/```$/, '');
+                    const lang = part.match(/^```(\w+)/)?.[1] || 'Code';
                     return (
-                        <div key={i} className="my-3 rounded-lg overflow-hidden bg-[#282c34] text-gray-200 text-xs font-mono shadow-md">
-                            <div className="flex justify-between items-center px-3 py-1 bg-[#21252b] border-b border-gray-600/50 text-gray-400">
-                                <span>{part.lang || 'code'}</span>
-                                <button onClick={() => navigator.clipboard.writeText(part.content)} className="hover:text-white"><i className="fas fa-copy"></i></button>
+                        <div key={i} className="my-3 rounded-xl overflow-hidden border border-gray-700 bg-[#1e1e1e] shadow-xl">
+                            <div className="flex justify-between items-center px-4 py-2 bg-[#2d2d2d] border-b border-gray-700">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{lang}</span>
+                                <button onClick={() => navigator.clipboard.writeText(content)} className="text-gray-400 hover:text-white transition-colors"><i className="fas fa-copy"></i></button>
                             </div>
-                            <pre className="p-3 overflow-x-auto m-0"><code>{part.content}</code></pre>
+                            <pre className="p-4 overflow-x-auto text-sm font-mono text-gray-300 leading-relaxed"><code>{content}</code></pre>
                         </div>
                     );
                 }
-                return <FormatText key={i} text={part.content} />;
+                // 普通文本渲染
+                return <FormatText key={i} text={part} />;
             })}
         </div>
     );
 };
 
-// 格式化普通文本（标题、粗体、列表）
 const FormatText = ({ text }) => {
-    const lines = text.split('\n');
     return (
         <>
-            {lines.map((line, idx) => {
+            {text.split('\n').map((line, idx) => {
                 if (line.trim() === '') return <div key={idx} className="h-2"></div>;
                 
-                // 标题
-                if (line.startsWith('### ')) return <h4 key={idx} className="text-base font-bold mt-3 mb-1 text-blue-600 dark:text-blue-400">{line.substring(4)}</h4>;
-                if (line.startsWith('## ')) return <h3 key={idx} className="text-lg font-bold mt-4 mb-2 border-b border-gray-200 dark:border-gray-700 pb-1">{line.substring(3)}</h3>;
-                if (line.startsWith('# ')) return <h2 key={idx} className="text-xl font-bold mt-5 mb-3">{line.substring(2)}</h2>;
+                // 标题 H1-H3 (样式加重)
+                if (line.startsWith('### ')) return <h4 key={idx} className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-4 mb-2">{parseInline(line.slice(4))}</h4>;
+                if (line.startsWith('## ')) return <h3 key={idx} className="text-xl font-black text-gray-800 dark:text-gray-100 border-b-2 border-gray-100 dark:border-gray-700 pb-2 mt-6 mb-3">{parseInline(line.slice(3))}</h3>;
+                if (line.startsWith('# ')) return <h2 key={idx} className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mt-6 mb-4">{parseInline(line.slice(2))}</h2>;
 
                 // 列表
-                if (line.match(/^[-*]\s/)) return <li key={idx} className="ml-4 list-disc marker:text-gray-400">{parseInline(line.substring(2))}</li>;
-                if (line.match(/^\d+\.\s/)) return <div key={idx} className="ml-4 flex gap-1"><span className="font-bold text-gray-500">{line.match(/^\d+\./)[0]}</span><span>{parseInline(line.replace(/^\d+\.\s/, ''))}</span></div>;
-                
-                // 引用
-                if (line.startsWith('> ')) return <blockquote key={idx} className="border-l-4 border-gray-300 dark:border-gray-600 pl-3 py-1 my-2 text-gray-500 italic bg-gray-50 dark:bg-gray-800 rounded-r">{parseInline(line.substring(2))}</blockquote>;
+                if (line.match(/^[-*]\s/)) return <div key={idx} className="flex gap-3 ml-2 my-2"><span className="text-blue-500 mt-1.5 text-xs">●</span><span className="flex-1 leading-relaxed">{parseInline(line.replace(/^[-*]\s/, ''))}</span></div>;
+                if (line.match(/^\d+\.\s/)) return <div key={idx} className="flex gap-3 ml-2 my-2"><span className="font-mono font-bold text-blue-600 shrink-0">{line.match(/^\d+\./)[0]}</span><span className="flex-1 leading-relaxed">{parseInline(line.replace(/^\d+\.\s/, ''))}</span></div>;
 
-                return <p key={idx} className="my-1 leading-relaxed text-justify break-words">{parseInline(line)}</p>;
+                // 引用
+                if (line.startsWith('> ')) return <blockquote key={idx} className="border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-900/20 pl-4 py-3 my-3 rounded-r-lg text-gray-600 dark:text-gray-300 italic shadow-sm">{parseInline(line.slice(2))}</blockquote>;
+
+                return <p key={idx} className="leading-7 my-1 text-[15px]">{parseInline(line)}</p>;
             })}
         </>
     );
 };
 
-// 解析行内样式 (粗体、代码片段)
+// 解析行内样式：**加粗** 和 `代码`
 const parseInline = (text) => {
     const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
     return parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="font-bold text-gray-900 dark:text-gray-100">{part.slice(2, -2)}</strong>;
-        if (part.startsWith('`') && part.endsWith('`')) return <code key={i} className="bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-xs font-mono text-red-500 dark:text-red-400 mx-1">{part.slice(1, -1)}</code>;
+        // 加粗：颜色更深，字重更大
+        if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} className="font-extrabold text-indigo-700 dark:text-indigo-300 mx-0.5">{part.slice(2, -2)}</strong>;
+        // 行内代码：红色高亮
+        if (part.startsWith('`') && part.endsWith('`')) return <code key={i} className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded text-xs font-mono border border-red-100 dark:border-red-900/50 mx-1">{part.slice(1, -1)}</code>;
         return part;
     });
 };
 
-// --- 【新增】划词工具菜单 ---
+// --- 划词工具菜单 (拼音、翻译、朗读) ---
 const TextActionMenu = ({ containerRef }) => {
     const [menuStyle, setMenuStyle] = useState({ display: 'none', top: 0, left: 0 });
     const [selectedText, setSelectedText] = useState('');
@@ -247,19 +335,13 @@ const TextActionMenu = ({ containerRef }) => {
     const handleSelection = useCallback(() => {
         const selection = window.getSelection();
         const text = selection.toString().trim();
-
         if (text && text.length > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
-            // 计算相对于 container 的位置，如果 containerRef 不存在则相对于视口
-            // 简单处理：使用 fixed 定位
-            setMenuStyle({
-                display: 'flex',
-                top: rect.top - 50, // 显示在上方
-                left: rect.left + (rect.width / 2) - 80, // 居中
-            });
+            // 简单的位置计算，显示在选区上方
+            setMenuStyle({ display: 'flex', top: rect.top - 60, left: rect.left + (rect.width / 2) - 100 });
             setSelectedText(text);
-            setPinyinResult(''); // 重置拼音
+            setPinyinResult('');
         } else {
             setMenuStyle({ display: 'none', top: 0, left: 0 });
         }
@@ -270,198 +352,122 @@ const TextActionMenu = ({ containerRef }) => {
         return () => document.removeEventListener('mouseup', handleSelection);
     }, [handleSelection]);
 
-    const handleSpeak = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        const u = new SpeechSynthesisUtterance(selectedText);
-        u.lang = 'zh-CN'; // 默认读中文
-        window.speechSynthesis.speak(u);
+    const handleSpeak = (e) => { 
+        e.preventDefault(); e.stopPropagation(); 
+        const u = new SpeechSynthesisUtterance(selectedText); 
+        u.lang = 'zh-CN'; 
+        window.speechSynthesis.speak(u); 
     };
-
+    const handleTranslate = (e) => { 
+        e.preventDefault(); e.stopPropagation(); 
+        window.open(`https://glosbe.com/zh/en/${encodeURIComponent(selectedText)}`, '_blank'); 
+        setMenuStyle({ ...menuStyle, display: 'none' }); 
+    };
     const handlePinyin = (e) => {
         e.preventDefault(); e.stopPropagation();
         try {
             const res = pinyin(selectedText, { toneType: 'symbol', type: 'string' });
             setPinyinResult(res);
-        } catch (err) {
-            setPinyinResult('无法生成');
-        }
-    };
-
-    const handleTranslate = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        window.open(`https://glosbe.com/zh/en/${encodeURIComponent(selectedText)}`, '_blank');
-        setMenuStyle({ ...menuStyle, display: 'none' }); // 关掉菜单
+        } catch (err) { setPinyinResult('拼音生成失败'); }
     };
 
     if (menuStyle.display === 'none') return null;
 
     return (
-        <div 
-            className="fixed z-50 bg-gray-900 text-white rounded-lg shadow-xl flex flex-col items-center p-1 animate-fade-in"
-            style={{ top: menuStyle.top, left: menuStyle.left }}
-            onMouseDown={(e) => e.preventDefault()} // 防止点击菜单时取消选区
-        >
+        <div className="fixed z-[9999] bg-gray-900/90 backdrop-blur-md text-white rounded-xl shadow-2xl flex flex-col items-center p-1 animate-fade-in border border-gray-700" style={{ top: menuStyle.top, left: menuStyle.left }} onMouseDown={(e) => e.preventDefault()}>
             <div className="flex gap-1">
-                <button onClick={handleSpeak} className="p-2 hover:bg-gray-700 rounded transition-colors text-xs flex flex-col items-center min-w-[40px]">
-                    <i className="fas fa-volume-up mb-1"></i> 朗读
-                </button>
-                <button onClick={handlePinyin} className="p-2 hover:bg-gray-700 rounded transition-colors text-xs flex flex-col items-center min-w-[40px]">
-                    <i className="fas fa-font mb-1"></i> 拼音
-                </button>
-                <button onClick={handleTranslate} className="p-2 hover:bg-gray-700 rounded transition-colors text-xs flex flex-col items-center min-w-[40px]">
-                    <i className="fas fa-language mb-1"></i> 翻译
-                </button>
+                <MenuBtn icon="fa-volume-up" label="朗读" onClick={handleSpeak} />
+                <MenuBtn icon="fa-font" label="拼音" onClick={handlePinyin} />
+                <MenuBtn icon="fa-language" label="翻译" onClick={handleTranslate} />
             </div>
-            {pinyinResult && (
-                <div className="border-t border-gray-700 mt-1 pt-1 px-2 pb-1 text-xs text-yellow-300 max-w-[200px] break-words text-center">
-                    {pinyinResult}
-                </div>
-            )}
-            {/* 三角箭头 */}
-            <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-gray-900"></div>
+            {pinyinResult && <div className="border-t border-gray-600 mt-1 pt-1 px-2 pb-1 text-sm font-mono text-yellow-400 text-center max-w-[200px] break-words">{pinyinResult}</div>}
+            <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-gray-900/90"></div>
         </div>
     );
 };
+const MenuBtn = ({ icon, label, onClick }) => ( <button onClick={onClick} className="flex flex-col items-center justify-center w-12 h-12 hover:bg-white/10 rounded-lg transition-colors group"><i className={`fas ${icon} text-lg mb-1 group-hover:scale-110 transition-transform`}></i><span className="text-[10px] opacity-80">{label}</span></button> );
 
 
-// --- MessageBubble 组件 (更新) ---
-const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate, onCorrectionRequest, explicitAiAvatar }) => {
+// --- MessageBubble ---
+const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate, onCorrectionRequest, explicitAiAvatar, onTranslate }) => {
     const isUser = msg.role === 'user';
-    const userBubbleClass = 'bg-blue-600 text-white rounded-2xl rounded-br-none shadow-md';
-    const aiBubbleClass = 'bg-white dark:bg-gray-700 rounded-2xl rounded-tl-none border border-gray-100 dark:border-gray-600 shadow-sm';
-    const isComponentMessage = msg.isComponent || false;
-
-    // AI 头像优先使用助理自定义的，用户头像使用设置里的
     const avatarToShow = isUser ? settings.userAvatarUrl : (explicitAiAvatar || settings.aiAvatarUrl);
 
     return (
-        <div className={`flex items-end gap-2.5 my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
-            {!isUser && <img src={convertGitHubUrl(avatarToShow)} alt="AI" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-white object-cover" />}
-            <div className={`p-3.5 text-left flex flex-col transition-shadow duration-300 ${isUser ? userBubbleClass : aiBubbleClass}`} style={{ maxWidth: '88%' }}>
-                {msg.images && msg.images.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                        {msg.images.map((img, index) => {
-                             // 优先使用 src (base64)，防止 URL 失效
-                            const imgSrc = img.src || img.previewUrl;
-                            return <img key={index} src={imgSrc} alt="附件" className="w-24 h-24 object-cover rounded-lg border border-white/20" />;
-                        })}
+        <div className={`flex items-end gap-3 my-5 ${isUser ? 'justify-end' : 'justify-start'}`}>
+            {!isUser && <img src={convertGitHubUrl(avatarToShow)} alt="AI" className="w-9 h-9 rounded-full shadow-sm bg-white object-cover border border-gray-100" />}
+            <div className={`p-4 text-left flex flex-col transition-all duration-300 ${isUser ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm shadow-lg' : 'bg-white dark:bg-gray-700 rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-600 shadow-md'}`} style={{ maxWidth: '88%' }}>
+                {msg.images && msg.images.length > 0 && <div className="flex flex-wrap gap-2 mb-3">{msg.images.map((img, i) => <img key={i} src={img.src || img.previewUrl} className="w-32 h-32 object-cover rounded-lg border-2 border-white/20" />)}</div>}
+                
+                {msg.isComponent ? React.createElement(componentMap[msg.componentName], { ...msg.props, onCorrectionRequest }) : (
+                    <div className={`text-[15px] ${isUser ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+                        {isLastAiMessage && msg.isTyping ? 
+                            <TypingEffect text={msg.content || ''} settings={settings} onComplete={onTypingComplete} onUpdate={onTypingUpdate} /> : 
+                            <RichMarkdown text={msg.content || ''} />
+                        }
                     </div>
                 )}
-                {isComponentMessage ? (
-                    React.createElement(componentMap[msg.componentName], { ...msg.props, onCorrectionRequest: onCorrectionRequest })
-                ) : (
-                    <>
-                        <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert text-white' : 'text-gray-900 dark:text-gray-100'}`}>
-                            {isLastAiMessage && msg.isTyping ?
-                                // 使用新的流式打字机组件
-                                <TypingEffect text={msg.content || ''} settings={settings} onComplete={onTypingComplete} onUpdate={onTypingUpdate} /> :
-                                // 使用新的富文本渲染组件
-                                <RichMarkdown text={msg.content || ''} />
-                            }
-                        </div>
-                        {!isUser && msg.content && !msg.isTyping && (
-                            <div className="flex items-center gap-3 mt-3 pt-2 border-t border-gray-100 dark:border-gray-600/50 text-gray-400 dark:text-gray-500">
-                                {!settings.isFacebookApp && (
-                                    <div className="scale-90 origin-left">
-                                        <AiTtsButton text={msg.content} ttsSettings={settings} />
-                                    </div>
-                                )}
-                                <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="复制"><i className="fas fa-copy text-sm"></i></button>
-                                {isLastAiMessage && (<button onClick={(e) => { e.stopPropagation(); onRegenerate(); }} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" title="重新生成"><i className="fas fa-sync-alt text-sm"></i></button>)}
-                            </div>
-                        )}
-                    </>
+
+                {!isUser && !msg.isTyping && msg.content && (
+                    <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-gray-600/50 text-gray-400">
+                        {!settings.isFacebookApp && <AiTtsButton text={msg.content} ttsSettings={settings} />}
+                        <IconButton icon="fa-copy" onClick={() => navigator.clipboard.writeText(msg.content)} title="复制" />
+                        <IconButton icon="fa-language" onClick={() => onTranslate(msg.content)} title="翻译" />
+                        {isLastAiMessage && <IconButton icon="fa-sync-alt" onClick={onRegenerate} title="重试" />}
+                    </div>
                 )}
             </div>
-            {isUser && <img src={convertGitHubUrl(avatarToShow)} alt="User" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-gray-200 object-cover" />}
+            {isUser && <img src={convertGitHubUrl(avatarToShow)} alt="User" className="w-9 h-9 rounded-full shadow-sm bg-gray-200 object-cover border border-gray-100" />}
         </div>
     );
 };
+const IconButton = ({ icon, onClick, title }) => <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors" title={title}><i className={`fas ${icon} text-xs`}></i></button>;
 
-// --- ThinkingIndicator (保持不变) ---
 const ThinkingIndicator = ({ settings, aiAvatar }) => (
-    <div className="flex items-end gap-2.5 my-4 justify-start">
-        <img src={convertGitHubUrl(aiAvatar || settings.aiAvatarUrl)} alt="AI" className="w-8 h-8 rounded-full shrink-0 shadow-sm" />
-        <div className="p-3 rounded-2xl rounded-tl-none bg-white dark:bg-gray-700 border border-gray-200/50 dark:border-gray-600/50 shadow-sm">
-            <div className="flex items-center gap-1.5">
-                <span className="block w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
-                <span className="block w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
-                <span className="block w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
-            </div>
+    <div className="flex items-end gap-3 my-5 justify-start">
+        <img src={convertGitHubUrl(aiAvatar || settings.aiAvatarUrl)} className="w-9 h-9 rounded-full shadow-sm" />
+        <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white dark:bg-gray-700 border border-gray-100 shadow-sm flex items-center gap-1">
+            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
         </div>
     </div>
 );
 
-// --- ChatSidebar, PromptManager, ModelManager, ApiKeyManager, SettingsModal 等组件 (保持逻辑，更新 UI) ---
-// 为了篇幅，以下组件逻辑在前面版本基础上进行了特定增强
-
+// --- ChatSidebar 等核心组件 (保持逻辑，更新 UI) ---
 const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDelete, onRename, prompts, settings }) => {
-    // ... (保持 State 逻辑)
-    const [editingId, setEditingId] = useState(null);
-    const [newName, setNewName] = useState('');
+    const [editingId, setEditingId] = useState(null); const [newName, setNewName] = useState('');
     const handleRename = (id, oldName) => { setEditingId(id); setNewName(oldName); };
-    const handleSaveRename = (id) => { if (newName.trim()) { onRename(id, newName.trim()); } setEditingId(null); };
-
-    const groupedConversations = useMemo(() => {
-        const groups = new Map();
-        const uncategorized = [];
+    const handleSaveRename = (id) => { if (newName.trim()) onRename(id, newName.trim()); setEditingId(null); };
+    const grouped = useMemo(() => {
+        const groups = new Map(); const uncategorized = [];
         (conversations || []).forEach(conv => {
-            const promptId = conv.promptId;
-            const prompt = (prompts || []).find(p => p.id === promptId);
-            if (prompt) {
-                if (!groups.has(promptId)) { groups.set(promptId, { prompt, conversations: [] }); }
-                groups.get(promptId).conversations.push(conv);
-            } else {
-                uncategorized.push(conv);
-            }
+            const prompt = (prompts || []).find(p => p.id === conv.promptId);
+            if (prompt) { if (!groups.has(prompt.id)) groups.set(prompt.id, { prompt, conversations: [] }); groups.get(prompt.id).conversations.push(conv); } else uncategorized.push(conv);
         });
         return { sortedGroups: Array.from(groups.values()), uncategorized };
     }, [conversations, prompts]);
 
-    const renderConversationItem = (conv) => (
-        <div key={conv.id} className={`group flex items-center p-3 rounded-xl cursor-pointer transition-all duration-200 ${currentId === conv.id ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`} onClick={() => onSelect(conv.id)}>
-            <div className="flex-grow truncate" onDoubleClick={(e) => { e.stopPropagation(); handleRename(conv.id, conv.title); }}>
-                {editingId === conv.id ? (
-                    <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} onBlur={() => handleSaveRename(conv.id)} onKeyDown={(e) => e.key === 'Enter' && handleSaveRename(conv.id)} className="w-full bg-transparent p-0 border-b border-blue-500 focus:outline-none" autoFocus />
-                ) : (
-                    <span className={`text-sm font-medium ${currentId === conv.id ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}>{conv.title}</span>
-                )}
+    const renderItem = (conv) => (
+        <div key={conv.id} className={`flex items-center p-2.5 rounded-lg cursor-pointer transition-colors mb-1 ${currentId === conv.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}`} onClick={() => onSelect(conv.id)}>
+            <div className="flex-grow truncate text-sm font-medium" onDoubleClick={(e) => {e.stopPropagation(); handleRename(conv.id, conv.title)}}>
+                {editingId === conv.id ? <input autoFocus className="bg-transparent border-b border-blue-500 w-full outline-none" value={newName} onChange={e=>setNewName(e.target.value)} onBlur={()=>handleSaveRename(conv.id)} onKeyDown={e=>e.key==='Enter'&&handleSaveRename(conv.id)}/> : conv.title}
             </div>
-            {currentId === conv.id && (
-                <div className="flex items-center shrink-0 space-x-1 ml-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleRename(conv.id, conv.title); }} className="p-1.5 rounded-full text-gray-400 hover:text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30"><i className="fas fa-pen text-xs"></i></button>
-                    <button onClick={(e) => { e.stopPropagation(); if (window.confirm('确定删除此对话吗？')) onDelete(conv.id); }} className="p-1.5 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"><i className="fas fa-trash text-xs"></i></button>
-                </div>
-            )}
+            {currentId === conv.id && <div className="flex gap-1 ml-2"><button onClick={(e)=>{e.stopPropagation(); handleRename(conv.id, conv.title)}} className="p-1 hover:text-blue-600"><i className="fas fa-pen text-xs"></i></button><button onClick={(e)=>{e.stopPropagation(); if(confirm('删除?')) onDelete(conv.id)}} className="p-1 hover:text-red-500"><i className="fas fa-trash text-xs"></i></button></div>}
         </div>
     );
 
     return (
-        <div className={`absolute lg:relative h-full bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl flex flex-col transition-all duration-300 z-30 ${isOpen ? 'w-72 shadow-2xl' : 'w-0'} overflow-hidden border-r border-gray-200 dark:border-gray-800`}>
-            <div className="p-4">
-                <button onClick={onNew} className="flex items-center justify-center w-full py-3 font-bold text-white bg-blue-600 rounded-xl shadow-lg shadow-blue-500/30 hover:bg-blue-700 active:scale-95 transition-all">
-                    <i className="fas fa-plus mr-2"></i> 新对话
-                </button>
-            </div>
-            <div className="flex-grow overflow-y-auto px-3 pb-safe space-y-4">
-                {groupedConversations.sortedGroups.map(({ prompt, conversations }) => (
-                    <details key={prompt.id} className="group" open>
-                        <summary className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer list-none hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                            <i className="fas fa-chevron-right text-[10px] transition-transform group-open:rotate-90"></i>
-                            <img src={convertGitHubUrl(prompt.avatarUrl) || convertGitHubUrl(settings.aiAvatarUrl)} alt="" className="w-4 h-4 rounded-full object-cover" />
-                            {prompt.name}
-                        </summary>
-                        <div className="space-y-1 mt-1 pl-2">{(conversations || []).map(renderConversationItem)}</div>
+        <div className={`absolute lg:relative h-full bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col transition-all duration-300 z-30 ${isOpen ? 'w-64 border-r border-gray-200 dark:border-gray-800' : 'w-0 overflow-hidden'}`}>
+            <div className="p-4"><button onClick={onNew} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2"><i className="fas fa-plus"></i> 新对话</button></div>
+            <div className="flex-1 overflow-y-auto px-3 pb-4">
+                {grouped.sortedGroups.map(({ prompt, conversations }) => (
+                    <details key={prompt.id} open className="group mb-2">
+                        <summary className="flex items-center gap-2 px-2 py-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-600 list-none"><i className="fas fa-chevron-right text-[10px] transition-transform group-open:rotate-90"></i> {prompt.name}</summary>
+                        <div className="pl-2 mt-1">{conversations.map(renderItem)}</div>
                     </details>
                 ))}
-                {groupedConversations.uncategorized.length > 0 && (
-                    <details className="group" open>
-                         <summary className="px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider cursor-pointer list-none hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
-                           <i className="fas fa-chevron-right text-[10px] transition-transform group-open:rotate-90 mr-2"></i> 未分类
-                        </summary>
-                        <div className="space-y-1 mt-1 pl-2">{(groupedConversations.uncategorized || []).map(renderConversationItem)}</div>
-                    </details>
-                )}
+                {grouped.uncategorized.length > 0 && <details open className="group"><summary className="px-2 py-1.5 text-xs font-bold text-gray-400 uppercase cursor-pointer list-none">未分类</summary><div className="pl-2 mt-1">{grouped.uncategorized.map(renderItem)}</div></details>}
             </div>
         </div>
     );
@@ -484,7 +490,6 @@ const SubPageWrapper = ({ title, onBack, onSave, children }) => (
 );
 
 const PromptManager = ({ prompts, onChange, onAdd, onDelete, settings }) => {
-    // ... (保持 PromptManager 逻辑不变，代码复用)
     const handleAvatarUpload = async (file, promptId) => { try { const compressedFile = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 512 }); const reader = new FileReader(); reader.onload = (e) => onChange(promptId, 'avatarUrl', e.target.result); reader.readAsDataURL(compressedFile); } catch (err) { alert('图片上传失败'); } };
     return (
         <>
@@ -736,6 +741,12 @@ const AiChatAssistant = ({ onClose }) => {
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     const handleCorrectionRequest = (correctionPrompt) => { if (!currentConversation || isLoading) return; const userMessage = { role: 'user', content: correctionPrompt, timestamp: Date.now() }; const updatedMessages = [...currentConversation.messages, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages } : c)); fetchAiResponse(updatedMessages); };
     
+    // 修复：添加翻译功能
+    const handleTranslate = (text) => {
+        const prompt = `请将以下内容翻译成中文（如果是中文则翻译成英文）：\n\n${text}`;
+        handleSubmit(false, prompt);
+    };
+
     // 修复：兼容 OpenAI 第三方接口 URL
     const fetchAiResponse = async (messagesForApi) => {
         setIsLoading(true);
@@ -817,7 +828,7 @@ const AiChatAssistant = ({ onClose }) => {
                     </header>
                     <main className="flex-grow p-4 overflow-y-auto">
                         <div className="space-y-1">
-                            {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} onCorrectionRequest={handleCorrectionRequest} explicitAiAvatar={displayAiAvatar} /> </div> ))}
+                            {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} onCorrectionRequest={handleCorrectionRequest} explicitAiAvatar={displayAiAvatar} onTranslate={handleTranslate} /> </div> ))}
                             {isLoading && !currentConversation?.messages.some(m => m.isTyping) && <ThinkingIndicator settings={settings} aiAvatar={displayAiAvatar} />}
                         </div>
                         <div ref={messagesEndRef} />
