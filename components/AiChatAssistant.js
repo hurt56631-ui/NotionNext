@@ -1,4 +1,4 @@
-// AIChatDrawer.js (最终修复版 - 已解决编译错误)
+// AIChatDrawer.js (最终修正版 - 已修复编译报错和逻辑隐患)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -15,7 +15,7 @@ const componentMap = {
   PaiXuTi: PaiXuTi
 };
 
-// --- [核心工具类] 增强版音频播放队列 (来自修复版) ---
+// --- [核心工具类] 增强版音频播放队列 ---
 class AudioQueue {
     constructor() {
         this.queue = [];
@@ -102,7 +102,7 @@ const DEFAULT_PROMPTS = [
 const DEFAULT_SETTINGS = {
     apiKey: '', apiKeys: [], activeApiKeyId: '', chatModels: CHAT_MODELS_LIST, selectedModel: 'gemini-2.5-flash',
     temperature: 0.8, maxOutputTokens: 8192, disableThinkingMode: true, startWithNewChat: false, prompts: DEFAULT_PROMPTS,
-    currentPromptId: DEFAULT_PROMPTS?.id || '',
+    currentPromptId: DEFAULT_PROMPTS[0]?.id || '',
     autoRead: true, voiceAutoSend: false,
     ttsEngine: TTS_ENGINE.THIRD_PARTY, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', ttsRate: 0, ttsPitch: 0, systemTtsVoiceURI: '', speechLanguage: 'zh-CN',
     chatBackgroundUrl: '/images/chat-bg-light.jpg', backgroundOpacity: 70,
@@ -113,7 +113,7 @@ const DEFAULT_SETTINGS = {
 const MICROSOFT_TTS_VOICES = [ { name: '晓晓 (女, 多语言)', value: 'zh-CN-XiaoxiaoMultilingualNeural' }, { name: '晓辰 (女, 多语言)', value: 'zh-CN-XiaochenMultilingualNeural' }, { name: '云希 (男, 温和)', value: 'zh-CN-YunxiNeural' }, { name: '云泽 (男, 叙事)', value: 'zh-CN-YunzeNeural' }, { name: '晓梦 (女, 播音)', value: 'zh-CN-XiaomengNeural' }, { name: '云扬 (男, 阳光)', value: 'zh-CN-YunyangNeural' }, { name: '晓伊 (女, 动漫)', value: 'zh-CN-XiaoyiNeural' }, { name: '晓臻 (女, 台湾)', value: 'zh-TW-HsiaoChenNeural' }, { name: '允喆 (男, 台湾)', value: 'zh-TW-YunJheNeural' }, { name: 'Ava (女, 美国, 多语言)', value: 'en-US-AvaMultilingualNeural' }, { name: 'Andrew (男, 美国, 多语言)', value: 'en-US-AndrewMultilingualNeural' }, { name: '七海 (女, 日本)', value: 'ja-JP-NanamiNeural' }, { name: '圭太 (男, 日本)', value: 'ja-JP-KeitaNeural' }, { name: '妮拉 (女, 缅甸)', value: 'my-MM-NilarNeural' }, { name: '蒂哈 (男, 缅甸)', value: 'my-MM-ThihaNeural' }, ];
 
 
-// --- [核心修复] 预合成+缓存的流式朗读打字机 ---
+// --- [核心功能] 预合成+缓存的流式朗读打字机 ---
 const TypingEffect = ({ text, settings, onComplete, onUpdate }) => {
     const [displayedText, setDisplayedText] = useState('');
     const sentences = useMemo(() => text?.match(/[^。！？\n]+[。！？\n]?/g) || [], [text]);
@@ -196,7 +196,7 @@ const TypingEffect = ({ text, settings, onComplete, onUpdate }) => {
 };
 
 
-// --- [UI组件] 增强版富文本渲染 (已修复编译错误) ---
+// --- [UI组件] 增强版富文本渲染 ---
 const RichMarkdown = ({ text }) => {
     if (!text) return null;
     const parts = text.split(/(```[\s\S]*?```)/g);
@@ -205,8 +205,8 @@ const RichMarkdown = ({ text }) => {
             {parts.map((part, i) => {
                 if (part.startsWith('```') && part.endsWith('```')) {
                     const content = part.replace(/^```\w*\n?/, '').replace(/```$/, '');
-                    // --- 错误修复 ---
-                    const lang = part.match(/^```(\w+)/)?. || 'Code';
+                    // --- [修正点] 语法修复：正确访问数组索引 ---
+                    const lang = part.match(/^```(\w+)/)?.[1] || 'Code';
                     return (
                         <div key={i} className="my-3 rounded-xl overflow-hidden border border-gray-700 bg-[#1e1e1e] shadow-xl">
                             <div className="flex justify-between items-center px-4 py-2 bg-[#2d2d2d] border-b border-gray-700">
@@ -246,7 +246,7 @@ const parseInline = (text) => {
 };
 
 
-// --- [核心修复] 划词工具菜单 (修复定位) ---
+// --- [UI组件] 划词工具菜单 ---
 const TextActionMenu = ({ containerRef }) => {
     const [menuStyle, setMenuStyle] = useState({ display: 'none' });
     const [selectedText, setSelectedText] = useState('');
@@ -338,7 +338,7 @@ const ThinkingIndicator = ({ settings, aiAvatar }) => (
     </div>
 );
 
-// --- [UI组件] 侧边栏及设置页面 (保持完整) ---
+// --- [UI组件] 侧边栏及设置页面 ---
 const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDelete, onRename, prompts }) => {
     const [editingId, setEditingId] = useState(null); const [newName, setNewName] = useState('');
     const handleRename = (id, oldName) => { setEditingId(id); setNewName(oldName); };
@@ -449,9 +449,12 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
     const [tempSettings, setTempSettings] = useState(settings); const [systemVoices, setSystemVoices] = useState([]); const [view, setView] = useState('main'); const fileInputRef = useRef(null); const userAvatarInputRef = useRef(null); useEffect(() => { const fetchSystemVoices = () => { if (!window.speechSynthesis) return; const voices = window.speechSynthesis.getVoices(); if (voices.length > 0) { setSystemVoices(voices.filter(v => v.lang.startsWith('zh') || v.lang.startsWith('en') || v.lang.startsWith('fr') || v.lang.startsWith('es') || v.lang.startsWith('ja') || v.lang.startsWith('ko') || v.lang.startsWith('vi'))); } }; if (window.speechSynthesis) { if (window.speechSynthesis.onvoiceschanged !== undefined) { window.speechSynthesis.onvoiceschanged = fetchSystemVoices; } fetchSystemVoices(); } }, []); const handleChange = (key, value) => setTempSettings(prev => ({ ...prev, [key]: value })); 
     const handleBgImageSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { e.target && handleChange('chatBackgroundUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; }; 
     const handleUserAvatarSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { e.target && handleChange('userAvatarUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; };
-    const handleAddPrompt = () => { const newPrompt = { id: generateSimpleId('prompt'), name: '新助理', description: '新助理', content: '你是一个...', openingLine: '你好', model: settings.selectedModel, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' }; const newPrompts = [...(tempSettings.prompts || []), newPrompt]; handleChange('prompts', newPrompts); }; const handleDeletePrompt = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newPrompts = (tempSettings.prompts || []).filter(p => p.id !== idToDelete); handleChange('prompts', newPrompts); if (tempSettings.currentPromptId === idToDelete) handleChange('currentPromptId', newPrompts?.id || ''); }; const handlePromptSettingChange = (promptId, field, value) => { const newPrompts = (tempSettings.prompts || []).map(p => p.id === promptId ? { ...p, [field]: value } : p); handleChange('prompts', newPrompts); }; const speechLanguageOptions = [ { name: '中文 (普通话)', value: 'zh-CN' }, { name: '缅甸语 (မြန်မာ)', value: 'my-MM' }, { name: 'English (US)', value: 'en-US' }, { name: 'Español (España)', value: 'es-ES' }, { name: 'Français (France)', value: 'fr-FR' }, { name: '日本語', value: 'ja-JP' }, { name: '한국어', value: 'ko-KR' }, { name: 'Tiếng Việt', value: 'vi-VN' }, ]; const handleAddModel = () => { const newModel = { id: generateSimpleId('model'), name: '新模型', value: '', maxContextTokens: 8192 }; const newModels = [...(tempSettings.chatModels || []), newModel]; handleChange('chatModels', newModels); }; const handleDeleteModel = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newModels = (tempSettings.chatModels || []).filter(m => m.id !== idToDelete); handleChange('chatModels', newModels); }; const handleModelSettingChange = (modelId, field, value) => { const newModels = (tempSettings.chatModels || []).map(m => m.id === modelId ? { ...m, [field]: value } : m); handleChange('chatModels', newModels); }; 
+    const handleAddPrompt = () => { const newPrompt = { id: generateSimpleId('prompt'), name: '新助理', description: '新助理', content: '你是一个...', openingLine: '你好', model: settings.selectedModel, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' }; const newPrompts = [...(tempSettings.prompts || []), newPrompt]; handleChange('prompts', newPrompts); }; 
+    const handleDeletePrompt = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newPrompts = (tempSettings.prompts || []).filter(p => p.id !== idToDelete); handleChange('prompts', newPrompts); if (tempSettings.currentPromptId === idToDelete) handleChange('currentPromptId', newPrompts[0]?.id || ''); }; 
+    const handlePromptSettingChange = (promptId, field, value) => { const newPrompts = (tempSettings.prompts || []).map(p => p.id === promptId ? { ...p, [field]: value } : p); handleChange('prompts', newPrompts); }; const speechLanguageOptions = [ { name: '中文 (普通话)', value: 'zh-CN' }, { name: '缅甸语 (မြန်မာ)', value: 'my-MM' }, { name: 'English (US)', value: 'en-US' }, { name: 'Español (España)', value: 'es-ES' }, { name: 'Français (France)', value: 'fr-FR' }, { name: '日本語', value: 'ja-JP' }, { name: '한국어', value: 'ko-KR' }, { name: 'Tiếng Việt', value: 'vi-VN' }, ]; const handleAddModel = () => { const newModel = { id: generateSimpleId('model'), name: '新模型', value: '', maxContextTokens: 8192 }; const newModels = [...(tempSettings.chatModels || []), newModel]; handleChange('chatModels', newModels); }; const handleDeleteModel = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newModels = (tempSettings.chatModels || []).filter(m => m.id !== idToDelete); handleChange('chatModels', newModels); }; const handleModelSettingChange = (modelId, field, value) => { const newModels = (tempSettings.chatModels || []).map(m => m.id === modelId ? { ...m, [field]: value } : m); handleChange('chatModels', newModels); }; 
     const handleAddApiKey = () => { const newKey = { id: generateSimpleId('key'), provider: 'openai', key: '', url: 'https://open-gemini-api.deno.dev/v1' }; const newKeys = [...(tempSettings.apiKeys || []), newKey]; handleChange('apiKeys', newKeys); if (newKeys.length === 1) { handleChange('activeApiKeyId', newKey.id); } }; 
-    const handleDeleteApiKey = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newKeys = (tempSettings.apiKeys || []).filter(k => k.id !== idToDelete); handleChange('apiKeys', newKeys); if (tempSettings.activeApiKeyId === idToDelete) handleChange('activeApiKeyId', newKeys?.id || ''); }; const handleApiKeySettingChange = (keyId, field, value) => { const newKeys = (tempSettings.apiKeys || []).map(k => k.id === keyId ? { ...k, [field]: value } : k); handleChange('apiKeys', newKeys); }; const handleSetActiveApiKey = (keyId) => { handleChange('activeApiKeyId', keyId); }; const handleSubPageSave = () => { onSave(tempSettings); }; 
+    const handleDeleteApiKey = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newKeys = (tempSettings.apiKeys || []).filter(k => k.id !== idToDelete); handleChange('apiKeys', newKeys); if (tempSettings.activeApiKeyId === idToDelete) handleChange('activeApiKeyId', newKeys[0]?.id || ''); }; 
+    const handleApiKeySettingChange = (keyId, field, value) => { const newKeys = (tempSettings.apiKeys || []).map(k => k.id === keyId ? { ...k, [field]: value } : k); handleChange('apiKeys', newKeys); }; const handleSetActiveApiKey = (keyId) => { handleChange('activeApiKeyId', keyId); }; const handleSubPageSave = () => { onSave(tempSettings); }; 
     const MenuItem = ({ title, icon, onClick, color = "blue" }) => (
         <button type="button" onClick={onClick} className={`w-full flex items-center p-4 mb-3 rounded-2xl bg-${color}-50 dark:bg-gray-700/50 border border-${color}-100 dark:border-gray-600 hover:bg-${color}-100 dark:hover:bg-gray-600 transition-all shadow-sm active:scale-98`}>
             <div className={`w-10 h-10 rounded-full bg-white dark:bg-gray-600 flex items-center justify-center text-${color}-500 shadow-sm mr-4`}><i className={`fas ${icon} text-lg`}></i></div>
@@ -573,7 +576,7 @@ const AiChatAssistant = ({ onClose }) => {
         if (finalSettings.startWithNewChat || parsedConvs.length === 0) { 
             createNewConversation(finalSettings.currentPromptId, true); 
         } else { 
-            const firstConv = parsedConvs; 
+            const firstConv = parsedConvs[0]; 
             if(firstConv) setCurrentConversationId(firstConv.id);
             else createNewConversation(finalSettings.currentPromptId, true);
         } 
@@ -590,15 +593,15 @@ const AiChatAssistant = ({ onClose }) => {
     
     const adjustTextareaHeight = useCallback(() => { if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; } }, []);
     useEffect(() => { adjustTextareaHeight(); }, [userInput, adjustTextareaHeight]);
-    const createNewConversation = (promptId, isInitial = false) => { const newId = generateSimpleId('conv'); const currentPrompt = (settings.prompts || []).find(p => p.id === (promptId || settings.currentPromptId)) || DEFAULT_PROMPTS; const newConv = { id: newId, title: '新的对话', messages: [{ role: 'ai', content: currentPrompt.openingLine || '你好！有什么可以帮助你的吗？', timestamp: Date.now() }], promptId: currentPrompt.id }; setConversations(prev => [newConv, ...prev]); setCurrentConversationId(newId); };
+    const createNewConversation = (promptId, isInitial = false) => { const newId = generateSimpleId('conv'); const currentPrompt = (settings.prompts || []).find(p => p.id === (promptId || settings.currentPromptId)) || DEFAULT_PROMPTS[0]; const newConv = { id: newId, title: '新的对话', messages: [{ role: 'ai', content: currentPrompt.openingLine || '你好！有什么可以帮助你的吗？', timestamp: Date.now() }], promptId: currentPrompt.id }; setConversations(prev => [newConv, ...prev]); setCurrentConversationId(newId); };
     const handleSelectConversation = (id) => { setCurrentConversationId(id); };
-    const handleDeleteConversation = (id) => { const remaining = conversations.filter(c => c.id !== id); setConversations(remaining); if (currentConversationId === id) { if (remaining.length > 0) { handleSelectConversation(remaining.id); } else { createNewConversation(); } } };
+    const handleDeleteConversation = (id) => { const remaining = conversations.filter(c => c.id !== id); setConversations(remaining); if (currentConversationId === id) { if (remaining.length > 0) { handleSelectConversation(remaining[0].id); } else { createNewConversation(); } } };
     const handleRenameConversation = (id, newTitle) => { setConversations(prev => prev.map(c => c.id === id ? { ...c, title: newTitle } : c)); };
     const handleSaveSettings = (newSettings) => { setSettings(newSettings); setShowSettings(false); };
     const handleAssistantSelect = (promptId) => { const selectedPrompt = settings.prompts.find(p => p.id === promptId); if (!selectedPrompt) return; setSettings(s => ({ ...s, currentPromptId: promptId, selectedModel: selectedPrompt.model || s.selectedModel, ttsVoice: selectedPrompt.ttsVoice || s.ttsVoice })); setConversations(prevConvs => prevConvs.map(c => c.id === currentConversationId ? { ...c, promptId: promptId } : c)); setShowAssistantSelector(false); };
-    const startListening = useCallback(() => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } if (recognitionRef.current) { recognitionRef.current.abort(); } const recognition = new SpeechRecognition(); recognition.lang = settings.speechLanguage; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setUserInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result).map(result => result.transcript).join(''); setUserInput(transcript); if (event.results.isFinal && transcript.trim()) { recognition.stop(); if (settings.voiceAutoSend && handleSubmitRef.current) { handleSubmitRef.current(false, transcript); } } }; recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); if (event.error !== 'no-speech') { setError(`语音识别错误: ${event.error}`); } if (event.error === 'aborted') return; }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.start(); }, [settings.speechLanguage, settings.voiceAutoSend, setError]);
+    const startListening = useCallback(() => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } if (recognitionRef.current) { recognitionRef.current.abort(); } const recognition = new SpeechRecognition(); recognition.lang = settings.speechLanguage; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setUserInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result).map(result => result.transcript).join(''); setUserInput(transcript); if (event.results[0].isFinal && transcript.trim()) { recognition.stop(); if (settings.voiceAutoSend && handleSubmitRef.current) { handleSubmitRef.current(false, transcript); } } }; recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); if (event.error !== 'no-speech') { setError(`语音识别错误: ${event.error}`); } if (event.error === 'aborted') return; }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.start(); }, [settings.speechLanguage, settings.voiceAutoSend, setError]);
     const stopListening = useCallback(() => { if (recognitionRef.current) { recognitionRef.current.stop(); } }, []);
-    const handleImageSelection = async (event) => { const files = Array.from(event.target.files); if (files.length === 0) return; const imagePromises = files.slice(0, 4 - selectedImages.length).map(async file => { try { const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true, }; const compressedFile = await imageCompression(file, options); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (e) => { const base64Data = e.target.result.split(','); const newImage = { previewUrl: URL.createObjectURL(compressedFile), data: base64Data, type: compressedFile.type, name: compressedFile.name }; resolve(newImage); }; reader.onerror = reject; reader.readAsDataURL(compressedFile); }); } catch (error) { console.error(error); return null; } }); const newImages = (await Promise.all(imagePromises)).filter(Boolean); setSelectedImages(prev => [...prev, ...newImages]); event.target.value = null; };
+    const handleImageSelection = async (event) => { const files = Array.from(event.target.files); if (files.length === 0) return; const imagePromises = files.slice(0, 4 - selectedImages.length).map(async file => { try { const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true, }; const compressedFile = await imageCompression(file, options); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (e) => { const base64Data = e.target.result.split(',')[1]; const fullDataUrl = `data:${compressedFile.type};base64,${base64Data}`; const newImage = { previewUrl: URL.createObjectURL(compressedFile), src: fullDataUrl, data: base64Data, type: compressedFile.type, name: compressedFile.name }; resolve(newImage); }; reader.onerror = reject; reader.readAsDataURL(compressedFile); }); } catch (error) { console.error(error); return null; } }); const newImages = (await Promise.all(imagePromises)).filter(Boolean); setSelectedImages(prev => [...prev, ...newImages]); event.target.value = null; };
     const triggerImageInput = () => { if (imageInputRef.current) { imageInputRef.current.removeAttribute('capture'); imageInputRef.current.click(); } };
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     const handleCorrectionRequest = (correctionPrompt) => { if (!currentConversation || isLoading) return; const userMessage = { role: 'user', content: correctionPrompt, timestamp: Date.now() }; const updatedMessages = [...currentConversation.messages, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages } : c)); fetchAiResponse(updatedMessages); };
@@ -613,8 +616,8 @@ const AiChatAssistant = ({ onClose }) => {
         try {
             if (!activeKey || !activeKey.key) { throw new Error('请在设置中配置并激活一个有效的 API 密钥。'); }
             const promptIdToUse = currentConversation.promptId || settings.currentPromptId;
-            const currentPrompt = (settings.prompts || []).find(p => p.id === promptIdToUse) || DEFAULT_PROMPTS;
-            const modelInfo = (settings.chatModels || []).find(m => m.value === settings.selectedModel) || (settings.chatModels || []);
+            const currentPrompt = (settings.prompts || []).find(p => p.id === promptIdToUse) || DEFAULT_PROMPTS[0];
+            const modelInfo = (settings.chatModels || []).find(m => m.value === settings.selectedModel) || (settings.chatModels || [])[0];
             const modelToUse = modelInfo.value;
             const contextLimit = modelInfo.maxContextTokens || 1048576; 
             const contextMessages = messagesForApi.slice(-contextLimit);
@@ -624,7 +627,8 @@ const AiChatAssistant = ({ onClose }) => {
                 const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.filter(msg => msg.content).map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ]; 
                 let baseUrl = activeKey.url || 'https://open-gemini-api.deno.dev/v1';
                 baseUrl = baseUrl.trim().replace(/\/+$/, '');
-                const url = `${baseUrl}/chat/completions`;
+                // 智能检测是否需要追加 /chat/completions
+                const url = baseUrl.includes('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
                 response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeKey.key}` }, body: JSON.stringify({ model: modelToUse, messages, temperature: settings.temperature, max_tokens: settings.maxOutputTokens, stream: false }), signal: abortControllerRef.current.signal }); 
             } else { // Gemini (Google Official)
                  const history = contextMessages.filter(msg => msg.content || (msg.images && msg.images.length > 0)).map(msg => { const parts = []; if (msg.content) parts.push({ text: msg.content }); if (msg.images) msg.images.forEach(img => parts.push({ inlineData: { mimeType: img.type, data: img.data } })); return { role: msg.role === 'user' ? 'user' : 'model', parts }; }); 
@@ -637,10 +641,10 @@ const AiChatAssistant = ({ onClose }) => {
             if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error?.message || `请求失败 (状态码: ${response.status})`); }
             const data = await response.json();
             let aiResponseContent;
-            if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.?.content?.parts?.?.text; } else { aiResponseContent = data.choices?.?.message?.content; }
+            if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text; } else { aiResponseContent = data.choices?.[0]?.message?.content; }
             if (!aiResponseContent) throw new Error('AI未能返回有效内容。');
             let aiMessage;
-            try { const jsonMatch = aiResponseContent.match(/\{[\s\S]*\}/); let parsed = null; if (jsonMatch) { try { parsed = JSON.parse(jsonMatch); } catch (e) {} } if (parsed && parsed.component && parsed.props && componentMap[parsed.component]) { const sanitizedProps = sanitizeQuizData(parsed.props); aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: sanitizedProps, isTyping: false }; } else { throw new Error("Not a component JSON"); } } catch(e) { aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true }; }
+            try { const jsonMatch = aiResponseContent.match(/\{[\s\S]*\}/); let parsed = null; if (jsonMatch) { try { parsed = JSON.parse(jsonMatch[0]); } catch (e) {} } if (parsed && parsed.component && parsed.props && componentMap[parsed.component]) { const sanitizedProps = sanitizeQuizData(parsed.props); aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: sanitizedProps, isTyping: false }; } else { throw new Error("Not a component JSON"); } } catch(e) { aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true }; }
             const finalMessages = [...messagesForApi, aiMessage];
             setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c));
         } catch (err) {
