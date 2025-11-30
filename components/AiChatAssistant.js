@@ -1,4 +1,4 @@
-// AIChatDrawer.js (最终完美修复版 - 修复语音与接口兼容)
+// AIChatDrawer.js (最终完美修复版 - 修复TTS设置、OpenAI接口及头像显示)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -86,9 +86,9 @@ const MICROSOFT_TTS_VOICES = [ { name: '晓晓 (女, 多语言)', value: 'zh-CN-
 const TypingEffect = ({ text, onComplete, onUpdate }) => { const [displayedText, setDisplayedText] = useState(''); useEffect(() => { if (!text) return; setDisplayedText(''); let index = 0; const intervalId = setInterval(() => { setDisplayedText(prev => prev + text.charAt(index)); index++; if (onUpdate && index % 2 === 0) onUpdate(); if (index >= text.length) { clearInterval(intervalId); if (onComplete) onComplete(); } }, 20); return () => clearInterval(intervalId); }, [text, onComplete, onUpdate]); return <SimpleMarkdown text={displayedText} />; };
 const SimpleMarkdown = ({ text }) => { if (!text) return null; const lines = text.split('\n').map((line, index) => { if (line.trim() === '') return <br key={index} />; if (line.match(/\*\*(.*?)\*\*/)) { const content = line.replace(/\*\*/g, ''); return <strong key={index} className="block mt-2 mb-1">{content}</strong>; } if (line.startsWith('* ') || line.startsWith('- ')) { return <li key={index} className="ml-5 list-disc">{line.substring(2)}</li>; } return <p key={index} className="my-1 leading-relaxed">{line}</p>; }); return <div>{lines}</div>; };
 
-const ThinkingIndicator = ({ settings }) => (
+const ThinkingIndicator = ({ settings, aiAvatar }) => (
     <div className="flex items-end gap-2.5 my-4 justify-start">
-        <img src={convertGitHubUrl(settings.aiAvatarUrl)} alt="AI Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm" />
+        <img src={convertGitHubUrl(aiAvatar || settings.aiAvatarUrl)} alt="AI Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm" />
         <div className="p-3 rounded-2xl rounded-tl-none bg-white dark:bg-gray-700 border border-gray-200/50 dark:border-gray-600/50 shadow-sm">
             <div className="flex items-center gap-1.5">
                 <span className="block w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
@@ -99,15 +99,19 @@ const ThinkingIndicator = ({ settings }) => (
     </div>
 );
 
-const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate, onCorrectionRequest }) => {
+// 修复：MessageBubble 现在接收 explicitAiAvatar 参数
+const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingComplete, onTypingUpdate, onCorrectionRequest, explicitAiAvatar }) => {
     const isUser = msg.role === 'user';
     const userBubbleClass = 'bg-blue-600 text-white rounded-2xl rounded-br-none shadow-md';
     const aiBubbleClass = 'bg-white dark:bg-gray-700 rounded-2xl rounded-tl-none border border-gray-100 dark:border-gray-600 shadow-sm';
     const isComponentMessage = msg.isComponent || false;
 
+    // 如果是 AI 消息，优先使用传入的 explicitAiAvatar (当前助理头像)，否则使用 settings.aiAvatarUrl
+    const avatarToShow = isUser ? settings.userAvatarUrl : (explicitAiAvatar || settings.aiAvatarUrl);
+
     return (
         <div className={`flex items-end gap-2.5 my-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
-            {!isUser && <img src={convertGitHubUrl(settings.aiAvatarUrl)} alt="AI Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-white" />}
+            {!isUser && <img src={convertGitHubUrl(avatarToShow)} alt="AI Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-white object-cover" />}
             <div className={`p-3.5 text-left flex flex-col transition-shadow duration-300 ${isUser ? userBubbleClass : aiBubbleClass}`} style={{ maxWidth: '88%' }}>
                 {msg.images && msg.images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2">
@@ -144,7 +148,7 @@ const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingC
                     </>
                 )}
             </div>
-            {isUser && <img src={convertGitHubUrl(settings.userAvatarUrl)} alt="User Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-gray-200" />}
+            {isUser && <img src={convertGitHubUrl(avatarToShow)} alt="User Avatar" className="w-8 h-8 rounded-full shrink-0 shadow-sm bg-gray-200 object-cover" />}
         </div>
     );
 };
@@ -200,7 +204,7 @@ const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDele
                 {groupedConversations.sortedGroups.map(({ prompt, conversations }) => (
                     <div key={prompt.id}>
                         <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                            <img src={convertGitHubUrl(prompt.avatarUrl) || convertGitHubUrl(settings.aiAvatarUrl)} alt="" className="w-4 h-4 rounded-full" />
+                            <img src={convertGitHubUrl(prompt.avatarUrl) || convertGitHubUrl(settings.aiAvatarUrl)} alt="" className="w-4 h-4 rounded-full object-cover" />
                             {prompt.name}
                         </div>
                         <div className="space-y-1">{(conversations || []).map(renderConversationItem)}</div>
@@ -306,7 +310,7 @@ const ApiKeyManager = ({ apiKeys, activeApiKeyId, onChange, onAdd, onDelete, onS
                 <div className="space-y-3">
                     <input type="password" value={k.key} onChange={(e) => onChange(k.id, 'key', e.target.value)} placeholder="在此粘贴 API Key (sk-...)" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none" />
                     {k.provider === 'openai' && (
-                        <input type="text" value={k.url || ''} onChange={(e) => onChange(k.id, 'url', e.target.value)} placeholder="API 地址 (例如: https://api.openai.com/v1)" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <input type="text" value={k.url || ''} onChange={(e) => onChange(k.id, 'url', e.target.value)} placeholder="API 接口地址 (例如: https://api.deepseek.com)" className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none" />
                     )}
                 </div>
             </div>
@@ -318,11 +322,9 @@ const ApiKeyManager = ({ apiKeys, activeApiKeyId, onChange, onAdd, onDelete, onS
 );
 
 const SettingsModal = ({ settings, onSave, onClose }) => { const [tempSettings, setTempSettings] = useState(settings); const [systemVoices, setSystemVoices] = useState([]); const [view, setView] = useState('main'); const fileInputRef = useRef(null); useEffect(() => { const fetchSystemVoices = () => { if (!window.speechSynthesis) return; const voices = window.speechSynthesis.getVoices(); if (voices.length > 0) { setSystemVoices(voices.filter(v => v.lang.startsWith('zh') || v.lang.startsWith('en') || v.lang.startsWith('fr') || v.lang.startsWith('es') || v.lang.startsWith('ja') || v.lang.startsWith('ko') || v.lang.startsWith('vi'))); } }; if (window.speechSynthesis) { if (window.speechSynthesis.onvoiceschanged !== undefined) { window.speechSynthesis.onvoiceschanged = fetchSystemVoices; } fetchSystemVoices(); } }, []); const handleChange = (key, value) => setTempSettings(prev => ({ ...prev, [key]: value })); const handleBgImageSelect = (event) => { const file = event.target.files[0]; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { handleChange('chatBackgroundUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; }; const handleAddPrompt = () => { const newPrompt = { id: generateSimpleId('prompt'), name: '新助理', description: '这是一个自定义的新助理。', content: '你是一个...', openingLine: '你好，我是你的新助理。', model: settings.selectedModel, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' }; const newPrompts = [...(tempSettings.prompts || []), newPrompt]; handleChange('prompts', newPrompts); }; const handleDeletePrompt = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newPrompts = (tempSettings.prompts || []).filter(p => p.id !== idToDelete); handleChange('prompts', newPrompts); if (tempSettings.currentPromptId === idToDelete) handleChange('currentPromptId', newPrompts[0]?.id || ''); }; const handlePromptSettingChange = (promptId, field, value) => { const newPrompts = (tempSettings.prompts || []).map(p => p.id === promptId ? { ...p, [field]: value } : p); handleChange('prompts', newPrompts); }; const speechLanguageOptions = [ { name: '中文 (普通话)', value: 'zh-CN' }, { name: '缅甸语 (မြန်မာ)', value: 'my-MM' }, { name: 'English (US)', value: 'en-US' }, { name: 'Español (España)', value: 'es-ES' }, { name: 'Français (France)', value: 'fr-FR' }, { name: '日本語', value: 'ja-JP' }, { name: '한국어', value: 'ko-KR' }, { name: 'Tiếng Việt', value: 'vi-VN' }, ]; const handleAddModel = () => { const newModel = { id: generateSimpleId('model'), name: '新模型', value: '', maxContextTokens: 8192 }; const newModels = [...(tempSettings.chatModels || []), newModel]; handleChange('chatModels', newModels); }; const handleDeleteModel = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newModels = (tempSettings.chatModels || []).filter(m => m.id !== idToDelete); handleChange('chatModels', newModels); }; const handleModelSettingChange = (modelId, field, value) => { const newModels = (tempSettings.chatModels || []).map(m => m.id === modelId ? { ...m, [field]: value } : m); handleChange('chatModels', newModels); }; 
-    // 修复: 添加密钥时，如果列表为空，自动设为当前
     const handleAddApiKey = () => { const newKey = { id: generateSimpleId('key'), provider: 'gemini', key: '', url: 'https://generativelanguage.googleapis.com/v1beta/models/' }; const newKeys = [...(tempSettings.apiKeys || []), newKey]; handleChange('apiKeys', newKeys); if (newKeys.length === 1) { handleChange('activeApiKeyId', newKey.id); } }; 
-    const handleDeleteApiKey = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newKeys = (tempSettings.apiKeys || []).filter(k => k.id !== idToDelete); handleChange('apiKeys', newKeys); if (tempSettings.activeApiKeyId === idToDelete) handleChange('activeApiKeyId', newKeys[0]?.id || ''); }; const handleApiKeySettingChange = (keyId, field, value) => { const newKeys = (tempSettings.apiKeys || []).map(k => k.id === keyId ? { ...k, [field]: value } : k); handleChange('apiKeys', newKeys); }; const handleSetActiveApiKey = (keyId) => { handleChange('activeApiKeyId', keyId); }; const commonInputClasses = 'w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md'; const handleSubPageSave = () => { onSave(tempSettings); }; 
+    const handleDeleteApiKey = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newKeys = (tempSettings.apiKeys || []).filter(k => k.id !== idToDelete); handleChange('apiKeys', newKeys); if (tempSettings.activeApiKeyId === idToDelete) handleChange('activeApiKeyId', newKeys[0]?.id || ''); }; const handleApiKeySettingChange = (keyId, field, value) => { const newKeys = (tempSettings.apiKeys || []).map(k => k.id === keyId ? { ...k, [field]: value } : k); handleChange('apiKeys', newKeys); }; const handleSetActiveApiKey = (keyId) => { handleChange('activeApiKeyId', keyId); }; const handleSubPageSave = () => { onSave(tempSettings); }; 
     
-    // 移动端优化的菜单项
     const MenuItem = ({ title, icon, onClick, color = "blue" }) => (
         <button type="button" onClick={onClick} className={`w-full flex items-center p-4 mb-3 rounded-2xl bg-${color}-50 dark:bg-gray-700/50 border border-${color}-100 dark:border-gray-600 hover:bg-${color}-100 dark:hover:bg-gray-600 transition-all shadow-sm active:scale-98`}>
             <div className={`w-10 h-10 rounded-full bg-white dark:bg-gray-600 flex items-center justify-center text-${color}-500 shadow-sm mr-4`}>
@@ -348,6 +350,53 @@ const SettingsModal = ({ settings, onSave, onClose }) => { const [tempSettings, 
                                 <MenuItem title="API 密钥管理" icon="fa-key" onClick={() => setView('apiKeys')} color="green" />
                                 <MenuItem title="助理工作室" icon="fa-user-astronaut" onClick={() => setView('prompts')} color="indigo" />
                                 <MenuItem title="模型管理" icon="fa-brain" onClick={() => setView('models')} color="purple" />
+                            </div>
+
+                            {/* 修复：重新添加语音设置模块 */}
+                            <div>
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">语音与交互</h4>
+                                <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl space-y-4">
+                                     <div className="flex items-center justify-between">
+                                        <label className="text-sm font-bold">语音合成引擎</label>
+                                        <select value={tempSettings.ttsEngine} onChange={(e) => handleChange('ttsEngine', e.target.value)} className="px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none">
+                                            <option value={TTS_ENGINE.THIRD_PARTY}>Microsoft Edge (推荐)</option>
+                                            <option value={TTS_ENGINE.SYSTEM}>系统内置</option>
+                                        </select>
+                                    </div>
+                                    {tempSettings.ttsEngine === TTS_ENGINE.THIRD_PARTY && (
+                                        <div>
+                                            <label className="block text-sm font-bold mb-2">选择发音人</label>
+                                            <select value={tempSettings.ttsVoice} onChange={(e) => handleChange('ttsVoice', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none">
+                                                {MICROSOFT_TTS_VOICES.map(voice => <option key={voice.value} value={voice.value}>{voice.name}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+                                     {tempSettings.ttsEngine === TTS_ENGINE.SYSTEM && (
+                                        <div>
+                                            <label className="block text-sm font-bold mb-2">系统声音</label>
+                                            <select value={tempSettings.systemTtsVoiceURI} onChange={(e) => handleChange('systemTtsVoiceURI', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none">
+                                                <option value="">默认</option>
+                                                {systemVoices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{`${voice.name} (${voice.lang})`}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+                                    <div className="flex gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex justify-between mb-1"><label className="text-xs font-bold">语速</label><span className="text-xs">{tempSettings.ttsRate}%</span></div>
+                                            <input type="range" min="-100" max="100" step="5" value={tempSettings.ttsRate} onChange={(e) => handleChange('ttsRate', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between mb-1"><label className="text-xs font-bold">音调</label><span className="text-xs">{tempSettings.ttsPitch}%</span></div>
+                                            <input type="range" min="-100" max="100" step="5" value={tempSettings.ttsPitch} onChange={(e) => handleChange('ttsPitch', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold mb-2">语音识别语言</label>
+                                        <select value={tempSettings.speechLanguage} onChange={(e) => handleChange('speechLanguage', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none">
+                                            {speechLanguageOptions.map(o => <option key={o.value} value={o.value}>{o.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -465,6 +514,14 @@ const AiChatAssistant = ({ onClose }) => {
     useEffect(() => { setIsMounted(true); let finalSettings = { ...DEFAULT_SETTINGS }; const savedSettings = safeLocalStorageGet('ai_chat_settings'); if (savedSettings) { const parsed = JSON.parse(savedSettings); if (parsed.thirdPartyTtsConfig) { parsed.ttsVoice = parsed.thirdPartyTtsConfig.microsoftVoice || DEFAULT_SETTINGS.ttsVoice; delete parsed.thirdPartyTtsConfig; } parsed.prompts = (parsed.prompts || []).map(p => ({ ...p, model: p.model || DEFAULT_SETTINGS.selectedModel, ttsVoice: p.ttsVoice || DEFAULT_SETTINGS.ttsVoice, avatarUrl: p.avatarUrl || '', description: p.description || '' })); if (!parsed.chatModels || parsed.chatModels.length === 0) { parsed.chatModels = CHAT_MODELS_LIST; } if (!parsed.apiKeys) { parsed.apiKeys = []; } finalSettings = { ...DEFAULT_SETTINGS, ...parsed }; } if (typeof navigator !== 'undefined' && /FBAN|FBAV/i.test(navigator.userAgent)) { finalSettings.isFacebookApp = true; } setSettings(finalSettings); const savedConversations = safeLocalStorageGet('ai_chat_conversations'); const parsedConvs = savedConversations ? JSON.parse(savedConversations) : []; setConversations(parsedConvs); if (finalSettings.startWithNewChat || parsedConvs.length === 0) { createNewConversation(finalSettings.currentPromptId, true); } else { const firstConv = parsedConvs[0]; setCurrentConversationId(firstConv.id); if (firstConv.messages.length > 0) { lastAutoReadMessageId.current = firstConv.messages[firstConv.messages.length - 1]?.timestamp; } } }, []);
     
     const currentConversation = useMemo(() => conversations.find(c => c.id === currentConversationId), [conversations, currentConversationId]);
+    
+    // 修复：获取当前活跃的 Prompt 信息，用于显示正确的头像
+    const activePromptInfo = useMemo(() => {
+        if (!currentConversation) return null;
+        return (settings.prompts || []).find(p => p.id === currentConversation.promptId);
+    }, [currentConversation, settings.prompts]);
+    const displayAiAvatar = activePromptInfo?.avatarUrl || settings.aiAvatarUrl;
+
     useEffect(() => { if (!isMounted) return; const timer = setTimeout(() => { safeLocalStorageSet('ai_chat_settings', JSON.stringify(settings)); safeLocalStorageSet('ai_chat_conversations', JSON.stringify(conversations)); }, 1000); return () => clearTimeout(timer); }, [settings, conversations, isMounted]);
     const scrollToBottom = useCallback((behavior = 'smooth') => { messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' }); }, []);
     useEffect(() => { const timeout = setTimeout(() => scrollToBottom('auto'), 100); return () => clearTimeout(timeout); }, [currentConversationId, scrollToBottom]);
@@ -492,7 +549,6 @@ const AiChatAssistant = ({ onClose }) => {
     const handleRenameConversation = (id, newTitle) => { setConversations(prev => prev.map(c => c.id === id ? { ...c, title: newTitle } : c)); };
     const handleSaveSettings = (newSettings) => { setSettings(newSettings); setShowSettings(false); };
     
-    // 修复: 切换助理立即生效，无需新对话
     const handleAssistantSelect = (promptId) => { 
         const selectedPrompt = settings.prompts.find(p => p.id === promptId); 
         if (!selectedPrompt) return; 
@@ -525,7 +581,6 @@ const AiChatAssistant = ({ onClose }) => {
     }, [settings.speechLanguage, setError]);
     const stopListening = useCallback(() => { if (recognitionRef.current) { recognitionRef.current.stop(); } }, []);
 
-    // 优化: 图片压缩
     const handleImageSelection = async (event) => {
         const files = Array.from(event.target.files);
         if (files.length === 0) return;
@@ -560,7 +615,7 @@ const AiChatAssistant = ({ onClose }) => {
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     const handleCorrectionRequest = (correctionPrompt) => { if (!currentConversation || isLoading) return; const userMessage = { role: 'user', content: correctionPrompt, timestamp: Date.now() }; const updatedMessages = [...currentConversation.messages, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages } : c)); fetchAiResponse(updatedMessages); };
     
-    // 修复: 兼容 OpenAI 接口地址
+    // 修复：兼容 OpenAI 第三方接口 URL
     const fetchAiResponse = async (messagesForApi) => {
         setIsLoading(true);
         setError('');
@@ -588,9 +643,11 @@ const AiChatAssistant = ({ onClose }) => {
             } else if (activeKey.provider === 'openai') { 
                 const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.filter(msg => msg.content).map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ]; 
                 
-                // 智能处理 URL: 移除末尾斜杠，并自动追加 /chat/completions (如果用户没写)
+                // 修复：智能处理 URL，自动补充 /chat/completions (如果用户没有填写)
                 let baseUrl = activeKey.url || 'https://api.openai.com/v1';
-                baseUrl = baseUrl.replace(/\/+$/, '');
+                baseUrl = baseUrl.trim().replace(/\/+$/, ''); // 移除末尾斜杠
+                
+                // 如果 URL 已经包含 /chat/completions，直接使用；否则追加
                 const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
 
                 response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeKey.key}` }, body: JSON.stringify({ model: modelToUse, messages, temperature: settings.temperature, max_tokens: settings.maxOutputTokens, stream: false }), signal: abortControllerRef.current.signal }); 
@@ -640,9 +697,10 @@ const AiChatAssistant = ({ onClose }) => {
                     </header>
                     <main className="flex-grow p-4 overflow-y-auto">
                         <div className="space-y-1">
-                            {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} onCorrectionRequest={handleCorrectionRequest} /> </div> ))}
+                            {/* 修复：将当前活跃助理的头像传递给 MessageBubble */}
+                            {currentConversation?.messages.map((msg, index) => ( <div id={`msg-${currentConversation.id}-${index}`} key={`${currentConversation.id}-${index}`}> <MessageBubble msg={msg} settings={settings} isLastAiMessage={index === currentConversation.messages.length - 1 && msg.role === 'ai'} onRegenerate={() => handleSubmit(true)} onTypingComplete={handleTypingComplete} onTypingUpdate={scrollToBottom} onCorrectionRequest={handleCorrectionRequest} explicitAiAvatar={displayAiAvatar} /> </div> ))}
                             {/* 显示思考中动画 */}
-                            {isLoading && !currentConversation?.messages.some(m => m.isTyping) && <ThinkingIndicator settings={settings} />}
+                            {isLoading && !currentConversation?.messages.some(m => m.isTyping) && <ThinkingIndicator settings={settings} aiAvatar={displayAiAvatar} />}
                         </div>
                         <div ref={messagesEndRef} />
                     </main>
