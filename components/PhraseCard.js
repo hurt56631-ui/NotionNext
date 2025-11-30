@@ -1,9 +1,9 @@
-// components/Tixing/CombinedPhraseCard.js (最终修复和优化版)
+// components/Tixing/CombinedPhraseCard.js (支持手机本地多图上传版)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaVolumeUp, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaLanguage, FaPlay } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaImage, FaTrash } from 'react-icons/fa'; // 新增图标
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
@@ -160,7 +160,8 @@ const PronunciationComparison = ({ correctWord, userText, onContinue, onClose })
 
 const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
-  const optimizedSrc = useMemo(() => src ? `${src}?quality=30` : null, [src]);
+  // 如果是本地图片(blob)，不加参数；如果是网络图片，可以加优化参数
+  const optimizedSrc = useMemo(() => src?.startsWith('blob:') ? src : (src ? `${src}?quality=30` : null), [src]);
   useEffect(() => { setImageLoaded(false); }, [src]);
   return (
     <div style={styles.imageWrapper}>
@@ -170,9 +171,79 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   );
 });
 
-const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
+// MODIFIED: 增加了图片上传功能的设置面板
+const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose, localImages, setLocalImages }) => {
+  const fileInputRef = useRef(null);
+
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
-  return (<div style={styles.settingsModal} onClick={onClose}><div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}><button style={styles.closeButton} onClick={onClose}><FaTimes /></button><h2 style={{marginTop: 0}}>常规设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> 6秒后自动切换</label></div></div><h2 style={{marginTop: '30px'}}>发音设置</h2><div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div><div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div></div></div>);
+
+  // 处理图片选择
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    // 创建本地预览链接
+    const newImageUrls = files.map(file => URL.createObjectURL(file));
+    setLocalImages(newImageUrls);
+  };
+
+  const handleClearImages = () => {
+    setLocalImages([]);
+  };
+
+  return (
+    <div style={styles.settingsModal} onClick={onClose}>
+        <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
+            <button style={styles.closeButton} onClick={onClose}><FaTimes /></button>
+            <h2 style={{marginTop: 0}}>常规设置</h2>
+            
+            {/* 新增：自定义图片上传区 */}
+            <div style={{...styles.settingGroup, background: '#f0f9ff', padding: '15px', borderRadius: '10px', border: '1px solid #bae6fd'}}>
+                <label style={{...styles.settingLabel, color: '#0369a1'}}>使用手机/本地图片</label>
+                <div style={{fontSize: '0.85rem', color: '#64748b', marginBottom: '10px'}}>
+                   请按单词顺序选择图片（第一张图对应第一个词）。
+                </div>
+                <div style={styles.settingControl}>
+                    <input 
+                        type="file" 
+                        multiple 
+                        accept="image/*" 
+                        ref={fileInputRef} 
+                        style={{display: 'none'}} 
+                        onChange={handleImageUpload}
+                    />
+                    <button 
+                        onClick={() => fileInputRef.current.click()} 
+                        style={{...styles.settingButton, background: '#3b82f6', color: 'white'}}
+                    >
+                        <FaImage /> 选择图片
+                    </button>
+                    {localImages.length > 0 && (
+                        <button 
+                            onClick={handleClearImages} 
+                            style={{...styles.settingButton, background: '#ef4444', color: 'white', flex: 0.5}}
+                            title="清除本地图片"
+                        >
+                            <FaTrash />
+                        </button>
+                    )}
+                </div>
+                {localImages.length > 0 && (
+                    <div style={{marginTop: '8px', color: '#059669', fontSize: '0.9rem', fontWeight: 'bold'}}>
+                        已加载 {localImages.length} 张本地图片
+                    </div>
+                )}
+            </div>
+
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>学习顺序</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> 顺序</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> 随机</button></div></div>
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>自动播放</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> 自动朗读中文</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> 自动朗读缅语</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> 6秒后自动切换</label></div></div>
+            <h2 style={{marginTop: '30px'}}>发音设置</h2>
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>中文发音人</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div>
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>中文语速: {settings.speechRateChinese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateChinese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateChinese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div>
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语发音人</label><select style={styles.settingSelect} value={settings.voiceBurmese} onChange={(e) => handleSettingChange('voiceBurmese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('my')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div>
+            <div style={styles.settingGroup}><label style={styles.settingLabel}>缅甸语语速: {settings.speechRateBurmese}%</label><div style={styles.settingControl}><span style={{marginRight: '10px'}}>-100</span><input type="range" min="-100" max="100" step="10" value={settings.speechRateBurmese} style={styles.settingSlider} onChange={(e) => handleSettingChange('speechRateBurmese', parseInt(e.target.value, 10))} /><span style={{marginLeft: '10px'}}>+100</span></div></div>
+        </div>
+    </div>
+  );
 });
 
 
@@ -181,15 +252,43 @@ const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose }) 
 // =================================================================================
 const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [settings, setSettings] = usePhraseCardSettings();
+  
+  // MODIFIED: 存储本地上传的图片 Blob URL
+  const [localImages, setLocalImages] = useState([]);
+
+  // 内存清理：组件销毁时释放 Blob URL
+  useEffect(() => {
+    return () => {
+        localImages.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [localImages]);
 
   const processedCards = useMemo(() => {
     try {
         if (!Array.isArray(flashcards)) return [];
-        const validCards = flashcards.filter(card => card && card.chinese && card.burmese);
-        if (settings.order === 'random') { for (let i = validCards.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; } }
+        
+        // MODIFIED: 将本地图片按照顺序合并到数据中
+        // 逻辑：如果上传了第N张本地图，就用第N张，否则用原来的
+        let validCards = flashcards
+            .filter(card => card && card.chinese && card.burmese)
+            .map((card, index) => {
+                const customImage = localImages[index];
+                return {
+                    ...card,
+                    imageUrl: customImage || card.imageUrl // 优先使用本地图片
+                };
+            });
+
+        // 随机逻辑保持不变，但因为已经在上面绑定了图片，所以图片会跟着单词走
+        if (settings.order === 'random') { 
+            for (let i = validCards.length - 1; i > 0; i--) { 
+                const j = Math.floor(Math.random() * (i + 1)); 
+                [validCards[i], validCards[j]] = [validCards[j], validCards[i]]; 
+            } 
+        }
         return validCards;
     } catch (error) { console.error("处理 'flashcards' 出错:", error, flashcards); return []; }
-  }, [flashcards, settings.order]);
+  }, [flashcards, settings.order, localImages]); // 依赖项加入 localImages
 
   const cards = processedCards.length > 0 ? processedCards : [{ chinese: "示例短语", pinyin: "shì lì duǎn yǔ", burmese: "နမူနာစကားစု", burmesePhonetic: "နမူနာ", imageUrl: null }];
 
@@ -200,7 +299,6 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [writerChar, setWriterChar] = useState(null);
 
   const recognitionRef = useRef(null);
-  const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = cards[currentIndex];
 
@@ -289,7 +387,17 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   return (
     <div style={styles.fullScreen}>
       {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
-      {isSettingsOpen && <PhraseCardSettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
+      
+      {/* MODIFIED: 传递图片相关Props给设置面板 */}
+      {isSettingsOpen && (
+          <PhraseCardSettingsPanel 
+              settings={settings} 
+              setSettings={setSettings} 
+              onClose={() => setIsSettingsOpen(false)} 
+              localImages={localImages}
+              setLocalImages={setLocalImages}
+          />
+      )}
 
       <div style={styles.gestureArea} {...useDrag(({ down, movement: [, my], velocity: [, vy], direction: [, yDir], event }) => { if (event.target.closest('[data-no-gesture]')) return; if (!down) { const isSignificantDrag = Math.abs(my) > 60 || (Math.abs(vy) > 0.4 && Math.abs(my) > 30); if (isSignificantDrag) { navigate(yDir < 0 ? 1 : -1); } } }, { axis: 'y' })()} />
 
@@ -309,6 +417,7 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
                       <div style={styles.textBurmese}>{cardData.burmese}</div>
                   </div>
               </div>
+              {/* 图片区域，会自动处理网络URL或本地Blob */}
               {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
             </div>
           </animated.div>
@@ -324,7 +433,6 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
           />
       )}
 
-      {/* MODIFIED: 所有按钮都移动到这个容器中 */}
       {currentCard && (
           <div style={styles.topRightControls} data-no-gesture="true">
             <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置">
@@ -360,13 +468,8 @@ const styles = {
     burmesePhonetic: { fontSize: '1.2rem', color: '#8b5cf6', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
     
-    // MODIFIED: 新增右上角控制按钮容器样式
     topRightControls: { position: 'fixed', top: '20px', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'row', gap: '15px' },
     
-    // MODIFIED: 移除了旧的 rightControls 和 settingsButton 样式
-    // rightControls 样式被 topRightControls 替代
-    // settingsButton 样式不再需要
-
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
