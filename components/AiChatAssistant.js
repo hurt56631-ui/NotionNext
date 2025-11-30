@@ -1,4 +1,4 @@
-// AIChatDrawer.js (最终合并版 - 包含所有修复和优化的完美版本)
+// AIChatDrawer.js (最终修复版 - 已解决编译错误)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -102,7 +102,7 @@ const DEFAULT_PROMPTS = [
 const DEFAULT_SETTINGS = {
     apiKey: '', apiKeys: [], activeApiKeyId: '', chatModels: CHAT_MODELS_LIST, selectedModel: 'gemini-2.5-flash',
     temperature: 0.8, maxOutputTokens: 8192, disableThinkingMode: true, startWithNewChat: false, prompts: DEFAULT_PROMPTS,
-    currentPromptId: DEFAULT_PROMPTS[0]?.id || '',
+    currentPromptId: DEFAULT_PROMPTS?.id || '',
     autoRead: true, voiceAutoSend: false,
     ttsEngine: TTS_ENGINE.THIRD_PARTY, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', ttsRate: 0, ttsPitch: 0, systemTtsVoiceURI: '', speechLanguage: 'zh-CN',
     chatBackgroundUrl: '/images/chat-bg-light.jpg', backgroundOpacity: 70,
@@ -196,7 +196,7 @@ const TypingEffect = ({ text, settings, onComplete, onUpdate }) => {
 };
 
 
-// --- [UI组件] 增强版富文本渲染 ---
+// --- [UI组件] 增强版富文本渲染 (已修复编译错误) ---
 const RichMarkdown = ({ text }) => {
     if (!text) return null;
     const parts = text.split(/(```[\s\S]*?```)/g);
@@ -205,6 +205,7 @@ const RichMarkdown = ({ text }) => {
             {parts.map((part, i) => {
                 if (part.startsWith('```') && part.endsWith('```')) {
                     const content = part.replace(/^```\w*\n?/, '').replace(/```$/, '');
+                    // --- 错误修复 ---
                     const lang = part.match(/^```(\w+)/)?. || 'Code';
                     return (
                         <div key={i} className="my-3 rounded-xl overflow-hidden border border-gray-700 bg-[#1e1e1e] shadow-xl">
@@ -338,7 +339,7 @@ const ThinkingIndicator = ({ settings, aiAvatar }) => (
 );
 
 // --- [UI组件] 侧边栏及设置页面 (保持完整) ---
-const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDelete, onRename, prompts, settings }) => {
+const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDelete, onRename, prompts }) => {
     const [editingId, setEditingId] = useState(null); const [newName, setNewName] = useState('');
     const handleRename = (id, oldName) => { setEditingId(id); setNewName(oldName); };
     const handleSaveRename = (id) => { if (newName.trim()) onRename(id, newName.trim()); setEditingId(null); };
@@ -355,7 +356,7 @@ const ChatSidebar = ({ isOpen, conversations, currentId, onSelect, onNew, onDele
             <div className="flex-grow truncate text-sm font-medium" onDoubleClick={(e) => {e.stopPropagation(); handleRename(conv.id, conv.title)}}>
                 {editingId === conv.id ? <input autoFocus className="bg-transparent border-b border-blue-500 w-full outline-none" value={newName} onChange={e=>setNewName(e.target.value)} onBlur={()=>handleSaveRename(conv.id)} onKeyDown={e=>e.key==='Enter'&&handleSaveRename(conv.id)}/> : conv.title}
             </div>
-            {currentId === conv.id && <div className="flex gap-1 ml-2"><button onClick={(e)=>{e.stopPropagation(); handleRename(conv.id, conv.title)}} className="p-1 hover:text-blue-600"><i className="fas fa-pen text-xs"></i></button><button onClick={(e)=>{e.stopPropagation(); if(confirm('删除?')) onDelete(conv.id)}} className="p-1 hover:text-red-500"><i className="fas fa-trash text-xs"></i></button></div>}
+            {currentId === conv.id && <div className="flex gap-1 ml-2"><button onClick={(e)=>{e.stopPropagation(); handleRename(conv.id, conv.title)}} className="p-1 hover:text-blue-600"><i className="fas fa-pen text-xs"></i></button><button onClick={(e)=>{e.stopPropagation(); if(window.confirm('删除?')) onDelete(conv.id)}} className="p-1 hover:text-red-500"><i className="fas fa-trash text-xs"></i></button></div>}
         </div>
     );
     return (
@@ -446,8 +447,8 @@ const ApiKeyManager = ({ apiKeys, activeApiKeyId, onChange, onAdd, onDelete, onS
 );
 const SettingsModal = ({ settings, onSave, onClose }) => {
     const [tempSettings, setTempSettings] = useState(settings); const [systemVoices, setSystemVoices] = useState([]); const [view, setView] = useState('main'); const fileInputRef = useRef(null); const userAvatarInputRef = useRef(null); useEffect(() => { const fetchSystemVoices = () => { if (!window.speechSynthesis) return; const voices = window.speechSynthesis.getVoices(); if (voices.length > 0) { setSystemVoices(voices.filter(v => v.lang.startsWith('zh') || v.lang.startsWith('en') || v.lang.startsWith('fr') || v.lang.startsWith('es') || v.lang.startsWith('ja') || v.lang.startsWith('ko') || v.lang.startsWith('vi'))); } }; if (window.speechSynthesis) { if (window.speechSynthesis.onvoiceschanged !== undefined) { window.speechSynthesis.onvoiceschanged = fetchSystemVoices; } fetchSystemVoices(); } }, []); const handleChange = (key, value) => setTempSettings(prev => ({ ...prev, [key]: value })); 
-    const handleBgImageSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { handleChange('chatBackgroundUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; }; 
-    const handleUserAvatarSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { handleChange('userAvatarUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; };
+    const handleBgImageSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { e.target && handleChange('chatBackgroundUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; }; 
+    const handleUserAvatarSelect = (event) => { const file = event.target.files; if (file && file.type.startsWith('image/')) { const reader = new FileReader(); reader.onload = (e) => { e.target && handleChange('userAvatarUrl', e.target.result); }; reader.readAsDataURL(file); } event.target.value = null; };
     const handleAddPrompt = () => { const newPrompt = { id: generateSimpleId('prompt'), name: '新助理', description: '新助理', content: '你是一个...', openingLine: '你好', model: settings.selectedModel, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' }; const newPrompts = [...(tempSettings.prompts || []), newPrompt]; handleChange('prompts', newPrompts); }; const handleDeletePrompt = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newPrompts = (tempSettings.prompts || []).filter(p => p.id !== idToDelete); handleChange('prompts', newPrompts); if (tempSettings.currentPromptId === idToDelete) handleChange('currentPromptId', newPrompts?.id || ''); }; const handlePromptSettingChange = (promptId, field, value) => { const newPrompts = (tempSettings.prompts || []).map(p => p.id === promptId ? { ...p, [field]: value } : p); handleChange('prompts', newPrompts); }; const speechLanguageOptions = [ { name: '中文 (普通话)', value: 'zh-CN' }, { name: '缅甸语 (မြန်မာ)', value: 'my-MM' }, { name: 'English (US)', value: 'en-US' }, { name: 'Español (España)', value: 'es-ES' }, { name: 'Français (France)', value: 'fr-FR' }, { name: '日本語', value: 'ja-JP' }, { name: '한국어', value: 'ko-KR' }, { name: 'Tiếng Việt', value: 'vi-VN' }, ]; const handleAddModel = () => { const newModel = { id: generateSimpleId('model'), name: '新模型', value: '', maxContextTokens: 8192 }; const newModels = [...(tempSettings.chatModels || []), newModel]; handleChange('chatModels', newModels); }; const handleDeleteModel = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newModels = (tempSettings.chatModels || []).filter(m => m.id !== idToDelete); handleChange('chatModels', newModels); }; const handleModelSettingChange = (modelId, field, value) => { const newModels = (tempSettings.chatModels || []).map(m => m.id === modelId ? { ...m, [field]: value } : m); handleChange('chatModels', newModels); }; 
     const handleAddApiKey = () => { const newKey = { id: generateSimpleId('key'), provider: 'openai', key: '', url: 'https://open-gemini-api.deno.dev/v1' }; const newKeys = [...(tempSettings.apiKeys || []), newKey]; handleChange('apiKeys', newKeys); if (newKeys.length === 1) { handleChange('activeApiKeyId', newKey.id); } }; 
     const handleDeleteApiKey = (idToDelete) => { if (!window.confirm('确定删除吗？')) return; const newKeys = (tempSettings.apiKeys || []).filter(k => k.id !== idToDelete); handleChange('apiKeys', newKeys); if (tempSettings.activeApiKeyId === idToDelete) handleChange('activeApiKeyId', newKeys?.id || ''); }; const handleApiKeySettingChange = (keyId, field, value) => { const newKeys = (tempSettings.apiKeys || []).map(k => k.id === keyId ? { ...k, [field]: value } : k); handleChange('apiKeys', newKeys); }; const handleSetActiveApiKey = (keyId) => { handleChange('activeApiKeyId', keyId); }; const handleSubPageSave = () => { onSave(tempSettings); }; 
@@ -488,17 +489,14 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
                                      {tempSettings.ttsEngine === TTS_ENGINE.SYSTEM && (<div><label className="block text-sm font-bold mb-2">系统声音</label><select value={tempSettings.systemTtsVoiceURI} onChange={(e) => handleChange('systemTtsVoiceURI', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none"><option value="">默认</option>{systemVoices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{`${voice.name} (${voice.lang})`}</option>)}</select></div>)}
                                     <div className="flex gap-4"><div className="flex-1"><div className="flex justify-between mb-1"><label className="text-xs font-bold">语速</label><span className="text-xs">{tempSettings.ttsRate}%</span></div><input type="range" min="-100" max="100" step="5" value={tempSettings.ttsRate} onChange={(e) => handleChange('ttsRate', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/></div><div className="flex-1"><div className="flex justify-between mb-1"><label className="text-xs font-bold">音调</label><span className="text-xs">{tempSettings.ttsPitch}%</span></div><input type="range" min="-100" max="100" step="5" value={tempSettings.ttsPitch} onChange={(e) => handleChange('ttsPitch', parseInt(e.target.value, 10))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"/></div></div>
                                     <div><label className="block text-sm font-bold mb-2">语音识别语言</label><select value={tempSettings.speechLanguage} onChange={(e) => handleChange('speechLanguage', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 outline-none">{speechLanguageOptions.map(o => <option key={o.value} value={o.value}>{o.name}</option>)}</select></div>
-                                    
-                                    {/* --- [核心修复] 重新添加自动朗读开关 --- */}
                                     <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-600 pt-3"><label className="text-sm font-bold">自动朗读回复</label><div className="relative inline-block w-12 mr-2 align-middle select-none"><input type="checkbox" checked={tempSettings.autoRead} onChange={(e) => handleChange('autoRead', e.target.checked)} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-full checked:border-green-500"/><div className={`block overflow-hidden h-6 rounded-full cursor-pointer transition-colors ${tempSettings.autoRead ? 'bg-green-500' : 'bg-gray-300'}`}></div></div></div>
-                                    
                                     <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-600 pt-3"><label className="text-sm font-bold">语音识别后自动发送</label><div className="relative inline-block w-12 mr-2 align-middle select-none"><input type="checkbox" checked={tempSettings.voiceAutoSend} onChange={(e) => handleChange('voiceAutoSend', e.target.checked)} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-full checked:border-green-500"/><div className={`block overflow-hidden h-6 rounded-full cursor-pointer transition-colors ${tempSettings.voiceAutoSend ? 'bg-green-500' : 'bg-gray-300'}`}></div></div></div>
                                 </div>
                             </div>
                             <div>
                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">个性化</h4>
                                 <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl space-y-4">
-                                    <div><label className="block text-sm font-bold mb-2">用户头像</label><div className="flex gap-2 items-center"><img src={tempSettings.userAvatarUrl} alt="User" className="w-10 h-10 rounded-full object-cover border border-gray-200"/><input type="text" value={tempSettings.userAvatarUrl} onChange={(e) => handleChange('userAvatarUrl', e.target.value)} placeholder="头像 URL..." className="flex-1 px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 shadow-sm outline-none" /><button onClick={() => userAvatarInputRef.current?.click()} className="px-3 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg font-bold text-sm"><i className="fas fa-upload"></i></button><input type="file" ref={userAvatarInputRef} onChange={handleUserAvatarSelect} accept="image/*" className="hidden" /></div></div>
+                                    <div><label className="block text-sm font-bold mb-2">用户头像</label><div className="flex gap-2 items-center"><img src={convertGitHubUrl(tempSettings.userAvatarUrl)} alt="User" className="w-10 h-10 rounded-full object-cover border border-gray-200"/><input type="text" value={tempSettings.userAvatarUrl} onChange={(e) => handleChange('userAvatarUrl', e.target.value)} placeholder="头像 URL..." className="flex-1 px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 shadow-sm outline-none" /><button onClick={() => userAvatarInputRef.current?.click()} className="px-3 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg font-bold text-sm"><i className="fas fa-upload"></i></button><input type="file" ref={userAvatarInputRef} onChange={handleUserAvatarSelect} accept="image/*" className="hidden" /></div></div>
                                     <div><label className="block text-sm font-bold mb-2">聊天背景</label><div className="flex gap-2"><input type="text" value={tempSettings.chatBackgroundUrl} onChange={(e) => handleChange('chatBackgroundUrl', e.target.value)} placeholder="图片 URL..." className="flex-1 px-3 py-2 bg-white dark:bg-gray-600 rounded-lg text-sm border-0 shadow-sm outline-none" /><button onClick={() => fileInputRef.current?.click()} className="px-3 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg font-bold text-sm"><i className="fas fa-image"></i></button><input type="file" ref={fileInputRef} onChange={handleBgImageSelect} accept="image/*" className="hidden" /></div></div>
                                     <div className="flex items-center gap-3"><span className="text-sm font-bold">透明度</span><input type="range" min="0" max="100" value={tempSettings.backgroundOpacity} onChange={(e) => handleChange('backgroundOpacity', parseInt(e.target.value, 10))} className="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" /><span className="text-sm w-8">{tempSettings.backgroundOpacity}%</span></div>
                                     <div className="flex items-center justify-between"><label className="text-sm font-bold">每次打开开启新对话</label><div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in"><input type="checkbox" name="toggle" id="toggle-newchat" checked={tempSettings.startWithNewChat} onChange={(e) => handleChange('startWithNewChat', e.target.checked)} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out checked:translate-x-full checked:border-blue-500"/><label htmlFor="toggle-newchat" className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer transition-colors ${tempSettings.startWithNewChat ? 'bg-blue-500' : 'bg-gray-300'}`}></label></div></div>
@@ -545,12 +543,41 @@ const AiChatAssistant = ({ onClose }) => {
     // --- [核心修复] 组件卸载时清理音频 ---
     useEffect(() => {
         return () => {
-            window.speechSynthesis.cancel();
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
             globalAudioQueue.clear();
         }
     }, []);
 
-    useEffect(() => { setIsMounted(true); let finalSettings = { ...DEFAULT_SETTINGS }; const savedSettings = safeLocalStorageGet('ai_chat_settings'); if (savedSettings) { const parsed = JSON.parse(savedSettings); if (parsed.thirdPartyTtsConfig) { parsed.ttsVoice = parsed.thirdPartyTtsConfig.microsoftVoice || DEFAULT_SETTINGS.ttsVoice; delete parsed.thirdPartyTtsConfig; } parsed.prompts = (parsed.prompts || []).map(p => ({ ...p, model: p.model || DEFAULT_SETTINGS.selectedModel, ttsVoice: p.ttsVoice || DEFAULT_SETTINGS.ttsVoice, avatarUrl: p.avatarUrl || '', description: p.description || '' })); if (!parsed.chatModels || parsed.chatModels.length === 0) { parsed.chatModels = CHAT_MODELS_LIST; } if (!parsed.apiKeys) { parsed.apiKeys = []; } finalSettings = { ...DEFAULT_SETTINGS, ...parsed }; } if (typeof navigator !== 'undefined' && /FBAN|FBAV/i.test(navigator.userAgent)) { finalSettings.isFacebookApp = true; } setSettings(finalSettings); const savedConversations = safeLocalStorageGet('ai_chat_conversations'); const parsedConvs = savedConversations ? JSON.parse(savedConversations) : []; setConversations(parsedConvs); if (finalSettings.startWithNewChat || parsedConvs.length === 0) { createNewConversation(finalSettings.currentPromptId, true); } else { const firstConv = parsedConvs; setCurrentConversationId(firstConv.id); } }, []);
+    useEffect(() => { 
+        setIsMounted(true); 
+        let finalSettings = { ...DEFAULT_SETTINGS }; 
+        const savedSettings = safeLocalStorageGet('ai_chat_settings'); 
+        if (savedSettings) { 
+            const parsed = JSON.parse(savedSettings); 
+            if (parsed.thirdPartyTtsConfig) { 
+                parsed.ttsVoice = parsed.thirdPartyTtsConfig.microsoftVoice || DEFAULT_SETTINGS.ttsVoice; 
+                delete parsed.thirdPartyTtsConfig; 
+            } 
+            parsed.prompts = (parsed.prompts || []).map(p => ({ ...p, model: p.model || DEFAULT_SETTINGS.selectedModel, ttsVoice: p.ttsVoice || DEFAULT_SETTINGS.ttsVoice, avatarUrl: p.avatarUrl || '', description: p.description || '' })); 
+            if (!parsed.chatModels || parsed.chatModels.length === 0) parsed.chatModels = CHAT_MODELS_LIST; 
+            if (!parsed.apiKeys) parsed.apiKeys = []; 
+            finalSettings = { ...DEFAULT_SETTINGS, ...parsed }; 
+        } 
+        if (typeof navigator !== 'undefined' && /FBAN|FBAV/i.test(navigator.userAgent)) { 
+            finalSettings.isFacebookApp = true; 
+        } 
+        setSettings(finalSettings); 
+        const savedConversations = safeLocalStorageGet('ai_chat_conversations'); 
+        const parsedConvs = savedConversations ? JSON.parse(savedConversations) : []; 
+        setConversations(parsedConvs); 
+        if (finalSettings.startWithNewChat || parsedConvs.length === 0) { 
+            createNewConversation(finalSettings.currentPromptId, true); 
+        } else { 
+            const firstConv = parsedConvs; 
+            if(firstConv) setCurrentConversationId(firstConv.id);
+            else createNewConversation(finalSettings.currentPromptId, true);
+        } 
+    }, []);
     
     const currentConversation = useMemo(() => conversations.find(c => c.id === currentConversationId), [conversations, currentConversationId]);
     const activePromptInfo = useMemo(() => { if (!currentConversation) return null; return (settings.prompts || []).find(p => p.id === currentConversation.promptId); }, [currentConversation, settings.prompts]);
@@ -571,7 +598,7 @@ const AiChatAssistant = ({ onClose }) => {
     const handleAssistantSelect = (promptId) => { const selectedPrompt = settings.prompts.find(p => p.id === promptId); if (!selectedPrompt) return; setSettings(s => ({ ...s, currentPromptId: promptId, selectedModel: selectedPrompt.model || s.selectedModel, ttsVoice: selectedPrompt.ttsVoice || s.ttsVoice })); setConversations(prevConvs => prevConvs.map(c => c.id === currentConversationId ? { ...c, promptId: promptId } : c)); setShowAssistantSelector(false); };
     const startListening = useCallback(() => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } if (recognitionRef.current) { recognitionRef.current.abort(); } const recognition = new SpeechRecognition(); recognition.lang = settings.speechLanguage; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setUserInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result).map(result => result.transcript).join(''); setUserInput(transcript); if (event.results.isFinal && transcript.trim()) { recognition.stop(); if (settings.voiceAutoSend && handleSubmitRef.current) { handleSubmitRef.current(false, transcript); } } }; recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); if (event.error !== 'no-speech') { setError(`语音识别错误: ${event.error}`); } if (event.error === 'aborted') return; }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.start(); }, [settings.speechLanguage, settings.voiceAutoSend, setError]);
     const stopListening = useCallback(() => { if (recognitionRef.current) { recognitionRef.current.stop(); } }, []);
-    const handleImageSelection = async (event) => { const files = Array.from(event.target.files); if (files.length === 0) return; const imagePromises = files.slice(0, 4 - selectedImages.length).map(async file => { try { const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true, }; const compressedFile = await imageCompression(file, options); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (e) => { const base64Data = e.target.result.split(','); const fullDataUrl = `data:${compressedFile.type};base64,${base64Data}`; const newImage = { previewUrl: URL.createObjectURL(compressedFile), src: fullDataUrl, data: base64Data, type: compressedFile.type, name: compressedFile.name }; resolve(newImage); }; reader.onerror = reject; reader.readAsDataURL(compressedFile); }); } catch (error) { console.error(error); return null; } }); const newImages = (await Promise.all(imagePromises)).filter(Boolean); setSelectedImages(prev => [...prev, ...newImages]); event.target.value = null; };
+    const handleImageSelection = async (event) => { const files = Array.from(event.target.files); if (files.length === 0) return; const imagePromises = files.slice(0, 4 - selectedImages.length).map(async file => { try { const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true, }; const compressedFile = await imageCompression(file, options); return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = (e) => { const base64Data = e.target.result.split(','); const newImage = { previewUrl: URL.createObjectURL(compressedFile), data: base64Data, type: compressedFile.type, name: compressedFile.name }; resolve(newImage); }; reader.onerror = reject; reader.readAsDataURL(compressedFile); }); } catch (error) { console.error(error); return null; } }); const newImages = (await Promise.all(imagePromises)).filter(Boolean); setSelectedImages(prev => [...prev, ...newImages]); event.target.value = null; };
     const triggerImageInput = () => { if (imageInputRef.current) { imageInputRef.current.removeAttribute('capture'); imageInputRef.current.click(); } };
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     const handleCorrectionRequest = (correctionPrompt) => { if (!currentConversation || isLoading) return; const userMessage = { role: 'user', content: correctionPrompt, timestamp: Date.now() }; const updatedMessages = [...currentConversation.messages, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages } : c)); fetchAiResponse(updatedMessages); };
@@ -595,7 +622,6 @@ const AiChatAssistant = ({ onClose }) => {
             let response;
             if (activeKey.provider === 'openai') { 
                 const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.filter(msg => msg.content).map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ]; 
-                // 修复：更健壮的 URL 处理
                 let baseUrl = activeKey.url || 'https://open-gemini-api.deno.dev/v1';
                 baseUrl = baseUrl.trim().replace(/\/+$/, '');
                 const url = `${baseUrl}/chat/completions`;
@@ -640,7 +666,7 @@ const AiChatAssistant = ({ onClose }) => {
             <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${convertGitHubUrl(settings.chatBackgroundUrl)}')`, opacity: (settings.backgroundOpacity || 70) / 100, zIndex: -1 }}></div>
             <div className="absolute inset-0 bg-black/10 dark:bg-black/20" style={{ zIndex: -1 }}></div>
             <div className="relative flex flex-1 min-h-0">
-                <ChatSidebar isOpen={isSidebarOpen} conversations={conversations} currentId={currentConversationId} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onRename={handleRenameConversation} onNew={() => createNewConversation()} prompts={settings.prompts} settings={settings} />
+                <ChatSidebar isOpen={isSidebarOpen} conversations={conversations} currentId={currentConversationId} onSelect={handleSelectConversation} onDelete={handleDeleteConversation} onRename={handleRenameConversation} onNew={() => createNewConversation()} prompts={settings.prompts} />
                 {isSidebarOpen && ( <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/20 z-20 lg:hidden"></div> )}
                 <div className="flex-1 flex flex-col h-full min-w-0">
                     <header className="flex items-center justify-between py-2 px-2 shrink-0 bg-white/40 dark:bg-black/20 backdrop-blur-lg shadow-sm border-b border-gray-200/50 dark:border-gray-800/50">
