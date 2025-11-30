@@ -1,4 +1,4 @@
-// AIChatDrawer.js (最终完美修复版 - 2025)
+// AIChatDrawer.js (最终完美修复版 - 修复语音与接口兼容)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -50,7 +50,7 @@ const generateSimpleId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.rand
 // --- 常量定义 ---
 const TTS_ENGINE = { SYSTEM: 'system', THIRD_PARTY: 'third_party' };
 
-// 修复: 更新模型列表，支持 1M 上下文 (解决回答截断问题 P1)
+// 模型列表 (支持 1M 上下文)
 const CHAT_MODELS_LIST = [
     { id: 'model-1', name: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash', maxContextTokens: 1048576 },
     { id: 'model-2', name: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro', maxContextTokens: 1048576 },
@@ -65,14 +65,14 @@ const DEFAULT_PROMPTS = [
     { id: 'translate-myanmar', name: '中缅互译', description: '在中文和缅甸语之间进行专业互译。', content: '你是一位专业的翻译助手，请将我发送的内容在中文和缅甸语之间进行互译。', openingLine: '你好！请发送中文或缅甸语内容以进行翻译。', model: 'gemini-2.5-flash', ttsVoice: 'my-MM-NilarNeural', avatarUrl: '' }
 ];
 
-// 修复: 更新默认设置，maxOutputTokens 提高到 8192，autoRead 默认为 true
+// 默认设置
 const DEFAULT_SETTINGS = {
     apiKey: '', apiKeys: [], activeApiKeyId: '', chatModels: CHAT_MODELS_LIST, selectedModel: 'gemini-2.5-flash',
     temperature: 0.8,
-    maxOutputTokens: 8192, // 提高默认输出限制，防止截断
+    maxOutputTokens: 8192,
     disableThinkingMode: true, startWithNewChat: false, prompts: DEFAULT_PROMPTS,
     currentPromptId: DEFAULT_PROMPTS[0]?.id || '',
-    autoRead: true, // 默认开启自动朗读
+    autoRead: true, 
     ttsEngine: TTS_ENGINE.THIRD_PARTY, ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural',
     ttsRate: 0, ttsPitch: 0, systemTtsVoiceURI: '', speechLanguage: 'zh-CN', chatBackgroundUrl: '/images/chat-bg-light.jpg',
     backgroundOpacity: 70, userAvatarUrl: '/images/user-avatar.png',
@@ -126,7 +126,6 @@ const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingC
                         </div>
                         {!isUser && msg.content && !msg.isTyping && (
                             <div className="flex items-center gap-3 mt-3 pt-2 border-t border-gray-100 dark:border-gray-600/50 text-gray-400 dark:text-gray-500">
-                                {/* 优化: 播放图标样式 */}
                                 {!settings.isFacebookApp && (
                                     <div className="scale-90 origin-left">
                                         <AiTtsButton text={msg.content} ttsSettings={settings} />
@@ -234,7 +233,6 @@ const SubPageWrapper = ({ title, onBack, onSave, children }) => (
     </div>
 );
 
-// 修复: PromptManager 增加图片上传功能
 const PromptManager = ({ prompts, onChange, onAdd, onDelete, settings }) => {
     const handleAvatarUpload = async (file, promptId) => {
         try {
@@ -281,7 +279,6 @@ const PromptManager = ({ prompts, onChange, onAdd, onDelete, settings }) => {
 
 const ModelManager = ({ models, onChange, onAdd, onDelete }) => ( <> {(models || []).map(m => ( <div key={m.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600 space-y-2"> <div className="flex items-center justify-between"> <input type="text" value={m.name} onChange={(e) => onChange(m.id, 'name', e.target.value)} placeholder="模型显示名称" className="font-semibold bg-transparent w-full text-lg" /> <button onClick={() => onDelete(m.id)} className="p-2 ml-2 text-sm text-red-500 rounded-full hover:bg-red-500/10"><i className="fas fa-trash"></i></button> </div> <div className="grid grid-cols-2 gap-2 text-sm"> <div> <label className="text-xs font-medium">模型值 (Value)</label> <input type="text" value={m.value} onChange={(e) => onChange(m.id, 'value', e.target.value)} placeholder="例如: gemini-1.5-pro-latest" className="w-full mt-1 px-2 py-1 bg-white dark:bg-gray-800 border dark:border-gray-500 rounded-md text-xs" /> </div> <div> <label className="text-xs font-medium">最大上下文 (Tokens)</label> <input type="number" value={m.maxContextTokens} onChange={(e) => onChange(m.id, 'maxContextTokens', parseInt(e.target.value, 10) || 0)} placeholder="例如: 8192" className="w-full mt-1 px-2 py-1 bg-white dark:bg-gray-800 border dark:border-gray-500 rounded-md text-xs" /> </div> </div> </div> ))} <button onClick={onAdd} className="w-full mt-4 py-3 bg-blue-500 text-white rounded-md shrink-0 mb-20"><i className="fas fa-plus mr-2"></i>添加新模型</button> </> );
 
-// 修复: 密钥管理增加说明，并优化 UI
 const ApiKeyManager = ({ apiKeys, activeApiKeyId, onChange, onAdd, onDelete, onSetActive }) => (
     <>
         <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
@@ -473,7 +470,6 @@ const AiChatAssistant = ({ onClose }) => {
     useEffect(() => { const timeout = setTimeout(() => scrollToBottom('auto'), 100); return () => clearTimeout(timeout); }, [currentConversationId, scrollToBottom]);
     useEffect(() => { const timeout = setTimeout(() => scrollToBottom('smooth'), 100); return () => clearTimeout(timeout); }, [currentConversation?.messages?.length]);
     
-    // 自动朗读逻辑
     useEffect(() => { 
         if (!currentConversation || !settings.autoRead || !isMounted) return; 
         const messages = currentConversation.messages; 
@@ -481,12 +477,7 @@ const AiChatAssistant = ({ onClose }) => {
         if (lastMessage && lastMessage.role === 'ai' && lastMessage.content && !lastMessage.isTyping && lastMessage.timestamp > (lastAutoReadMessageId.current || 0)) { 
             lastAutoReadMessageId.current = lastMessage.timestamp; 
             setTimeout(() => { 
-                // 查找最新的语音按钮并点击
-                // 由于我们已经更新了 AiTtsButton 的渲染位置，这里尝试一种更通用的方式，或者依赖 AiTtsButton 内部的自动播放逻辑
-                // 这里模拟点击 DOM 是一种方法，但更好的做法是让 AiTtsButton 接收一个 `autoPlay` prop。
-                // 既然不能改 AiTtsButton，我们维持原有的 DOM 点击逻辑，适配新的结构
                 const bubble = document.getElementById(`msg-${currentConversation.id}-${messages.length - 1}`); 
-                // 查找内部的 button，AiTtsButton 通常渲染为一个 button 或包含 button
                 const ttsButton = bubble?.querySelector('button[title="朗读"]') || bubble?.querySelector('button[aria-label="Play"]'); 
                 if (bubble && document.body.contains(bubble)) { ttsButton?.click(); } 
             }, 500); 
@@ -505,17 +496,33 @@ const AiChatAssistant = ({ onClose }) => {
     const handleAssistantSelect = (promptId) => { 
         const selectedPrompt = settings.prompts.find(p => p.id === promptId); 
         if (!selectedPrompt) return; 
-        
-        // 更新全局设置
         setSettings(s => ({ ...s, currentPromptId: promptId, selectedModel: selectedPrompt.model || s.selectedModel, ttsVoice: selectedPrompt.ttsVoice || s.ttsVoice })); 
-        
-        // 关键修复: 更新当前对话的 promptId，这样下次 fetchAiResponse 就会用新的 prompt
         setConversations(prevConvs => prevConvs.map(c => c.id === currentConversationId ? { ...c, promptId: promptId } : c)); 
-        
         setShowAssistantSelector(false); 
     };
 
-    const startListening = useCallback(() => { const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } if (recognitionRef.current) { recognitionRef.current.abort(); } const recognition = new SpeechRecognition(); recognition.lang = settings.speechLanguage; recognition.interimResults = true; recognition.continuous = false; recognitionRef.current = recognition; recognition.onstart = () => { setIsListening(true); setUserInput(''); }; recognition.onresult = (event) => { const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); setUserInput(transcript); if (event.results[0].isFinal && transcript.trim()) { recognition.stop(); if (handleSubmitRef.current) { handleSubmitRef.current(false, transcript); } } }; recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); if (event.error !== 'no-speech') { setError(`语音识别错误: ${event.error}`); } if (event.error === 'aborted') return; }; recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; recognition.start(); }, [settings.speechLanguage, setError]);
+    const startListening = useCallback(() => { 
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition; 
+        if (!SpeechRecognition) { alert('您的浏览器不支持语音输入。'); return; } 
+        if (recognitionRef.current) { recognitionRef.current.abort(); } 
+        const recognition = new SpeechRecognition(); 
+        recognition.lang = settings.speechLanguage; 
+        recognition.interimResults = true; 
+        recognition.continuous = false; 
+        recognitionRef.current = recognition; 
+        recognition.onstart = () => { setIsListening(true); setUserInput(''); }; 
+        recognition.onresult = (event) => { 
+            const transcript = Array.from(event.results).map(result => result[0]).map(result => result.transcript).join(''); 
+            setUserInput(transcript); 
+            if (event.results[0].isFinal && transcript.trim()) { 
+                recognition.stop(); 
+                if (handleSubmitRef.current) { handleSubmitRef.current(false, transcript); } 
+            } 
+        }; 
+        recognition.onerror = (event) => { console.error("Speech recognition error:", event.error); if (event.error !== 'no-speech') { setError(`语音识别错误: ${event.error}`); } if (event.error === 'aborted') return; }; 
+        recognition.onend = () => { setIsListening(false); recognitionRef.current = null; }; 
+        recognition.start(); 
+    }, [settings.speechLanguage, setError]);
     const stopListening = useCallback(() => { if (recognitionRef.current) { recognitionRef.current.stop(); } }, []);
 
     // 优化: 图片压缩
@@ -553,6 +560,7 @@ const AiChatAssistant = ({ onClose }) => {
     const removeSelectedImage = (index) => { const imageToRemove = selectedImages[index]; if (imageToRemove) { URL.revokeObjectURL(imageToRemove.previewUrl); } setSelectedImages(prev => prev.filter((_, i) => i !== index)); };
     const handleCorrectionRequest = (correctionPrompt) => { if (!currentConversation || isLoading) return; const userMessage = { role: 'user', content: correctionPrompt, timestamp: Date.now() }; const updatedMessages = [...currentConversation.messages, userMessage]; setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: updatedMessages } : c)); fetchAiResponse(updatedMessages); };
     
+    // 修复: 兼容 OpenAI 接口地址
     const fetchAiResponse = async (messagesForApi) => {
         setIsLoading(true);
         setError('');
@@ -561,27 +569,30 @@ const AiChatAssistant = ({ onClose }) => {
         try {
             if (!activeKey || !activeKey.key) { throw new Error('请在设置中配置并激活一个有效的 API 密钥。'); }
             
-            // 修复: 确保获取的是当前对话绑定的 prompt，如果没绑定则用全局，实现立即切换效果
             const promptIdToUse = currentConversation.promptId || settings.currentPromptId;
             const currentPrompt = (settings.prompts || []).find(p => p.id === promptIdToUse) || DEFAULT_PROMPTS[0];
             
             const modelInfo = (settings.chatModels || []).find(m => m.value === settings.selectedModel) || (settings.chatModels || [])[0];
             const modelToUse = modelInfo.value;
-            const contextLimit = modelInfo.maxContextTokens || 1048576; // 默认给大一点
+            const contextLimit = modelInfo.maxContextTokens || 1048576; 
             const contextMessages = messagesForApi.slice(-contextLimit);
             
             let response;
             if (activeKey.provider === 'gemini') { 
                 const history = contextMessages.filter(msg => msg.content || (msg.images && msg.images.length > 0)).map(msg => { const parts = []; if (msg.content) parts.push({ text: msg.content }); if (msg.images) msg.images.forEach(img => parts.push({ inlineData: { mimeType: img.type, data: img.data } })); return { role: msg.role === 'user' ? 'user' : 'model', parts }; }); 
                 const contents = [ { role: 'user', parts: [{ text: currentPrompt.content }] }, { role: 'model', parts: [{ text: "好的，我明白了。" }] }, ...history ]; 
-                // 修复: 确保 maxOutputTokens 传递给 API
                 const generationConfig = { temperature: settings.temperature, maxOutputTokens: settings.maxOutputTokens }; 
                 if (settings.disableThinkingMode && modelToUse.includes('gemini-2.5')) { generationConfig.thinkingConfig = { thinkingBudget: 0 }; } 
                 const url = `${activeKey.url || 'https://generativelanguage.googleapis.com/v1beta/models/'}${modelToUse}:generateContent?key=${activeKey.key}`; 
                 response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents, generationConfig }), signal: abortControllerRef.current.signal }); 
             } else if (activeKey.provider === 'openai') { 
                 const messages = [ { role: 'system', content: currentPrompt.content }, ...contextMessages.filter(msg => msg.content).map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content })) ]; 
-                const url = `${activeKey.url || 'https://api.openai.com/v1'}/chat/completions`; 
+                
+                // 智能处理 URL: 移除末尾斜杠，并自动追加 /chat/completions (如果用户没写)
+                let baseUrl = activeKey.url || 'https://api.openai.com/v1';
+                baseUrl = baseUrl.replace(/\/+$/, '');
+                const url = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
+
                 response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${activeKey.key}` }, body: JSON.stringify({ model: modelToUse, messages, temperature: settings.temperature, max_tokens: settings.maxOutputTokens, stream: false }), signal: abortControllerRef.current.signal }); 
             }
             if (!response.ok) { const errorData = await response.json(); throw new Error(errorData.error?.message || `请求失败 (状态码: ${response.status})`); }
