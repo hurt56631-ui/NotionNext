@@ -1,0 +1,101 @@
+{
+  "id": "hsk1-lesson1-greetings",
+  "title": "第 1 课：初次见面",
+  "globalConfig": {
+    "themeColor": "#00B894",
+    "backgroundColor": "#F0FDF4"
+  },
+  "blocks": [
+    {
+      "type": "teaching",
+      "id": "intro",
+      "content": {
+        "pinyin": "Dì yī kè: Chūcì jiànmiàn",
+        "displayText": "第1课：初次见面",
+        "translation": "(Lesson Title) Lesson 1: First Meeting",
+        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒါကတော့ တရုတ်စာ လေ့လာမှုရဲ့ ပထမဆုံး ခြေလှမ်းဖြစ်ပါတယ်။ ဒီနေ့မှာတော့ တရုတ်လို 'မင်္ဂလာပါ' လို့ နှုတ်ဆက်ပုံနဲ့ ကိုယ့်နာမည်ကို မိတ်ဆက်ပုံတွေကို လေ့လာကြပါမယ်။ အရမ်းလွယ်ပါတယ်၊ စလိုက်ကြရအောင်။",
+        "narrationLang": "my",
+        "hintText": "👆 点击开始学习 (စတင်လေ့လာရန် နှိပ်ပါ)"
+      }
+    },
+    {
+      "type": "word_study",
+      "id": "core_vocab",
+      "content": {
+        "title": "核心词汇：问候与称呼",
+        "displayMode": "list",
+        "words": [
+          { "id": "w1", "chinese": "你好", "translation": "你好 (nǐ hǎo) - မင်္ဂလာပါ", "example": "你好！" },
+          { "id": "w2", "chinese": "我", "translation": "我 (wǒ) - ကျွန်တော်/ကျွန်မ", "example": "我是学生。" },
+          { "id": "w3", "chinese": "叫", "translation": "叫 (jiào) - ခေါ်သည်/အမည်တွင်သည်", "example": "你叫什么？" },
+          { "id": "w4", "chinese": "什么", "translation": "什么 (shénme) - ဘာလဲ", "example": "这是什么？" },
+          { "id": "w5", "chinese": "名字", "translation": "名字 (míngzi) - နာမည်", "example": "我的名字。" },
+          { "id": "w6", "chinese": "很高兴", "translation": "很高兴 (hěn gāoxìng) - ဝမ်းသာပါတယ်", "example": "我很高兴。" },
+          { "id": "w7", "chinese": "认识", "translation": "认识 (rènshi) - သိကျွမ်းသည်", "example": "认识你。" }
+        ]
+      }
+    },
+    {
+      "type": "grammar_study",
+      "id": "grammar_deep_dive",
+      "content": {
+        "title": "核心语法深度解析",
+        "grammarPoints": [
+          {
+            "id": "gp1_1_rich",
+            "grammarPoint": "基础问候：你好",
+            "pattern": "你 (Nǐ) + 好 (hǎo)",
+            "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>字面意思</strong></div><div style='padding-left: 15px;'>“你” (You) + “好” (Good)。<br>字面意思是你很好，引申为<b>“你好/Hello/Mingalarpar”</b>。</div>",
+            "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>这是中文里最通用的问候语，一天中的任何时间、对任何人都可以使用。</div>",
+            "narrationScript": "တရုတ်လို 'မင်္ဂလာပါ' လို့ ပြောချင်ရင် 'နီဟောင်' (你好) လို့ ပြောရပါတယ်။ စကားလုံးအဓိပ္ပာယ်ကတော့ 'မင်း' (你) နဲ့ 'ကောင်းတယ်' (好) ပေါင်းစပ်ထားတာပါ။",
+            "examples": [
+              { "id": "ex1_1_1", "sentence": "A: {{你好}}！ B: {{你好}}！", "pinyin": "Nǐ hǎo! - Nǐ hǎo!", "translation": "မင်္ဂလာပါ! - မင်္ဂလာပါ!", "narrationScript": "你好！你好！" }
+            ]
+          },
+          {
+            "id": "gp1_2_rich",
+            "grammarPoint": "自我介绍：我叫...",
+            "pattern": "{{主语}} + 叫 + {{名字}}",
+            "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法核心</strong></div><div style='padding-left: 15px;'>动词 <b>“叫” (jiào)</b> 的意思是“叫做”或“名字是”。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>缅汉对比</strong></div><div style='padding-left: 15px;'>结构非常简单：<br><div style='margin-top:8px; padding-left:10px; border-left: 3px solid #F39C12;'><span style='color:#d35400;'><b>中文:</b> 我 <b>叫</b> 大卫。</span><br><span style='color:#27ae60;'><b>缅文:</b> ကျွန်တော့်နာမည် ဒေးဗစ် <b>ပါ/လို့ခေါ်ပါတယ်</b>။</span></div></div>",
+            "narrationScript": "ကိုယ့်နာမည်ကို မိတ်ဆက်တဲ့အခါ 'ဝေါ့ ကျောက်...' (我叫...) ပြီးရင် နာမည်ထည့်ပြောရုံပါပဲ။",
+            "examples": [
+              { "id": "ex1_2_1", "sentence": "{{我}} {{叫}} {{李华}}。", "pinyin": "Wǒ jiào Lǐ Huá.", "translation": "ကျွန်တော့်နာမည်က လီဟွာ ပါ။", "narrationScript": "我叫李华。" },
+              { "id": "ex1_2_2", "sentence": "{{他}} {{叫}} {{大卫}}。", "pinyin": "Tā jiào Dàwèi.", "translation": "သူ့နာမည်က ဒေးဗစ် ပါ။", "narrationScript": "他叫大卫。" }
+            ]
+          },
+          {
+            "id": "gp1_3_rich",
+            "grammarPoint": "询问名字",
+            "pattern": "你叫 + 什么 + 名字？",
+            "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>疑问词</strong></div><div style='padding-left: 15px;'><b>“什么” (shénme)</b> 意思是“什么/What/ဘာလဲ”。<br><b>“名字” (míngzi)</b> 意思是“名字/Name/နာမည်”。</div>",
+            "usage": "这是一个固定的常用问句，请直接背下来。",
+            "narrationScript": "တခြားတစ်ယောက်ရဲ့ နာမည်ကို မေးချင်ရင်တော့ 'နီ ကျောက် စ်ှမ်မ မင်းဇ' (你叫什么名字) လို့ မေးနိုင်ပါတယ်။",
+            "examples": [
+              { "id": "ex1_3_1", "sentence": "{{你}} {{叫}} {{什么}} {{名字}}？", "pinyin": "Nǐ jiào shénme míngzi?", "translation": "မင်းနာမည် ဘယ်လိုခေါ်လဲ?", "narrationScript": "你叫什么名字？" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "teaching",
+      "id": "culture_tip_1",
+      "content": {
+        "pinyin": "Wénhuà: Chēnghu",
+        "displayText": "文化小贴士：您好 (Nin hao)",
+        "translation": "表示尊敬的问候",
+        "visibleExplanation": "<div style='text-align:left; padding:15px; background-color:#eaf2f8; border-radius:8px;'>在和长辈、老师或上级说话时，为了表示<b>尊敬</b>，我们会把“你”(nǐ) 改成 <b>“您”(nín)</b>。<br><br>所以“您好”比“你好”更礼貌。</div>",
+        "narrationScript": "တရုတ်ယဉ်ကျေးမှုမှာ လူကြီးသူမတွေ၊ ဆရာသမားတွေကို နှုတ်ဆက်တဲ့အခါ ပိုပြီးယဉ်ကျေးအောင် 'နီဟောင်' (你好) အစား 'နင်းဟောင်' (您好) လို့ သုံးလေ့ရှိပါတယ်။",
+        "narrationLang": "my"
+      }
+    },
+    {
+      "type": "complete",
+      "id": "end_lesson_1",
+      "content": { 
+        "title": "🎉 太棒了！", 
+        "text": "你已经学会了最基础的中文问候和介绍！试着向你的朋友用中文打个招呼吧！" 
+      }
+    }
+  ]
+}
