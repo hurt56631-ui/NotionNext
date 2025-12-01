@@ -1,0 +1,5 @@
+[
+  { "id": "v1", "word": "你好", "pinyin": "nǐ hǎo", "translation": "Hello" },
+  { "id": "v2", "word": "名字", "pinyin": "míng zi", "translation": "Name" },
+  { "id": "v3", "word": "高兴", "pinyin": "gāo xìng", "translation": "Happy" }
+]
