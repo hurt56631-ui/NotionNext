@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router'; 
-// ❌ 不需要 createPortal 了
-// import { createPortal } from 'react-dom'; 
-
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
-import { IoMdClose } from "react-icons/io";
+// ❌ 删除了关闭图标引用
+// import { IoMdClose } from "react-icons/io";
 
 // --- 外部题型组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -30,28 +28,15 @@ const audioManager = (() => {
 })();
 
 // ---------------- Sub Components (保持不变) ----------------
-// 为了节省篇幅，这里省略了 TeachingBlock, WordStudyBlock 等子组件的具体代码
-// 请保持你原文件中的 TeachingBlock, WordStudyBlock, CompletionBlock, UnknownBlockHandler 不变
-// ... (此处省略子组件代码，复制时请保留原来的) ...
-
-// 为了演示完整性，我把 CompletionBlock 补上，因为它用了 router
-const CompletionBlock = ({ data, router }) => {
-  useEffect(() => {
-    audioManager?.playTTS(data.title || "恭喜", 'zh');
-    import('canvas-confetti').then(m => m.default({ particleCount: 150, spread: 70, origin: { y: 0.6 } })).catch(()=>{});
-    const timer = setTimeout(() => router.back(), 3000);
-    return () => clearTimeout(timer);
-  }, [data, router]);
-  return (<div className="flex flex-col items-center justify-center h-full pb-20 animate-bounce-in"><div className="text-8xl mb-6 drop-shadow-md">🎉</div><h2 className="text-3xl font-black text-slate-800 mb-3">{data.title || "完成！"}</h2><p className="text-lg text-slate-500">{data.text || "即将返回..."}</p></div>);
+// ... (此处省略子组件代码，复制时请保留你原来的 TeachingBlock, WordStudyBlock 等) ...
+const TeachingBlock = ({ data, onComplete, settings }) => {
+  useEffect(() => { if (data?.narrationScript && settings?.playTTS) { const timer = setTimeout(() => { settings.playTTS(data.narrationScript, data.narrationLang || 'my'); }, 600); return () => clearTimeout(timer); } }, [data, settings]);
+  const handleManualPlay = (e) => { e.stopPropagation(); settings?.playTTS(data.displayText || data.narrationScript || '', 'zh'); };
+  return ( <div className="w-full flex flex-col items-center animate-fade-in-up"> {data.pinyin && <p className="text-lg text-slate-500 font-medium mb-4">{data.pinyin}</p>} <div className="relative bg-white w-full rounded-[2rem] p-10 shadow-xl shadow-blue-100/50 border border-slate-100 flex flex-col items-center justify-center min-h-[220px] mb-8"> <h1 className="text-5xl md:text-6xl font-black text-slate-800 text-center tracking-tight leading-tight"> {data.displayText} </h1> <button onClick={handleManualPlay} className="absolute -bottom-7 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40 active:scale-90 transition-transform"> <HiSpeakerWave className="text-2xl" /> </button> </div> {data.translation && ( <div className="bg-white/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-200/60 shadow-sm mt-4"> <p className="text-xl text-slate-600 font-medium text-center leading-relaxed"> {data.translation} </p> </div> )} <div className="mt-auto w-full pt-10"> <button onClick={onComplete} className="w-full py-4 bg-slate-800 text-white font-bold text-lg rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"> 继续 <FaArrowRight /> </button> </div> </div> );
 };
-
-// ... 其他子组件 (WordStudyBlock, TeachingBlock, UnknownBlockHandler) 请确保保留 ...
-// 如果你不想重新复制子组件，只替换下面的 InteractiveLesson 主函数即可。
-
-const TeachingBlock = ({ data, onComplete, settings }) => { /* ...保持原样... */ return <div onClick={onComplete}>TeachingBlock Placeholder</div> };
-const WordStudyBlock = ({ data, onComplete, settings }) => { /* ...保持原样... */ return <div onClick={onComplete}>WordStudyBlock Placeholder</div> };
-const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip}>Unknown</div>;
-
+const WordStudyBlock = ({ data, onComplete, settings }) => ( <div className="w-full h-full flex flex-col"> <div className="text-center mb-6 shrink-0"> <h2 className="text-2xl font-bold text-slate-800">{data.title || "生词学习"}</h2> <p className="text-slate-400 text-sm mt-1">点击卡片听发音</p> </div> <div className="flex-1 overflow-y-auto pb-4 px-1" style={{ scrollbarWidth: 'none' }}> <div className="grid grid-cols-2 gap-4 pb-20"> {data.words?.map((word, i) => ( <button key={word.id || i} onClick={() => settings?.playTTS(word.chinese, 'zh', word.rate || 0)} className="flex flex-col items-center p-5 bg-white rounded-2xl shadow-sm border border-slate-100 active:scale-95 transition-all hover:border-blue-300 hover:shadow-md"> <span className="text-xs text-slate-400 font-medium mb-1">{word.pinyin}</span> <span className="text-2xl font-bold text-slate-800 mb-2">{word.chinese}</span> <span className="text-sm text-slate-500 bg-slate-50 px-2 py-1 rounded-md w-full truncate text-center">{word.translation}</span> </button> ))} </div> </div> <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent"> <button onClick={onComplete} className="w-full py-3.5 bg-blue-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all">我学会了</button> </div> </div> );
+const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS(data.title || "恭喜", 'zh'); import('canvas-confetti').then(m => m.default({ particleCount: 150, spread: 70, origin: { y: 0.6 } })).catch(()=>{}); const timer = setTimeout(() => router.back(), 3000); return () => clearTimeout(timer); }, [data, router]); return (<div className="flex flex-col items-center justify-center h-full pb-20 animate-bounce-in"><div className="text-8xl mb-6 drop-shadow-md">🎉</div><h2 className="text-3xl font-black text-slate-800 mb-3">{data.title || "完成！"}</h2><p className="text-lg text-slate-500">{data.text || "即将返回..."}</p></div>); };
+const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="text-center text-gray-400 mt-10">Unknown type: {type}</div>;
 
 // ---------------- Main Component ----------------
 
@@ -117,35 +102,55 @@ export default function InteractiveLesson({ lesson }) {
 
   if (!hasMounted) return null;
 
-  // ✅ 改动：不再使用 createPortal，不再使用 fixed 全屏
-  // 只使用 w-full h-full，让父组件决定它的大小
   return (
-    <div className="w-full h-full bg-slate-50 flex flex-col overflow-hidden font-sans relative">
+    // ✅ 1. 添加 overscroll-none 防止整个页面橡皮筋回弹
+    // ✅ 2. touch-none 在非滚动区域禁止默认触摸行为 (如果内部不需要滚动)
+    <div className="w-full h-full bg-slate-50 flex flex-col overflow-hidden font-sans relative overscroll-none">
       <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-100 to-blue-50 pointer-events-none" />
 
-      {/* Top Bar */}
-      <div className="relative flex-none pt-[env(safe-area-inset-top)] px-4 pb-2 z-20 flex items-center justify-between">
-        <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-full bg-black/5 active:bg-black/10 transition-colors">
-          <IoMdClose className="text-xl text-slate-600" />
-        </button>
+      {/* --- Top Bar: 极简模式，只有进度条 --- */}
+      <div className="relative flex-none pt-[env(safe-area-inset-top)] px-4 py-3 z-20 flex items-center justify-between">
+        {/* ❌ 删除了左上角关闭按钮 */}
+        {/* ❌ 删除了右上角页码 */}
+        
+        {/* 进度条：加粗加高，视觉更清晰 */}
         {currentIndex < totalBlocks && (
-          <div className="flex-1 mx-4 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+          <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden mx-2">
             <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / totalBlocks) * 100}%` }} />
           </div>
         )}
-        <button onClick={() => setIsJumping(true)} className="text-xs font-bold text-slate-400 px-2">{currentIndex + 1}/{totalBlocks}</button>
       </div>
 
       {/* Main Content */}
-      <main className="relative flex-1 w-full max-w-2xl mx-auto px-5 pt-[1vh] md:pt-[2vh] pb-32 overflow-y-auto overflow-x-hidden no-scrollbar z-10">
+      <main className="relative flex-1 w-full max-w-2xl mx-auto px-5 pt-[1vh] md:pt-[2vh] pb-32 overflow-y-auto overflow-x-hidden no-scrollbar z-10 overscroll-contain">
         {currentIndex >= totalBlocks ? <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} /> : renderBlock()}
       </main>
 
-      {/* Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] p-4 pointer-events-none z-30">
-        <div className="max-w-2xl mx-auto flex justify-between pointer-events-auto items-end">
-          <button onClick={goPrev} className={`w-12 h-12 rounded-full bg-white shadow-md border border-slate-100 text-slate-500 flex items-center justify-center transition-all active:scale-90 ${currentIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}><FaChevronLeft /></button>
-          <button onClick={goNext} className={`w-12 h-12 rounded-full bg-white shadow-md border border-slate-100 text-slate-500 flex items-center justify-center transition-all active:scale-90 ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}><FaChevronRight /></button>
+      {/* --- Bottom Bar: 大按钮 + 居中页码 --- */}
+      <div className="fixed bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-6 py-4 pointer-events-none z-30">
+        <div className="max-w-xl mx-auto flex justify-between items-center pointer-events-auto mb-4">
+          
+          {/* 左侧：上一题 (大尺寸) */}
+          <button onClick={goPrev} 
+            className={`w-16 h-16 rounded-2xl bg-white shadow-xl shadow-slate-200 border border-slate-100 text-slate-500 flex items-center justify-center transition-all active:scale-90 active:bg-slate-50 ${currentIndex === 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          >
+            <FaChevronLeft className="text-xl" />
+          </button>
+          
+          {/* 中间：页码 (点击可跳转) */}
+          <button onClick={() => setIsJumping(true)} className="flex flex-col items-center justify-center px-4 py-2 rounded-xl active:bg-black/5 transition-colors">
+            <span className="text-2xl font-black text-slate-300 tracking-widest font-mono">
+              {currentIndex + 1}<span className="text-sm text-slate-200 mx-1">/</span>{totalBlocks}
+            </span>
+          </button>
+
+          {/* 右侧：下一题 (大尺寸 + 强调色) */}
+          <button onClick={goNext} 
+            className={`w-16 h-16 rounded-2xl bg-white shadow-xl shadow-slate-200 border border-slate-100 text-slate-600 flex items-center justify-center transition-all active:scale-90 active:bg-slate-50 ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}
+          >
+             <FaChevronRight className="text-xl" />
+          </button>
+
         </div>
       </div>
 
