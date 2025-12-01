@@ -1,3 +1,5 @@
+// components/SpeakingContentBlock.js
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, X } from 'lucide-react';
@@ -7,13 +9,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 // 导入目录数据
 import speakingList from '@/data/speaking.json';
 
-// 1. 导入组件
-const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
-// 导入全屏互动引擎 (InteractiveLesson 内部集成了 XuanZeTi, PanDuanTi 等所有题型)
+// --- 核心组件 ---
+// 统一使用您的全屏互动引擎，它内部集成了 GrammarPointPlayer 和各种题型组件
 const InteractiveLesson = dynamic(() => import('@/components/InteractiveLesson'), { ssr: false });
-
-// ✅ 移除 ExerciseCard，不再需要
-// const ExerciseCard = dynamic(() => import('@/components/ExerciseCard'), { ssr: false });
 
 const SpeakingContentBlock = () => {
   const router = useRouter();
@@ -22,11 +20,12 @@ const SpeakingContentBlock = () => {
   const [activeModule, setActiveModule] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  // 数据加载逻辑 (保持不变)
+  // ==================== 1. 数据加载 ====================
   const handleCourseClick = async (courseSummary) => {
     setIsLoading(true);
     const lessonId = courseSummary.id;
     
+    // 辅助函数
     const fetchSafe = async (url) => {
         try {
             const res = await fetch(url);
@@ -36,6 +35,7 @@ const SpeakingContentBlock = () => {
     };
 
     try {
+      // 并行请求所有数据
       const [vocabData, grammarData, sentencesData, exercisesData] = await Promise.all([
           fetchSafe(`/data/lessons/${lessonId}/vocabulary.json`),
           fetchSafe(`/data/lessons/${lessonId}/grammar.json`),
@@ -48,17 +48,19 @@ const SpeakingContentBlock = () => {
           vocabulary: vocabData,
           grammar: grammarData,
           sentences: sentencesData,
-          exercises: exercisesData // 这里现在加载的是 题型Block 数组
+          exercises: exercisesData
       });
       
       router.push(router.asPath + '#course-menu', undefined, { shallow: true });
     } catch (error) {
-      alert("加载失败，请重试");
+      console.error(error);
+      alert("加载课程失败，请重试");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ==================== 2. 状态同步 ====================
   const handleModuleClick = (type) => {
     setActiveModule(type);
     router.push(router.asPath.split('#')[0] + `#course-${type}`, undefined, { shallow: true });
@@ -84,73 +86,104 @@ const SpeakingContentBlock = () => {
 
   const handleBack = () => router.back();
 
-  // ==================== 数据转换 ====================
+  // ==================== 3. 数据转换适配器 (核心) ====================
+  // 将简单 JSON 转换为 InteractiveLesson 需要的 Blocks 结构
 
-  // 1. 短句转换 (和之前一样)
-  const transformSentencesToLesson = (sentences) => {
-    if (!sentences || sentences.length === 0) return { blocks: [] };
+  // A. 生词 -> word_study Block
+  const transformVocabToLesson = (data) => {
+    if (!data || data.length === 0) return { blocks: [] };
+    return {
+      blocks: [
+        {
+          type: "word_study",
+          content: {
+            title: "核心生词",
+            words: data.map(item => ({
+              id: item.id,
+              chinese: item.word,      // InteractiveLesson 里的字段是 chinese
+              pinyin: item.pinyin,
+              translation: item.translation,
+              example: item.example,   // 支持例句展示
+              rate: 0                  // 正常语速
+            }))
+          }
+        },
+        { type: "complete", content: { title: "学习完成", text: "生词已掌握！" } }
+      ]
+    };
+  };
+
+  // B. 短句 -> word_study Block (复用滚动列表模式)
+  const transformSentencesToLesson = (data) => {
+    if (!data || data.length === 0) return { blocks: [] };
     return {
       blocks: [
         {
           type: "word_study",
           content: {
             title: "常用短句",
-            words: sentences.map(s => ({
-              id: s.id,
-              chinese: s.sentence,
-              pinyin: s.pinyin,
-              translation: s.translation,
-              rate: 0.85
+            words: data.map(item => ({
+              id: item.id,
+              chinese: item.sentence,  // 映射 sentence -> chinese
+              pinyin: item.pinyin,
+              translation: item.translation,
+              rate: 0.85               // 语速稍慢
             }))
           }
         },
-        { type: "complete", content: { title: "完成！", text: "你已掌握本课短句。" } }
+        { type: "complete", content: { title: "太棒了", text: "短句已掌握！" } }
       ]
     };
   };
 
-  // 2. 语法转换 (和之前一样)
-  const transformGrammarToLesson = (grammarData) => {
-    if (!grammarData || grammarData.length === 0) return { blocks: [] };
+  // C. 语法 -> grammar_study Block (调用 GrammarPointPlayer)
+  const transformGrammarToLesson = (data) => {
+    if (!data || data.length === 0) return { blocks: [] };
     return {
       blocks: [
         {
           type: "grammar_study",
           content: {
-            title: "核心语法解析",
-            grammarPoints: grammarData.map(g => {
+            // InteractiveLesson 会把这个对象传给 GrammarPointPlayer
+            grammarPoints: data.map(g => {
+              // 自动构建富文本解释（如果 json 里没有 visibleExplanation）
               let finalExplanation = g.visibleExplanation;
               if (!finalExplanation) {
                  finalExplanation = `<div class="font-bold text-blue-600 mb-2">${g.translation || ''}</div><div>${g.explanation || ''}</div>`;
               }
               if (g.usage) finalExplanation += g.usage;
-              if (g.attention) finalExplanation += g.attention;
 
               return {
                 id: g.id,
-                grammarPoint: g.grammarPoint || g.sentence,
-                pattern: g.pattern || g.sentence,
-                visibleExplanation: finalExplanation,
-                examples: g.examples || []
+                grammarPoint: g.sentence || g.pattern, // 标题
+                pattern: g.pattern || g.sentence,      // 句型结构
+                visibleExplanation: finalExplanation,  // 富文本解释
+                examples: g.examples || []             // 例句
               };
             })
           }
         },
-        { type: "complete", content: { title: "太棒了！", text: "语法要点已学完。" } }
+        { type: "complete", content: { title: "语法通关", text: "去试试练习题吧！" } }
       ]
     };
   };
 
-  // 3. 练习转换 (✅ 新逻辑)
-  // 因为 exercises.json 已经是 blocks 格式了，我们只需要简单包装一下
-  const transformExercisesToLesson = (exercisesData) => {
-    if (!exercisesData || exercisesData.length === 0) return { blocks: [] };
-    
-    // 直接返回数据，因为我们在 json 里已经写好了 type: "choice", type: "panduan" 等
+  // D. 练习 -> 直接使用 blocks (JSON 中需包含 type: choice/panduan 等)
+  const transformExercisesToLesson = (data) => {
+    if (!data || data.length === 0) return { blocks: [] };
+    // 如果 json 直接是数组，就包一层；如果已经是对象则直接用
     return {
-      blocks: exercisesData
+      blocks: Array.isArray(data) ? data : (data.blocks || [])
     };
   };
+
+  // ==================== 4. 渲染 ====================
+  // 根据当前模块类型，选择对应的数据转换函数
+  let currentLessonData = null;
+  if (activeModule === 'vocab') currentLessonData = transformVocabToLesson(selectedCourse?.vocabulary);
+  else if (activeModule === 'sentences') currentLessonData = transformSentencesToLesson(selectedCourse?.sentences);
+  else if (activeModule === 'grammar') currentLessonData = transformGrammarToLesson(selectedCourse?.grammar);
+  else if (activeModule === 'exercises') currentLessonData = transformExercisesToLesson(selectedCourse?.exercises);
 
   return (
     <>
@@ -158,7 +191,7 @@ const SpeakingContentBlock = () => {
         <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center">
             <div className="bg-white p-4 rounded-xl shadow-xl flex items-center gap-3">
                 <Loader2 className="animate-spin text-teal-600" />
-                <span className="font-medium">正在加载资源...</span>
+                <span className="font-medium">正在加载...</span>
             </div>
         </div>
       )}
@@ -198,39 +231,23 @@ const SpeakingContentBlock = () => {
         )}
       </AnimatePresence>
 
-      {/* 1. 生词 (卡片) */}
-      <WordCard isOpen={activeModule === 'vocab'} words={selectedCourse?.vocabulary || []} onClose={handleBack} progressKey={`vocab-${selectedCourse?.id}`} />
-
-      {/* 2. 短句 (全屏互动) */}
-      {activeModule === 'sentences' && (
+      {/* 统一的全屏互动容器 */}
+      {activeModule && currentLessonData && (
          <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-             <button onClick={handleBack} className="fixed top-4 right-4 z-[60] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm"><X size={20} className="text-gray-600 dark:text-gray-200" /></button>
-             <InteractiveLesson lesson={transformSentencesToLesson(selectedCourse?.sentences)} />
-         </div>
-      )}
-
-      {/* 3. 语法 (全屏互动) */}
-      {activeModule === 'grammar' && (
-         <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-             <button onClick={handleBack} className="fixed top-4 right-4 z-[60] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm"><X size={20} className="text-gray-600 dark:text-gray-200" /></button>
-             <InteractiveLesson lesson={transformGrammarToLesson(selectedCourse?.grammar)} />
-         </div>
-      )}
-
-      {/* 4. 练习 (全屏互动 - 升级版!) */}
-      {activeModule === 'exercises' && (
-         <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-             {/* 练习模式一般不允许中途随便退出，或者您可以保留关闭按钮 */}
-             <button onClick={handleBack} className="fixed top-4 right-4 z-[60] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm"><X size={20} className="text-gray-600 dark:text-gray-200" /></button>
+             {/* 独立的关闭按钮 */}
+             <button onClick={handleBack} className="fixed top-4 right-4 z-[60] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm hover:bg-black/20 transition-colors">
+                <X size={20} className="text-gray-600 dark:text-gray-200" />
+             </button>
              
-             {/* 直接把 exercises.json 的数据传给 lesson */}
-             <InteractiveLesson lesson={transformExercisesToLesson(selectedCourse?.exercises)} />
+             {/* 调用互动引擎 */}
+             <InteractiveLesson lesson={currentLessonData} />
          </div>
       )}
     </>
   );
 };
 
+// 菜单卡片组件
 const MenuCard = ({ title, subtitle, icon, color, onClick }) => (
     <div onClick={onClick} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-6 active:scale-95 transition-transform cursor-pointer">
         <div className={`w-14 h-14 rounded-full ${color} text-white flex items-center justify-center shadow-lg`}>
