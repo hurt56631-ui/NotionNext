@@ -1,0 +1,271 @@
+[
+  {
+    "type": "teaching",
+    "content": {
+      "displayText": "组件功能全面测试",
+      "pinyin": "Zǔjiàn Gōngnéng Cèshì",
+      "translation": "Component Full Feature Test",
+      "narrationScript": "欢迎来到测试环节，我们将测试文本、图片、音频和视频等多种题型。",
+      "narrationLang": "zh"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【基础文本】“你好”的英文是什么？",
+      "choices": [
+        { "id": "A", "text": "Goodbye" },
+        { "id": "B", "text": "Hello" },
+        { "id": "C", "text": "Thank you" }
+      ],
+      "correctId": "B",
+      "explanation": "“你好”是最常见的问候语，对应英文 Hello。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【图片选项】请选择“苹果” (Apple)",
+      "choices": [
+        { "id": "opt1", "text": "香蕉", "imageUrl": "https://images.unsplash.com/photo-1571771896612-424b6f0f1325?w=400&q=80" },
+        { "id": "opt2", "text": "苹果", "imageUrl": "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=400&q=80" },
+        { "id": "opt3", "text": "葡萄", "imageUrl": "https://images.unsplash.com/photo-1537640538965-175629952712?w=400&q=80" }
+      ],
+      "correctId": "opt2",
+      "explanation": "图2是红色的苹果 (Píngguǒ)。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【看图识字】这张图里的人在做什么？",
+      "imageUrl": "https://images.unsplash.com/photo-1511988617509-a57c8a288659?w=600&q=80",
+      "choices": [
+        { "id": 1, "text": "睡觉 (Shuìjiào)" },
+        { "id": 2, "text": "跑步 (Pǎobù)" },
+        { "id": 3, "text": "吃饭 (Chīfàn)" }
+      ],
+      "correctId": 2,
+      "explanation": "图片中的人在户外跑步。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【听力测试】请听录音，他说了什么？(点击左上角喇叭播放)",
+      "audioUrl": "https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav",
+      "text": "（听力题：请忽略此处的文字，专注于听）",
+      "choices": [
+        { "id": "a", "text": "大象走路" },
+        { "id": "b", "text": "小鸟唱歌" },
+        { "id": "c", "text": "老虎吼叫" }
+      ],
+      "correctId": "a",
+      "explanation": "这是一段经典的大象走路的音乐/音效。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【语法逻辑】“我__一个学生。”",
+      "choices": [
+        { "id": 0, "text": "是 (shì)" },
+        { "id": 1, "text": "有 (yǒu)" },
+        { "id": 2, "text": "在 (zài)" }
+      ],
+      "correctId": 0,
+      "explanation": "主语+是+名词，表示身份。I am a student."
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【文化常识】中国的首都是哪里？",
+      "imageUrl": "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=600&q=80",
+      "choices": [
+        { "id": "bj", "text": "上海 (Shanghai)" },
+        { "id": "sh", "text": "北京 (Beijing)" },
+        { "id": "xa", "text": "西安 (Xi'an)" }
+      ],
+      "correctId": "sh",
+      "explanation": "北京是中国的政治文化中心。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【图片辨析】哪个是“猫” (Cat)？",
+      "choices": [
+        { "id": "dog", "text": "狗", "imageUrl": "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&q=80" },
+        { "id": "cat", "text": "猫", "imageUrl": "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&q=80" }
+      ],
+      "correctId": "cat",
+      "explanation": "左边是狗，右边是猫。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【反义词】“大”(Big) 的反义词是？",
+      "choices": [
+        { "id": 1, "text": "多 (Many)" },
+        { "id": 2, "text": "小 (Small)" },
+        { "id": 3, "text": "高 (Tall)" }
+      ],
+      "correctId": 2,
+      "explanation": "大(Big) 对 小(Small)。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【量词测试】一__书 (A book)",
+      "choices": [
+        { "id": "ben", "text": "本 (běn)" },
+        { "id": "ge", "text": "个 (gè)" },
+        { "id": "zhang", "text": "张 (zhāng)" }
+      ],
+      "correctId": "ben",
+      "explanation": "书的量词是“本”。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【视频测试】请看视频，这是什么自然现象？",
+      "videoUrl": "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
+      "choices": [
+        { "id": "1", "text": "动画电影" },
+        { "id": "2", "text": "新闻联播" }
+      ],
+      "correctId": "1",
+      "explanation": "这是 Sintel 的动画预告片。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【拼音测试】“谢谢”的正确拼音是？",
+      "choices": [
+        { "id": "a", "text": "xiè xie" },
+        { "id": "b", "text": "xí xié" },
+        { "id": "c", "text": "xī xī" }
+      ],
+      "correctId": "a",
+      "explanation": "第一个字四声，第二个字轻声。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【情景对话】晚上睡觉前应该说什么？",
+      "choices": [
+        { "id": "1", "text": "早上好 (Good morning)" },
+        { "id": "2", "text": "晚安 (Good night)" }
+      ],
+      "correctId": "2",
+      "explanation": "睡觉前说“晚安”。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【颜色识别】这是什么颜色？",
+      "imageUrl": "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=600&q=80",
+      "choices": [
+        { "id": "r", "text": "红色 (Hóngsè)" },
+        { "id": "g", "text": "绿色 (Lǜsè)" },
+        { "id": "b", "text": "蓝色 (Lánsè)" }
+      ],
+      "correctId": "g",
+      "explanation": "这片森林是绿色的。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【数字计算】一加一等于几 (1 + 1 = ?)？",
+      "choices": [
+        { "id": "1", "text": "一 (Yī)" },
+        { "id": "2", "text": "二 (Èr)" },
+        { "id": "3", "text": "三 (Sān)" }
+      ],
+      "correctId": "2",
+      "explanation": "1+1=2，中文是“二”。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【食物认知】中国人早饭常吃什么？",
+      "imageUrl": "https://images.unsplash.com/photo-1626804475297-411f7c1664f3?w=600&q=80",
+      "choices": [
+        { "id": "1", "text": "粥和包子" },
+        { "id": "2", "text": "牛排和红酒" }
+      ],
+      "correctId": "1",
+      "explanation": "粥(Porridge)和包子(Baozi)是传统的中式早餐。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【时间表达】图片上的时间是？",
+      "imageUrl": "https://images.unsplash.com/photo-1563861826100-9cb868c725a9?w=600&q=80",
+      "choices": [
+        { "id": "a", "text": "10点10分" },
+        { "id": "b", "text": "3点整" },
+        { "id": "c", "text": "12点30分" }
+      ],
+      "correctId": "a",
+      "explanation": "时针指向10，分针指向2（10分）。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【称谓】爸爸的爸爸叫什么？",
+      "choices": [
+        { "id": "ye", "text": "爷爷 (Yéye)" },
+        { "id": "nai", "text": "奶奶 (Nǎinai)" },
+        { "id": "wai", "text": "外公 (Wàigōng)" }
+      ],
+      "correctId": "ye",
+      "explanation": "父亲的父亲是爷爷。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【动词】他在做什么？",
+      "imageUrl": "https://images.unsplash.com/photo-1544367563-12123d8965cd?w=600&q=80",
+      "choices": [
+        { "id": "read", "text": "看书 (Kànshū)" },
+        { "id": "swim", "text": "游泳 (Yóuyǒng)" }
+      ],
+      "correctId": "read",
+      "explanation": "他正拿着一本书在阅读。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【多字识别】哪个选项是“中国”？",
+      "choices": [
+        { "id": "cn", "text": "中国" },
+        { "id": "us", "text": "美国" },
+        { "id": "jp", "text": "日本" },
+        { "id": "uk", "text": "英国" }
+      ],
+      "correctId": "cn",
+      "explanation": "China = 中国。"
+    }
+  },
+  {
+    "type": "complete",
+    "content": {
+      "title": "测试结束！",
+      "text": "恭喜你完成了所有20道测试题，你的中文水平很棒！"
+    }
+  }
+]
