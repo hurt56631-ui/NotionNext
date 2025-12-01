@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-// ✅ NotionNext (Pages Router) 必须使用 next/router，否则会报错
+// ✅ 适配 NotionNext (Pages Router)
 import { useRouter } from 'next/router'; 
+// ✅ 引入 Portal 以实现真·全屏
+import { createPortal } from 'react-dom'; 
+
+// 图标库 (请确保已安装 react-icons)
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
-// --- 外部题型组件 (请确保这些文件在同级目录或路径正确) ---
+// --- 外部题型组件 (请确保这些文件路径正确) ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -15,7 +19,7 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// ---------------- 全局音频管理器 ----------------
+// ---------------- 全局音频管理器 (单例模式) ----------------
 const ttsVoices = {
   zh: 'zh-CN-XiaoyouNeural',
   my: 'my-MM-NilarNeural',
@@ -109,7 +113,7 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- UI 组件 ----------------
+// ---------------- UI 子组件 ----------------
 
 const TeachingBlock = ({ data, onComplete, settings }) => {
   useEffect(() => {
@@ -190,8 +194,10 @@ const WordStudyBlock = ({ data, onComplete, settings }) => {
 const CompletionBlock = ({ data, router }) => {
   useEffect(() => {
     audioManager?.playTTS(data.title || "恭喜", 'zh');
+    // 撒花特效 (如果安装了 canvas-confetti)
     import('canvas-confetti').then(m => m.default({ particleCount: 150, spread: 70, origin: { y: 0.6 } })).catch(()=>{});
-    // NotionNext 返回上一页
+    
+    // 3秒后返回上一页
     const timer = setTimeout(() => router.back(), 3000);
     return () => clearTimeout(timer);
   }, [data, router]);
@@ -212,7 +218,7 @@ const UnknownBlockHandler = ({ type, onSkip }) => (
   </div>
 );
 
-// ---------------- 主组件 ----------------
+// ---------------- 主组件 (InteractiveLesson) ----------------
 
 export default function InteractiveLesson({ lesson }) {
   const router = useRouter();
@@ -225,8 +231,10 @@ export default function InteractiveLesson({ lesson }) {
   const totalBlocks = blocks.length;
   const currentBlock = blocks[currentIndex];
 
+  // 确保在客户端挂载
   useEffect(() => { setHasMounted(true); }, []);
 
+  // 进度读取
   useEffect(() => {
     if (lesson?.id && hasMounted) {
       const saved = localStorage.getItem(`lesson-progress-${lesson.id}`);
@@ -237,6 +245,7 @@ export default function InteractiveLesson({ lesson }) {
     }
   }, [lesson, hasMounted, totalBlocks]);
 
+  // 进度保存 & 切题停止音频
   useEffect(() => {
     if (hasMounted && lesson?.id && currentIndex > 0) {
       localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
@@ -244,6 +253,7 @@ export default function InteractiveLesson({ lesson }) {
     audioManager?.stop();
   }, [currentIndex, lesson?.id, hasMounted]);
 
+  // --- 导航逻辑 ---
   const goNext = useCallback(() => {
     audioManager?.stop();
     audioManager?.playDing();
@@ -257,6 +267,7 @@ export default function InteractiveLesson({ lesson }) {
   }, [currentIndex]);
 
   const delayedNextStep = useCallback(() => {
+    // 答对时撒花 + 延迟跳转
     import('canvas-confetti').then(m => m.default({ particleCount: 60, spread: 50, origin: { y: 0.7 } })).catch(()=>{});
     setTimeout(() => {
       setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
@@ -271,6 +282,7 @@ export default function InteractiveLesson({ lesson }) {
     setJumpValue('');
   };
 
+  // --- 渲染当前题型块 ---
   const renderBlock = () => {
     if (!hasMounted) return null;
     if (currentIndex >= totalBlocks) return <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} />;
@@ -278,14 +290,17 @@ export default function InteractiveLesson({ lesson }) {
     if (!currentBlock) return <div className="text-slate-400 mt-20">Loading...</div>;
 
     const type = (currentBlock.type || '').toLowerCase();
+    
+    // 传递给子组件的通用 Props
     const props = { 
       data: currentBlock.content, 
-      onCorrect: delayedNextStep, 
-      onComplete: goNext, 
-      onNext: goNext, 
+      onCorrect: delayedNextStep,  // 自动跳转逻辑
+      onComplete: goNext,          // 手动完成逻辑
+      onNext: goNext,              // 兼容部分组件命名
       settings: { playTTS: audioManager?.playTTS } 
     };
 
+    // 通用卡片容器
     const CommonWrapper = ({ children }) => (
       <div className="w-full bg-white rounded-3xl p-4 md:p-6 shadow-sm border border-slate-100 min-h-[50vh] flex flex-col justify-between">
         {children}
@@ -296,21 +311,29 @@ export default function InteractiveLesson({ lesson }) {
       switch (type) {
         case 'teaching': return <TeachingBlock {...props} />;
         case 'word_study': return <WordStudyBlock {...props} />;
+        
         case 'choice': 
           return <CommonWrapper><XuanZeTi {...props} question={{text: props.data.prompt, ...props.data}} options={props.data.choices||[]} correctAnswer={props.data.correctId?[props.data.correctId]:[]} /></CommonWrapper>;
+        
         case 'panduan': 
           return <CommonWrapper><PanDuanTi {...props} /></CommonWrapper>;
+        
         case 'lianxian': 
           const pairsMap = props.data.pairs?.reduce((acc,p)=>{acc[p.id]=`${p.id}_b`;return acc},{})||{};
           return <CommonWrapper><LianXianTi title={props.data.prompt} columnA={props.data.pairs?.map(p=>({id:p.id,content:p.left}))} columnB={props.data.pairs?.map(p=>({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={pairsMap} onCorrect={props.onCorrect} /></CommonWrapper>;
+        
         case 'paixu': 
           return <CommonWrapper><PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...props.data.items].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={props.onCorrect} /></CommonWrapper>;
+        
         case 'gaicuo': 
           return <CommonWrapper><GaiCuoTi {...props} /></CommonWrapper>;
+        
         case 'image_match_blanks': 
           return <CommonWrapper><TianKongTi {...props.data} onCorrect={props.onNext} /></CommonWrapper>;
+        
         case 'dialogue_cinematic': return <DuiHua {...props} />;
         case 'grammar_study': return <div className="h-[80vh] w-full"><GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} /></div>;
+        
         case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
         default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
       }
@@ -320,18 +343,32 @@ export default function InteractiveLesson({ lesson }) {
     }
   };
 
-  if (!hasMounted) return null;
+  // 如果没有挂载，或者不在浏览器环境，不渲染
+  if (!hasMounted || typeof document === 'undefined') return null;
 
-  return (
-    // 全屏容器：z-[9999] 确保在 NotionNext 的所有元素之上
+  // --- 定义全屏内容 ---
+  const content = (
     <div 
-      className="fixed inset-0 z-[9999] w-full bg-gradient-to-br from-slate-50 via-slate-100 to-blue-50 text-slate-800 flex flex-col overflow-hidden font-sans"
-      style={{ height: '100dvh' }} 
+      // 核心样式：fixed 全屏 + 极高 z-index + 强制不透明背景
+      className="fixed inset-0 z-[2147483647] w-screen h-[100dvh] bg-slate-50 flex flex-col overflow-hidden font-sans"
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#f8fafc', // 强制背景色，防止父级样式干扰
+      }} 
     >
-      <div className="flex-none pt-[env(safe-area-inset-top)] px-4 pb-2 z-20 flex items-center justify-between">
+      {/* 背景渐变层 */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-100 to-blue-50 pointer-events-none" />
+
+      {/* 顶部栏 */}
+      <div className="relative flex-none pt-[env(safe-area-inset-top)] px-4 pb-2 z-20 flex items-center justify-between">
         <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-full bg-black/5 active:bg-black/10 transition-colors">
           <IoMdClose className="text-xl text-slate-600" />
         </button>
+        
         {currentIndex < totalBlocks && (
           <div className="flex-1 mx-4 h-1.5 bg-slate-200 rounded-full overflow-hidden">
             <div 
@@ -340,15 +377,18 @@ export default function InteractiveLesson({ lesson }) {
             />
           </div>
         )}
+        
         <button onClick={() => setIsJumping(true)} className="text-xs font-bold text-slate-400 px-2">
           {currentIndex + 1}/{totalBlocks}
         </button>
       </div>
 
-      <main className="flex-1 w-full max-w-2xl mx-auto px-5 pt-[5vh] md:pt-[10vh] pb-32 overflow-y-auto overflow-x-hidden no-scrollbar">
+      {/* 主内容区域 */}
+      <main className="relative flex-1 w-full max-w-2xl mx-auto px-5 pt-[5vh] md:pt-[10vh] pb-32 overflow-y-auto overflow-x-hidden no-scrollbar z-10">
         {renderBlock()}
       </main>
 
+      {/* 底部导航栏 */}
       <div className="fixed bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] p-4 pointer-events-none z-30">
         <div className="max-w-2xl mx-auto flex justify-between pointer-events-auto items-end">
           <button
@@ -357,6 +397,8 @@ export default function InteractiveLesson({ lesson }) {
           >
             <FaChevronLeft />
           </button>
+          
+          {/* 右侧按钮作为兜底，如果题目卡死或无法交互，用户可以点这个跳过 */}
           <button
             onClick={goNext}
             className={`w-12 h-12 rounded-full bg-white shadow-md border border-slate-100 text-slate-500 flex items-center justify-center transition-all active:scale-90 ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}
@@ -366,6 +408,7 @@ export default function InteractiveLesson({ lesson }) {
         </div>
       </div>
 
+      {/* 页面跳转弹窗 */}
       {isJumping && (
         <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}>
           <div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72 animate-zoom-in">
@@ -386,4 +429,7 @@ export default function InteractiveLesson({ lesson }) {
       )}
     </div>
   );
+
+  // ✅ 核心魔法：使用 Portal 将 content 直接渲染到 body 节点下，脱离任何父级容器限制
+  return createPortal(content, document.body);
 }
