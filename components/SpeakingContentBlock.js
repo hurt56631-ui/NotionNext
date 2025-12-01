@@ -11,9 +11,9 @@ import speakingList from '@/data/speaking.json';
 
 // --- 动态导入组件 ---
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
-const ExerciseCard = dynamic(() => import('@/components/ExerciseCard'), { ssr: false });
+//const ExerciseCard = dynamic(() => import('@/components/ExerciseCard'), { ssr: false });
 // 导入全屏互动组件 (用于短句和语法)
-const InteractiveLesson = dynamic(() => import('@/components/InteractiveLesson'), { ssr: false });
+const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
 const SpeakingContentBlock = () => {
   const router = useRouter();
