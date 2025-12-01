@@ -1,17 +1,20 @@
+// components/InteractiveLesson.js
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { HiSpeakerWave } from "react-icons/hi2";
+import { FaChevronLeft, FaChevronRight, FaCheck } from "react-icons/fa"; // 引入图标
 import confetti from 'canvas-confetti';
+import dynamic from 'next/dynamic';
 
-// --- 1. 导入子组件 (路径请确保正确) ---
-import XuanZeTi from './XuanZeTi';
-import PanDuanTi from './PanDuanTi';
-import PaiXuTi from './PaiXuTi';
-import LianXianTi from './LianXianTi';
-import GaiCuoTi from './GaiCuoTi';
-import DuiHua from './DuiHua';
-import TianKongTi from './TianKongTi';
-import GrammarPointPlayer from './GrammarPointPlayer';
+// --- 1. 动态导入子组件 (确保路径正确指向 Tixing) ---
+const XuanZeTi = dynamic(() => import('@/components/Tixing/XuanZeTi'), { ssr: false });
+const PanDuanTi = dynamic(() => import('@/components/Tixing/PanDuanTi'), { ssr: false });
+const PaiXuTi = dynamic(() => import('@/components/Tixing/PaiXuTi'), { ssr: false });
+const LianXianTi = dynamic(() => import('@/components/Tixing/LianXianTi'), { ssr: false });
+const GaiCuoTi = dynamic(() => import('@/components/Tixing/GaiCuoTi'), { ssr: false });
+const DuiHua = dynamic(() => import('@/components/Tixing/DuiHua'), { ssr: false });
+const TianKongTi = dynamic(() => import('@/components/Tixing/TianKongTi'), { ssr: false });
+const GrammarPointPlayer = dynamic(() => import('@/components/Tixing/GrammarPointPlayer'), { ssr: false });
 
 // --- 2. TTS 语音模块 ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
@@ -29,7 +32,7 @@ const playTTS = async (text, lang = 'zh', rate = 0) => {
     } catch (e) { console.error("TTS error:", e); }
 };
 
-// --- 3. 页面组件 ---
+// --- 3. 页面组件 (已清理上滑提示) ---
 
 // [TeachingBlock] 首页
 const TeachingBlock = ({ data }) => {
@@ -40,7 +43,7 @@ const TeachingBlock = ({ data }) => {
     }, [data]);
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center pb-32 px-6 text-center select-none relative animate-fade-in">
+        <div className="w-full h-full flex flex-col items-center justify-center pb-20 px-6 text-center select-none relative animate-fade-in">
             {data.pinyin && <p className="text-lg text-slate-500 mb-2 font-medium">{data.pinyin}</p>}
             <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 mb-5 drop-shadow-sm leading-tight">{data.displayText}</h1>
             
@@ -55,12 +58,7 @@ const TeachingBlock = ({ data }) => {
                 </div>
             )}
             
-            <div className="absolute bottom-20 opacity-40 flex flex-col items-center animate-pulse pointer-events-none">
-                <span className="text-xs mb-1">上滑开始</span>
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-                </svg>
-            </div>
+            {/* 已移除底部上滑箭头 */}
         </div>
     );
 };
@@ -68,41 +66,36 @@ const TeachingBlock = ({ data }) => {
 // [WordStudyBlock] 生词 - 滚动式布局
 const WordStudyBlock = ({ data }) => {
     return (
-        <div className="w-full min-h-full flex flex-col p-4 pb-48">
+        <div className="w-full min-h-full flex flex-col p-4 pb-24">
             <div className="py-8 text-center shrink-0">
-                <h2 className="text-2xl font-bold text-slate-800">{data.title || "本课生词"}</h2>
-                <p className="text-slate-400 text-xs mt-2">点击发音，上滑继续</p>
+                <h2 className="text-2xl font-bold text-slate-800">{data.title || "本课学习"}</h2>
+                <p className="text-slate-400 text-xs mt-2">点击发音</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto w-full shrink-0">
+            <div className="grid grid-cols-1 gap-3 max-w-3xl mx-auto w-full shrink-0">
                 {data.words && data.words.map((word) => (
                     <div key={word.id} onClick={(e) => { e.stopPropagation(); playTTS(word.chinese, 'zh', word.rate || 0); }} 
                          className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 active:scale-[0.98] transition-all flex flex-col items-center text-center cursor-pointer">
-                        <span className="text-xs text-slate-400 mb-1 font-mono">{word.pinyin}</span>
-                        <span className="text-2xl font-bold text-slate-800 mb-2">{word.chinese}</span>
+                        {word.pinyin && <span className="text-xs text-slate-400 mb-1 font-mono">{word.pinyin}</span>}
+                        <span className="text-xl font-bold text-slate-800 mb-2">{word.chinese}</span>
                         <span className="text-blue-500 text-sm font-medium">{word.translation}</span>
                         {word.example && <div className="mt-3 pt-3 border-t border-slate-50 w-full text-xs text-slate-400 text-left leading-relaxed">{word.example}</div>}
                     </div>
                 ))}
             </div>
-            
-            <div className="mt-8 text-center opacity-30 shrink-0">
-                <div className="w-1 h-8 bg-slate-300 mx-auto rounded-full mb-2"></div>
-                <span className="text-xs">继续上滑</span>
-            </div>
+            {/* 已移除底部提示 */}
         </div>
     );
 };
 
 // [CompletionBlock]
-const CompletionBlock = ({ data, router }) => {
+const CompletionBlock = ({ data }) => {
     useEffect(() => {
         playTTS(data.title || "恭喜", 'zh');
         confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-        setTimeout(() => router.push('/'), 4000);
     }, []);
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center text-center">
+        <div className="w-full h-full flex flex-col items-center justify-center text-center pb-20">
             <div className="text-7xl mb-6 animate-bounce">🎉</div>
             <h2 className="text-3xl font-bold text-slate-800">{data.title || "完成！"}</h2>
             <p className="text-slate-500 mt-2">{data.text || "正在返回..."}</p>
@@ -110,21 +103,42 @@ const CompletionBlock = ({ data, router }) => {
     );
 };
 
-// --- 4. 底部浮层 (只有解锁后显示) ---
-const SwipeOverlay = ({ isVisible, onNext }) => {
-    if (!isVisible) return null;
+// --- 4. 新增：底部导航栏组件 ---
+const BottomNavigation = ({ currentIndex, total, isCompleted, onPrev, onNext }) => {
     return (
-        <div onClick={onNext} className="fixed bottom-0 left-0 w-full h-40 z-50 flex flex-col items-center justify-end pb-12 bg-gradient-to-t from-gray-100/90 via-gray-100/60 to-transparent cursor-pointer pointer-events-none animate-fade-in">
-            <style>{`
-                @keyframes bounce-up-light { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-15px); opacity: 0.7; } }
-                .animate-bounce-up-light { animation: bounce-up-light 2s infinite ease-in-out; }
-            `}</style>
-            <div className="flex flex-col items-center animate-bounce-up-light">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="#3b82f6" style={{ width: '2.5rem', height: '2.5rem' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-                </svg>
-                <span className="text-blue-500 font-bold text-sm mt-2 tracking-widest">上滑继续</span>
+        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-100 p-4 pb-safe-bottom z-50 flex items-center justify-between shadow-[0_-4px_15px_rgba(0,0,0,0.03)]">
+            {/* 上一页按钮 */}
+            <button 
+                onClick={onPrev}
+                disabled={currentIndex === 0}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                    currentIndex === 0 
+                    ? 'text-gray-300 cursor-not-allowed' 
+                    : 'text-gray-600 hover:bg-gray-100 active:bg-gray-200'
+                }`}
+            >
+                <FaChevronLeft />
+                <span>上一页</span>
+            </button>
+
+            {/* 页码 */}
+            <div className="text-xs font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                {currentIndex + 1} / {total}
             </div>
+
+            {/* 下一页按钮 */}
+            <button 
+                onClick={onNext}
+                disabled={!isCompleted}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold shadow-md transition-all transform active:scale-95 ${
+                    isCompleted 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200' 
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+            >
+                <span>下一页</span>
+                {isCompleted ? <FaChevronRight /> : <span className="text-xs ml-1 opacity-50">(未完成)</span>}
+            </button>
         </div>
     );
 };
@@ -134,28 +148,23 @@ export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isBlockCompleted, setIsBlockCompleted] = useState(false);
     
-    // 手势相关状态
-    const touchStartY = useRef(0);
+    // containerRef 用于处理内部滚动
     const containerRef = useRef(null);
     const router = useRouter();
 
     const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
     const currentBlock = blocks[currentIndex] || null;
 
-    // --- 禁止下拉刷新 & 全局设置 ---
     useEffect(() => {
-        document.body.style.overscrollBehaviorY = 'contain';
-        return () => {
-            document.body.style.overscrollBehaviorY = 'auto';
-            if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-        };
+        // 恢复默认滚动行为
+        document.body.style.overscrollBehaviorY = 'auto';
+        return () => { if (currentAudio) { currentAudio.pause(); currentAudio = null; } };
     }, []);
 
-    // --- 页面切换逻辑 ---
     useEffect(() => {
         if (!currentBlock) return;
         const type = currentBlock.type.toLowerCase();
-        // 这些页面默认就是“完成”状态，允许直接上滑翻页
+        // 自动解锁的类型
         const autoUnlockTypes = ['teaching', 'word_study', 'grammar_study', 'dialogue_cinematic', 'end', 'complete'];
         setIsBlockCompleted(autoUnlockTypes.includes(type));
         
@@ -166,58 +175,37 @@ export default function InteractiveLesson({ lesson }) {
         }
     }, [currentIndex, currentBlock]);
 
+    // 下一页逻辑
     const handleNext = useCallback(() => {
+        if (!isBlockCompleted) return; // 再次校验
         if (currentIndex < blocks.length) {
             setCurrentIndex(p => p + 1);
         }
-    }, [currentIndex, blocks.length]);
+    }, [currentIndex, blocks.length, isBlockCompleted]);
+
+    // 上一页逻辑
+    const handlePrev = useCallback(() => {
+        if (currentIndex > 0) {
+            setCurrentIndex(p => p - 1);
+            // 切回上一页时，默认该页已完成（因为之前肯定做过了）
+            setIsBlockCompleted(true); 
+        }
+    }, [currentIndex]);
 
     const handleCorrect = useCallback(() => {
         confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
         setIsBlockCompleted(true);
     }, []);
 
-    // --- [核心] 原生手势处理逻辑 ---
-    const onTouchStart = (e) => {
-        touchStartY.current = e.touches[0].clientY;
-    };
-
-    const onTouchEnd = (e) => {
-        const touchEndY = e.changedTouches[0].clientY;
-        const distance = touchStartY.current - touchEndY; // 正数表示向上滑
-        
-        // 阈值设为 60px，避免轻微误触
-        if (distance > 60) {
-            // 特殊逻辑：如果是生词页 (WordStudy)，检查是否滚到了底部
-            if (currentBlock?.type === 'word_study' && containerRef.current) {
-                const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-                // 允许 10px 的误差
-                const isAtBottom = Math.ceil(scrollTop + clientHeight) >= scrollHeight - 10;
-                
-                if (!isAtBottom) {
-                    // 如果没到底，不翻页，让它自然滚动
-                    return; 
-                }
-            }
-
-            // 通用逻辑：只有解锁了才能翻页
-            if (isBlockCompleted) {
-                handleNext();
-            } else {
-                // 可选：在这里加一个“请先完成题目”的晃动动画
-            }
-        }
-    };
-
     const renderBlock = () => {
         if (!currentBlock) return null;
-        if (currentIndex >= blocks.length) return <CompletionBlock data={{}} router={router} />;
+        if (currentIndex >= blocks.length) return <CompletionBlock data={{}} />;
 
         const type = currentBlock.type.toLowerCase();
         const props = {
             data: currentBlock.content,
             onCorrect: handleCorrect,
-            onComplete: handleNext,
+            onComplete: handleNext, // 某些自动完成的组件调用这个
             onNext: handleCorrect,
             settings: { playTTS }
         };
@@ -231,8 +219,14 @@ export default function InteractiveLesson({ lesson }) {
         switch (type) {
             case 'teaching': return <TeachingBlock {...props} />;
             case 'word_study': return <WordStudyBlock {...props} />;
-            case 'grammar_study': return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={handleNext} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} onComplete={handleNext} />;
+            case 'grammar_study': 
+                return (
+                    <GrammarPointPlayer 
+                        grammarPoints={props.data.grammarPoints} 
+                        onComplete={() => setIsBlockCompleted(true)} 
+                    />
+                );
+            case 'dialogue_cinematic': return <DuiHua {...props} onComplete={() => setIsBlockCompleted(true)} />;
             
             case 'choice': 
                 const choiceProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices||[], correctAnswer: props.data.correctId?[props.data.correctId]:[] };
@@ -251,43 +245,39 @@ export default function InteractiveLesson({ lesson }) {
             case 'panduan': return <QuizContainer><PanDuanTi {...props} /></QuizContainer>;
             case 'gaicuo': return <QuizContainer><GaiCuoTi {...props} /></QuizContainer>;
             
-            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
-            default: return <div>Unknown {type}</div>;
+            case 'complete': case 'end': return <CompletionBlock data={props.data} />;
+            default: return <div>Unknown Type: {type}</div>;
         }
     };
 
     return (
-        <div 
-            ref={containerRef}
-            onTouchStart={onTouchStart}
-            onTouchEnd={onTouchEnd}
-            className="fixed inset-0 w-full h-full bg-[#F5F7FA] text-slate-800 flex flex-col font-sans overflow-y-auto overflow-x-hidden"
-            // touchAction: 'pan-y' 非常重要，它允许内容内部滚动，但我们 JS 会监听是否到底
-            style={{ touchAction: 'pan-y' }}
-        >
+        <div className="fixed inset-0 w-full h-full bg-[#F5F7FA] text-slate-800 flex flex-col font-sans">
+            
             {/* 顶部进度条 */}
             {currentIndex < blocks.length && (
-                <div className="fixed top-0 left-0 w-full z-40 bg-[#F5F7FA]/90 backdrop-blur-sm pt-safe-top">
+                <div className="fixed top-0 left-0 w-full z-40 bg-[#F5F7FA]/90 backdrop-blur-sm pt-safe-top pointer-events-none">
                     <div className="h-1 bg-gray-200 w-full">
                         <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${((currentIndex + 1) / blocks.length) * 100}%` }} />
                     </div>
                 </div>
             )}
 
-            {/* 主内容 */}
-            <div className="flex-1 w-full min-h-full">
+            {/* 主内容区域 (padding-bottom 留出底部栏空间) */}
+            <div 
+                ref={containerRef}
+                className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden pb-24"
+            >
                 {renderBlock()}
             </div>
 
-            {/* 页码 - 底部居中 */}
-            {currentIndex < blocks.length && (
-                <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1 bg-slate-200/60 backdrop-blur-md text-[10px] font-bold text-slate-400 rounded-full select-none">
-                    {currentIndex + 1} / {blocks.length}
-                </div>
-            )}
-
-            {/* 提示浮层 */}
-            <SwipeOverlay isVisible={isBlockCompleted} onNext={handleNext} />
+            {/* 底部导航栏 (替代原来的手势) */}
+            <BottomNavigation 
+                currentIndex={currentIndex}
+                total={blocks.length}
+                isCompleted={isBlockCompleted}
+                onPrev={handlePrev}
+                onNext={handleNext}
+            />
         </div>
     );
 }
