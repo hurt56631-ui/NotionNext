@@ -1,21 +1,66 @@
 [
-  { "id": 3, "chinese": "爸爸", "burmese": "အဖေ", "mnemonic": "ပေါ့ပါ", "example": "我爸爸是医生。" },
-  { "id": 4, "chinese": "杯子", "burmese": "ခွက်", "mnemonic": "ပေစ့်", "example": "杯子里有茶。" },
-  { "id": 5, "chinese": "北京", "burmese": "ပေကျင်းမြို့", "mnemonic": "ပေကျင့်", "example": "我住在北京。" },
-  { "id": 6, "chinese": "本", "burmese": "စာအုပ် စသည်ကို ရေတွက်သော ယူနစ်။", "mnemonic": "ပင်", "example": "桌子上有一本书。" },
-  { "id": 7, "chinese": "不客气", "burmese": "အားမနာပါနဲ့။ ရပါတယ်။", "mnemonic": "ပုခဲချိ", "example": "甲：谢谢你！乙：不客气。" },
-  { "id": 8, "chinese": "不", "burmese": "မ...ဘူး။", "mnemonic": "ပု", "example": "我不是学生。" },
-  { "id": 9, "chinese": "菜", "burmese": "ဟင်း", "mnemonic": "ချိုက်", "example": "我想吃中国菜。" },
-  { "id": 10, "chinese": "茶", "burmese": "လက်ဖက်ရည်", "mnemonic": "ချာ", "example": "请喝杯茶吧。" },
-  { "id": 11, "chinese": "吃", "burmese": "စားသည်", "mnemonic": "ချီး", "example": "你喜欢吃什么？" },
-  { "id": 12, "chinese": "出租车", "burmese": "တက္ကစီငှားသည်", "mnemonic": "ချူဇူချဲ", "example": "我们坐出租车去火车站。" },
-  { "id": 13, "chinese": "打电话", "burmese": "ဖုန်းခေါ်သည်", "mnemonic": "ဒါးတျန့်ဟွား", "example": "我在打电话呢。" },
-  { "id": 14, "chinese": "大", "burmese": "ကြီးသော", "mnemonic": "ဒါး", "example": "这个苹果很大。" },
-  { "id": 15, "chinese": "的", "burmese": "ပိုင်ဆိုင်မှုကို ပြသော စကားလုံး", "mnemonic": "တဲ့", "example": "这是我的书。" },
-  { "id": 16, "chinese": "点", "burmese": "အစက်။ သေးသေးလေး။ အချိန် နာရီ ကို ပြသော စကားလုံး", "mnemonic": "တျန့်", "example": "现在是下午三点。" },
-  { "id": 17, "chinese": "电脑", "burmese": "ကွန်ပျူတာ", "mnemonic": "တျန့်နောင်း", "example": "我买了一个新电脑。" },
-  { "id": 18, "chinese": "电视", "burmese": "တီဗွီ", "mnemonic": "တျန့်ရှိ", "example": "妈妈在看电视。" },
-  { "id": 19, "chinese": "电影", "burmese": "ရုပ်ရှင်", "mnemonic": "တျန့်ယိန်း", "example": "我喜欢看电影。" },
-  { "id": 20, "chinese": "东西", "burmese": "ပစ္စည်း", "mnemonic": "တုန်းရှိ", "example": "商店里有很多东西。" },
-  { "id": 21, "chinese": "都", "burmese": "အားလုံး", "mnemonic": "တိုး", "example": "我们都是学生。" },
+  { 
+    "id": "v1", 
+    "word": "你好", 
+    "pinyin": "nǐ hǎo", 
+    "translation": "Hello / မင်္ဂလာပါ", 
+    "mnemonic": "🔊 谐音: နီဟောင် (Ni Hao)",
+    "example": "你好！我是李华。(Hello! I am Li Hua.)" 
+  },
+  { 
+    "id": "v2", 
+    "word": "叫", 
+    "pinyin": "jiào", 
+    "translation": "To be called / ခေါ်သည်", 
+    "mnemonic": "🔊 谐音: ကျောက် (Jiao)",
+    "example": "你叫什么名字？(What is your name?)" 
+  },
+  { 
+    "id": "v3", 
+    "word": "什么", 
+    "pinyin": "shén me", 
+    "translation": "What / ဘာလဲ", 
+    "mnemonic": "🔊 谐音: ှမ္မ (Shen Me)",
+    "example": "这是什么？(What is this?)" 
+  },
+  { 
+    "id": "v4", 
+    "word": "名字", 
+    "pinyin": "míng zi", 
+    "translation": "Name / နာမည်", 
+    "mnemonic": "🔊 谐音: မင်းဇ (Min Zi)",
+    "example": "我的名字是大卫。(My name is David.)" 
+  },
+  { 
+    "id": "v5", 
+    "word": "认识", 
+    "pinyin": "rèn shi", 
+    "translation": "To know/meet / သိကျွမ်းသည်", 
+    "mnemonic": "🔊 谐音: ရန့်ရှစ် (Ren Shi)",
+    "example": "很高兴认识你。(Nice to meet you.)" 
+  },
+  { 
+    "id": "v6", 
+    "word": "高兴", 
+    "pinyin": "gāo xìng", 
+    "translation": "Happy / ဝမ်းသာပါတယ်", 
+    "mnemonic": "🔊 谐音: ကောင်ရှင်း (Gao Xing)",
+    "example": "我也很高兴。(I am also very happy.)" 
+  },
+  { 
+    "id": "v7", 
+    "word": "老师", 
+    "pinyin": "lǎo shī", 
+    "translation": "Teacher / ဆရာ/ဆရာမ", 
+    "mnemonic": "🔊 谐音: လောင်ရှီး (Lao Shi)",
+    "example": "老师好！(Hello, teacher!)" 
+  },
+  { 
+    "id": "v8", 
+    "word": "学生", 
+    "pinyin": "xué sheng", 
+    "translation": "Student / ကျောင်းသား", 
+    "mnemonic": "🔊 谐音: ရွှယ်ရှန်း (Xue Sheng)",
+    "example": "我是学生。(I am a student.)" 
+  }
 ]
