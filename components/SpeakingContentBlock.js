@@ -11,7 +11,7 @@ import speakingList from '@/data/speaking.json';
 
 // --- 核心组件 ---
 // 统一使用您的全屏互动引擎，它内部集成了 GrammarPointPlayer 和各种题型组件
-const InteractiveLesson = dynamic(() => import('@/components/InteractiveLesson'), { ssr: false });
+const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
 const SpeakingContentBlock = () => {
   const router = useRouter();
