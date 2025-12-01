@@ -360,4 +360,4 @@ export default function InteractiveLesson({ lesson }) {
       </div>
     </div>
   );
-      }
+}
