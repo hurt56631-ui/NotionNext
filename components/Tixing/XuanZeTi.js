@@ -1,536 +1,254 @@
-// components/Tixing/XuanZeTi.js (V5 - 移动端适配美化版)
-
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Howl } from 'howler';
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { 
-  FaCheckCircle, FaTimesCircle, FaLightbulb, FaRedo, 
-  FaArrowRight, FaHourglassHalf, FaVolumeUp, FaEye, FaEyeSlash 
-} from 'react-icons/fa';
-import ReactPlayer from 'react-player/lazy';
+import { FaCheckCircle, FaTimesCircle, FaVolumeUp } from 'react-icons/fa';
+// 确保安装了 pinyin-pro: npm install pinyin-pro
+import { pinyin } from 'pinyin-pro';
 
-// --- 样式定义 (CSS-in-JS + Global Styles) ---
-// 使用 CSS 变量以便于动态调整主题，并支持暗黑模式扩展
 const cssStyles = `
-  :root {
-    --primary: #3b82f6;
-    --primary-dark: #2563eb;
-    --success: #22c55e;
-    --error: #ef4444;
-    --warning: #f59e0b;
-    --gray: #64748b;
-    --light-gray: #f1f5f9;
-    --bg-card: #ffffff;
-    --text-main: #1e2b3b;
-    --text-sub: #475569;
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    --radius-box: 20px;
-    --radius-btn: 12px;
-  }
-
-  .xzt-container {
-    background-color: #f8fafc;
-    border-radius: var(--radius-box);
-    box-shadow: var(--shadow-lg);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    max-width: 650px;
-    margin: 1.5rem auto;
-    overflow: hidden;
-    touch-action: manipulation;
-    transition: all 0.3s ease;
-  }
-
-  .xzt-content-padding {
-    padding: 24px;
-  }
-
-  /* 移动端适配 */
-  @media (max-width: 600px) {
-    .xzt-container {
-      margin: 0;
-      border-radius: 0;
-      box-shadow: none;
-      min-height: 100vh;
-      background-color: #fff;
-    }
-    .xzt-content-padding {
-      padding: 16px;
-    }
-    .xzt-question-text {
-      font-size: 1.25rem !important;
-    }
-  }
-
-  /* 选项网格布局 */
-  .xzt-options-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
+  .xzt-container { width: 100%; max-width: 500px; display: flex; flex-direction: column; height: 100%; }
   
-  @media (max-width: 400px) {
-    .xzt-options-grid {
-      grid-template-columns: 1fr; /* 极小屏幕单列显示 */
-    }
-    .xzt-option-image {
-      height: 140px !important;
-    }
-  }
-
-  /* 选项卡片样式 */
-  .xzt-option-card {
+  /* 题目卡片区域 - 增加白底投影，让用户知道这里是主要内容 */
+  .xzt-question-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 24px 16px;
+    margin-bottom: 24px;
+    text-align: center;
+    box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.15);
+    border: 1px solid #f1f5f9;
+    cursor: pointer; /* 暗示可点击 */
+    transition: transform 0.1s;
     position: relative;
+    overflow: hidden;
+  }
+  .xzt-question-card:active { transform: scale(0.98); }
+
+  /* 喇叭图标动画 */
+  .icon-pulse { animation: pulse 1.5s infinite; color: #3b82f6; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+
+  /* 拼音汉字样式 */
+  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; row-gap: 8px; }
+  .char-block {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 16px;
-    background-color: var(--bg-card);
-    border-radius: 16px;
-    border: 2px solid var(--light-gray);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: var(--shadow-sm);
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
   }
+  .char-block:active .cn-text { color: #3b82f6; }
+  .py-text { font-size: 1.1rem; color: #64748b; font-weight: 500; margin-bottom: -2px; font-family: 'Courier New', monospace; }
+  .cn-text { font-size: 2.4rem; font-weight: 900; color: #1e2b3b; line-height: 1.1; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
 
-  .xzt-option-card:active {
-    transform: scale(0.96);
-  }
-
-  .xzt-option-card.selected {
-    border-color: var(--primary);
-    background-color: #eff6ff;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .xzt-option-card.correct {
-    border-color: var(--success);
-    background-color: #f0fdf4;
-  }
-
-  .xzt-option-card.incorrect {
-    border-color: var(--error);
-    background-color: #fef2f2;
-    animation: shake 0.5s;
-  }
-
-  .xzt-option-image {
+  /* 选项区域 */
+  .xzt-options-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
     width: 100%;
-    height: 110px;
-    object-fit: cover;
-    border-radius: 12px;
-    margin-bottom: 12px;
+    margin-bottom: 80px; /* 给底部按钮留位置 */
   }
 
-  .xzt-option-text {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text-sub);
-    text-align: center;
-    line-height: 1.4;
-  }
-
-  /* 按钮通用样式 */
-  .xzt-btn {
-    width: 100%;
-    padding: 16px;
-    border-radius: var(--radius-btn);
-    border: none;
-    color: white;
-    font-size: 1.1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform 0.1s, filter 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: var(--shadow-md);
-  }
-  
-  .xzt-btn:active {
-    transform: scale(0.98);
-  }
-
-  .xzt-btn-primary { background-color: var(--primary); }
-  .xzt-btn-warning { background-color: var(--warning); color: #fff; }
-  .xzt-btn-gray { background-color: var(--light-gray); color: var(--text-sub); }
-  .xzt-btn-disabled { background-color: #cbd5e1; cursor: not-allowed; box-shadow: none; }
-
-  /* 听力播放按钮动画 */
-  @keyframes pulse-blue {
-    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-    70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-  }
-  
-  .xzt-listen-btn {
-    background-color: var(--primary);
-    color: white;
-    border-radius: 50%;
-    width: 70px;
-    height: 70px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(59,130,246,0.4);
-    transition: all 0.3s;
-    margin: 0 auto 20px auto;
-  }
-  
-  .xzt-listen-btn.playing {
-    animation: pulse-blue 1.5s infinite;
-    transform: scale(1.1);
-  }
-
-  /* 震动动画 */
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-  }
-
-  /* 淡入动画 */
-  .fade-in {
-    animation: fadeIn 0.4s ease-out forwards;
-  }
-  
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* 媒体容器 */
-  .media-wrapper {
+  .xzt-option-card {
     position: relative;
-    padding-top: 56.25%; /* 16:9 Aspect Ratio */
-    background-color: #000;
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 20px;
+    background-color: #fff;
+    border-radius: 16px;
+    border: 2px solid #f1f5f9;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    cursor: pointer;
+    transition: all 0.15s;
+    min-height: 64px;
   }
-  
-  .react-player-absolute {
+  .xzt-option-card:active { transform: scale(0.97); background-color: #f8fafc; }
+  .xzt-option-card.selected { border-color: #3b82f6; background-color: #eff6ff; }
+  .xzt-option-card.correct { border-color: #22c55e; background-color: #f0fdf4; }
+  .xzt-option-card.incorrect { border-color: #ef4444; background-color: #fef2f2; animation: shake 0.4s; }
+
+  .xzt-option-text { font-size: 1.2rem; font-weight: 600; color: #334155; }
+
+  /* 底部提交按钮 */
+  .submit-btn-wrapper {
     position: absolute;
-    top: 0;
+    bottom: 20px;
     left: 0;
+    right: 0;
+    padding: 0 20px;
+    z-index: 50;
   }
+  .submit-btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 16px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: white;
+    background: #3b82f6;
+    box-shadow: 0 8px 20px -5px rgba(59, 130, 246, 0.4);
+    transition: all 0.2s;
+    border: none;
+  }
+  .submit-btn:disabled { background: #cbd5e1; box-shadow: none; opacity: 0.7; }
+  .submit-btn:active:not(:disabled) { transform: scale(0.95); }
+
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 `;
 
-// --- 音效管理 ---
-const sounds = {
-  correct: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }) : null,
-  incorrect: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.6 }) : null,
-  click: typeof window !== 'undefined' ? new Howl({ src: ['/sounds/click.mp3'], volume: 0.4 }) : null,
+// TTS 播放函数
+const playTTS = (text) => {
+  if (!text) return;
+  // 使用简单的 Audio 对象播放
+  const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural`;
+  const audio = new Audio(url);
+  audio.play().catch(e => console.log('TTS playback failed', e));
 };
-const playSound = (name) => sounds[name]?.play();
 
-const XuanZeTi = ({ 
-  question = {}, 
-  options = [], 
-  correctAnswer = [], 
-  explanation, 
-  onCorrect, 
-  onIncorrect, 
-  onNext, 
-  isListeningMode = false 
-}) => {
-  const [selectedAnswers, setSelectedAnswers] = useState([]);
+const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }) => {
+  const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [showTranscript, setShowTranscript] = useState(false);
-  const [isTTsPlaying, setIsTTsPlaying] = useState(false);
-  
-  // 使用 Ref 追踪 TTS 实例，防止组件卸载时内存泄漏
-  const ttsRef = useRef(null);
+  const [pinyinData, setPinyinData] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
-  const isMultipleChoice = correctAnswer.length > 1;
-  const correctCount = selectedAnswers.filter(id => correctAnswer.includes(id)).length;
-  const isCorrect = isSubmitted && correctCount === correctAnswer.length && selectedAnswers.length === correctAnswer.length;
-  const isPartiallyCorrect = isSubmitted && correctCount > 0 && !isCorrect;
-
-  // TTS 播放逻辑
-  const handlePlayTTS = () => {
-    if (isTTsPlaying || !question.text) return;
-    setIsTTsPlaying(true);
-    
-    if (ttsRef.current) ttsRef.current.unload();
-
-    ttsRef.current = new Howl({
-      src: [`https://t.leftsite.cn/tts?t=${encodeURIComponent(question.text)}&v=zh-CN-XiaoyouNeural`],
-      html5: true,
-      onend: () => setIsTTsPlaying(false),
-      onloaderror: () => { 
-        console.error('TTS Load Error'); 
-        setIsTTsPlaying(false); 
-      },
-    });
-    ttsRef.current.play();
-  };
-
-  // 自动播放逻辑
+  // 初始化：生成拼音
   useEffect(() => {
-    let autoSound;
-    if (question.autoPlayAudio && question.audioUrl) {
-      autoSound = new Howl({ src: [question.audioUrl], html5: true, autoplay: true });
+    if (question.text) {
+      try {
+        const chars = question.text.split('');
+        const pinyins = pinyin(question.text, { type: 'array', toneType: 'symbol' }) || [];
+        const combined = chars.map((char, index) => ({
+          char,
+          pinyin: pinyins[index] || ''
+        }));
+        setPinyinData(combined);
+      } catch (e) {
+        console.error("Pinyin generation error:", e);
+        setPinyinData([{ char: question.text, pinyin: '' }]);
+      }
+    } else {
+      setPinyinData([]);
     }
-    return () => {
-      autoSound?.unload();
-      ttsRef.current?.unload();
-    };
-  }, [question.audioUrl, question.autoPlayAudio]);
-  
-  // 重置状态
-  useEffect(() => {
-    setSelectedAnswers([]);
+    // 重置
+    setSelectedId(null);
     setIsSubmitted(false);
-    setShowExplanation(false);
-    setShowTranscript(false);
-    setIsTTsPlaying(false);
   }, [question]);
 
-  const handleSelect = useCallback((optionId) => {
-    if (isSubmitted) return;
-    playSound('click');
-    setSelectedAnswers(prev => {
-      if (isMultipleChoice) {
-        return prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId];
-      }
-      return [optionId];
-    });
-  }, [isSubmitted, isMultipleChoice]);
+  // 处理选项点击
+  const handleSelect = (id) => {
+    if (isSubmitted) return; // 提交后不能改
+    setSelectedId(id);
+    // 这里不直接提交，而是等待用户点按钮
+  };
 
-  const handleSubmit = useCallback(() => {
-    if (selectedAnswers.length === 0) return;
+  // 处理提交
+  const handleSubmit = () => {
+    if (!selectedId || isSubmitted) return;
+    
     setIsSubmitted(true);
-    
-    // 检查答案
-    const isAnswerCorrect = selectedAnswers.length === correctAnswer.length && selectedAnswers.every(id => correctAnswer.includes(id));
-    
-    if (isAnswerCorrect) {
-      playSound('correct');
-      confetti({ 
-        particleCount: 150, 
-        spread: 70, 
-        origin: { y: 0.7 },
-        colors: ['#22c55e', '#3b82f6', '#f59e0b']
-      });
-      if (onCorrect) onCorrect({ answered: selectedAnswers });
-    } else {
-      playSound('incorrect');
-      if (onIncorrect) onIncorrect({ answered: selectedAnswers, correct: correctAnswer });
-    }
-  }, [selectedAnswers, correctAnswer, onCorrect, onIncorrect]);
+    const isCorrect = correctAnswer.includes(selectedId);
 
-  const handleNextOrReset = useCallback(() => {
-    if (onNext) {
-      onNext();
+    if (isCorrect) {
+      // 答对
+      confetti({ particleCount: 120, spread: 70, origin: { y: 0.8 } });
+      new Audio('/sounds/correct.mp3').play().catch(()=>{}); // 需要本地有文件，没有不报错
+      
+      // 1.5秒后自动下一题
+      if (onCorrect) setTimeout(onCorrect, 1500);
     } else {
-      // 仅重置当前题目
-      setSelectedAnswers([]);
-      setIsSubmitted(false);
-      setShowExplanation(false);
-      setShowTranscript(false);
+      // 答错
+      new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
+      if (navigator.vibrate) navigator.vibrate(200);
+      
+      // 答错后，延迟1秒允许重选（为了让用户看清错误）
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setSelectedId(null);
+      }, 1500);
     }
-  }, [onNext]);
+  };
+
+  // 处理点读
+  const handleRead = (e, text) => {
+    e.stopPropagation(); // 防止冒泡
+    setIsPlaying(true);
+    playTTS(text);
+    setTimeout(() => setIsPlaying(false), 1500); // 简单模拟播放状态
+  };
 
   return (
     <>
       <style>{cssStyles}</style>
-      
       <div className="xzt-container">
-        <div className="xzt-content-padding">
-          
-          {/* --- 题目区域 --- */}
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            
-            {/* 听力模式大按钮 */}
-            {isListeningMode && (
-              <button 
-                className={`xzt-listen-btn ${isTTsPlaying ? 'playing' : ''}`} 
-                onClick={handlePlayTTS}
-                aria-label="播放题目音频"
-              >
-                <FaVolumeUp size={30} />
-              </button>
-            )}
-
-            {/* 视频播放器 */}
-            {question.videoUrl && (
-              <div className="media-wrapper">
-                <ReactPlayer 
-                  url={question.videoUrl} 
-                  controls 
-                  width="100%" 
-                  height="100%" 
-                  className="react-player-absolute"
-                />
-              </div>
-            )}
-
-            {/* 普通音频播放器 */}
-            {question.audioUrl && !isListeningMode && (
-              <div style={{ borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
-                <ReactPlayer 
-                  url={question.audioUrl} 
-                  controls 
-                  width="100%" 
-                  height="50px" 
-                  playing={false} 
-                />
-              </div>
-            )}
-
-            {/* 题目图片 */}
-            {question.imageUrl && !question.videoUrl && (
-              <img 
-                src={question.imageUrl} 
-                alt="题目配图" 
-                style={{ width: '100%', borderRadius: '12px', marginBottom: '16px', display: 'block' }} 
-              />
-            )}
-            
-            {/* 题干文本 */}
-            {question.text && (!isListeningMode || showTranscript) && (
-              <h3 className="xzt-question-text fade-in" style={{ 
-                margin: 0, 
-                color: 'var(--text-main)', 
-                lineHeight: 1.6, 
-                whiteSpace: 'pre-wrap'
-              }}>
-                {question.text}
-              </h3>
-            )}
-
-            {/* 查看原文开关 */}
-            {isListeningMode && question.text && (
-              <button 
-                onClick={() => setShowTranscript(!showTranscript)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--gray)',
-                  color: 'var(--gray)',
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  marginTop: '16px',
-                  fontSize: '0.9rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                {showTranscript ? <><FaEyeSlash /> 隐藏原文</> : <><FaEye /> 查看原文</>}
-              </button>
-            )}
+        
+        {/* --- 题目卡片 (可点击朗读) --- */}
+        <div 
+          className="xzt-question-card"
+          onClick={(e) => handleRead(e, question.text)}
+        >
+          {/* 右上角喇叭提示 */}
+          <div className="absolute top-3 right-3 text-slate-300">
+            <FaVolumeUp className={isPlaying ? 'icon-pulse' : ''} />
           </div>
 
-          {/* --- 选项区域 --- */}
-          <div className="xzt-options-grid">
-            {options.map(option => {
-              // 计算卡片样式类名
-              let cardClass = 'xzt-option-card';
-              if (selectedAnswers.includes(option.id)) cardClass += ' selected';
-              
-              if (isSubmitted) {
-                if (correctAnswer.includes(option.id)) {
-                  cardClass += ' correct';
-                } else if (selectedAnswers.includes(option.id)) {
-                  cardClass += ' incorrect';
-                }
-              }
-
-              return (
-                <div 
-                  key={option.id} 
-                  className={cardClass} 
-                  onClick={() => handleSelect(option.id)}
-                >
-                  {option.imageUrl && (
-                    <img src={option.imageUrl} alt={option.text || '选项'} className="xzt-option-image"/>
-                  )}
-                  {option.text && <div className="xzt-option-text">{option.text}</div>}
-                  
-                  {/* 状态图标 */}
-                  {isSubmitted && correctAnswer.includes(option.id) && (
-                    <FaCheckCircle style={{ position: 'absolute', top: 8, right: 8, color: 'var(--success)', fontSize: '1.4rem' }}/>
-                  )}
-                  {isSubmitted && selectedAnswers.includes(option.id) && !correctAnswer.includes(option.id) && (
-                    <FaTimesCircle style={{ position: 'absolute', top: 8, right: 8, color: 'var(--error)', fontSize: '1.4rem' }}/>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* --- 按钮与反馈区域 --- */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {!isSubmitted ? (
-              <button 
-                className={`xzt-btn ${selectedAnswers.length === 0 ? 'xzt-btn-disabled' : 'xzt-btn-primary'}`} 
-                onClick={handleSubmit} 
-                disabled={selectedAnswers.length === 0}
+          <div className="pinyin-box">
+            {pinyinData.length > 0 ? pinyinData.map((item, idx) => (
+              <div 
+                key={idx} 
+                className="char-block"
+                onClick={(e) => handleRead(e, item.char)} // 读单字
               >
-                提交答案
-              </button>
-            ) : (
-              <div className="fade-in" style={{ width: '100%' }}>
-                {/* 结果反馈条 */}
-                <div style={{ 
-                  padding: '12px', 
-                  borderRadius: '12px', 
-                  backgroundColor: isCorrect ? 'var(--bg-success)' : (isPartiallyCorrect ? 'var(--bg-warning)' : '#fee2e2'),
-                  color: isCorrect ? 'var(--success)' : (isPartiallyCorrect ? 'var(--warning)' : 'var(--error)'),
-                  textAlign: 'center', 
-                  fontWeight: 'bold',
-                  marginBottom: '16px',
-                  border: `1px solid ${isCorrect ? 'var(--success)' : 'currentColor'}`
-                }}>
-                  {isCorrect ? '🎉 太棒了，全部答对！' : isPartiallyCorrect ? `😄 答对 ${correctCount} 个，继续加油！` : '❌ 回答错误，请看解析'}
-                </div>
-
-                {/* 解析部分 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {explanation ? (
-                    <button className="xzt-btn xzt-btn-warning" onClick={() => setShowExplanation(s => !s)}>
-                      <FaLightbulb /> {showExplanation ? '收起解析' : '查看解析'}
-                    </button>
-                  ) : (
-                    <div style={{ padding: '12px', background: '#fffbeb', borderRadius: '8px', color: 'var(--text-sub)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <FaHourglassHalf style={{ marginRight: '8px' }}/> 智能解析生成中...
-                    </div>
-                  )}
-
-                  {showExplanation && explanation && (
-                    <div className="fade-in" style={{ 
-                      backgroundColor: '#fffbeb', 
-                      padding: '16px', 
-                      borderRadius: '12px', 
-                      color: '#92400e',
-                      lineHeight: '1.6',
-                      fontSize: '0.95rem',
-                      borderLeft: '4px solid var(--warning)'
-                    }}>
-                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>💡 题目解析：</div>
-                      {explanation}
-                    </div>
-                  )}
-
-                  {/* 底部导航按钮 */}
-                  <button className="xzt-btn xzt-btn-gray" onClick={handleNextOrReset}>
-                    {onNext ? <><FaArrowRight /> 下一题</> : <><FaRedo /> 再试一次</>}
-                  </button>
-                </div>
+                <span className="py-text">{item.pinyin}</span>
+                <span className="cn-text">{item.char}</span>
               </div>
+            )) : (
+              // 如果没有拼音数据，显示普通文本
+              <h2 className="text-2xl font-bold">{question.text || "题目加载中..."}</h2>
             )}
           </div>
         </div>
+
+        {/* --- 选项区域 --- */}
+        <div className="xzt-options-grid">
+          {options.map(option => {
+            let statusClass = '';
+            // 如果已提交，显示正确/错误状态
+            if (isSubmitted) {
+              if (correctAnswer.includes(option.id)) statusClass = 'correct'; 
+              else if (option.id === selectedId) statusClass = 'incorrect';
+            } else {
+              // 未提交，只显示选中状态
+              if (option.id === selectedId) statusClass = 'selected';
+            }
+
+            return (
+              <div 
+                key={option.id} 
+                className={`xzt-option-card ${statusClass}`}
+                onClick={() => handleSelect(option.id)}
+              >
+                <div className="xzt-option-text">{option.text}</div>
+                {isSubmitted && correctAnswer.includes(option.id) && <FaCheckCircle className="text-green-500 absolute right-4 text-xl"/>}
+                {isSubmitted && option.id === selectedId && !correctAnswer.includes(option.id) && <FaTimesCircle className="text-red-500 absolute right-4 text-xl"/>}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* --- 提交按钮 (悬浮在底部) --- */}
+        <div className="submit-btn-wrapper">
+          <button 
+            className="submit-btn" 
+            onClick={handleSubmit}
+            disabled={!selectedId || isSubmitted} // 没选或者已提交时禁用
+          >
+            {isSubmitted 
+              ? (correctAnswer.includes(selectedId) ? "回答正确！" : "回答错误，请重试") 
+              : "确认提交"
+            }
+          </button>
+        </div>
+
       </div>
     </>
   );
