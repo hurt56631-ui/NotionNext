@@ -39,7 +39,7 @@
     "type": "choice",
     "content": {
       "prompt": "【看图识字】这张图里的人在做什么？",
-      "imageUrl": "https://images.unsplash.com/photo-1511988617509-a57c8a288659?w=600&q=80",
+      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
       "choices": [
         { "id": 1, "text": "睡觉 (Shuìjiào)" },
         { "id": 2, "text": "跑步 (Pǎobù)" },
@@ -54,7 +54,7 @@
     "content": {
       "prompt": "【听力测试】请听录音，他说了什么？(点击左上角喇叭播放)",
       "audioUrl": "https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav",
-      "text": "（听力题：请忽略此处的文字，专注于听）",
+      "text": "（听力题，你叫什么名字）",
       "choices": [
         { "id": "a", "text": "大象走路" },
         { "id": "b", "text": "小鸟唱歌" },
@@ -69,19 +69,19 @@
     "content": {
       "prompt": "【语法逻辑】“我__一个学生。”",
       "choices": [
-        { "id": 0, "text": "是 (shì)" },
-        { "id": 1, "text": "有 (yǒu)" },
-        { "id": 2, "text": "在 (zài)" }
+        { "id": 0, "text": "是 " },
+        { "id": 1, "text": "有 " },
+        { "id": 2, "text": "在 " }
       ],
       "correctId": 0,
-      "explanation": "主语+是+名词，表示身份。I am a student."
+      "explanation": "主语+是+名词，表示身份"
     }
   },
   {
     "type": "choice",
     "content": {
       "prompt": "【文化常识】中国的首都是哪里？",
-      "imageUrl": "https://images.unsplash.com/photo-1508804185872-d7badad00f7d?w=600&q=80",
+      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
       "choices": [
         { "id": "bj", "text": "上海 (Shanghai)" },
         { "id": "sh", "text": "北京 (Beijing)" },
@@ -119,11 +119,11 @@
   {
     "type": "choice",
     "content": {
-      "prompt": "【量词测试】一__书 (A book)",
+      "prompt": "【量词测试】一__书 ",
       "choices": [
-        { "id": "ben", "text": "本 (běn)" },
-        { "id": "ge", "text": "个 (gè)" },
-        { "id": "zhang", "text": "张 (zhāng)" }
+        { "id": "ben", "text": "本 " },
+        { "id": "ge", "text": "个 " },
+        { "id": "zhang", "text": "张 " }
       ],
       "correctId": "ben",
       "explanation": "书的量词是“本”。"
@@ -171,7 +171,7 @@
     "type": "choice",
     "content": {
       "prompt": "【颜色识别】这是什么颜色？",
-      "imageUrl": "https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?w=600&q=80",
+      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
       "choices": [
         { "id": "r", "text": "红色 (Hóngsè)" },
         { "id": "g", "text": "绿色 (Lǜsè)" },
@@ -198,7 +198,7 @@
     "type": "choice",
     "content": {
       "prompt": "【食物认知】中国人早饭常吃什么？",
-      "imageUrl": "https://images.unsplash.com/photo-1626804475297-411f7c1664f3?w=600&q=80",
+      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
       "choices": [
         { "id": "1", "text": "粥和包子" },
         { "id": "2", "text": "牛排和红酒" }
@@ -211,7 +211,7 @@
     "type": "choice",
     "content": {
       "prompt": "【时间表达】图片上的时间是？",
-      "imageUrl": "https://images.unsplash.com/photo-1563861826100-9cb868c725a9?w=600&q=80",
+      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
       "choices": [
         { "id": "a", "text": "10点10分" },
         { "id": "b", "text": "3点整" },
