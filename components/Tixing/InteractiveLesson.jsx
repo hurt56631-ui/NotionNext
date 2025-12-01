@@ -1,9 +1,9 @@
-// components/Tixing/InteractiveLesson.jsx (优化版 — 按钮切换、全屏居中、移除手势)
+// components/Tixing/InteractiveLesson.jsx (全屏浅色系美化版)
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { HiSpeakerWave } from "react-icons/hi2";
-import { FaChevronUp, FaChevronLeft, FaChevronRight } from "react-icons/fa";
-import { IoMdClose } from "react-icons/io";
+import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
+import { IoMdClose, IoMdRefresh } from "react-icons/io";
 
 // --- 外部题型组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -15,12 +15,13 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 统一的TTS模块（保留你原先的实现风格） ---
+// --- 统一的TTS模块 ---
 const ttsVoices = {
   zh: 'zh-CN-XiaoyouNeural',
   my: 'my-MM-NilarNeural',
 };
 let currentAudio = null;
+
 const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
   if (currentAudio) {
     currentAudio.pause();
@@ -52,10 +53,11 @@ const playTTS = async (text, lang = 'zh', rate = 0, onEndCallback = null) => {
     };
     await audio.play();
   } catch (e) {
-    console.error(`播放 "${text}" (lang: ${lang}, rate: ${rate}) 失败:`, e);
+    console.error(`播放失败:`, e);
     if (onEndCallback) onEndCallback();
   }
 };
+
 const stopAllAudio = () => {
   if (currentAudio) {
     currentAudio.pause();
@@ -64,15 +66,15 @@ const stopAllAudio = () => {
   }
 };
 
-// ---------------- 内置 UI Block（无手势，按钮控制） ----------------
+// ---------------- 内置 UI Block (白底卡片风格) ----------------
 
-// TeachingBlock (居中、按钮继续)
+// 1. 教学演示块
 const TeachingBlock = ({ data, onComplete, settings }) => {
   useEffect(() => {
     if (data?.narrationScript) {
       const timer = setTimeout(() => {
         settings.playTTS(data.narrationScript, data.narrationLang || 'my');
-      }, 1200);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [data, settings]);
@@ -83,103 +85,104 @@ const TeachingBlock = ({ data, onComplete, settings }) => {
   };
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-6">
-      <div className="max-w-4xl w-full bg-black/60 rounded-2xl p-8 text-center text-white shadow-xl">
-        {data.pinyin && <p className="text-xl text-slate-300 mb-2">{data.pinyin}</p>}
-        <div className="flex items-center justify-center gap-4">
-          <h1 className="text-5xl md:text-6xl font-bold">{data.displayText}</h1>
-          <button onClick={handleManualPlay} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="播放">
-            <HiSpeakerWave className="h-8 w-8 md:h-9 md:w-9" />
-          </button>
-        </div>
-        {data.translation && <p className="text-lg text-slate-200 mt-4 leading-relaxed">{data.translation}</p>}
-        <div className="mt-8">
-          <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold rounded-full shadow hover:scale-105 transition-transform">
-            继续
-          </button>
-        </div>
+    <div className="w-full flex flex-col items-center animate-fade-in-up">
+      {/* 拼音/注音 */}
+      {data.pinyin && <p className="text-lg text-slate-500 font-medium mb-3 tracking-wide">{data.pinyin}</p>}
+      
+      {/* 核心大字 */}
+      <div className="relative bg-white rounded-3xl p-8 shadow-xl shadow-blue-100/50 border border-slate-100 w-full max-w-sm flex flex-col items-center justify-center min-h-[200px] mb-8">
+         <h1 className="text-5xl md:text-6xl font-black text-slate-800 tracking-tight">{data.displayText}</h1>
+         <button 
+           onClick={handleManualPlay} 
+           className="absolute -bottom-6 bg-blue-600 text-white p-4 rounded-full shadow-lg shadow-blue-500/30 hover:scale-110 hover:bg-blue-700 transition-all active:scale-95"
+           aria-label="播放"
+         >
+            <HiSpeakerWave className="h-6 w-6" />
+         </button>
+      </div>
+
+      {/* 释义 */}
+      {data.translation && (
+        <p className="text-xl text-slate-600 font-medium text-center mt-4 px-4 leading-relaxed bg-white/60 backdrop-blur-sm py-2 px-6 rounded-full border border-slate-200/50">
+          {data.translation}
+        </p>
+      )}
+
+      {/* 继续按钮 (移动端大按钮) */}
+      <div className="mt-12 w-full max-w-xs">
+        <button onClick={onComplete} className="w-full py-4 bg-slate-900 text-white font-bold text-lg rounded-2xl shadow-xl hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2">
+          继续 <FaArrowRight />
+        </button>
       </div>
     </div>
   );
 };
 
-// WordStudyBlock (卡片式、按钮继续)
+// 2. 生词学习块
 const WordStudyBlock = ({ data, onComplete, settings }) => {
   const handlePlayWord = (word) => {
     settings.playTTS(word.chinese, 'zh', word.rate || 0);
   };
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-6">
-      <div className="w-full max-w-5xl bg-black/60 rounded-2xl p-6 text-white shadow-lg">
-        <div className="text-center mb-6">
-          <h2 className="text-3xl font-bold">{data.title || "生词学习"}</h2>
-          <p className="text-slate-300 mt-1">点击生词听发音，或使用底部按钮切换</p>
-        </div>
+    <div className="w-full flex flex-col h-full animate-fade-in">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">{data.title || "生词学习"}</h2>
+        <p className="text-slate-500 text-sm mt-1">点击卡片听发音</p>
+      </div>
 
-        <div className="flex flex-wrap justify-center gap-3">
+      <div className="flex-1 overflow-y-auto pb-4 pr-1 scrollbar-hide">
+        <div className="grid grid-cols-2 gap-4 content-start">
           {data.words?.map(word => (
             <button
               key={word.id}
               onClick={() => handlePlayWord(word)}
-              className="w-40 p-4 rounded-lg shadow-md transition-transform transform bg-slate-700 hover:bg-slate-600 hover:-translate-y-1 focus:outline-none text-center"
+              className="group relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-100 transition-all active:scale-95 hover:shadow-md hover:border-blue-200"
             >
-              <div className="text-sm text-slate-300">{word.pinyin}</div>
-              <div className="text-2xl font-semibold mt-1">{word.chinese}</div>
-              <div className="text-base text-yellow-300 mt-2">{word.translation}</div>
+              <div className="text-xs text-slate-400 font-medium mb-1">{word.pinyin}</div>
+              <div className="text-2xl font-bold text-slate-800 mb-2 group-hover:text-blue-600 transition-colors">{word.chinese}</div>
+              <div className="text-sm text-slate-500 bg-slate-50 px-2 py-1 rounded-md w-full truncate">{word.translation}</div>
             </button>
           ))}
         </div>
+      </div>
 
-        <div className="mt-6 text-center">
-          <button onClick={onComplete} className="px-8 py-3 bg-white/90 text-slate-800 font-bold rounded-full shadow hover:scale-105 transition-transform">
-            继续
-          </button>
-        </div>
+      <div className="mt-4 shrink-0 w-full">
+        <button onClick={onComplete} className="w-full py-3.5 bg-blue-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
+          学完了
+        </button>
       </div>
     </div>
   );
 };
 
-// CompletionBlock (4秒返回首页)
+// 3. 完成块
 const CompletionBlock = ({ data, router }) => {
   useEffect(() => {
     const textToPlay = data.title || "恭喜";
     playTTS(textToPlay, 'zh');
-
     if (typeof window !== 'undefined') {
       import('canvas-confetti').then(module => {
-        const confetti = module.default;
-        confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+        module.default({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
       }).catch(() => {});
     }
-
     const timer = setTimeout(() => router.push('/'), 4000);
     return () => clearTimeout(timer);
   }, [data, router]);
 
   return (
-    <div className="w-full h-full flex items-center justify-center p-8">
-      <div className="text-center text-white">
-        <h1 className="text-7xl mb-4">🎉</h1>
-        <h2 className="text-4xl font-bold mb-4">{data.title || "ဂုဏ်ယူပါတယ်။"}</h2>
-        <p className="text-xl">{data.text || "သင်ခန်းစာပြီးဆုံးပါပြီ。 正在返回主页..."}</p>
-      </div>
+    <div className="flex flex-col items-center justify-center text-center animate-bounce-in">
+      <div className="text-8xl mb-6 drop-shadow-sm">🎉</div>
+      <h2 className="text-3xl font-black text-slate-800 mb-3">{data.title || "太棒了！"}</h2>
+      <p className="text-lg text-slate-500">{data.text || "正在保存进度并返回主页..."}</p>
+      <div className="mt-8 w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
     </div>
   );
 };
 
 const UnknownBlockHandler = ({ type, onSkip }) => {
-  useEffect(() => {
-    console.error(`不支持的组件类型或渲染失败: "${type}", 将在1.2秒后自动跳过。`);
-    const timer = setTimeout(onSkip, 1200);
-    return () => clearTimeout(timer);
-  }, [type, onSkip]);
-  return (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className="text-red-400 text-xl font-bold bg-black/50 p-4 rounded-lg">错误：不支持的题型 ({type})</div>
-    </div>
-  );
+  useEffect(() => { const timer = setTimeout(onSkip, 1000); return () => clearTimeout(timer); }, [onSkip]);
+  return <div className="text-slate-400 text-sm bg-slate-100 px-4 py-2 rounded-full">加载中... ({type})</div>;
 };
 
 // ---------------- 主播放器组件 ----------------
@@ -188,78 +191,48 @@ export default function InteractiveLesson({ lesson }) {
   const [isJumping, setIsJumping] = useState(false);
   const [jumpValue, setJumpValue] = useState('');
   const router = useRouter();
+  
   const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
   const totalBlocks = blocks.length;
   const currentBlock = blocks[currentIndex];
 
-  // 缓存课程元数据（仅一次）
+  // 缓存与进度逻辑
   useEffect(() => {
-    if (lesson && lesson.id) {
-      const storageKey = `lesson-cache-${lesson.id}`;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(lesson));
-      } catch (error) {
-        console.error("缓存课程数据失败:", error);
-      }
+    if (lesson?.id) {
+      try { localStorage.setItem(`lesson-cache-${lesson.id}`, JSON.stringify(lesson)); } catch (e) {}
     }
   }, [lesson]);
 
-  // 恢复进度
   useEffect(() => {
     if (lesson?.id) {
-      const storageKey = `lesson-progress-${lesson.id}`;
-      const savedProgress = localStorage.getItem(storageKey);
-      if (savedProgress) {
-        const savedIndex = parseInt(savedProgress, 10);
-        if (!isNaN(savedIndex) && savedIndex > 0 && savedIndex < totalBlocks) {
-          setCurrentIndex(savedIndex);
-        }
+      const saved = localStorage.getItem(`lesson-progress-${lesson.id}`);
+      if (saved) {
+        const idx = parseInt(saved, 10);
+        if (!isNaN(idx) && idx > 0 && idx < totalBlocks) setCurrentIndex(idx);
       }
     }
   }, [lesson?.id, totalBlocks]);
 
-  // 保存进度
   useEffect(() => {
-    if (lesson?.id) {
-      const storageKey = `lesson-progress-${lesson.id}`;
-      if (currentIndex > 0 && currentIndex < totalBlocks) {
-        localStorage.setItem(storageKey, currentIndex.toString());
-      } else {
-        localStorage.removeItem(storageKey);
-      }
+    if (lesson?.id && currentIndex > 0 && currentIndex < totalBlocks) {
+      localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
     }
   }, [currentIndex, lesson?.id, totalBlocks]);
 
-  // 停音/切换时停止所有播放
+  // 切换题目时停止音频
   useEffect(() => { stopAllAudio(); }, [currentIndex]);
 
-  // 如果是选择题并且自带 narrationText，开场播放
+  // 选择题自动朗读
   useEffect(() => {
-    if (currentBlock && currentBlock.type === 'choice' && currentBlock.content?.narrationText) {
+    if (currentBlock?.type === 'choice' && currentBlock.content?.narrationText) {
       const timer = setTimeout(() => { playTTS(currentBlock.content.narrationText, 'zh'); }, 500);
       return () => clearTimeout(timer);
     }
-  }, [currentIndex, currentBlock]);
+  }, [currentBlock]);
 
-  // 键盘支持（左右键）
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'ArrowRight') {
-        goNext();
-      } else if (e.key === 'ArrowLeft') {
-        goPrev();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [currentIndex, totalBlocks]);
-
-  // 下一题 / 上一题
   const goNext = useCallback(() => {
     stopAllAudio();
-    if (currentIndex < totalBlocks) {
-      setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
-    }
+    if (currentIndex < totalBlocks) setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
   }, [currentIndex, totalBlocks]);
 
   const goPrev = useCallback(() => {
@@ -267,20 +240,13 @@ export default function InteractiveLesson({ lesson }) {
     if (currentIndex > 0) setCurrentIndex(prev => Math.max(prev - 1, 0));
   }, [currentIndex]);
 
-  // 带延迟的下一步（用于展示奖励动画再跳转）
   const delayedNextStep = useCallback(() => {
     if (typeof window !== 'undefined') {
-      import('canvas-confetti').then(module => {
-        const confetti = module.default;
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-      }).catch(() => {});
+      import('canvas-confetti').then(module => module.default({ particleCount: 100, spread: 70, origin: { y: 0.6 } })).catch(() => {});
     }
-    setTimeout(() => {
-      setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
-    }, 4500);
+    setTimeout(() => { setCurrentIndex(prev => Math.min(prev + 1, totalBlocks)); }, 1500); // 缩短等待时间，提升体感
   }, [totalBlocks]);
 
-  // 跳转表单处理
   const handleJump = (e) => {
     e.preventDefault();
     const pageNum = parseInt(jumpValue, 10);
@@ -291,132 +257,137 @@ export default function InteractiveLesson({ lesson }) {
     setJumpValue('');
   };
 
-  // 渲染题块分发
   const renderBlock = () => {
-    if (currentIndex >= totalBlocks) {
-      return <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} />;
-    }
-    if (!currentBlock) return <div className="text-white">正在加载...</div>;
+    if (currentIndex >= totalBlocks) return <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} />;
+    if (!currentBlock) return <div className="text-slate-500 flex flex-col items-center"><div className="animate-spin mb-2 text-2xl">⏳</div>准备中...</div>;
 
     const type = currentBlock.type.toLowerCase();
     const props = { data: currentBlock.content, onCorrect: delayedNextStep, onComplete: goNext, settings: { playTTS } };
 
+    // 包装器：为所有题型提供统一的浅色背景容器样式，如果题型组件本身没有自带背景
+    const ContentWrapper = ({ children }) => <div className="w-full">{children}</div>;
+
     try {
       switch (type) {
         case 'teaching': return <TeachingBlock {...props} />;
-        case 'grammar_study':
-          if (!props.data?.grammarPoints?.length) return <UnknownBlockHandler type="grammar_study (数据为空)" onSkip={goNext} />;
-          return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} />;
-        case 'dialogue_cinematic': return <DuiHua {...props} />;
         case 'word_study': return <WordStudyBlock {...props} />;
+        case 'grammar_study':
+          return <div className="h-[80vh] w-full"><GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} /></div>;
+        case 'dialogue_cinematic': return <DuiHua {...props} />;
         case 'image_match_blanks': return <TianKongTi {...props.data} onCorrect={props.onCorrect} onNext={props.onCorrect} />;
-        case 'choice': {
-          const xuanZeTiProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices || [], correctAnswer: props.data.correctId ? [props.data.correctId] : [], onNext: props.onCorrect };
-          if (xuanZeTiProps.data.narrationText) { xuanZeTiProps.isListeningMode = true; xuanZeTiProps.question.text = props.data.prompt; }
-          return <XuanZeTi {...xuanZeTiProps} />;
-        }
-        case 'lianxian': {
-          if (!props.data.pairs?.length) return <UnknownBlockHandler type="lianxian (no pairs data)" onSkip={goNext} />;
-          const columnA = props.data.pairs.map(p => ({ id: p.id, content: p.left }));
-          const columnB_temp = props.data.pairs.map(p => ({ id: `${p.id}_b`, content: p.right }));
-          const columnB = [...columnB_temp].sort(() => Math.random() - 0.5);
-          const correctPairsMap = props.data.pairs.reduce((acc, p) => { acc[p.id] = `${p.id}_b`; return acc; }, {});
-          return <LianXianTi title={props.data.prompt} columnA={columnA} columnB={columnB} pairs={correctPairsMap} onCorrect={props.onCorrect} />;
-        }
-        case 'paixu': {
-          if (!props.data.items) return <UnknownBlockHandler type="paixu (no items)" onSkip={goNext} />;
-          const paiXuProps = { title: props.data.prompt, items: props.data.items, correctOrder: [...props.data.items].sort((a, b) => a.order - b.order).map(item => item.id), onCorrect: props.onCorrect, onComplete: props.onComplete, settings: props.settings };
-          return <PaiXuTi {...paiXuProps} />;
-        }
+        case 'choice':
+          return (
+            <ContentWrapper>
+              <XuanZeTi 
+                {...props} 
+                question={{ text: props.data.prompt, ...props.data }} 
+                options={props.data.choices || []} 
+                correctAnswer={props.data.correctId ? [props.data.correctId] : []} 
+                onNext={props.onCorrect} 
+                isListeningMode={!!props.data.narrationText}
+              />
+            </ContentWrapper>
+          );
+        case 'lianxian':
+          const columnA = props.data.pairs?.map(p => ({ id: p.id, content: p.left })) || [];
+          const columnB = props.data.pairs?.map(p => ({ id: `${p.id}_b`, content: p.right })).sort(() => Math.random() - 0.5) || [];
+          const pairsMap = props.data.pairs?.reduce((acc, p) => { acc[p.id] = `${p.id}_b`; return acc; }, {}) || {};
+          return <LianXianTi title={props.data.prompt} columnA={columnA} columnB={columnB} pairs={pairsMap} onCorrect={props.onCorrect} />;
+        case 'paixu':
+           return <PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...props.data.items].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={props.onCorrect} onComplete={props.onComplete} settings={props.settings} />;
         case 'panduan': return <PanDuanTi {...props} />;
         case 'gaicuo': return <GaiCuoTi {...props} />;
-        case 'complete':
-        case 'end': return <CompletionBlock data={props.data} router={router} />;
+        case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
         default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
       }
     } catch (error) {
-      console.error(`渲染环节 "${type}" 时发生错误:`, error);
-      return <UnknownBlockHandler type={`${type} (渲染失败)`} onSkip={goNext} />;
+      console.error(`渲染错误: ${type}`, error);
+      return <UnknownBlockHandler type={`${type} Error`} onSkip={goNext} />;
     }
   };
 
   return (
-    <div className="fixed inset-0 w-full h-screen bg-cover bg-fixed bg-center flex flex-col" style={{ backgroundImage: "url(/background.jpg)" }}>
-      {/* 顶部进度条 */}
+    // 1. 全屏、高层级容器，覆盖底部导航，浅色背景
+    <div className="fixed inset-0 w-full h-[100dvh] bg-gradient-to-b from-blue-50 to-slate-100 text-slate-800 z-[5000] flex flex-col font-sans overflow-hidden">
+      
+      {/* 2. 顶部导航与进度条 */}
       {currentIndex < totalBlocks && (
-        <div className="fixed top-4 left-4 right-4 z-30 pointer-events-auto">
-          <div className="max-w-5xl mx-auto">
-            <div className="bg-gray-600/50 rounded-full h-1.5">
-              <div
-                className="bg-blue-400 h-1.5 rounded-full"
-                style={{ width: `${(currentIndex + 1) / Math.max(totalBlocks, 1) * 100}%`, transition: 'width 0.5s ease' }}
-                aria-hidden
-              />
-            </div>
-          </div>
-          <div className="absolute top-[-6px] right-0 px-3 py-1 bg-black/30 text-white text-sm rounded-full cursor-pointer whitespace-nowrap" onClick={() => setIsJumping(true)}>
-            {currentIndex + 1} / {totalBlocks}
-          </div>
+        <div className="flex-none px-6 pt-safe-top pb-2 w-full z-20 bg-white/50 backdrop-blur-sm border-b border-white/50">
+           <div className="flex items-center justify-between h-12">
+             <button onClick={() => router.back()} className="p-2 -ml-2 text-slate-500 hover:text-slate-800 transition-colors">
+               <IoMdClose className="text-2xl" />
+             </button>
+             
+             {/* 进度条 */}
+             <div className="flex-1 mx-4 h-2 bg-slate-200 rounded-full overflow-hidden">
+               <div 
+                 className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out" 
+                 style={{ width: `${((currentIndex + 1) / Math.max(totalBlocks, 1)) * 100}%` }}
+               />
+             </div>
+             
+             <button onClick={() => setIsJumping(true)} className="text-sm font-bold text-slate-500 tabular-nums px-2 py-1 bg-slate-100 rounded-lg">
+               {currentIndex + 1} / {totalBlocks}
+             </button>
+           </div>
         </div>
       )}
 
-      {/* 跳转 Modal */}
+      {/* 跳转浮层 (Modal) */}
       {isJumping && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={() => setIsJumping(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-gray-800 p-6 rounded-lg shadow-xl relative w-80">
-            <h3 className="text-white text-lg mb-4">跳转到第几页？ (1-{totalBlocks})</h3>
-            <form onSubmit={handleJump}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[6000] flex items-center justify-center animate-fade-in" onClick={() => setIsJumping(false)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72 transform transition-all scale-100">
+            <h3 className="text-slate-800 font-bold text-lg mb-4 text-center">跳转至题目</h3>
+            <form onSubmit={handleJump} className="relative">
               <input
                 type="number"
                 autoFocus
                 value={jumpValue}
+                placeholder={`1 - ${totalBlocks}`}
                 onChange={(e) => setJumpValue(e.target.value)}
-                className="w-full px-4 py-2 text-center bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 text-center bg-slate-50 text-slate-800 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xl font-bold"
               />
+              <button type="submit" className="mt-4 w-full bg-blue-600 text-white py-2.5 rounded-xl font-bold">确定</button>
             </form>
-            <button onClick={() => setIsJumping(false)} className="absolute top-2 right-2 p-2 text-gray-400 hover:text-white"><IoMdClose size={24} /></button>
           </div>
         </div>
       )}
 
-      {/* 主内容区域：垂直居中、全屏 */}
-      <main className="flex-1 flex items-center justify-center">
-        <div className="w-full h-full flex items-center justify-center p-6">
-          <div className="w-full h-full max-w-6xl max-h-[92vh] flex items-center justify-center">
-            {renderBlock()}
-          </div>
-        </div>
+      {/* 3. 主内容区域 - 居中偏上显示 */}
+      {/* justify-start + pt-[10vh] 实现偏上，避免被视线低处遮挡 */}
+      <main className="flex-1 flex flex-col items-center justify-start pt-[5vh] md:pt-[10vh] px-6 w-full max-w-2xl mx-auto overflow-y-auto pb-32">
+        {renderBlock()}
       </main>
 
-      {/* 底部左右按钮（A 方案） */}
-      <div className="fixed bottom-6 left-6 right-6 pointer-events-none">
-        <div className="max-w-6xl mx-auto relative">
-          {/* 左按钮 */}
+      {/* 4. 底部控制栏 (悬浮极简风格) */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe-bottom bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none z-10">
+        <div className="max-w-2xl mx-auto flex items-center justify-between pointer-events-auto">
+          {/* 上一题 */}
           <button
-            onClick={(e) => { e.stopPropagation(); goPrev(); }}
+            onClick={goPrev}
             disabled={currentIndex <= 0}
-            className={`pointer-events-auto absolute left-0 bottom-0 p-3 rounded-full shadow-xl flex items-center gap-2 ${currentIndex <= 0 ? 'opacity-40 cursor-not-allowed' : 'bg-white/90 hover:scale-105'}`}
-            aria-label="上一题"
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              currentIndex <= 0 
+                ? 'opacity-0 translate-y-4' 
+                : 'bg-white shadow-md border border-slate-100 text-slate-600 active:scale-95'
+            }`}
           >
-            <FaChevronLeft className="h-5 w-5 text-slate-800" />
-            <span className="hidden md:inline text-slate-800 font-semibold">上一题</span>
+            <FaChevronLeft />
           </button>
 
-          {/* 右按钮 */}
+          {/* 如果是互动题（如选择题）通常有自己的“下一步”，这里只在部分页面显示强制下一步，或者始终显示辅助跳转 */}
           <button
-            onClick={(e) => { e.stopPropagation(); goNext(); }}
+            onClick={goNext}
             disabled={currentIndex >= totalBlocks}
-            className={`pointer-events-auto absolute right-0 bottom-0 p-3 rounded-full shadow-xl flex items-center gap-2 ${currentIndex >= totalBlocks ? 'opacity-40 cursor-not-allowed' : 'bg-white/90 hover:scale-105'}`}
-            aria-label="下一题"
+            className={`flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all active:scale-95 ${
+              currentIndex >= totalBlocks 
+                ? 'opacity-0' 
+                : 'bg-white text-slate-800 border border-slate-100 hover:bg-slate-50'
+            }`}
           >
-            <span className="hidden md:inline text-slate-800 font-semibold">下一题</span>
-            <FaChevronRight className="h-5 w-5 text-slate-800" />
+            <span className="font-bold">跳过 / 下一步</span>
+            <FaChevronRight className="text-xs opacity-60" />
           </button>
-
-          {/* 中央提示（可选） */}
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-1 text-sm text-white/90 bg-black/30 px-3 py-1 rounded-full">
-            {currentIndex + 1} / {totalBlocks}
-          </div>
         </div>
       </div>
     </div>
