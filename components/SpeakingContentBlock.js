@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import speakingList from '@/data/speaking.json';
 
 // 动态导入组件 (保持不变)
-const InteractiveLesson = dynamic(() => import('./InteractiveLesson'), { ssr: false });
+const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
 const SpeakingContentBlock = () => {
   const router = useRouter();
