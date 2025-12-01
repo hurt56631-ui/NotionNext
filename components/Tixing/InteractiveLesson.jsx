@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { HiSpeakerWave, HiArrowLeft, HiArrowRight, HiCheck } from "react-icons/hi2";
+import { HiSpeakerWave, HiCheckCircle, HiXCircle } from "react-icons/hi2";
 import confetti from 'canvas-confetti';
 
 // --- 1. 导入子组件 ---
-import XuanZeTi from './XuanZeTi';
+// 注意：为了配合多邻国模式，你的子组件(如XuanZeTi)可能需要微调，
+// 接受一个 `submitted` 属性来决定是否显示红绿色框。
+import XuanZeTi from './XuanZeTi'; 
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
 import LianXianTi from './LianXianTi';
@@ -13,7 +15,7 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 2. TTS 工具 ---
+// --- 2. TTS & 音效 ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 let currentAudio = null;
 
@@ -21,224 +23,245 @@ const playTTS = async (text, lang = 'zh', rate = 0) => {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     if (!text) return;
     try {
-        const voice = ttsVoices[lang] || ttsVoices['zh'];
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${ttsVoices[lang]||ttsVoices['zh']}&r=${rate}`;
         const audio = new Audio(url);
         currentAudio = audio;
         await audio.play();
     } catch (e) { console.error("TTS error:", e); }
 };
 
-// --- 3. 基础展示组件 (无内部按钮) ---
-
-const TeachingBlock = ({ data }) => {
-    useEffect(() => {
-        if (data.narrationScript) {
-            setTimeout(() => playTTS(data.narrationScript, data.narrationLang || 'my'), 800);
-        }
-    }, [data]);
-    return (
-        <div className="flex flex-col items-center text-center">
-            {data.pinyin && <p className="text-lg text-slate-500 mb-2 font-medium">{data.pinyin}</p>}
-            <h1 className="text-4xl font-extrabold text-slate-800 mb-6">{data.displayText}</h1>
-            <button onClick={(e) => { e.stopPropagation(); playTTS(data.displayText, 'zh'); }} 
-                className="p-3 bg-white text-blue-500 rounded-full shadow-md border border-slate-100 active:scale-95 mb-6">
-                <HiSpeakerWave className="w-8 h-8" /> 
-            </button>
-            {data.translation && (
-                <div className="bg-white/80 px-6 py-4 rounded-xl border border-slate-100 text-slate-600 font-medium">
-                    {data.translation}
-                </div>
-            )}
-        </div>
-    );
+const playSound = (type) => {
+    // 这里你可以换成真实的 mp3 URL
+    const audio = new Audio(type === 'correct' 
+        ? 'https://codesandbox.io/static/sound/correct.mp3' // 示例正确音效
+        : 'https://codesandbox.io/static/sound/error.mp3');  // 示例错误音效
+    audio.play().catch(()=>null);
 };
 
-const WordStudyBlock = ({ data }) => {
+// --- 3. [核心] 多邻国风格底部 Footer ---
+const DuolingoFooter = ({ status, onCheck, onContinue, correctMessage = "非常好！", wrongMessage = "答案错误" }) => {
+    // status: 'idle'(不可点) | 'selected'(可点检测) | 'correct'(显示绿条) | 'wrong'(显示红条)
+    
+    // 根据状态计算样式
+    const isResultShown = status === 'correct' || status === 'wrong';
+    const isCorrect = status === 'correct';
+
+    // 容器背景色
+    let containerBg = "bg-white border-t border-slate-200";
+    if (status === 'correct') containerBg = "bg-[#d7ffb8] border-t-transparent"; // 多邻国绿背景
+    if (status === 'wrong') containerBg = "bg-[#ffdfe0] border-t-transparent";   // 多邻国红背景
+
+    // 按钮样式
+    let btnClass = "w-full py-3 rounded-xl font-bold text-lg shadow-[0_4px_0_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-y-[4px] transition-all uppercase tracking-wider";
+    if (status === 'idle') {
+        btnClass += " bg-slate-200 text-slate-400 cursor-not-allowed shadow-none active:translate-y-0";
+    } else if (status === 'selected') {
+        btnClass += " bg-[#58cc02] text-white hover:bg-[#46a302] shadow-[#46a302]"; // 绿色检测按钮
+    } else if (status === 'correct') {
+        btnClass += " bg-[#58cc02] text-white hover:bg-[#46a302] shadow-[#46a302]"; // 继续按钮(绿)
+    } else if (status === 'wrong') {
+        btnClass += " bg-[#ff4b4b] text-white hover:bg-[#d63e3e] shadow-[#d63e3e]"; // 继续按钮(红)
+    }
+
     return (
-        <div className="w-full flex flex-col items-center">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">{data.title || "本课生词"}</h2>
-            <div className="grid grid-cols-1 gap-4 w-full">
-                {data.words && data.words.map((word) => (
-                    <div key={word.id} onClick={() => playTTS(word.chinese, 'zh')} 
-                         className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center active:scale-[0.99] transition-transform">
-                        <span className="text-xs text-slate-400 mb-1">{word.pinyin}</span>
-                        <span className="text-xl font-bold text-slate-800">{word.chinese}</span>
-                        <span className="text-blue-500 text-sm mt-1">{word.translation}</span>
+        <div className={`fixed bottom-0 left-0 w-full z-50 transition-colors duration-300 pb-safe ${containerBg}`}>
+            <div className="max-w-2xl mx-auto px-4 py-4 md:px-6">
+                
+                {/* 结果反馈区 (只在检测后显示) */}
+                {isResultShown && (
+                    <div className="flex items-center mb-4 animate-fade-in-up">
+                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center mr-3 ${isCorrect ? 'bg-white text-[#58cc02]' : 'bg-white text-[#ff4b4b]'}`}>
+                            {isCorrect ? <HiCheckCircle className="w-6 h-6 md:w-8 md:h-8" /> : <HiXCircle className="w-6 h-6 md:w-8 md:h-8" />}
+                        </div>
+                        <div>
+                            <h3 className={`font-extrabold text-xl md:text-2xl ${isCorrect ? 'text-[#58a700]' : 'text-[#ea2b2b]'}`}>
+                                {isCorrect ? "非常好！" : "再接再厉"}
+                            </h3>
+                            {!isCorrect && <p className="text-[#ea2b2b] text-sm md:text-base">{wrongMessage}</p>}
+                        </div>
                     </div>
-                ))}
+                )}
+
+                {/* 按钮区 */}
+                <button 
+                    onClick={isResultShown ? onContinue : onCheck}
+                    disabled={status === 'idle'}
+                    className={btnClass}
+                >
+                    {isResultShown ? "继续" : "检测"}
+                </button>
             </div>
         </div>
     );
 };
 
-const CompletionBlock = ({ data, router }) => {
+// --- 4. 页面组件 (简化版) ---
+// 对于不需要“检测”的页面（如Teaching, End），status直接设为 'selected' 并修改按钮文字逻辑
+
+const TeachingBlock = ({ data }) => {
     useEffect(() => {
-        playTTS("恭喜完成", 'zh');
-        confetti();
-        setTimeout(() => router.push('/'), 3000);
-    }, []);
+        if (data.narrationScript) setTimeout(() => playTTS(data.narrationScript, 'my'), 600);
+    }, [data]);
     return (
-        <div className="flex flex-col items-center justify-center h-64">
-            <div className="text-6xl mb-4 animate-bounce">🎉</div>
-            <h2 className="text-2xl font-bold text-slate-800">课程完成！</h2>
+        <div className="flex flex-col items-center text-center">
+            <h1 className="text-4xl font-black text-slate-800 mb-6">{data.displayText}</h1>
+            <button onClick={() => playTTS(data.displayText, 'zh')} className="p-4 bg-white rounded-2xl shadow-sm border mb-4"><HiSpeakerWave className="w-8 h-8 text-blue-500"/></button>
+            <div className="text-slate-500">{data.translation}</div>
         </div>
     );
 };
 
-// --- 4. 核心页面组件 ---
+const CompletionBlock = ({ router }) => (
+    <div className="flex flex-col items-center">
+        <div className="text-7xl mb-4 animate-bounce">🎉</div>
+        <h2 className="text-2xl font-bold">课程完成</h2>
+    </div>
+);
+
+// --- 5. 主逻辑组件 ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [isBlockCompleted, setIsBlockCompleted] = useState(false);
     const router = useRouter();
     const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
     const currentBlock = blocks[currentIndex] || null;
 
-    // --- 逻辑控制 ---
+    // --- 状态管理 ---
+    // 'idle': 用户没操作
+    // 'selected': 用户选了，但没点检测
+    // 'correct': 检测通过
+    // 'wrong': 检测错误
+    const [footerStatus, setFooterStatus] = useState('idle'); 
+    
+    // 用于通知子组件“提交了” (以便子组件显示红绿框)
+    const [isSubmitted, setIsSubmitted] = useState(false);
+    
+    // 暂存用户当前的答案正确性 (由子组件通过 onSelect 回传，或者父组件校验)
+    // 这里为了兼容性，假设子组件在 onSelect 时告诉父组件 "我选的这个是对是错" 或者 "我选了xxx"
+    // 简化方案：我们假设子组件传递 `isCorrect` 给 onSelect
+    const [pendingCorrectness, setPendingCorrectness] = useState(false);
+
+    // --- 副作用 ---
     useEffect(() => {
         if (!currentBlock) return;
         
-        // 1. 自动滚动回顶部 (切换题目时)
-        window.scrollTo(0, 0);
+        // 切题时重置状态
+        setIsSubmitted(false);
+        setFooterStatus('idle');
+        setPendingCorrectness(false);
+        window.scrollTo(0,0);
 
-        // 2. 判断当前页类型，有些类型天生就是“已完成”状态，不需要做题
+        // 自动类型直接允许“继续”
         const type = currentBlock.type.toLowerCase();
         const autoUnlockTypes = ['teaching', 'word_study', 'grammar_study', 'dialogue_cinematic', 'end', 'complete'];
-        setIsBlockCompleted(autoUnlockTypes.includes(type));
-        
-        // 3. 自动播放读音
-        if (currentBlock.content && (currentBlock.content.narrationScript || currentBlock.content.narrationText)) {
-            const text = currentBlock.content.narrationScript || currentBlock.content.narrationText;
-            setTimeout(() => playTTS(text, 'zh'), 600);
+        if (autoUnlockTypes.includes(type)) {
+            // 这些页面不需要“检测”，直接变成“继续”的状态，或者变成“可点击”状态
+            // 为了复用Footer逻辑，我们把它们视为“已选择”，且点击直接跳下一题
+            setFooterStatus('correct'); // 这里借用correct样式(绿色)，或者你可以新增一个 'continue' 状态
+        }
+
+        // 自动播放
+        if (currentBlock.content?.narrationScript) {
+            setTimeout(() => playTTS(currentBlock.content.narrationScript, 'zh'), 500);
         }
     }, [currentIndex, currentBlock]);
 
-    // 下一题逻辑
-    const handleNext = useCallback(() => {
-        if (currentIndex < blocks.length) {
-            setCurrentIndex(p => p + 1);
-        }
-    }, [currentIndex, blocks.length]);
+    // --- 交互处理 ---
 
-    // 上一题逻辑
-    const handlePrev = useCallback(() => {
-        if (currentIndex > 0) {
-            setIsBlockCompleted(true); // 往回翻默认解锁
-            setCurrentIndex(p => p - 1);
-        }
-    }, [currentIndex]);
+    // 子组件通知父组件：用户选择了一个选项
+    // isCorrectNow: 用户当前选的这个答案是否正确 (需要在子组件里判断好传出来，或者传值由父组件判断)
+    const handleUserSelect = useCallback((isCorrectNow) => {
+        if (isSubmitted) return; // 提交后不能改
+        setFooterStatus('selected'); // 按钮变绿（检测）
+        setPendingCorrectness(isCorrectNow);
+    }, [isSubmitted]);
 
-    // 做对题目的回调
-    const handleCorrect = useCallback(() => {
-        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-        setIsBlockCompleted(true);
-    }, []);
-
-    // 渲染题目内容
-    const renderContent = () => {
-        if (!currentBlock) return null;
-        if (currentIndex >= blocks.length) return <CompletionBlock data={{}} router={router} />;
-
-        const type = currentBlock.type.toLowerCase();
-        const props = {
-            data: currentBlock.content,
-            onCorrect: handleCorrect,
-            onComplete: handleCorrect, // 统一触发完成状态
-            onNext: handleCorrect,     // 兼容某些组件的命名
-            settings: { playTTS }
-        };
-
-        // 注意：这里移除了原来外层的 flex center 布局，改由外部容器控制
-        switch (type) {
-            case 'teaching': return <TeachingBlock {...props} />;
-            case 'word_study': return <WordStudyBlock {...props} />;
-            case 'grammar_study': return <GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={handleCorrect} />;
-            case 'dialogue_cinematic': return <DuiHua {...props} onComplete={handleCorrect} />;
-            
-            case 'choice': 
-                const choiceProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices||[], correctAnswer: props.data.correctId?[props.data.correctId]:[] };
-                return <XuanZeTi {...choiceProps} />;
-            
-            case 'image_match_blanks': return <TianKongTi {...props.data} onCorrect={handleCorrect} />;
-            
-            case 'lianxian':
-                const lp = props.data.pairs || [];
-                const ansMap = lp.reduce((acc, p) => ({ ...acc, [p.id]: `${p.id}_b` }), {});
-                return <LianXianTi title={props.data.prompt} columnA={lp.map(p => ({id:p.id,content:p.left}))} columnB={lp.map(p => ({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={ansMap} onCorrect={handleCorrect} />;
-            
-            case 'paixu': 
-                return <PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...(props.data.items||[])].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={handleCorrect} />;
-            
-            case 'panduan': return <PanDuanTi {...props} />;
-            case 'gaicuo': return <GaiCuoTi {...props} />;
-            
-            case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
-            default: return <div>未知题型 {type}</div>;
+    // 点击“检测”按钮
+    const handleCheck = () => {
+        setIsSubmitted(true); // 通知子组件显示红绿框
+        
+        if (pendingCorrectness) {
+            setFooterStatus('correct');
+            playSound('correct');
+            confetti({ particleCount: 80, spread: 70, origin: { y: 0.8 } });
+        } else {
+            setFooterStatus('wrong');
+            playSound('wrong');
         }
     };
 
-    // 进度条百分比
-    const progress = Math.min(((currentIndex + 1) / blocks.length) * 100, 100);
+    // 点击“继续”按钮
+    const handleContinue = () => {
+        if (currentIndex < blocks.length - 1) {
+            setCurrentIndex(prev => prev + 1);
+        } else {
+            router.push('/'); // 结束
+        }
+    };
+
+    // --- 渲染内容 ---
+    const renderContent = () => {
+        if (!currentBlock) return null;
+        if (currentIndex >= blocks.length) return <CompletionBlock router={router} />;
+
+        const type = currentBlock.type.toLowerCase();
+        const commonProps = {
+            data: currentBlock.content,
+            // 关键：把状态传给子组件
+            isSubmitted: isSubmitted, 
+            // 关键：子组件选择时调用，参数 true/false 代表选的对不对
+            onSelect: (isCorrect) => handleUserSelect(isCorrect), 
+            settings: { playTTS }
+        };
+
+        // 针对不同组件，你可能需要稍微修改一下组件内部逻辑，
+        // 让它们在 isSubmitted=true 时显示答案样式
+        switch (type) {
+            case 'teaching': 
+            case 'word_study': 
+            case 'dialogue_cinematic':
+            case 'grammar_study':
+                // 这些组件本身没有对错之分，直接渲染
+                // 在 useEffect 里已经设置了 status 为 'correct' (即可以直接点继续)
+                return type === 'teaching' ? <TeachingBlock {...commonProps} /> : <div>非题目页面内容</div>;
+
+            case 'choice': 
+                // 示例：选择题
+                // 你需要修改 XuanZeTi，让它在点击选项时调用 props.onSelect(item.isCorrect)
+                return <XuanZeTi {...commonProps} 
+                    question={currentBlock.content} 
+                    options={currentBlock.content.choices} 
+                    correctId={currentBlock.content.correctId} 
+                />;
+            
+            // ... 其他题型同理
+            default: return <div>{type}</div>;
+        }
+    };
+
+    // 进度条
+    const progress = ((currentIndex + 1) / blocks.length) * 100;
 
     return (
-        // 容器：全屏高度 (h-[100dvh])，背景灰白
         <div className="min-h-[100dvh] w-full bg-[#F5F7FA] text-slate-800 flex flex-col font-sans">
             
-            {/* 1. 顶部进度条 (没有关闭按钮 X) */}
-            <div className="w-full h-1.5 bg-slate-200 sticky top-0 z-50">
-                <div 
-                    className="h-full bg-blue-500 transition-all duration-500 ease-out" 
-                    style={{ width: `${progress}%` }} 
-                />
+            {/* 顶部进度条 (极简) */}
+            <div className="w-full h-4 bg-slate-100 sticky top-0 z-40">
+                <div className="h-full bg-[#58cc02] transition-all duration-500 rounded-r-full" style={{ width: `${progress}%` }} />
             </div>
 
-            {/* 2. 主内容区域 */}
-            {/* flex-1 让它占满剩余空间 */}
-            {/* justify-center 让内容垂直居中 */}
-            {/* pb-32 是关键：底部的 Padding 大于顶部，视觉上内容会“中偏上” */}
-            <div className="flex-1 flex flex-col items-center justify-center px-5 pt-8 pb-32 w-full max-w-2xl mx-auto">
-                
-                {/* 题目组件渲染区 */}
-                <div className="w-full">
-                    {renderContent()}
-                </div>
-
-                {/* 3. 导航按钮区域 (跟随在题目下方) */}
-                {/* mt-12 保证按钮和题目有足够间距 */}
-                {/* 这个位置就是“中偏下”，因为它在内容下方，但又被外层 pb-32 顶起来了，不会贴底 */}
-                {currentIndex < blocks.length && (
-                    <div className="w-full mt-12 flex items-center justify-between gap-4">
-                        
-                        {/* 上一题 (圆形小按钮) */}
-                        <button 
-                            onClick={handlePrev} 
-                            disabled={currentIndex === 0}
-                            className={`w-12 h-12 flex items-center justify-center rounded-full border transition-all
-                                ${currentIndex === 0 
-                                    ? 'border-slate-200 text-slate-300 opacity-0 cursor-default' // 第一页隐藏
-                                    : 'border-slate-300 text-slate-500 bg-white hover:bg-slate-50 shadow-sm'}`}
-                        >
-                            <HiArrowLeft className="w-5 h-5" />
-                        </button>
-
-                        {/* 下一题 (长条大按钮) */}
-                        <button 
-                            onClick={handleNext}
-                            disabled={!isBlockCompleted}
-                            className={`flex-1 flex items-center justify-center space-x-2 h-12 rounded-full font-bold text-lg shadow-md transition-all active:scale-95
-                                ${!isBlockCompleted 
-                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed' // 锁定状态：灰色
-                                    : 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-200'}`} // 解锁状态：蓝色
-                        >
-                            <span>{currentIndex === blocks.length - 1 ? "完成" : "下一题"}</span>
-                            {isBlockCompleted && (
-                                currentIndex === blocks.length - 1 ? <HiCheck className="w-5 h-5"/> : <HiArrowRight className="w-5 h-5"/>
-                            )}
-                        </button>
-                    </div>
-                )}
-
+            {/* 内容区 */}
+            {/* pb-48: 给底部的 Footer 留出足够的空间，防止内容被遮挡 */}
+            <div className="flex-1 flex flex-col items-center justify-center px-4 pt-10 pb-48 w-full max-w-2xl mx-auto">
+                {renderContent()}
             </div>
+
+            {/* 底部多邻国风格 Footer */}
+            <DuolingoFooter 
+                status={footerStatus}
+                onCheck={handleCheck}
+                onContinue={handleContinue}
+                wrongMessage={currentBlock?.content?.explanation || "正确答案是..."}
+            />
         </div>
     );
 }
