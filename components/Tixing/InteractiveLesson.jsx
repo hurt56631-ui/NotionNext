@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { HiSpeakerWave, HiArrowLeft, HiArrowRight } from "react-icons/hi2"; // 引入箭头图标
+import { HiSpeakerWave, HiArrowLeft, HiArrowRight, HiArrowsPointingOut, HiArrowsPointingIn } from "react-icons/hi2";
 import confetti from 'canvas-confetti';
 
-// --- 1. 导入子组件 (保持不变) ---
+// --- 1. 导入子组件 (保持路径正确) ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -13,7 +13,7 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 2. TTS 语音模块 (保持不变) ---
+// --- 2. TTS 语音模块 ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 let currentAudio = null;
 
@@ -29,9 +29,9 @@ const playTTS = async (text, lang = 'zh', rate = 0) => {
     } catch (e) { console.error("TTS error:", e); }
 };
 
-// --- 3. 页面组件 (去除了手势提示) ---
+// --- 3. 页面组件 (样式微调以适应全屏) ---
 
-// [TeachingBlock] 首页 - 去除上滑提示
+// [TeachingBlock]
 const TeachingBlock = ({ data }) => {
     useEffect(() => {
         if (data.narrationScript) {
@@ -40,52 +40,46 @@ const TeachingBlock = ({ data }) => {
     }, [data]);
 
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center pb-10 px-6 text-center select-none relative animate-fade-in">
-            {data.pinyin && <p className="text-lg text-slate-500 mb-2 font-medium">{data.pinyin}</p>}
-            <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 mb-5 drop-shadow-sm leading-tight">{data.displayText}</h1>
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none animate-fade-in relative z-10">
+            {data.pinyin && <p className="text-xl text-slate-500 mb-4 font-medium tracking-wider">{data.pinyin}</p>}
+            <h1 className="text-5xl md:text-6xl font-black text-slate-800 mb-8 drop-shadow-sm leading-tight">{data.displayText}</h1>
             
             <button onClick={(e) => { e.stopPropagation(); playTTS(data.displayText, 'zh'); }} 
-                className="mb-8 p-3 bg-white text-blue-500 rounded-full shadow-md border border-blue-50 active:scale-95 transition-transform">
-                <HiSpeakerWave className="w-6 h-6" /> 
+                className="mb-10 p-4 bg-white/90 text-blue-600 rounded-full shadow-lg border border-white/50 backdrop-blur-md active:scale-95 transition-transform hover:bg-blue-50">
+                <HiSpeakerWave className="w-8 h-8" /> 
             </button>
 
             {data.translation && (
-                <div className="bg-white/60 px-5 py-4 rounded-xl backdrop-blur-sm border border-slate-100/50">
-                    <p className="text-lg text-slate-600 font-medium">{data.translation}</p>
+                <div className="bg-white/70 px-6 py-5 rounded-2xl backdrop-blur-md border border-white/40 shadow-sm max-w-lg">
+                    <p className="text-xl text-slate-700 font-medium">{data.translation}</p>
                 </div>
             )}
-            
-            {/* 移除了原本底部的 animate-pulse 上滑提示 */}
         </div>
     );
 };
 
-// [WordStudyBlock] 生词 - 去除上滑提示
+// [WordStudyBlock]
 const WordStudyBlock = ({ data }) => {
     return (
-        <div className="w-full min-h-full flex flex-col p-4 pb-10">
-            <div className="py-8 text-center shrink-0">
-                <h2 className="text-2xl font-bold text-slate-800">{data.title || "本课生词"}</h2>
-                <p className="text-slate-400 text-xs mt-2">点击发音</p>
+        <div className="w-full h-full flex flex-col p-4 pt-12 overflow-y-auto pb-32">
+            <div className="text-center shrink-0 mb-6">
+                <h2 className="text-3xl font-bold text-slate-800">{data.title || "本课生词"}</h2>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto w-full shrink-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto w-full">
                 {data.words && data.words.map((word) => (
                     <div key={word.id} onClick={(e) => { e.stopPropagation(); playTTS(word.chinese, 'zh', word.rate || 0); }} 
-                         className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 active:scale-[0.98] transition-all flex flex-col items-center text-center cursor-pointer">
-                        <span className="text-xs text-slate-400 mb-1 font-mono">{word.pinyin}</span>
+                         className="bg-white/80 backdrop-blur-sm rounded-xl p-5 shadow-sm border border-white/50 active:scale-[0.98] transition-all flex flex-col items-center text-center cursor-pointer hover:shadow-md">
+                        <span className="text-sm text-slate-400 mb-1 font-mono">{word.pinyin}</span>
                         <span className="text-2xl font-bold text-slate-800 mb-2">{word.chinese}</span>
-                        <span className="text-blue-500 text-sm font-medium">{word.translation}</span>
-                        {word.example && <div className="mt-3 pt-3 border-t border-slate-50 w-full text-xs text-slate-400 text-left leading-relaxed">{word.example}</div>}
+                        <span className="text-blue-600 text-sm font-medium">{word.translation}</span>
                     </div>
                 ))}
             </div>
-            {/* 移除了底部的继续上滑提示 */}
         </div>
     );
 };
 
-// [CompletionBlock] (保持不变)
+// [CompletionBlock]
 const CompletionBlock = ({ data, router }) => {
     useEffect(() => {
         playTTS(data.title || "恭喜", 'zh');
@@ -93,58 +87,71 @@ const CompletionBlock = ({ data, router }) => {
         setTimeout(() => router.push('/'), 4000);
     }, []);
     return (
-        <div className="w-full h-full flex flex-col items-center justify-center text-center">
-            <div className="text-7xl mb-6 animate-bounce">🎉</div>
-            <h2 className="text-3xl font-bold text-slate-800">{data.title || "完成！"}</h2>
-            <p className="text-slate-500 mt-2">{data.text || "正在返回..."}</p>
+        <div className="w-full h-full flex flex-col items-center justify-center text-center z-10 relative">
+            <div className="text-8xl mb-6 animate-bounce">🎉</div>
+            <h2 className="text-4xl font-black text-slate-800">{data.title || "完成！"}</h2>
+            <p className="text-slate-500 mt-4 text-lg">{data.text || "正在返回..."}</p>
         </div>
     );
 };
 
-// --- 4. 底部导航栏组件 (新增) ---
-const BottomNavBar = ({ currentIndex, total, isCompleted, onPrev, onNext }) => {
-    // 进度条计算
+// --- 4. 悬浮控制层 (Floating Controls) ---
+const FullscreenControls = ({ currentIndex, total, isCompleted, onPrev, onNext, isFullscreen, toggleFullscreen }) => {
+    // 进度计算
     const progress = Math.min(((currentIndex + 1) / total) * 100, 100);
 
     return (
-        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-100 z-50 px-4 py-3 pb-safe-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            {/* 进度条显示在按钮上方 */}
-            <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
+        <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col justify-end pointer-events-none">
+            {/* 顶部渐变遮罩，防止文字看不清 */}
+            <div className="absolute bottom-0 left-0 w-full h-40 bg-gradient-to-t from-slate-900/20 via-slate-900/5 to-transparent -z-10" />
+
+            {/* 进度条 (吸底) */}
+            <div className="w-full h-1.5 bg-gray-200/30 backdrop-blur-sm">
                 <div 
-                    className="h-full bg-blue-500 transition-all duration-300" 
+                    className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all duration-300 ease-out" 
                     style={{ width: `${progress}%` }} 
                 />
             </div>
 
-            <div className="flex items-center justify-between max-w-3xl mx-auto pt-2">
-                {/* 上一页按钮 */}
+            {/* 按钮控制区域 */}
+            <div className="flex items-center justify-between px-6 py-5 pb-safe-bottom w-full max-w-4xl mx-auto pointer-events-auto">
+                
+                {/* 左侧：上一页 */}
                 <button 
                     onClick={onPrev} 
                     disabled={currentIndex === 0}
-                    className={`flex items-center space-x-1 px-4 py-2 rounded-lg font-medium transition-colors
+                    className={`p-4 rounded-full backdrop-blur-md border shadow-lg transition-all active:scale-90
                         ${currentIndex === 0 
-                            ? 'text-slate-300 cursor-not-allowed' 
-                            : 'text-slate-600 hover:bg-slate-100 active:scale-95'}`}
+                            ? 'bg-white/20 border-white/10 text-white/40 cursor-not-allowed' 
+                            : 'bg-white/90 border-white/50 text-slate-700 hover:bg-white'}`}
                 >
-                    <HiArrowLeft className="w-5 h-5" />
-                    <span>上一页</span>
+                    <HiArrowLeft className="w-6 h-6" />
                 </button>
 
-                {/* 页码指示器 */}
-                <span className="text-xs font-bold text-slate-300 select-none">
-                    {currentIndex + 1} / {total}
-                </span>
+                {/* 中间：全屏开关 & 页码 */}
+                <div className="flex flex-col items-center gap-1">
+                    <button 
+                        onClick={toggleFullscreen}
+                        className="p-2 text-white/70 hover:text-white transition-colors active:scale-95"
+                        title={isFullscreen ? "退出全屏" : "进入全屏"}
+                    >
+                        {isFullscreen ? <HiArrowsPointingIn className="w-6 h-6" /> : <HiArrowsPointingOut className="w-6 h-6" />}
+                    </button>
+                    <span className="text-[10px] font-bold text-white/80 tracking-widest drop-shadow-md">
+                        {currentIndex + 1} / {total}
+                    </span>
+                </div>
 
-                {/* 下一页按钮 */}
+                {/* 右侧：下一页 (主要操作) */}
                 <button 
                     onClick={onNext}
                     disabled={!isCompleted && currentIndex < total}
-                    className={`flex items-center space-x-1 px-6 py-2 rounded-lg font-bold shadow-sm transition-all
+                    className={`flex items-center gap-2 px-6 py-4 rounded-full font-bold shadow-xl transition-all active:scale-95 border
                         ${!isCompleted 
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                            : 'bg-blue-500 text-white hover:bg-blue-600 active:scale-95 shadow-blue-200'}`}
+                            ? 'bg-black/30 border-white/10 text-white/50 cursor-not-allowed backdrop-blur-sm' 
+                            : 'bg-blue-600 border-blue-500 text-white hover:bg-blue-500 shadow-blue-500/30'}`}
                 >
-                    <span>{currentIndex === total - 1 ? "完成" : "下一页"}</span>
+                    <span className="text-lg">{currentIndex === total - 1 ? "完成" : "下一页"}</span>
                     <HiArrowRight className="w-5 h-5" />
                 </button>
             </div>
@@ -152,41 +159,56 @@ const BottomNavBar = ({ currentIndex, total, isCompleted, onPrev, onNext }) => {
     );
 };
 
-
 // --- 5. 主逻辑组件 ---
 export default function InteractiveLesson({ lesson }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isBlockCompleted, setIsBlockCompleted] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     
-    // 引用容器以便切页时滚回顶部
     const containerRef = useRef(null);
     const router = useRouter();
 
     const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
     const currentBlock = blocks[currentIndex] || null;
 
-    // --- 页面切换副作用 ---
+    // --- 全屏 API 逻辑 ---
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(e => console.log(e));
+            setIsFullscreen(true);
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+                setIsFullscreen(false);
+            }
+        }
+    };
+
+    // 监听全屏变化（比如用户按 ESC 退出）
+    useEffect(() => {
+        const handleChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', handleChange);
+        return () => document.removeEventListener('fullscreenchange', handleChange);
+    }, []);
+
+    // --- 页面切换逻辑 ---
     useEffect(() => {
         if (!currentBlock) return;
-
-        // 切页时，滚动到顶部
-        if (containerRef.current) {
-            containerRef.current.scrollTop = 0;
-        }
+        
+        // 切页时重置滚动
+        if (containerRef.current) containerRef.current.scrollTop = 0;
 
         const type = currentBlock.type.toLowerCase();
-        // 自动解锁的页面类型
+        // 自动解锁列表
         const autoUnlockTypes = ['teaching', 'word_study', 'grammar_study', 'dialogue_cinematic', 'end', 'complete'];
         setIsBlockCompleted(autoUnlockTypes.includes(type));
         
-        // 自动读题
         if (currentBlock.content && (currentBlock.content.narrationScript || currentBlock.content.narrationText)) {
             const text = currentBlock.content.narrationScript || currentBlock.content.narrationText;
             setTimeout(() => playTTS(text, 'zh'), 600);
         }
     }, [currentIndex, currentBlock]);
 
-    // --- 导航逻辑 ---
     const handleNext = useCallback(() => {
         if (currentIndex < blocks.length) {
             setCurrentIndex(p => p + 1);
@@ -195,7 +217,6 @@ export default function InteractiveLesson({ lesson }) {
 
     const handlePrev = useCallback(() => {
         if (currentIndex > 0) {
-            // 往回翻时，默认直接设为已完成，防止回看时卡住
             setIsBlockCompleted(true);
             setCurrentIndex(p => p - 1);
         }
@@ -206,13 +227,7 @@ export default function InteractiveLesson({ lesson }) {
         setIsBlockCompleted(true);
     }, []);
 
-    // 题目完成后的回调（以前是自动下一页，现在可以是仅仅解锁，或者解锁+提示）
-    const onQuestionComplete = () => {
-        handleCorrect();
-        // 如果想做完题自动跳下一页，可以解开下面这行注释：
-        // setTimeout(handleNext, 1000); 
-    };
-
+    // 渲染题目组件
     const renderBlock = () => {
         if (!currentBlock) return null;
         if (currentIndex >= blocks.length) return <CompletionBlock data={{}} router={router} />;
@@ -221,13 +236,14 @@ export default function InteractiveLesson({ lesson }) {
         const props = {
             data: currentBlock.content,
             onCorrect: handleCorrect,
-            onComplete: onQuestionComplete, // 统一处理
+            onComplete: handleCorrect,
             onNext: handleCorrect,
             settings: { playTTS }
         };
 
-        const QuizContainer = ({ children }) => (
-            <div className="w-full min-h-full flex flex-col items-center justify-center animate-fade-in">
+        const FullScreenContainer = ({ children }) => (
+            // 增加 pb-32 保证内容底部不被悬浮按钮遮挡
+            <div className="w-full min-h-full flex flex-col items-center justify-center pb-32 animate-fade-in">
                 {children}
             </div>
         );
@@ -240,20 +256,20 @@ export default function InteractiveLesson({ lesson }) {
             
             case 'choice': 
                 const choiceProps = { ...props, question: { text: props.data.prompt, ...props.data }, options: props.data.choices||[], correctAnswer: props.data.correctId?[props.data.correctId]:[] };
-                return <QuizContainer><XuanZeTi {...choiceProps} /></QuizContainer>;
+                return <FullScreenContainer><XuanZeTi {...choiceProps} /></FullScreenContainer>;
             
             case 'image_match_blanks': return <TianKongTi {...props.data} onCorrect={handleCorrect} />;
             
             case 'lianxian':
                 const lp = props.data.pairs || [];
                 const ansMap = lp.reduce((acc, p) => ({ ...acc, [p.id]: `${p.id}_b` }), {});
-                return <QuizContainer><LianXianTi title={props.data.prompt} columnA={lp.map(p => ({id:p.id,content:p.left}))} columnB={lp.map(p => ({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={ansMap} onCorrect={handleCorrect} /></QuizContainer>;
+                return <FullScreenContainer><LianXianTi title={props.data.prompt} columnA={lp.map(p => ({id:p.id,content:p.left}))} columnB={lp.map(p => ({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={ansMap} onCorrect={handleCorrect} /></FullScreenContainer>;
             
             case 'paixu': 
-                return <QuizContainer><PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...(props.data.items||[])].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={handleCorrect} /></QuizContainer>;
+                return <FullScreenContainer><PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...(props.data.items||[])].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={handleCorrect} /></FullScreenContainer>;
             
-            case 'panduan': return <QuizContainer><PanDuanTi {...props} /></QuizContainer>;
-            case 'gaicuo': return <QuizContainer><GaiCuoTi {...props} /></QuizContainer>;
+            case 'panduan': return <FullScreenContainer><PanDuanTi {...props} /></FullScreenContainer>;
+            case 'gaicuo': return <FullScreenContainer><GaiCuoTi {...props} /></FullScreenContainer>;
             
             case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
             default: return <div>Unknown {type}</div>;
@@ -261,25 +277,30 @@ export default function InteractiveLesson({ lesson }) {
     };
 
     return (
-        <div 
-            className="fixed inset-0 w-full h-full bg-[#F5F7FA] text-slate-800 flex flex-col font-sans"
-        >
-            {/* 主内容区域 - 增加了 pb-24 防止被底部按钮遮挡 */}
+        // 关键点：使用 h-[100dvh] 强制使用动态视口高度，解决移动端地址栏问题
+        <div className="fixed inset-0 w-screen h-[100dvh] bg-[#F0F4F8] text-slate-800 font-sans overflow-hidden">
+            
+            {/* 背景装饰 (可选) */}
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50/50 -z-10" />
+
+            {/* 内容滚动区域 */}
             <div 
                 ref={containerRef}
-                className="flex-1 w-full overflow-y-auto overflow-x-hidden pb-24"
+                className="w-full h-full overflow-y-auto overflow-x-hidden scroll-smooth"
             >
                 {renderBlock()}
             </div>
 
-            {/* 底部导航栏 (仅在非结束页显示) */}
+            {/* 悬浮控制层 (始终显示在最上层) */}
             {currentIndex < blocks.length && (
-                <BottomNavBar 
+                <FullscreenControls 
                     currentIndex={currentIndex}
                     total={blocks.length}
                     isCompleted={isBlockCompleted}
                     onPrev={handlePrev}
                     onNext={handleNext}
+                    isFullscreen={isFullscreen}
+                    toggleFullscreen={toggleFullscreen}
                 />
             )}
         </div>
