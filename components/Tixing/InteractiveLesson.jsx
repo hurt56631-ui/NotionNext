@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router'; 
 import { HiSpeakerWave } from "react-icons/hi2";
-import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
 // --- 1. 外部题型组件 ---
@@ -12,11 +12,9 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-// 语法组件 (你提供的那个全屏 Portal 组件)
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 2. 单词与短句卡片 (请确保路径正确) ---
-// 假设这些组件在 components 根目录下
+// --- 2. 新引入的学习卡片 ---
 import WordCard from '../WordCard';   
 import PhraseCard from '../PhraseCard'; 
 
@@ -41,83 +39,61 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- 3. 单词/短句 列表容器适配器 ----------------
-// 负责把 data.words 数组渲染成一排排的 Card
+// ---------------- 3. 列表容器适配器 ----------------
 const CardListRenderer = ({ data, type, onComplete }) => {
-  // 根据类型决定用什么卡片、几列布局
   const isPhrase = type === 'phrase_study' || type === 'sentences';
-  
+  const list = data.words || [];
+
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* 标题区 */}
-      <div className="text-center mb-6 shrink-0 pt-6">
-        <h2 className="text-3xl font-black text-slate-800 tracking-tight">
+    <div className="w-full h-full flex flex-col relative bg-slate-50">
+      {/* 标题 */}
+      <div className="flex-none pt-6 pb-4 px-4 text-center z-10 bg-slate-50">
+        <h2 className="text-2xl font-black text-slate-800">
           {data.title || (isPhrase ? "常用短句" : "核心生词")}
         </h2>
-        <p className="text-slate-400 text-sm mt-2">点击卡片听发音</p>
+        <p className="text-slate-400 text-xs mt-1">共 {list.length} 个 • 点击卡片跟读</p>
       </div>
 
-      {/* 列表区 (允许滚动) */}
-      <div className="flex-1 w-full overflow-y-auto px-2 pb-24 no-scrollbar">
-        {/* 短句单列，单词双列 */}
+      {/* 列表区 */}
+      <div className="flex-1 w-full overflow-y-auto px-4 pb-32" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className={`grid gap-4 ${isPhrase ? 'grid-cols-1' : 'grid-cols-2'}`}>
-          {data.words?.map((item, i) => (
+          {list.map((item, i) => (
             isPhrase ? (
-              // 短句卡片
               <PhraseCard 
                 key={item.id || i} 
-                phrase={item} // 传入完整对象
-                data={item}   // 兼容某些写法
-                onPlay={() => audioManager.playTTS(item.chinese)}
+                phrase={item} 
+                data={item}
+                onPlay={() => audioManager.playTTS(item.sentence || item.chinese)}
               />
             ) : (
-              // 单词卡片
               <WordCard 
                 key={item.id || i} 
-                word={item}   // 传入完整对象
-                data={item}   // 兼容某些写法
-                onPlay={() => audioManager.playTTS(item.chinese)}
+                word={item}
+                data={item}
+                onPlay={() => audioManager.playTTS(item.word || item.chinese)}
               />
             )
           ))}
         </div>
       </div>
       
-      {/* 底部按钮 (固定) */}
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-white via-white to-transparent z-20">
-        <div className="max-w-xl mx-auto">
-          <button 
-            onClick={onComplete} 
-            className="w-full py-4 bg-blue-600 text-white font-bold text-xl rounded-2xl shadow-xl shadow-blue-200 active:scale-95 transition-all"
-          >
-            我学会了
-          </button>
-        </div>
+      {/* 底部大按钮 (替代全局导航) */}
+      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-20">
+        <button 
+          onClick={onComplete} 
+          className="w-full py-4 bg-blue-600 text-white font-bold text-lg rounded-2xl shadow-xl shadow-blue-200 active:scale-95 transition-all"
+        >
+          我学会了
+        </button>
       </div>
     </div>
   );
 };
 
-// 结束页
-const CompletionBlock = ({ data, router }) => {
-  useEffect(() => {
-    audioManager?.playTTS("恭喜完成", 'zh');
-    setTimeout(() => router.back(), 2500);
-  }, [router]);
-  return (
-    <div className="flex flex-col items-center justify-center h-full animate-bounce-in">
-      <div className="text-8xl mb-6">🎉</div>
-      <h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2>
-    </div>
-  );
-};
+// ... CompletionBlock & UnknownBlockHandler ...
+const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS("恭喜完成", 'zh'); setTimeout(() => router.back(), 2500); }, [router]); return <div className="flex flex-col items-center justify-center h-full animate-bounce-in"><div className="text-8xl mb-6">🎉</div><h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2></div>; };
+const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
 
-const UnknownBlockHandler = ({ type, onSkip }) => (
-  <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400">
-    <p>未知题型: {type}</p>
-    <button className="mt-4 text-blue-500 underline">点击跳过</button>
-  </div>
-);
 
 // ---------------- 4. 主组件 ----------------
 
@@ -133,28 +109,15 @@ export default function InteractiveLesson({ lesson }) {
   const currentBlock = blocks[currentIndex];
 
   useEffect(() => { setHasMounted(true); }, []);
-  
-  // 进度恢复
-  useEffect(() => { 
-    if (lesson?.id && hasMounted) { 
-      const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); 
-      if (saved && parseInt(saved) < totalBlocks) setCurrentIndex(parseInt(saved)); 
-    } 
-  }, [lesson, hasMounted, totalBlocks]);
-  
-  // 进度保存 & 音频停止
-  useEffect(() => { 
-    if (hasMounted && lesson?.id && currentIndex > 0) localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString()); 
-    audioManager?.stop(); 
-  }, [currentIndex, lesson?.id, hasMounted]);
+  useEffect(() => { if (lesson?.id && hasMounted) { const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); if (saved && parseInt(saved) < totalBlocks) setCurrentIndex(parseInt(saved)); } }, [lesson, hasMounted, totalBlocks]);
+  useEffect(() => { if (hasMounted && lesson?.id && currentIndex > 0) localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString()); audioManager?.stop(); }, [currentIndex, lesson?.id, hasMounted]);
 
-  // ✅ 自动跳过 Teaching 开头
+  // 自动跳过 Teaching
   useEffect(() => {
     if (currentBlock && currentBlock.type === 'teaching') {
-      // 这里的延时是为了防止 render 循环，确保跳转顺滑
       const timer = setTimeout(() => {
         if (currentIndex < totalBlocks) setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
-      }, 100); 
+      }, 50); 
       return () => clearTimeout(timer);
     }
   }, [currentIndex, currentBlock, totalBlocks]);
@@ -181,50 +144,34 @@ export default function InteractiveLesson({ lesson }) {
       settings: { playTTS: audioManager?.playTTS } 
     };
     
-    // 普通题型的居中容器
-    const CommonWrapper = ({ children }) => (
-      <div className="w-full h-full flex flex-col items-center justify-center pt-4">
-        {children}
-      </div>
-    );
-
-    // 列表类（单词/语法）的全高容器，不强制居中，允许顶部对齐
-    const FullHeightWrapper = ({ children }) => (
-      <div className="w-full h-full flex flex-col">
-        {children}
-      </div>
-    );
+    // 容器策略
+    const CommonWrapper = ({ children }) => <div className="w-full h-full flex flex-col items-center justify-center pt-4">{children}</div>;
+    const FullHeightWrapper = ({ children }) => <div className="w-full h-full flex flex-col">{children}</div>;
 
     try {
       switch (type) {
-        // ✅ 1. Teaching: 这里返回 null，配合上面的 useEffect 自动跳过
-        case 'teaching': 
-          return null; 
+        case 'teaching': return null; 
 
-        // ✅ 2. 生词: 使用 CardListRenderer + WordCard
+        // 单词/短句/语法：全高显示
         case 'word_study': 
           return <FullHeightWrapper><CardListRenderer data={props.data} type="word_study" onComplete={props.onComplete} /></FullHeightWrapper>;
         
-        // ✅ 3. 短句: 使用 CardListRenderer + PhraseCard (假设类型叫 phrase_study 或 sentences)
         case 'phrase_study': 
         case 'sentences':
           return <FullHeightWrapper><CardListRenderer data={props.data} type="phrase_study" onComplete={props.onComplete} /></FullHeightWrapper>;
 
-        // ✅ 4. 语法: 你的组件本身就是全屏 Portal，这里只需要渲染它
-        // 注意：这里不需要 Wrapper，因为它自己会 createPortal 到 body
         case 'grammar_study': 
-          // 确保数据存在，否则显示错误
-          if (!props.data.grammarPoints || props.data.grammarPoints.length === 0) {
-             return <UnknownBlockHandler type="grammar_study (无数据)" onSkip={goNext} />;
-          }
+          if (!props.data.grammarPoints?.length) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={goNext} />;
           return (
-             <GrammarPointPlayer 
-                grammarPoints={props.data.grammarPoints} 
-                onComplete={props.onComplete} 
-             />
+             <div className="w-full h-full relative">
+                <GrammarPointPlayer 
+                    grammarPoints={props.data.grammarPoints} 
+                    onComplete={props.onComplete} 
+                />
+             </div>
           );
 
-        // 题型
+        // 题型：居中显示
         case 'choice': return <CommonWrapper><XuanZeTi {...props} question={{text: props.data.prompt, ...props.data}} options={props.data.choices||[]} correctAnswer={props.data.correctId?[props.data.correctId]:[]} /></CommonWrapper>;
         case 'panduan': return <CommonWrapper><PanDuanTi {...props} /></CommonWrapper>;
         case 'lianxian': const pairsMap = props.data.pairs?.reduce((acc,p)=>{acc[p.id]=`${p.id}_b`;return acc},{})||{}; return <CommonWrapper><LianXianTi title={props.data.prompt} columnA={props.data.pairs?.map(p=>({id:p.id,content:p.left}))} columnB={props.data.pairs?.map(p=>({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={pairsMap} onCorrect={props.onCorrect} /></CommonWrapper>;
@@ -232,7 +179,7 @@ export default function InteractiveLesson({ lesson }) {
         case 'gaicuo': return <CommonWrapper><GaiCuoTi {...props} /></CommonWrapper>;
         case 'image_match_blanks': return <CommonWrapper><TianKongTi {...props.data} onCorrect={props.onNext} /></CommonWrapper>;
         case 'dialogue_cinematic': return <DuiHua {...props} />;
-        
+
         case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
         default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
       }
@@ -241,40 +188,44 @@ export default function InteractiveLesson({ lesson }) {
 
   if (!hasMounted) return null;
 
+  // ✅ 关键逻辑：定义哪些类型不需要底部导航
+  const type = currentBlock?.type?.toLowerCase();
+  const hideBottomNav = ['word_study', 'phrase_study', 'sentences', 'grammar_study', 'teaching', 'complete', 'end'].includes(type);
+
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans select-none" style={{ touchAction: 'none' }}>
-      <style>{`::-webkit-scrollbar { display: none; } * { -webkit-tap-highlight-color: transparent; } .no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-slate-100 to-blue-50 pointer-events-none" />
-
+      <style>{`::-webkit-scrollbar { display: none; } * { -webkit-tap-highlight-color: transparent; }`}</style>
+      
       {/* 顶部进度条 */}
-      <div className="relative flex-none pt-[env(safe-area-inset-top)] px-4 py-3 z-20">
+      <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top)] px-4 py-3 z-30 pointer-events-none">
         {currentIndex < totalBlocks && (
-          <div className="h-2 bg-slate-200 rounded-full overflow-hidden mx-4">
+          <div className="h-1.5 bg-slate-200/50 rounded-full overflow-hidden mx-4 backdrop-blur-sm">
             <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / totalBlocks) * 100}%` }} />
           </div>
         )}
       </div>
 
       {/* 主内容区 */}
-      <main 
-        className="relative flex-1 w-full max-w-xl mx-auto flex flex-col z-10 px-4 pb-0 overflow-hidden" 
-      >
-        {/* 内容区域 */}
+      <main className="relative w-full h-full flex flex-col z-10 overflow-hidden">
         {currentIndex >= totalBlocks ? <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} /> : renderBlock()}
       </main>
 
-      {/* 底部导航 (只在非列表页显示，或者一直显示？列表页有自己的大按钮，这里可以隐藏或者保留翻页) */}
-      {/* 这里的逻辑：如果是生词/语法页，通常不需要底部的左右翻页，因为它们有自己的流程。但保留也可以作为强制跳转 */}
-      <div className="absolute bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-8 py-4 z-30 flex justify-between items-center pointer-events-none">
-          <button onClick={goPrev} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/50 shadow-sm text-slate-400 flex items-center justify-center border border-slate-100/50 ${currentIndex === 0 ? 'opacity-0' : 'opacity-100'}`}><FaChevronLeft /></button>
-          
-          <button onClick={() => setIsJumping(true)} className="pointer-events-auto px-4 py-2 rounded-xl active:bg-black/5 transition-colors">
-            <span className="text-sm font-bold text-slate-400">{currentIndex + 1} / {totalBlocks}</span>
-          </button>
+      {/* ✅ 底部导航 (条件渲染) */}
+      {/* 只有当当前题型 不在 隐藏列表里时，才显示左右翻页键 */}
+      {!hideBottomNav && currentIndex < totalBlocks && (
+        <div className="absolute bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-8 py-4 z-30 flex justify-between items-center pointer-events-none">
+            <button onClick={goPrev} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/80 shadow-sm text-slate-400 flex items-center justify-center backdrop-blur-md ${currentIndex === 0 ? 'opacity-0' : 'opacity-100'}`}><FaChevronLeft /></button>
+            
+            {/* 点击中间页码可以跳转 */}
+            <button onClick={() => setIsJumping(true)} className="pointer-events-auto px-4 py-2 rounded-xl active:bg-black/5 transition-colors">
+              <span className="text-xs font-bold text-slate-400">{currentIndex + 1} / {totalBlocks}</span>
+            </button>
 
-          <button onClick={goNext} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/50 shadow-sm text-slate-400 flex items-center justify-center border border-slate-100/50 ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}><FaChevronRight /></button>
-      </div>
+            <button onClick={goNext} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/80 shadow-sm text-slate-400 flex items-center justify-center backdrop-blur-md ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}><FaChevronRight /></button>
+        </div>
+      )}
       
+      {/* 跳转弹窗 */}
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
