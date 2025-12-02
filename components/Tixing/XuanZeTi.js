@@ -1,30 +1,16 @@
-// XuanZeTi.jsx
 import React, { useEffect, useRef, useState } from "react";
 import confetti from "canvas-confetti";
 import { FaVolumeUp, FaCheckCircle, FaTimesCircle, FaLightbulb } from "react-icons/fa";
 import { pinyin } from "pinyin-pro";
 
 /**
- * Duolingo 风格选择题组件（移动端优先）
- *
- * Props:
- *  - question: {
- *      id: string|number,
- *      text: string,
- *      imageUrl?: string,
- *      options: [{ id, text, imageUrl? }],
- *      correct: [id,...]
- *    }
- *  - autoAdvance?: boolean (默认 true) - 正确 / 错误后是否自动进入下一题
- *  - onNext?: (nextWhen?) => void - 当进入下一题时回调（例如通知父组件加载下一题）
- *  - ttsVoice?: string - tts 引擎 id（可选）
- *  - playRate?: number - tts 播放速度
- *
- * 特点：
- *  - 点击整张卡片即选中并立即判定（避免“点右侧才生效”的问题）
- *  - 题目切换时立即乱序选项（保证每题一次乱序）
- *  - IndexedDB 缓存 TTS 音频
- *  - 阻止手机下拉刷新（安卓 Chrome）
+ * Duolingo 风格选择题组件 - 修复版
+ * 
+ * 修改内容：
+ * 1. 移除了底部所有按钮（跳过/下一题）。
+ * 2. 强制使用自动推进逻辑：答对 -> 自动下一题；答错 -> 显示解析 -> 自动重置供重试。
+ * 3. 增强禁止下拉刷新（CSS + JS）。
+ * 4. 修复选项渲染依赖问题。
  */
 
 const DB_NAME = "LessonCacheDB";
@@ -81,7 +67,7 @@ const idb = {
   },
 };
 
-// ========== 音频控制器（限一个播放实例） ==========
+// ========== 音频控制器 ==========
 const audioController = {
   currentAudio: null,
   latestRequestId: 0,
@@ -97,7 +83,8 @@ const audioController = {
   },
   async playWithCache(text, voice = "zh-CN-XiaoyouMultilingualNeural", rate = 1.0) {
     if (!text || !text.trim()) return;
-    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\u1000-\u109F]/g, "");
+    // 移除特殊字符，只保留中英文数字用于生成Key
+    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, "");
     if (!textToRead.trim()) return;
 
     const myReq = ++this.latestRequestId;
@@ -109,7 +96,6 @@ const audioController = {
       if (cached) {
         audioUrl = URL.createObjectURL(cached);
       } else {
-        // 注意：这里使用你的 tts 代理接口（和你原先的类似）
         const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${encodeURIComponent(voice)}&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         if (!res.ok) throw new Error("tts fetch failed");
@@ -122,7 +108,6 @@ const audioController = {
       const audio = new Audio(audioUrl);
       audio.playbackRate = rate;
       this.currentAudio = audio;
-      // play() 可能会被浏览器阻止，需要 catch
       audio.play().catch(() => {});
       audio.onended = () => {
         if (this.currentAudio === audio) this.currentAudio = null;
@@ -151,249 +136,247 @@ const makePinyinData = (text) => {
       return { char: ch, py: "" };
     });
   } catch (e) {
+    // 降级处理
     return text.split("").map((c) => ({ char: c, py: "" }));
   }
 };
 
-// ========== 样式（内联 CSS 字符串） ==========
+// ========== 样式 ==========
 const styles = `
-/* Container */
+/* 禁止全局下拉刷新的关键 CSS */
+body, html { overscroll-behavior-y: none; overscroll-behavior: none; }
+
 .dlg-root { width:100%; max-width:580px; margin:0 auto; padding:14px; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
 .dlg-card { background: #fff; border-radius:18px; padding:16px; box-shadow: 0 8px 30px rgba(16,24,40,0.06); margin-bottom:12px; user-select:none; }
-.dlg-q-image { width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px; background:#f8fafc; }
+.dlg-q-image { width:100%; max-height:220px; object-fit:cover; border-radius:12px; margin-bottom:12px; background:#f8fafc; display:block; }
 
-/* pinyin/char */
-.dlg-pinyin-row { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; align-items:flex-end; }
+.dlg-pinyin-row { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; align-items:flex-end; min-height: 3rem; }
 .dlg-char { display:flex; flex-direction:column; align-items:center; min-width:20px; }
 .dlg-py { font-size:0.85rem; color:#6b7280; font-family:monospace; height:1.05rem; line-height:1.05rem; margin-bottom:-6px; }
 .dlg-cn { font-size:1.5rem; font-weight:700; color:#0f172a; line-height:1.2; }
 
 /* options */
 .dlg-options { display:grid; gap:12px; margin-top:6px; }
-.dlg-opt { display:flex; align-items:center; gap:12px; padding:12px; border-radius:14px; background:#fff; border:1px solid #e6eef7; cursor:pointer; transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
-.dlg-opt:active { transform: scale(0.985); }
+.dlg-opt { display:flex; align-items:center; gap:12px; padding:12px; border-radius:14px; background:#fff; border:1px solid #e6eef7; cursor:pointer; transition: transform .12s ease, box-shadow .12s ease, background .12s ease; position: relative; }
+.dlg-opt:active { transform: scale(0.98); }
 .dlg-opt .opt-left { width:56px; height:56px; border-radius:10px; overflow:hidden; background:#f3f4f6; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
 .dlg-opt img.opt-img { width:100%; height:100%; object-fit:cover; }
 .dlg-opt .opt-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
 .dlg-opt .opt-py { font-size:0.78rem; color:#94a3b8; font-family:monospace; height:1.1rem; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .dlg-opt .opt-cn { font-size:1.05rem; font-weight:700; color:#0b1524; }
+.dlg-opt .status-icon { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 24px; }
 
 /* 状态 */
 .dlg-opt.selected { border-color: #c7b3ff; background: linear-gradient(180deg,#f8f3ff,#fbf8ff); box-shadow: 0 8px 20px rgba(139,92,246,0.12); }
 .dlg-opt.correct { border-color:#34d399; background:#ecfdf5; box-shadow:0 8px 20px rgba(16,185,129,0.08); }
 .dlg-opt.incorrect { border-color:#fb7185; background:#fff1f2; box-shadow:0 8px 20px rgba(242,63,63,0.06); animation: shake .36s; }
 
-.dlg-btn-row { display:flex; gap:12px; margin-top:14px; align-items:center; justify-content:center; }
-.dlg-btn { padding:12px 20px; border-radius:999px; font-weight:800; font-size:1rem; border:none; cursor:pointer; }
-.dlg-btn.primary { background: linear-gradient(135deg,#8b5cf6 0%, #5b6df6 100%); color:white; box-shadow: 0 10px 28px rgba(99,102,241,0.22); }
-.dlg-btn.ghost { background:transparent; border:1px solid #e6eef7; color:#334155; }
+.dlg-explain { margin-top:12px; padding:12px; border-radius:12px; background:#fff7ed; border:1px solid #fee2b3; color:#92400e; display:flex; gap:8px; align-items:flex-start; animation: fadeIn 0.3s ease; }
 
-.dlg-explain { margin-top:12px; padding:12px; border-radius:12px; background:#fff7ed; border:1px solid #fee2b3; color:#92400e; display:flex; gap:8px; align-items:flex-start; }
+.dlg-vol { position: absolute; top:14px; right:18px; color:#94a3b8; z-index: 10; }
 
-/* icons */
-.dlg-vol { position: absolute; top:14px; right:18px; color:#94a3b8; }
-
-/* small animation */
 @keyframes shake {
   0% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } 100% { transform: translateX(0); }
 }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
 // ========== 主组件 ==========
 const DuolingoMCQ = ({
   question,
-  autoAdvance = true,
   onNext = () => {},
   ttsVoice = "zh-CN-XiaoyouMultilingualNeural",
   playRate = 0.95,
 }) => {
   const [shuffledOptions, setShuffledOptions] = useState([]);
   const [selected, setSelected] = useState(null); // id
-  const [state, setState] = useState("idle"); // idle | showing (判定中) | waitingNext
+  const [state, setState] = useState("idle"); // idle | showing
   const [showExplanation, setShowExplanation] = useState(false);
   const [pinyinData, setPinyinData] = useState([]);
   const containerRef = useRef(null);
-  const lastQuestionIdRef = useRef(null);
   const autoAdvanceTimeout = useRef(null);
   const isMounted = useRef(true);
 
-  // 防止下拉刷新（安卓）
+  // 1. 防止下拉刷新（JS层 + CSS层配合）
   useEffect(() => {
+    // 只有在非 passive 下才能 preventDefault
+    const options = { passive: false };
     let startY = 0;
+    
     const onTouchStart = (e) => {
       startY = e.touches?.[0]?.clientY || 0;
     };
+    
     const onTouchMove = (e) => {
       const y = e.touches?.[0]?.clientY || 0;
+      // document.documentElement.scrollTop 用于 PC/Mobile 兼容
       const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      if (scrollTop === 0 && y - startY > 10) {
-        // 在页面顶端向下滑动，阻止浏览器下拉刷新的默认行为
+      
+      // 如果处于顶部且向下拉，阻止默认行为
+      if (scrollTop <= 0 && y > startY) {
         e.preventDefault();
       }
     };
-    document.addEventListener("touchstart", onTouchStart, { passive: false });
-    document.addEventListener("touchmove", onTouchMove, { passive: false });
+
+    document.addEventListener("touchstart", onTouchStart, options);
+    document.addEventListener("touchmove", onTouchMove, options);
+    
     return () => {
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove", onTouchMove);
     };
   }, []);
 
-  // 初始化/题目切换：乱序并生成拼音。只在 question.id 改变时触发。
+  // 2. 组件挂载/卸载追踪
   useEffect(() => {
     isMounted.current = true;
     return () => { isMounted.current = false; };
   }, []);
 
+  // 3. 题目初始化逻辑（当 question 变化时执行）
   useEffect(() => {
     if (!question) return;
-    // 停音
+    
     audioController.stop();
 
-    // 生成拼音
+    // 准备拼音
     setPinyinData(makePinyinData(question.text || ""));
 
-    // 处理并乱序选项（每次题目切换都乱序）
-    const processed = (question.options || []).map((opt) => ({
+    // 准备选项（如果 options 为空则给空数组防止报错）
+    const rawOptions = question.options || [];
+    const processed = rawOptions.map((opt) => ({
       ...opt,
       isChinese: /[\u4e00-\u9fa5]/.test(opt.text || ""),
       pinyinData: /[\u4e00-\u9fa5]/.test(opt.text || "") ? makePinyinData(opt.text || "") : [],
       hasImage: !!opt.imageUrl,
     }));
 
-    // Fisher-Yates shuffle
+    // 乱序算法
     const arr = [...processed];
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+    
+    // 更新状态
     setShuffledOptions(arr);
-
-    // 重置状态
     setSelected(null);
     setState("idle");
     setShowExplanation(false);
 
-    // 自动读题（短延迟以避免自动播放被浏览器阻止）
+    // 自动读题
     setTimeout(() => {
-      audioController.playWithCache(question.text || "", ttsVoice, playRate);
-    }, 220);
+      if (isMounted.current) {
+        audioController.playWithCache(question.text || "", ttsVoice, playRate);
+      }
+    }, 300);
 
-    lastQuestionIdRef.current = question.id;
-  }, [question?.id]);
+  }, [question]); // 依赖项改为整个 question 对象，确保数据更新时视图更新
 
-  // 清理自动推进定时器
+  // 清理定时器
   useEffect(() => {
     return () => {
-      if (autoAdvanceTimeout.current) {
-        clearTimeout(autoAdvanceTimeout.current);
-      }
+      if (autoAdvanceTimeout.current) clearTimeout(autoAdvanceTimeout.current);
     };
   }, []);
 
-  // 点击选项：立即选中并判定（立即反馈）
+  // 点击选项
   const handleOptionClick = (opt) => {
-    if (!question || state !== "idle") return;
+    if (!question || state !== "idle") return; // 判定中禁止点击
+    
     setSelected(opt.id);
-    // 立刻给出音频（选项文本）
+    
+    // 读选项
     audioController.playWithCache(opt.text || "", ttsVoice, playRate);
-    // 立刻判定
+    
+    // 立即判定
     evaluateAnswer(opt.id);
   };
 
   const evaluateAnswer = (optId) => {
     if (!question) return;
     setState("showing");
+    
     const correctIds = (question.correct || []).map(String);
     const chosen = String(optId);
     const isCorrect = correctIds.includes(chosen);
 
     if (isCorrect) {
-      // 成功动画与音效
-      confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ["#a78bfa", "#60a5fa", "#fbbf24"] });
-      // 播放成功音（尝试内置声音或静默失败）
-      try {
-        new Audio("/sounds/correct.mp3").play().catch(()=>{});
-      } catch (e) {}
+      // === 正确 ===
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#a78bfa", "#34d399", "#fbbf24"] });
+      try { new Audio("/sounds/correct.mp3").play().catch(()=>{}); } catch (e) {}
 
-      // 短暂展示正确状态，然后自动 next（或等用户触发）
-      if (autoAdvance) {
-        autoAdvanceTimeout.current = setTimeout(() => {
-          if (!isMounted.current) return;
-          setState("waitingNext");
-          onNext && onNext({ correct: true, question });
-        }, 700);
-      } else {
-        setState("waitingNext");
-      }
+      // 0.8秒后自动进入下一题
+      autoAdvanceTimeout.current = setTimeout(() => {
+        if (!isMounted.current) return;
+        onNext({ correct: true, question });
+      }, 800);
     } else {
-      // 错误音与振动
-      try {
-        new Audio("/sounds/incorrect.mp3").play().catch(()=>{});
-      } catch (e) {}
-      if (navigator.vibrate) navigator.vibrate(180);
+      // === 错误 ===
+      try { new Audio("/sounds/incorrect.mp3").play().catch(()=>{}); } catch (e) {}
+      if (navigator.vibrate) navigator.vibrate(200);
 
-      // 如果有解析文本，显示并朗读解析
+      // 显示解析并朗读
       if (question.explanation) {
         setShowExplanation(true);
-        setTimeout(() => audioController.playWithCache(question.explanation || "", ttsVoice, playRate), 700);
+        setTimeout(() => {
+          if (isMounted.current) audioController.playWithCache(question.explanation, ttsVoice, playRate);
+        }, 500);
       }
 
-      // 错误后给用户一个短暂查看期，然后恢复为可重试（不乱序）
+      // 1.5秒后重置状态，允许用户重试（因为没有下一题按钮了，必须让用户重试）
       autoAdvanceTimeout.current = setTimeout(() => {
         if (!isMounted.current) return;
         setState("idle");
-        // 保留 selected（显示错）或清空 selected 以便用户重新选
         setSelected(null);
-      }, 1200);
+        // 注意：这里不自动隐藏解析，让用户还能看到提示
+      }, 1500);
     }
   };
 
-  // 手动读题
   const handleRead = (e) => {
     e && e.stopPropagation();
     audioController.playWithCache(question.text || "", ttsVoice, playRate);
   };
 
-  // 渲染 option 卡片状态类名
-  const optionClassFor = (opt) => {
-    const s = [];
-    if (selected !== null) {
-      const corr = (question.correct || []).map(String);
-      if (state !== "idle") {
-        if (corr.includes(String(opt.id))) s.push("correct");
-        else if (String(opt.id) === String(selected) && !corr.includes(String(opt.id))) s.push("incorrect");
-      } else {
-        if (String(opt.id) === String(selected)) s.push("selected");
-      }
+  // 计算选项样式
+  const getOptionClass = (opt) => {
+    if (state === "idle") {
+      // 选中态（虽然是立即判定，但在动画瞬间可能会用到）
+      return String(selected) === String(opt.id) ? "selected" : "";
     }
-    return s.join(" ");
+    // 判定态
+    const correctIds = (question.correct || []).map(String);
+    const isThisCorrect = correctIds.includes(String(opt.id));
+    const isThisSelected = String(selected) === String(opt.id);
+
+    // 如果选了该项且对了 -> correct
+    // 如果选了该项但错了 -> incorrect
+    // 如果没选该项，但它是正确答案 -> (可选：提示正确答案) correct
+    if (isThisSelected) {
+      return isThisCorrect ? "correct" : "incorrect";
+    }
+    // 也可以选择在错误时显示正确答案，如下：
+    // if (isThisCorrect && state === 'showing') return "correct"; 
+    return "";
   };
 
-  // 如果没有 question，渲染空占位
+  // 渲染空状态
   if (!question) {
-    return (
-      <>
-        <style>{styles}</style>
-        <div className="dlg-root">
-          <div className="dlg-card">
-            <div style={{ textAlign: "center", color: "#64748b" }}>暂无题目</div>
-          </div>
-        </div>
-      </>
-    );
+    return <div className="dlg-root"></div>;
   }
 
   return (
     <>
       <style>{styles}</style>
       <div className="dlg-root" ref={containerRef}>
-        <div className="dlg-card" onClick={() => { /* 点击卡片不触发其他行为 */ }}>
-          {/* 读题按钮 */}
+        {/* 问题卡片 */}
+        <div className="dlg-card">
           <div style={{ position: "relative" }}>
-            <FaVolumeUp className="dlg-vol" onClick={handleRead} style={{ fontSize: 18, cursor: "pointer" }} />
-            {question.imageUrl && <img src={question.imageUrl} alt="q" className="dlg-q-image" />}
-            <div className="dlg-pinyin-row" aria-hidden>
+            <FaVolumeUp className="dlg-vol" onClick={handleRead} style={{ fontSize: 20, cursor: "pointer" }} />
+            {question.imageUrl && <img src={question.imageUrl} alt="Topic" className="dlg-q-image" />}
+            
+            <div className="dlg-pinyin-row" onClick={handleRead}>
               {pinyinData.map((it, i) => (
                 <div className="dlg-char" key={i}>
                   <div className="dlg-py">{it.py || ""}</div>
@@ -404,20 +387,23 @@ const DuolingoMCQ = ({
           </div>
         </div>
 
-        {/* 选项列表 */}
-        <div className="dlg-options" role="list">
+        {/* 选项区域 */}
+        <div className="dlg-options">
           {shuffledOptions.map((opt) => (
             <div
               key={opt.id}
-              role="button"
-              tabIndex={0}
-              aria-pressed={String(selected) === String(opt.id)}
+              className={`dlg-opt ${getOptionClass(opt)}`}
               onClick={() => handleOptionClick(opt)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOptionClick(opt); } }}
-              className={`dlg-opt ${optionClassFor(opt)}`}
             >
               <div className="opt-left">
-                {opt.imageUrl ? <img src={opt.imageUrl} className="opt-img" alt="" /> : <div style={{ width: "100%", height: "100%" }} />}
+                {opt.imageUrl ? (
+                  <img src={opt.imageUrl} className="opt-img" alt="" />
+                ) : (
+                   /* 如果没有图片显示首字或者占位 */
+                   <span style={{color:'#cbd5e1', fontSize:24, fontWeight:700}}>
+                     {opt.text ? opt.text.charAt(0) : "?"}
+                   </span>
+                )}
               </div>
               <div className="opt-text">
                 {opt.isChinese ? (
@@ -426,60 +412,34 @@ const DuolingoMCQ = ({
                     <div className="opt-cn">{opt.text}</div>
                   </>
                 ) : (
-                  <div className="opt-cn">{opt.text}</div>
+                  <div className="opt-cn">{opt.text || "暂无文本"}</div>
                 )}
               </div>
 
-              {/* 状态图标 */}
-              {state !== "idle" && ((question.correct || []).map(String).includes(String(opt.id))) && (
-                <FaCheckCircle style={{ color: "#10b981", fontSize: 18 }} />
-              )}
-              {state !== "idle" && String(selected) === String(opt.id) && !((question.correct || []).map(String).includes(String(opt.id))) && (
-                <FaTimesCircle style={{ color: "#ef4444", fontSize: 18 }} />
+              {/* 结果图标 (只在判定时显示) */}
+              {state !== "idle" && String(selected) === String(opt.id) && (
+                 <div className="status-icon">
+                    {(question.correct || []).map(String).includes(String(opt.id)) 
+                      ? <FaCheckCircle style={{ color: "#10b981", fontSize: 20 }} />
+                      : <FaTimesCircle style={{ color: "#ef4444", fontSize: 20 }} />
+                    }
+                 </div>
               )}
             </div>
           ))}
         </div>
 
-        {/* 解析 + 按钮 */}
-        <div style={{ marginTop: 12 }}>
-          {showExplanation && question.explanation && (
-            <div className="dlg-explain">
-              <FaLightbulb style={{ marginTop: 2 }} />
-              <div style={{ fontSize: 14, lineHeight: 1.45 }}>{question.explanation}</div>
+        {/* 解析显示区域 */}
+        {showExplanation && (
+          <div className="dlg-explain">
+            <FaLightbulb style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ fontSize: 14, lineHeight: 1.5 }}>
+              <strong>解析：</strong> {question.explanation || "暂无解析"}
             </div>
-          )}
-
-          <div className="dlg-btn-row">
-            {/* 手动下一题（当 autoAdvance=false 或者用户想跳过） */}
-            <button
-              className="dlg-btn ghost"
-              onClick={() => {
-                // 允许父组件决定下一题
-                audioController.stop();
-                onNext && onNext({ correct: (question.correct || []).map(String).includes(String(selected)), question });
-              }}
-            >
-              跳过 / 下一题
-            </button>
-
-            <button
-              className="dlg-btn primary"
-              onClick={() => {
-                // 当用户希望手动提交（只在未自动提交场景下有用）
-                if (state === "idle" && selected !== null) {
-                  evaluateAnswer(selected);
-                } else if (state === "waitingNext") {
-                  // 已判定并等待下一步，直接触发下一题
-                  audioController.stop();
-                  onNext && onNext({ correct: (question.correct || []).map(String).includes(String(selected)), question });
-                }
-              }}
-            >
-              {state === "waitingNext" ? "下一题" : "确认"}
-            </button>
           </div>
-        </div>
+        )}
+        
+        {/* 按钮组已移除 */}
       </div>
     </>
   );
