@@ -2,270 +2,265 @@
   {
     "type": "teaching",
     "content": {
-      "displayText": "组件功能全面测试",
-      "pinyin": "Zǔjiàn Gōngnéng Cèshì",
-      "translation": "Component Full Feature Test",
-      "narrationScript": "欢迎来到测试环节，我们将测试文本、图片、音频和视频等多种题型。",
+      "displayText": "HSK1 中文基础测试（缅甸语版）",
+      "pinyin": "HSK1 Zhōngwén Jīchǔ Cèshì (Miǎndiàn yǔ bǎn)",
+      "translation": "HSK1 Chinese Basic Test (Burmese Version)",
+      "narrationScript": "你好！欢迎参加HSK1中文测试。这些题目将帮助你学习基础中文。加油！",
       "narrationLang": "zh"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【基础文本】“你好”的英文是什么？",
+      "prompt": "【词汇】“你好”的中文意思是什么？",
       "choices": [
-        { "id": "A", "text": "Goodbye" },
-        { "id": "B", "text": "Hello" },
-        { "id": "C", "text": "Thank you" }
+        { "id": "A", "text": "Goodbye (နုတ်ဆက်ပါတယ်)" },
+        { "id": "B", "text": "Hello (မင်္ဂလာပါ)" },
+        { "id": "C", "text": "Thank you (ကျေးဇူးတင်ပါတယ်)" }
       ],
       "correctId": "B",
-      "explanation": "“你好”是最常见的问候语，对应英文 Hello。"
+      "explanation": "“你好”是最常见的问候语，意思是Hello。缅语：မင်္ဂလာပါ"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【图片选项】请选择“苹果” (Apple)",
+      "prompt": "【人称】“我”在中文中是什么意思？",
       "choices": [
-        { "id": "opt1", "text": "香蕉", "imageUrl": "https://images.unsplash.com/photo-1571771896612-424b6f0f1325?w=400&q=80" },
-        { "id": "opt2", "text": "苹果", "imageUrl": "https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a?w=400&q=80" },
-        { "id": "opt3", "text": "葡萄", "imageUrl": "https://images.unsplash.com/photo-1537640538965-175629952712?w=400&q=80" }
+        { "id": "A", "text": "You (မင်း/သင်)" },
+        { "id": "B", "text": "I/Me (ကျွန်တော်/ကျွန်မ)" },
+        { "id": "C", "text": "He/She (သူ)" }
       ],
-      "correctId": "opt2",
-      "explanation": "图2是红色的苹果 (Píngguǒ)。"
+      "correctId": "B",
+      "explanation": "“我”是第一人称代词，意思是I或me。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【看图识字】这张图里的人在做什么？",
-      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
+      "prompt": "【数字】中文数字“一、二、三”之后是什么？",
       "choices": [
-        { "id": 1, "text": "睡觉 (Shuìjiào)" },
-        { "id": 2, "text": "跑步 (Pǎobù)" },
-        { "id": 3, "text": "吃饭 (Chīfàn)" }
+        { "id": "A", "text": "五 (ငါး)" },
+        { "id": "B", "text": "四 (လေး)" },
+        { "id": "C", "text": "六 (ခြောက်)" }
       ],
-      "correctId": 2,
-      "explanation": "图片中的人在户外跑步。"
+      "correctId": "B",
+      "explanation": "正确顺序是：一(yī)、二(èr)、三(sān)、四(sì)、五(wǔ)"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【听力测试】请听录音，他说了什么？(点击左上角喇叭播放)",
-      "audioUrl": "https://www2.cs.uic.edu/~i101/SoundFiles/BabyElephantWalk60.wav",
-      "text": "（听力题，你叫什么名字）",
+      "prompt": "【语法】“我 ______ 学生。”（我是学生）",
       "choices": [
-        { "id": "a", "text": "大象走路" },
-        { "id": "b", "text": "小鸟唱歌" },
-        { "id": "c", "text": "老虎吼叫" }
+        { "id": "A", "text": "是 (ဖြစ်သည်)" },
+        { "id": "B", "text": "有 (ရှိသည်)" },
+        { "id": "C", "text": "在 (တွင်ရှိသည်)" }
       ],
-      "correctId": "a",
-      "explanation": "这是一段经典的大象走路的音乐/音效。"
+      "correctId": "A",
+      "explanation": "主语+是+名词，表示身份。例子：我是老师，他是医生。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【语法逻辑】“我__一个学生。”",
+      "prompt": "【日常用语】早上见面时应该说什么？",
       "choices": [
-        { "id": 0, "text": "是 " },
-        { "id": 1, "text": "有 " },
-        { "id": 2, "text": "在 " }
+        { "id": "A", "text": "晚上好 (ညနေခင်းပါ)" },
+        { "id": "B", "text": "早上好 (မနက်ခင်းပါ)" },
+        { "id": "C", "text": "下午好 (မွန်းလွဲပါ)" }
       ],
-      "correctId": 0,
-      "explanation": "主语+是+名词，表示身份"
+      "correctId": "B",
+      "explanation": "早上好 = Good morning，缅语：မနက်ခင်းပါ"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【文化常识】中国的首都是哪里？",
-      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
+      "prompt": "【家庭成员】“妈妈”在中文中是什么意思？",
       "choices": [
-        { "id": "bj", "text": "上海 (Shanghai)" },
-        { "id": "sh", "text": "北京 (Beijing)" },
-        { "id": "xa", "text": "西安 (Xi'an)" }
+        { "id": "A", "text": "Father (အဖေ)" },
+        { "id": "B", "text": "Mother (အမေ)" },
+        { "id": "C", "text": "Brother (အစ်ကို/ညီ)" }
       ],
-      "correctId": "sh",
-      "explanation": "北京是中国的政治文化中心。"
+      "correctId": "B",
+      "explanation": "妈妈 = Mother/အမေ，爸爸 = Father/အဖေ"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【图片辨析】哪个是“猫” (Cat)？",
+      "prompt": "【食物】“米饭”的中文拼音是什么？",
       "choices": [
-        { "id": "dog", "text": "狗", "imageUrl": "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&q=80" },
-        { "id": "cat", "text": "猫", "imageUrl": "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&q=80" }
+        { "id": "A", "text": "miànbāo" },
+        { "id": "B", "text": "shuǐguǒ" },
+        { "id": "C", "text": "mǐfàn" }
       ],
-      "correctId": "cat",
-      "explanation": "左边是狗，右边是猫。"
+      "correctId": "C",
+      "explanation": "米饭 (mǐfàn) = rice/ထမင်း，面包 (miànbāo) = bread/ပေါင်မုန့်"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【反义词】“大”(Big) 的反义词是？",
+      "prompt": "【动词】“喝”是什么意思？",
       "choices": [
-        { "id": 1, "text": "多 (Many)" },
-        { "id": 2, "text": "小 (Small)" },
-        { "id": 3, "text": "高 (Tall)" }
+        { "id": "A", "text": "To eat (စားသည်)" },
+        { "id": "B", "text": "To drink (သောက်သည်)" },
+        { "id": "C", "text": "To go (သွားသည်)" }
       ],
-      "correctId": 2,
-      "explanation": "大(Big) 对 小(Small)。"
+      "correctId": "B",
+      "explanation": "喝 (hē) = to drink，吃 (chī) = to eat"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【量词测试】一__书 ",
+      "prompt": "【学校】“学生”在中文中是什么意思？",
       "choices": [
-        { "id": "ben", "text": "本 " },
-        { "id": "ge", "text": "个 " },
-        { "id": "zhang", "text": "张 " }
+        { "id": "A", "text": "Teacher (ဆရာ/ဆရာမ)" },
+        { "id": "B", "text": "Student (ကျောင်းသား/ကျောင်းသူ)" },
+        { "id": "C", "text": "Doctor (ဆရာဝန်)" }
       ],
-      "correctId": "ben",
-      "explanation": "书的量词是“本”。"
+      "correctId": "B",
+      "explanation": "学生 (xuéshēng) = student，老师 (lǎoshī) = teacher"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【视频测试】请看视频，这是什么自然现象？",
-      "videoUrl": "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
+      "prompt": "【颜色】“红色”的拼音是什么？",
       "choices": [
-        { "id": "1", "text": "动画电影" },
-        { "id": "2", "text": "新闻联播" }
+        { "id": "A", "text": "lán sè" },
+        { "id": "B", "text": "hóng sè" },
+        { "id": "C", "text": "lǜ sè" }
       ],
-      "correctId": "1",
-      "explanation": "这是 Sintel 的动画预告片。"
+      "correctId": "B",
+      "explanation": "红色 (hóngsè) = red/အနီရောင်，蓝色 (lánsè) = blue/အပြာရောင်"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【拼音测试】“谢谢”的正确拼音是？",
+      "prompt": "【时间】“今天”是什么意思？",
       "choices": [
-        { "id": "a", "text": "xiè xie" },
-        { "id": "b", "text": "xí xié" },
-        { "id": "c", "text": "xī xī" }
+        { "id": "A", "text": "Yesterday (မနေ့က)" },
+        { "id": "B", "text": "Today (ဒီနေ့)" },
+        { "id": "C", "text": "Tomorrow (မနက်ဖြန်)" }
       ],
-      "correctId": "a",
-      "explanation": "第一个字四声，第二个字轻声。"
+      "correctId": "B",
+      "explanation": "今天 (jīntiān) = today，昨天 (zuótiān) = yesterday"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【情景对话】晚上睡觉前应该说什么？",
+      "prompt": "【地点】“学校”的拼音是什么？",
       "choices": [
-        { "id": "1", "text": "早上好 (Good morning)" },
-        { "id": "2", "text": "晚安 (Good night)" }
+        { "id": "A", "text": "xuéxiào" },
+        { "id": "B", "text": "shāngdiàn" },
+        { "id": "C", "text": "yīyuàn" }
       ],
-      "correctId": "2",
-      "explanation": "睡觉前说“晚安”。"
+      "correctId": "A",
+      "explanation": "学校 (xuéxiào) = school/ကျောင်း，商店 (shāngdiàn) = shop/ဆိုင်"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【颜色识别】这是什么颜色？",
-      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
+      "prompt": "【数量】“一个苹果”中的“个”是什么词？",
       "choices": [
-        { "id": "r", "text": "红色 (Hóngsè)" },
-        { "id": "g", "text": "绿色 (Lǜsè)" },
-        { "id": "b", "text": "蓝色 (Lánsè)" }
+        { "id": "A", "text": "Measure word (အရေအတွက်ပြစကားလုံး)" },
+        { "id": "B", "text": "Noun (နာမ်)" },
+        { "id": "C", "text": "Verb (ကြိယာ)" }
       ],
-      "correctId": "g",
-      "explanation": "这片森林是绿色的。"
+      "correctId": "A",
+      "explanation": "“个”是量词，用于计数一般物品。例如：一个人、一个苹果"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【数字计算】一加一等于几 (1 + 1 = ?)？",
+      "prompt": "【疑问词】“什么”是什么意思？",
       "choices": [
-        { "id": "1", "text": "一 (Yī)" },
-        { "id": "2", "text": "二 (Èr)" },
-        { "id": "3", "text": "三 (Sān)" }
+        { "id": "A", "text": "Where (ဘယ်မှာ)" },
+        { "id": "B", "text": "Who (ဘယ်သူ)" },
+        { "id": "C", "text": "What (ဘာ)" }
       ],
-      "correctId": "2",
-      "explanation": "1+1=2，中文是“二”。"
+      "correctId": "C",
+      "explanation": "什么 (shénme) = what，谁 (shéi) = who，哪里 (nǎlǐ) = where"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【食物认知】中国人早饭常吃什么？",
-      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
+      "prompt": "【反义词】“大”的反义词是什么？",
       "choices": [
-        { "id": "1", "text": "粥和包子" },
-        { "id": "2", "text": "牛排和红酒" }
+        { "id": "A", "text": "多 (များသည်)" },
+        { "id": "B", "text": "小 (သေးသည်)" },
+        { "id": "C", "text": "好 (ကောင်းသည်)" }
       ],
-      "correctId": "1",
-      "explanation": "粥(Porridge)和包子(Baozi)是传统的中式早餐。"
+      "correctId": "B",
+      "explanation": "大 (dà) = big，小 (xiǎo) = small，这是常见的反义词对"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【时间表达】图片上的时间是？",
-      "imageUrl": "https://img2.baidu.com/it/u=1857105344,1660682771&fm=253&fmt=auto&app=120&f=JPEG?w=749&h=500",
+      "prompt": "【感谢】“谢谢”的正确回答是什么？",
       "choices": [
-        { "id": "a", "text": "10点10分" },
-        { "id": "b", "text": "3点整" },
-        { "id": "c", "text": "12点30分" }
+        { "id": "A", "text": "对不起 (တောင်းပန်ပါတယ်)" },
+        { "id": "B", "text": "不客气 (ရပါတယ်)" },
+        { "id": "C", "text": "你好 (မင်္ဂလာပါ)" }
       ],
-      "correctId": "a",
-      "explanation": "时针指向10，分针指向2（10分）。"
+      "correctId": "B",
+      "explanation": "当别人说“谢谢”时，应该回答“不客气”（You're welcome）"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【称谓】爸爸的爸爸叫什么？",
+      "prompt": "【国家】“中国”的英文是什么？",
       "choices": [
-        { "id": "ye", "text": "爷爷 (Yéye)" },
-        { "id": "nai", "text": "奶奶 (Nǎinai)" },
-        { "id": "wai", "text": "外公 (Wàigōng)" }
+        { "id": "A", "text": "Japan (ဂျပန်)" },
+        { "id": "B", "text": "China (တရုတ်)" },
+        { "id": "C", "text": "Korea (ကိုရီးယား)" }
       ],
-      "correctId": "ye",
-      "explanation": "父亲的父亲是爷爷。"
+      "correctId": "B",
+      "explanation": "中国 (Zhōngguó) = China，美国 (Měiguó) = America"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【动词】他在做什么？",
-      "imageUrl": "https://images.unsplash.com/photo-1544367563-12123d8965cd?w=600&q=80",
+      "prompt": "【计算】“一加一等于几？”",
       "choices": [
-        { "id": "read", "text": "看书 (Kànshū)" },
-        { "id": "swim", "text": "游泳 (Yóuyǒng)" }
+        { "id": "A", "text": "一 (Yī)" },
+        { "id": "B", "text": "二 (Èr)" },
+        { "id": "C", "text": "三 (Sān)" }
       ],
-      "correctId": "read",
-      "explanation": "他正拿着一本书在阅读。"
+      "correctId": "B",
+      "explanation": "1+1=2，中文是“二”"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【多字识别】哪个选项是“中国”？",
+      "prompt": "【星期】“星期一”之后是哪一天？",
       "choices": [
-        { "id": "cn", "text": "中国" },
-        { "id": "us", "text": "美国" },
-        { "id": "jp", "text": "日本" },
-        { "id": "uk", "text": "英国" }
+        { "id": "A", "text": "星期二 (အင်္ဂါ)" },
+        { "id": "B", "text": "星期三 (ဗုဒ္ဓဟူး)" },
+        { "id": "C", "text": "星期日 (တနင်္ဂနွေ)" }
       ],
-      "correctId": "cn",
-      "explanation": "China = 中国。"
+      "correctId": "A",
+      "explanation": "星期顺序：星期一、星期二、星期三、星期四、星期五、星期六、星期日"
     }
   },
   {
     "type": "complete",
     "content": {
-      "title": "测试结束！",
-      "text": "恭喜你完成了所有20道测试题，你的中文水平很棒！"
+      "title": "测试完成！",
+      "text": "恭喜你完成了HSK1中文基础测试！你学习了问候语、数字、日常用语等基础知识。继续努力！"
     }
   }
 ]
