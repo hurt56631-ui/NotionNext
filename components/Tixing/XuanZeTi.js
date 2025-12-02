@@ -4,7 +4,7 @@ import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb } from 'react-ico
 import { pinyin } from 'pinyin-pro';
 
 // ==========================================
-// 1. IndexedDB 缓存 (保持不变，确保性能)
+// 1. IndexedDB 缓存
 // ==========================================
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
@@ -49,22 +49,21 @@ const idb = {
         const store = tx.objectStore(STORE_NAME);
         store.put(blob, key);
         tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve(); // 防止报错卡死
+        tx.onerror = () => resolve();
       } catch (e) { resolve(); }
     });
   }
 };
 
 // ==========================================
-// 2. 音频控制器 (修复：强制打断)
+// 2. 音频控制器
 // ==========================================
 const audioController = {
   currentAudio: null,
   latestRequestId: 0,
 
-  // 立即停止当前播放
   stop() {
-    this.latestRequestId++; // 使之前的异步请求失效
+    this.latestRequestId++;
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -75,33 +74,30 @@ const audioController = {
   },
 
   async play(text, rate = 1.0) {
-    // 1. 强制打断之前的发音
     this.stop(); 
 
     if (!text) return;
-    // 过滤：只读中英文数字，忽略标点符号，防止TTS读出"问号"
+    // 过滤掉所有符号，只保留文字发音
     const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
     if (!textToRead.trim()) return; 
 
-    const myRequestId = this.latestRequestId; // 注意：stop()里已经++了，这里取当前的
-
+    const myRequestId = this.latestRequestId;
     const cacheKey = `tts-${textToRead}-${rate}`;
     let audioUrl;
 
     try {
       const cachedBlob = await idb.get(cacheKey);
-      if (myRequestId !== this.latestRequestId) return; // 如果被新请求打断，则退出
+      if (myRequestId !== this.latestRequestId) return;
 
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
-        // 使用你的 TTS 接口
         const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         if (!res.ok) throw new Error("TTS Network Error");
         const blob = await res.blob();
         
-        if (myRequestId !== this.latestRequestId) return; // 再次检查是否被打断
+        if (myRequestId !== this.latestRequestId) return;
         await idb.set(cacheKey, blob);
         audioUrl = URL.createObjectURL(blob);
       }
@@ -110,43 +106,40 @@ const audioController = {
       audio.playbackRate = rate;
       this.currentAudio = audio;
       
-      await audio.play().catch(e => { /* 忽略自动播放限制错误 */ });
+      await audio.play().catch(e => {});
       
       audio.onended = () => {
         if (this.currentAudio === audio) this.currentAudio = null;
         if (audioUrl) URL.revokeObjectURL(audioUrl); 
       };
     } catch (e) { 
-      console.error("Audio error:", e); 
       this.currentAudio = null;
     }
   }
 };
 
 // ==========================================
-// 3. 样式定义 (修复：彻底禁止下拉刷新)
+// 3. 样式定义
 // ==========================================
 const cssStyles = `
-  /* 核心：CSS层禁止下拉刷新 */
   html, body {
     overscroll-behavior-y: none;
-    overscroll-behavior: none; /* 兼容部分浏览器 */
+    overscroll-behavior: none;
     touch-action: pan-x pan-y;
     height: 100%;
-    overflow: hidden; /* 防止 body 滚动 */
+    overflow: hidden; 
   }
 
-  /* 容器：允许内部滚动，但由于 overscroll-behavior 存在，不会触发刷新 */
   .xzt-container { 
     width: 100%; 
-    height: 100vh; /* 视口高度 */
+    height: 100vh;
     display: flex; 
     flex-direction: column; 
     align-items: center;
     position: relative; 
     padding: 10px 16px;
     box-sizing: border-box;
-    overflow-y: auto; /* 容器内部滚动 */
+    overflow-y: auto; 
     -webkit-overflow-scrolling: touch;
     -webkit-tap-highlight-color: transparent;
   }
@@ -186,7 +179,6 @@ const cssStyles = `
     margin-top: 4px;
   }
   .char-block { display: flex; flex-direction: column; align-items: center; min-width: 1.2em; }
-  
   .py-text { font-size: 0.85rem; color: #64748b; font-family: monospace; margin-bottom: -2px; min-height: 1rem; line-height: 1; }
   .cn-text { font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.25; }
 
@@ -198,7 +190,7 @@ const cssStyles = `
     width: 100%;
     max-width: 500px;
     /* 底部增加内边距，防止被固定按钮遮挡 */
-    padding-bottom: 140px; 
+    padding-bottom: 160px; 
   }
 
   .xzt-option-card {
@@ -227,12 +219,13 @@ const cssStyles = `
   .opt-img-wrapper { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: #f1f5f9; margin-right: 12px; flex-shrink: 0; }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
+  /* 修复 Flex 子元素导致点击只有一侧生效的问题 */
   .opt-text-box { 
     flex: 1; 
     display: flex; 
     flex-direction: column; 
     justify-content: center;
-    min-width: 0; /* 修复 flex 子元素溢出 */
+    min-width: 0; 
   }
   .layout-text-only .opt-text-box { align-items: center; text-align: center; } 
   .layout-with-image .opt-text-box { align-items: flex-start; text-align: left; }
@@ -241,10 +234,11 @@ const cssStyles = `
   .opt-cn { font-size: 1.15rem; font-weight: 700; color: #334155; line-height: 1.2; word-break: break-word; }
   .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
 
-  /* 底部固定区域 */
+  /* 底部固定区域 (调整高度适配全面屏) */
   .fixed-bottom-area {
     position: fixed;
-    bottom: 20px;
+    /* 适配 iPhone 底部黑条，且默认抬高到 40px */
+    bottom: calc(40px + env(safe-area-inset-bottom));
     left: 0;
     right: 0;
     display: flex;
@@ -252,7 +246,7 @@ const cssStyles = `
     align-items: center;
     z-index: 100;
     padding: 0 20px;
-    pointer-events: none; /* 让点击穿透空白区域 */
+    pointer-events: none; 
   }
 
   .explanation-card {
@@ -307,7 +301,7 @@ const cssStyles = `
 `;
 
 // ==========================================
-// 4. 拼音处理 (修复：过滤符号拼音)
+// 4. 拼音处理 (严格过滤符号)
 // ==========================================
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
 const generatePinyinData = (text) => {
@@ -317,13 +311,13 @@ const generatePinyinData = (text) => {
     const chars = text.split('');
     let pyIndex = 0;
     return chars.map((char) => {
-      // 只有中文字符才去取拼音
+      // 只有纯汉字才去取拼音
       if (isChineseChar(char)) {
         let py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } 
-      // 对于标点、数字、英文，拼音设为空，只显示字符本身
+      // 符号、数字、英文等，拼音强制为空，界面上不会乱显示
       return { char, pinyin: '' };
     });
   } catch (e) {
@@ -335,9 +329,9 @@ const generatePinyinData = (text) => {
 // 5. 主组件
 // ==========================================
 const XuanZeTi = ({ 
-  question,         // 题目对象
-  options,          // 选项数组 (兼容：可能作为单独参数，也可能在 question.options)
-  onNext,           // 回调：进入下一题
+  question,         
+  options,          
+  onNext,           
   explanation 
 }) => {
   const [selectedId, setSelectedId] = useState(null);
@@ -348,16 +342,14 @@ const XuanZeTi = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const isMounted = useRef(true);
 
-  // 1. JS层拦截下拉刷新 (辅助 CSS)
+  // 1. JS层拦截下拉刷新
   useEffect(() => {
     isMounted.current = true;
     const preventPullToRefresh = (e) => {
-      // 当处于顶部且向下滑动时，阻止默认行为
       if (window.scrollY === 0 && e.touches[0].clientY > e.touches[0].target.offsetTop) {
         if(e.cancelable) e.preventDefault();
       }
     };
-    // 使用 passive: false 才能 preventDefault
     document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
     return () => {
       isMounted.current = false;
@@ -365,21 +357,19 @@ const XuanZeTi = ({
     };
   }, []);
 
-  // 2. 初始化逻辑 (核心：修复 options 加载和乱序)
+  // 2. 初始化逻辑
+  // 关键修复：依赖项改为 [question.id]，防止重试时重新乱序
   useEffect(() => {
     if (!question) return;
 
-    // 2.1 停止旧语音
     audioController.stop();
 
-    // 2.2 生成拼音
     const text = question.text || "";
     setQuestionPinyin(generatePinyinData(text));
 
-    // 2.3 获取选项源 (兼容处理：优先用 question.options，没有则用 props.options)
     const sourceOptions = question.options || options || [];
     
-    // 2.4 处理选项 (增加拼音字段)
+    // 生成选项数据
     const processed = sourceOptions.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text || "");
       return {
@@ -390,7 +380,7 @@ const XuanZeTi = ({
       };
     });
 
-    // 2.5 乱序 (Fisher-Yates)
+    // 乱序 (Fisher-Yates)
     const shuffled = [...processed];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -398,12 +388,12 @@ const XuanZeTi = ({
     }
     setShuffledOptions(shuffled);
 
-    // 2.6 重置状态
+    // 重置页面状态
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // 2.7 自动读题 (延迟一点点，确保 DOM 渲染完成)
+    // 读题
     setTimeout(() => {
       if (isMounted.current && text) {
         setIsPlaying(true);
@@ -413,34 +403,37 @@ const XuanZeTi = ({
       }
     }, 300);
 
-  }, [question]); // 只要 question 变了，就重置
+  }, [question.id]); // <--- 只有题目ID变了才重置（即切题），原地重试不重置顺序
 
-  // 点击选项
   const handleSelect = (option) => {
-    if (isSubmitted) return; // 提交后锁定
+    if (isSubmitted) return;
     setSelectedId(option.id);
-    
-    // 点击读选项 (防抖动由 audioController 内部处理)
     if (option.text) audioController.play(option.text, 0.85);
   };
 
-  // 提交 / 确认
   const handleSubmit = (e) => {
     e && e.stopPropagation();
     if (!selectedId || isSubmitted) return;
 
     setIsSubmitted(true);
     
-    // 获取正确答案列表 (兼容 string/number 比较)
-    const correctAnswer = (question.correct || []).map(String);
-    const isCorrect = correctAnswer.includes(String(selectedId));
+    // === 关键修复：正确答案比对逻辑 ===
+    // 1. 将题目中的 correct 转为数组 (防止是单值)
+    // 2. 全部转为 String 进行比对 (防止 1 !== "1")
+    const correctArray = Array.isArray(question.correct) 
+      ? question.correct 
+      : [question.correct];
+    
+    const correctIds = correctArray.map(id => String(id));
+    const selectedStr = String(selectedId);
+    
+    const isCorrect = correctIds.includes(selectedStr);
 
     if (isCorrect) {
       // === 正确 ===
       confetti({ particleCount: 120, spread: 70, origin: { y: 0.65 }, colors: ['#a78bfa', '#34d399', '#fcd34d'] });
       try { new Audio('/sounds/correct.mp3').play().catch(()=>{}); } catch (e) {}
       
-      // 1秒后通知父组件进入下一题 (如果有 onNext)
       if (onNext) {
         setTimeout(() => {
            if(isMounted.current) onNext({ correct: true, question });
@@ -459,14 +452,11 @@ const XuanZeTi = ({
         }, 600);
       }
 
-      // 错误后逻辑：停留一会，然后重置让用户重试（因为没有跳过按钮）
+      // 错误后逻辑：等待2.5秒后重置状态，让用户重选
       setTimeout(() => {
         if(isMounted.current) {
-            // 如果不想自动重置，可以去掉下面这两行，用户需要手动刷新
-            // 这里我们选择：重置状态允许重选，但保留解析显示
             setIsSubmitted(false);
-            // 保持 selectedId 还是清空？清空让用户感觉像重来
-            setSelectedId(null); 
+            // 保持 selectedId，让用户知道刚才选错了哪个
         }
       }, 2500);
     }
@@ -480,7 +470,6 @@ const XuanZeTi = ({
     });
   };
 
-  // 如果没有题目数据，渲染空白
   if (!question) return null;
 
   return (
@@ -502,7 +491,7 @@ const XuanZeTi = ({
           <div className="pinyin-box">
             {questionPinyin.map((item, idx) => (
               <div key={idx} className="char-block">
-                {/* 修复：只有非空拼音才显示，符号不占位 */}
+                {/* 只有非空拼音才显示，不显示符号占位 */}
                 <span className="py-text">{item.pinyin}</span>
                 <span className="cn-text">{item.char}</span>
               </div>
@@ -518,7 +507,10 @@ const XuanZeTi = ({
             let statusClass = '';
             const optId = String(option.id);
             const selId = String(selectedId);
-            const corrIds = (question.correct || []).map(String);
+            
+            // 安全处理 correct 数组
+            const rawCorrect = Array.isArray(question.correct) ? question.correct : [question.correct];
+            const corrIds = rawCorrect.map(id => String(id));
 
             if (isSubmitted) {
               if (corrIds.includes(optId)) statusClass = 'correct'; 
@@ -527,7 +519,6 @@ const XuanZeTi = ({
               if (optId === selId) statusClass = 'selected';
             }
 
-            // 如果有图片，使用 layout-with-image 样式
             const layoutClass = option.hasImage ? 'layout-with-image' : 'layout-text-only';
 
             return (
@@ -535,8 +526,9 @@ const XuanZeTi = ({
                 key={option.id} 
                 className={`xzt-option-card ${layoutClass} ${statusClass}`}
                 onClick={(e) => {
-                    e.stopPropagation();
-                    if(showExplanation) setShowExplanation(false); // 点击选项隐藏旧解析
+                    // 核心修复：点击卡片任何位置都触发，并且防止冒泡导致的问题
+                    e.stopPropagation(); 
+                    if(showExplanation) setShowExplanation(false);
                     handleSelect(option);
                 }}
               >
@@ -559,7 +551,6 @@ const XuanZeTi = ({
                   )}
                 </div>
                 
-                {/* 状态图标 */}
                 {isSubmitted && corrIds.includes(optId) && 
                   <FaCheckCircle className="status-icon" style={{color:'#22c55e'}}/>}
                 {isSubmitted && optId === selId && !corrIds.includes(optId) && 
@@ -569,7 +560,7 @@ const XuanZeTi = ({
           })}
         </div>
 
-        {/* 底部固定区域：解析 + 按钮 */}
+        {/* 底部固定区域 */}
         <div className="fixed-bottom-area">
           {showExplanation && (
             <div className="explanation-card">
@@ -581,11 +572,10 @@ const XuanZeTi = ({
           <button 
             className="submit-btn" 
             onClick={handleSubmit}
-            // 只有选中了才能提交；提交后如果不正确，需等待重置状态后才能再点
             disabled={!selectedId || (isSubmitted && !showExplanation)} 
           >
             {isSubmitted 
-              ? ((question.correct || []).map(String).includes(String(selectedId)) ? "正确" : "请重试") 
+              ? ((Array.isArray(question.correct) ? question.correct : [question.correct]).map(String).includes(String(selectedId)) ? "正确" : "请重试") 
               : "确认"
             }
           </button>
