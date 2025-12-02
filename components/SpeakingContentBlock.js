@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { createPortal } from 'react-dom'; // 👈 1. 引入传送门
-import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles } from 'lucide-react';
+import { createPortal } from 'react-dom'; 
+import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, X } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,14 +11,13 @@ import speakingList from '@/data/speaking.json';
 // --- 核心组件 ---
 const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
-// ✅ 2. 新增：全屏传送门组件
-// 它的作用是把子元素直接挂载到 body 上，无视父级 CSS 限制
+// 全屏传送门组件 (仅用于语法和练习)
 const FullScreenPortal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    // 锁定背景滚动，防止背后页面滑动
+    // 锁定背景滚动
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
@@ -30,7 +29,7 @@ const FullScreenPortal = ({ children }) => {
   return createPortal(
     <div 
       className="fixed inset-0 z-[99999] bg-white flex flex-col"
-      style={{ touchAction: 'none' }} // 禁止触摸穿透
+      style={{ touchAction: 'none' }} 
     >
       {children}
     </div>,
@@ -90,10 +89,9 @@ const SpeakingContentBlock = () => {
       else if (hash.includes('#course-sentences')) setActiveModule('sentences');
       else if (hash.includes('#course-exercises')) setActiveModule('exercises');
       else if (hash.includes('#course-menu')) {
-          setActiveModule(null); // 回到菜单
+          setActiveModule(null); 
       }
       else { 
-          // 彻底退出
           setSelectedCourse(null); 
           setActiveModule(null); 
       }
@@ -107,24 +105,20 @@ const SpeakingContentBlock = () => {
 
   const transformToWordStudyLesson = (data, title, isSentence = false) => {
     if (!data || data.length === 0) return { blocks: [] };
-    
-    // 如果是短句，使用 'phrase_study' 类型，生词用 'word_study'
     const type = isSentence ? "phrase_study" : "word_study";
-    
     return {
       blocks: [
         {
-          type: type, // ✅ 区分生词和短句类型，配合 InteractiveLesson
+          type: type, 
           content: {
             title: title,
-            // 确保数据字段名统一，InteractiveLesson 的 Adapter 会处理
             words: data.map(item => ({
               id: item.id,
-              chinese: isSentence ? item.sentence : item.word, // 统一字段
+              chinese: isSentence ? item.sentence : item.word,
               pinyin: item.pinyin,
               translation: item.translation,
               example: item.example,
-              ...item // 保留原数据
+              ...item 
             }))
           }
         },
@@ -140,7 +134,6 @@ const SpeakingContentBlock = () => {
         {
           type: "grammar_study",
           content: {
-            // ✅ 确保 grammarPoints 结构正确传递给 GrammarPointPlayer
             grammarPoints: data.map(g => {
               let finalExplanation = g.visibleExplanation || `<div class="font-bold text-blue-600 mb-2">${g.translation || ''}</div><div>${g.explanation || ''}</div>`;
               if (g.usage) finalExplanation += g.usage;
@@ -149,7 +142,7 @@ const SpeakingContentBlock = () => {
                 grammarPoint: g.sentence || g.pattern,
                 pattern: g.pattern || g.sentence,
                 visibleExplanation: finalExplanation,
-                narrationScript: g.narrationScript, // 确保音频脚本传递
+                narrationScript: g.narrationScript,
                 examples: g.examples || [],
                 usage: g.usage,
                 attention: g.attention
@@ -175,6 +168,9 @@ const SpeakingContentBlock = () => {
   else if (activeModule === 'grammar') currentLessonData = transformGrammarToLesson(selectedCourse?.grammar);
   else if (activeModule === 'exercises') currentLessonData = transformExercisesToLesson(selectedCourse?.exercises);
 
+  // ✅ 核心判断：只有 语法 和 练习 使用 Portal，其他（生词/短句）直接渲染
+  const useParentPortal = ['grammar', 'exercises'].includes(activeModule);
+
   return (
     <>
       {isLoading && (
@@ -186,7 +182,7 @@ const SpeakingContentBlock = () => {
         </div>
       )}
 
-      {/* 课程列表 (普通页面流) */}
+      {/* 课程列表 */}
       <div className="space-y-4 pb-20">
         <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">口语速成</h2>
@@ -199,10 +195,10 @@ const SpeakingContentBlock = () => {
         ))}
       </div>
 
-      {/* 课程菜单 (底部弹窗) */}
+      {/* 课程菜单 */}
       <AnimatePresence>
         {selectedCourse && !activeModule && (
-          <motion.div initial={{ opacity: 0, y: "100%" }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: "100%" }} className="fixed inset-0 z-[150] bg-gray-100 dark:bg-gray-900 flex flex-col">
+          <motion.div initial={{ opacity: 0, y: "100%" }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: "100%" }} className="fixed inset-0 z-40 bg-gray-100 dark:bg-gray-900 flex flex-col">
             <div className="p-4 bg-white dark:bg-gray-800 shadow-sm flex items-center"><button onClick={handleBack} className="p-2 -ml-2 text-gray-600 dark:text-gray-300"><ChevronRight className="rotate-180" size={24}/></button><h2 className="flex-1 text-center font-bold text-lg pr-8 truncate">{selectedCourse.title}</h2></div>
             <div className="flex-1 p-6 space-y-4 overflow-y-auto">
                 <MenuCard title="生词学习" subtitle={`${selectedCourse.vocabulary?.length || 0} 个生词`} icon={<Book size={24}/>} color="bg-blue-500" onClick={() => handleModuleClick('vocab')} />
@@ -214,12 +210,21 @@ const SpeakingContentBlock = () => {
         )}
       </AnimatePresence>
 
-      {/* ✅ 3. 使用 Portal 渲染全屏课程 */}
-      {/* 这样 InteractiveLesson 会直接挂载到 body 下，彻底解决层级和滚动问题 */}
+      {/* ✅ 渲染逻辑分离 */}
       {activeModule && currentLessonData && (
-         <FullScreenPortal>
+         useParentPortal ? (
+             // 情况 A: 语法/练习 -> 使用 Portal 强行全屏
+             <FullScreenPortal>
+                 <button onClick={handleBack} className="fixed top-4 right-4 z-[210] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm hover:bg-black/20 transition-colors">
+                    <X size={20} className="text-gray-600 dark:text-gray-200" />
+                 </button>
+                 <InteractiveLesson lesson={currentLessonData} />
+             </FullScreenPortal>
+         ) : (
+             // 情况 B: 生词/短句 -> 直接渲染 (使用 InteractiveLesson 自带的 fixed inset-0)
+             // 这样不会受 Portal 影响，而是直接作为 React 组件树的一部分
              <InteractiveLesson lesson={currentLessonData} />
-         </FullScreenPortal>
+         )
       )}
     </>
   );
