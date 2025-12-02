@@ -51,7 +51,7 @@ const idb = {
 };
 
 // =================================================================================
-// ===== 2. 混合 TTS 核心 Hook (修复：增加请求计数器，解决音频重叠) =====
+// ===== 2. 混合 TTS 核心 Hook (音频控制) =====
 // =================================================================================
 const useMixedTTS = () => {
     const audioCtxRef = useRef(null);
@@ -59,13 +59,20 @@ const useMixedTTS = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [loadingId, setLoadingId] = useState(null);
     const [playingId, setPlayingId] = useState(null);
-    const requestCounter = useRef(0); // 新增：请求计数器
+    const latestRequestId = useRef(0);
 
-    useEffect(() => {
+    // 修复：将 AudioContext 的创建和解锁逻辑分离
+    const unlockAudioContext = useCallback(() => {
         if (!audioCtxRef.current) {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             audioCtxRef.current = new AudioContext();
         }
+        if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume();
+        }
+    }, []);
+
+    useEffect(() => {
         return () => {
             stop();
             if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
@@ -120,7 +127,7 @@ const useMixedTTS = () => {
     };
     
     const stop = useCallback(() => {
-        requestCounter.current++; // 每次停止都增加计数，使旧请求失效
+        latestRequestId.current++;
         if (sourceRef.current) {
             try {
                 sourceRef.current.stop();
@@ -134,8 +141,7 @@ const useMixedTTS = () => {
     }, []);
 
     const play = useCallback(async (text, uniqueId) => {
-        const currentRequest = ++requestCounter.current; // 获取当前请求的唯一ID
-
+        const currentRequestId = ++latestRequestId.current;
         if (playingId === uniqueId) {
             stop();
             return;
@@ -143,27 +149,18 @@ const useMixedTTS = () => {
         stop();
         if (!text || typeof text !== 'string') return;
         setLoadingId(uniqueId);
-
         try {
             const cleanText = text.replace(/【.*?】/g, '').trim();
             const segments = splitMixedText(cleanText);
             if (segments.length === 0) {
-                if (currentRequest === requestCounter.current) setLoadingId(null);
+                if (currentRequestId === latestRequestId.current) setLoadingId(null);
                 return;
             }
-
             const blobPromises = segments.map(seg => fetchSegmentAudio(seg.text, seg.lang));
             const audioBlobs = await Promise.all(blobPromises);
-            
-            // 如果在网络请求期间，用户点击了其他按钮，则作废当前操作
-            if (currentRequest !== requestCounter.current) return;
-
+            if (currentRequestId !== latestRequestId.current) return;
             const concatenatedBuffer = await decodeAndConcat(audioBlobs);
-            
-            // 如果在解码期间，用户点击了其他按钮，也作废
-            if (currentRequest !== requestCounter.current) return;
-
-            // 播放音频
+            if (currentRequestId !== latestRequestId.current) return;
             if (!concatenatedBuffer) { setLoadingId(null); return; }
             const ctx = audioCtxRef.current;
             if (ctx.state === 'suspended') await ctx.resume();
@@ -171,7 +168,7 @@ const useMixedTTS = () => {
             source.buffer = concatenatedBuffer;
             source.connect(ctx.destination);
             source.onended = () => {
-                if (requestCounter.current === currentRequest) { // 只有当前音频自然结束才更新状态
+                if (latestRequestId.current === currentRequestId) {
                     setIsPlaying(false);
                     setPlayingId(null);
                 }
@@ -181,12 +178,9 @@ const useMixedTTS = () => {
             setPlayingId(uniqueId);
             setIsPlaying(true);
             setLoadingId(null);
-
         } catch (e) {
             console.error("TTS Play Error:", e);
-            if (currentRequest === requestCounter.current) {
-                setLoadingId(null);
-            }
+            if (currentRequestId === latestRequestId.current) setLoadingId(null);
         }
     }, [playingId, stop]);
     
@@ -199,7 +193,7 @@ const useMixedTTS = () => {
         });
     }, []);
 
-    return { play, stop, isPlaying, playingId, loadingId, preload };
+    return { play, stop, isPlaying, playingId, loadingId, preload, unlockAudioContext };
 }
 
 // ==========================================
@@ -252,12 +246,8 @@ const cssStyles = `
 // ==========================================
 const getCorrectIds = (question, correctAnswerProp) => {
   let ids = [];
-  if (question && question.correct !== undefined) {
-    ids = Array.isArray(question.correct) ? question.correct : [question.correct];
-  } 
-  else if (correctAnswerProp !== undefined) {
-    ids = Array.isArray(correctAnswerProp) ? correctAnswerProp : [correctAnswerProp];
-  }
+  if (question && question.correct !== undefined) ids = Array.isArray(question.correct) ? question.correct : [question.correct];
+  else if (correctAnswerProp !== undefined) ids = Array.isArray(correctAnswerProp) ? correctAnswerProp : [correctAnswerProp];
   return ids.map(id => String(id));
 };
 
@@ -269,9 +259,7 @@ const QuestionTitle = ({ text }) => {
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
     const parts = [];
     let match;
-    while ((match = regex.exec(text)) !== null) {
-        parts.push({ text: match[0], isChinese: !!match[1] });
-    }
+    while ((match = regex.exec(text)) !== null) parts.push({ text: match[0], isChinese: !!match[1] });
     return (
         <div className="title-mixed-box">
             {parts.map((part, i) => {
@@ -283,16 +271,14 @@ const QuestionTitle = ({ text }) => {
                             <span className="cn-text">{char}</span>
                         </div>
                     ));
-                } else {
-                    return <span key={i} className="mm-text">{part.text}</span>;
-                }
+                } else return <span key={i} className="mm-text">{part.text}</span>;
             })}
         </div>
     );
 };
 
 // ==========================================
-// 6. 主组件 (修复：handleSelect 使用 useCallback)
+// 6. 主组件 (修复：增加音频解锁机制)
 // ==========================================
 const XuanZeTi = ({ 
   question, options, correctAnswer, onNext, explanation, allQuestions = [], currentIndex = 0,
@@ -303,7 +289,7 @@ const XuanZeTi = ({
   const [displayOptions, setDisplayOptions] = useState([]);
   const isMounted = useRef(true);
   
-  const { play, stop, playingId, loadingId, preload } = useMixedTTS();
+  const { play, stop, playingId, loadingId, preload, unlockAudioContext } = useMixedTTS();
 
   useEffect(() => {
     isMounted.current = true;
@@ -325,12 +311,13 @@ const XuanZeTi = ({
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
-    setTimeout(() => {
+    const autoPlayTimeout = setTimeout(() => {
       if (isMounted.current && question.prompt) {
         play(question.prompt, `question_${question.id || currentIndex}`);
       }
     }, 500);
-  }, [question, currentIndex, play, stop]); 
+    return () => clearTimeout(autoPlayTimeout);
+  }, [question?.id, currentIndex]); 
 
   useEffect(() => {
     if (!allQuestions || allQuestions.length === 0 || currentIndex >= allQuestions.length - 1) return;
@@ -348,16 +335,16 @@ const XuanZeTi = ({
     return () => clearTimeout(precacheTask);
   }, [currentIndex, allQuestions, preload]);
 
-  // 修复：使用 useCallback 稳定函数，防止不必要的重渲染
-  const handleSelect = useCallback((option) => {
+  const handleSelect = (option) => {
     if (isSubmitted) return;
+    unlockAudioContext(); // 确保音频已解锁
     if (navigator.vibrate) try { navigator.vibrate(30); } catch(e){}
     setSelectedId(option.id);
     if (option.text) play(option.text, `option_${option.id}`);
-  }, [isSubmitted, play]);
+  };
 
   const handleSubmit = (e) => {
-    e && e.stopPropagation();
+    e.stopPropagation();
     if (!selectedId || isSubmitted) return;
     setIsSubmitted(true);
     const correctIds = getCorrectIds(question, correctAnswer || question.correctId);
@@ -382,6 +369,7 @@ const XuanZeTi = ({
 
   const handleReadQuestion = (e) => {
     e.stopPropagation();
+    unlockAudioContext(); // 确保音频已解锁
     play(question.prompt, `question_${question.id || currentIndex}`);
   };
 
@@ -408,7 +396,8 @@ const XuanZeTi = ({
   return (
     <>
       <style>{cssStyles}</style>
-      <div className="xzt-container">
+      {/* 关键修复：在外层容器上添加 onClick 来解锁音频 */}
+      <div className="xzt-container" onClick={unlockAudioContext}>
         <div className="spacer" />
         <div className="xzt-question-card" onClick={handleReadQuestion}>
           <div style={{position:'absolute', top:16, right:16, color: isCurrentPlaying ? '#8b5cf6' : '#cbd5e1', transition:'color 0.3s'}}>
