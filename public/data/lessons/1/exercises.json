@@ -1030,7 +1030,7 @@
       "choices": [
         { "id": "A", "text": "To sell (ရောင်းသည်)" },
         { "id": "B", "text": "To eat (စားသည်)" },
-        { "id":- "C", "text": "To buy (ဝယ်သည်)" }
+        { "id": "C", "text": "To buy (ဝယ်သည်)" }
       ],
       "correctId": "C",
       "explanation": "买 (mǎi) = to buy。"
