@@ -1,96 +1,65 @@
 [
   {
     "id": "gp14_1_rich",
-  "title": "第14课：描述日常活动和时间",
-  "globalConfig": {
-    "themeColor": "#4A90E2",
-    "backgroundColor": "#F5F7FA"
+    "grammarPoint": "黄金法则：时间在前，动作在后",
+    "pattern": "{{主语}} + {{时间}} + {{动作}}",
+    "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法核心</strong></div><div style='padding-left: 15px;'>汉语的时间词必须放在 <b>动词前面</b>。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>缅汉对比</strong></div><div style='padding-left: 15px;'>这个语序和缅甸语<b>完全一样</b>，非常容易掌握。<br><div style='margin-top:8px; padding-left:10px; border-left: 3px solid #3498DB;'><span style='color:#2980b9;'><b>中文:</b> 我 <b>早上七点</b> 起床。</span><br><span style='color:#27ae60;'><b>缅文:</b> ကျွန်တော် <b>မနက် ၇ နာရီ</b> အိပ်ရာထတယ်။</span></div></div>",
+    "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>描述任何在<b>特定时间</b>发生的动作。</div>",
+    "attention": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>⚠️ 常见偏误</strong></div><div style='padding-left: 15px;'>绝对不要说 “<del>我起床在早上七点</del>”。</div>",
+    "narrationScript": "ကျောင်းသားတို့ မှတ်ထားရမယ့် ရွှေစည်းမျဉ်းကတော့ - 'အချိန်' ဟာ 'အပြုအမူ' ရဲ့ ရှေ့မှာပဲ အမြဲရှိရပါမယ်။ ဒါဟာ မြန်မာလို စာစီပုံနဲ့ အတူတူပါပဲ။",
+    "examples": [
+      {
+        "id": "ex14_1_1",
+        "sentence": "{{我}} {{早上七点}} {{起床}}。",
+        "pinyin": "Wǒ zǎoshang qī diǎn qǐchuáng.",
+        "translation": "ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။",
+        "narrationScript": "我早上七点起床。"
+      },
+      {
+        "id": "ex14_1_2",
+        "sentence": "{{爸爸}} {{下午六点}} {{下班}}。",
+        "pinyin": "Bàba xiàwǔ liù diǎn xiàbān.",
+        "translation": "အဖေ ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။",
+        "narrationScript": "爸爸下午六点下班。"
+      },
+      {
+        "id": "ex14_1_3",
+        "sentence": "{{我}} {{每天}} {{看新闻}}。",
+        "pinyin": "Wǒ měitiān kàn xīnwén.",
+        "translation": "ကျွန်တော် နေ့တိုင်း သတင်းကြည့်တယ်။",
+        "narrationScript": "我每天看新闻。"
+      }
+    ]
   },
-  "blocks": [
-    {
-      "type": "teaching",
-      "id": "intro",
-      "content": {
-        "pinyin": "Dì shísì kè: Miáoshù rìcháng huódòng",
-        "displayText": "第14课：描述日常活动和时间",
-        "translation": "(课程标题) 第14课：描述日常活动和时间",
-        "narrationScript": "မင်္ဂလာပါ ကျောင်းသားတို့။ ဒီနေ့မှာတော့ နေ့စဉ်လှုပ်ရှားမှုနဲ့ အချိန်ကို ဘယ်လိုပြောရမလဲဆိုတာကို နက်နက်နဲနဲ လေ့လာကြမှာပါ။ သတင်းကောင်းကတော့ တရုတ်စာကြောင်းတည်ဆောက်ပုံက မြန်မာလိုနဲ့ တစ်ပုံစံတည်း တူနေလို့ပါပဲ။ ကဲ... စလိုက်ကြရအောင်။",
-        "narrationLang": "my",
-        "hintText": "👆 点击开始学习 (စတင်လေ့လာရန် နှိပ်ပါ)"
+  {
+    "id": "gp14_2_rich",
+    "grammarPoint": "提问方式：你几点 + [活动]？",
+    "pattern": "{{你}} + {{几点}} + {{活动}}？",
+    "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法解释</strong></div><div style='padding-left: 15px;'>用疑问词 <b>“几点” (jǐ diǎn)</b> 来替换掉具体时间，语序完全不变。</div>",
+    "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>询问别人做某件事的<b>具体钟点</b>。</div>",
+    "narrationScript": "တခြားသူကို မေးခွန်းမေးချင်ရင်တော့ အချိန်နေရာမှာ '几点' (ဘယ်အချိန်) ကို အစားထိုးလိုက်ရုံပါပဲ။",
+    "examples": [
+      {
+        "id": "ex14_2_1",
+        "sentence": "A: {{你}} {{几点}} {{起床}}？",
+        "pinyin": "Nǐ jǐ diǎn qǐchuáng?",
+        "translation": "မင်း ဘယ်အချိန် အိပ်ရာထလဲ?",
+        "narrationScript": "你几点起床？"
+      },
+      {
+        "id": "ex14_2_2",
+        "sentence": "B: {{我}} {{早上六点半}} {{起床}}。",
+        "pinyin": "Wǒ zǎoshang liù diǎn bàn qǐchuáng.",
+        "translation": "ကျွန်တော် မနက် ၆ နာရီခွဲ အိပ်ရာထတယ်။",
+        "narrationScript": "我早上六点半起床。"
+      },
+      {
+        "id": "ex14_2_3",
+        "sentence": "A: {{你们}} {{几点}} {{吃饭}}？",
+        "pinyin": "Nǐmen jǐ diǎn chīfàn?",
+        "translation": "ခင်ဗျားတို့ ဘယ်အချိန် ထမင်းစားမှာလဲ?",
+        "narrationScript": "你们几点吃饭？"
       }
-    },
-    {
-      "type": "word_study",
-      "id": "core_vocab",
-      "content": {
-        "title": "核心词汇：时间和活动",
-        "displayMode": "list",
-        "words": [
-          { "id": "w1", "chinese": "早上", "translation": "早上 (zǎoshang)", "example": "早上好！" },
-          { "id": "w2", "chinese": "中午", "translation": "中午 (zhōngwǔ)", "example": "中午十二点。" },
-          { "id": "w3", "chinese": "晚上", "translation": "晚上 (wǎnshang)", "example": "晚上见。" },
-          { "id": "w4", "chinese": "起床", "translation": "起床 (qǐchuáng)", "example": "我七点起床。" },
-          { "id": "w5", "chinese": "吃饭", "translation": "吃饭 (chīfàn)", "example": "我们去吃饭吧。" },
-          { "id": "w6", "chinese": "下班", "translation": "下班 (xiàbān)", "example": "爸爸六点下班。" },
-          { "id": "w7", "chinese": "睡觉", "translation": "睡觉 (shuìjiào)", "example": "你几点睡觉？" }
-        ]
-      }
-    },
-    {
-      "type": "grammar_study",
-      "id": "grammar_deep_dive",
-      "content": {
-        "title": "核心语法深度解析",
-        "grammarPoints": [
-          {
-            "id": "gp14_1_rich",
-            "grammarPoint": "黄金法则：时间在前，动作在后",
-            "pattern": "{{主语}} + {{时间}} + {{动作}}",
-            "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法核心</strong></div><div style='padding-left: 15px;'>汉语的时间词必须放在 <b>动词前面</b>。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>缅汉对比</strong></div><div style='padding-left: 15px;'>这个语序和缅甸语<b>完全一样</b>，非常容易掌握。<br><div style='margin-top:8px; padding-left:10px; border-left: 3px solid #3498DB;'><span style='color:#2980b9;'><b>中文:</b> 我 <b>早上七点</b> 起床。</span><br><span style='color:#27ae60;'><b>缅文:</b> ကျွန်တော် <b>မနက် ၇ နာရီ</b> အိပ်ရာထတယ်။</span></div></div>",
-            "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>描述任何在<b>特定时间</b>发生的动作。</div>",
-            "attention": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>⚠️ 常见偏误</strong></div><div style='padding-left: 15px;'>绝对不要说 “<del>我起床在早上七点</del>”。</div>",
-            "narrationScript": "ကျောင်းသားတို့ မှတ်ထားရမယ့် ရွှေစည်းမျဉ်းကတော့ - 'အချိန်' ဟာ 'အပြုအမူ' ရဲ့ ရှေ့မှာပဲ အမြဲရှိရပါမယ်။ ဒါဟာ မြန်မာလို စာစီပုံနဲ့ အတူတူပါပဲ။",
-            "examples": [
-              { "id": "ex14_1_1", "sentence": "{{我}} {{早上七点}} {{起床}}。", "pinyin": "Wǒ zǎoshang qī diǎn qǐchuáng.", "translation": "ကျွန်တော် မနက် ၇ နာရီ အိပ်ရာထတယ်။", "narrationScript": "我早上七点起床。" },
-              { "id": "ex14_1_2", "sentence": "{{爸爸}} {{下午六点}} {{下班}}。", "pinyin": "Bàba xiàwǔ liù diǎn xiàbān.", "translation": "အဖေ ညနေ ၆ နာရီ အလုပ်ဆင်းတယ်။", "narrationScript": "爸爸下午六点下班。" },
-              { "id": "ex14_1_3", "sentence": "{{我}} {{每天}} {{看新闻}}。", "pinyin": "Wǒ měitiān kàn xīnwén.", "translation": "ကျွန်တော် နေ့တိုင်း သတင်းကြည့်တယ်။", "narrationScript": "我每天看新闻。" }
-            ]
-          },
-          {
-            "id": "gp14_2_rich",
-            "grammarPoint": "提问方式：你几点 + [活动]？",
-            "pattern": "{{你}} + {{几点}} + {{活动}}？",
-            "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法解释</strong></div><div style='padding-left: 15px;'>用疑问词 <b>“几点” (jǐ diǎn)</b> 来替换掉具体时间，语序完全不变。</div>",
-            "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>询问别人做某件事的<b>具体钟点</b>。</div>",
-            "narrationScript": "တခြားသူကို မေးခွန်းမေးချင်ရင်တော့ အချိန်နေရာမှာ '几点' (ဘယ်အချိန်) ကို အစားထိုးလိုက်ရုံပါပဲ။",
-            "examples": [
-              { "id": "ex14_2_1", "sentence": "A: {{你}} {{几点}} {{起床}}？", "pinyin": "Nǐ jǐ diǎn qǐchuáng?", "translation": "မင်း ဘယ်အချိန် အိပ်ရာထလဲ?", "narrationScript": "你几点起床？" },
-              { "id": "ex14_2_2", "sentence": "B: {{我}} {{早上六点半}} {{起床}}。", "pinyin": "Wǒ zǎoshang liù diǎn bàn qǐchuáng.", "translation": "ကျွန်တော် မနက် ၆ နာရီခွဲ အိပ်ရာထတယ်။", "narrationScript": "我早上六点半起床。" },
-              { "id": "ex14_2_3", "sentence": "A: {{你们}} {{几点}} {{吃饭}}？", "pinyin": "Nǐmen jǐ diǎn chīfàn?", "translation": "ခင်ဗျားတို့ ဘယ်အချိန် ထမင်းစားမှာလဲ?", "narrationScript": "你们几点吃饭？" }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "type": "teaching",
-      "id": "culture_tip",
-      "content": {
-        "pinyin": "Wénhuà: Wǔshuì",
-        "displayText": "文化小贴士：午睡 (Nap)",
-        "translation": "关于中国的午睡习惯",
-        "visibleExplanation": "<div style='text-align:left; padding:15px; background-color:#eaf2f8; border-radius:8px;'>在中国，许多人在午饭后有<b>“午睡” (wǔshuì)</b>的习惯，尤其是在南方。这被认为能恢复精力，提高下午的工作效率。所以，如果你在下午一点左右联系中国朋友，他们可能正在休息。</div>",
-        "narrationScript": "တရုတ်နိုင်ငံမှာ လူတော်တော်များများက နေ့လည်စာ စားပြီးရင် ခဏအိပ်လေ့ရှိကြတယ် (午睡)။ ဒါက ကျောင်းတွေ၊ ရုံးတွေမှာ ပုံမှန်ပါပဲ။",
-        "narrationLang": "my"
-      }
-    },
-    {
-      "type": "complete",
-      "id": "end",
-      "content": { 
-        "title": "🎉 恭喜完成！", 
-        "text": "你已经学会了如何用中文清晰地描述一天的时间和活动！" 
-      }
-    }
-  ]
+    ]
   }
+]
