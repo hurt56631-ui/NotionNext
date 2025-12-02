@@ -4,7 +4,7 @@ import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb } from 'react-ico
 import { pinyin } from 'pinyin-pro';
 
 // ==========================================
-// 1. IndexedDB 缓存
+// 1. IndexedDB 缓存 (性能优化)
 // ==========================================
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
@@ -14,49 +14,44 @@ const idb = {
   db: null,
   async init() {
     if (this.db) return;
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       };
-      request.onsuccess = (e) => {
-        this.db = e.target.result;
-        resolve();
-      };
-      request.onerror = (e) => reject(e);
+      request.onsuccess = (e) => { this.db = e.target.result; resolve(); };
+      request.onerror = () => resolve(); 
     });
   },
   async get(key) {
     await this.init();
+    if (!this.db) return null;
     return new Promise((resolve) => {
       try {
         const tx = this.db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(key);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(null);
-      } catch (e) { resolve(null); }
+        const r = tx.objectStore(STORE_NAME).get(key);
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => resolve(null);
+      } catch { resolve(null); }
     });
   },
   async set(key, blob) {
     await this.init();
+    if (!this.db) return;
     return new Promise((resolve) => {
       try {
         const tx = this.db.transaction(STORE_NAME, 'readwrite');
-        const store = tx.objectStore(STORE_NAME);
-        store.put(blob, key);
+        tx.objectStore(STORE_NAME).put(blob, key);
         tx.oncomplete = () => resolve();
         tx.onerror = () => resolve();
-      } catch (e) { resolve(); }
+      } catch { resolve(); }
     });
   }
 };
 
 // ==========================================
-// 2. 音频控制器
+// 2. 音频控制器 (强制打断 + 过滤符号)
 // ==========================================
 const audioController = {
   currentAudio: null,
@@ -75,29 +70,27 @@ const audioController = {
 
   async play(text, rate = 1.0) {
     this.stop(); 
-
     if (!text) return;
-    // 过滤掉所有符号，只保留文字发音
+    // 过滤掉所有符号，只读汉字、英文、数字
     const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
     if (!textToRead.trim()) return; 
 
-    const myRequestId = this.latestRequestId;
+    const myReq = this.latestRequestId;
     const cacheKey = `tts-${textToRead}-${rate}`;
     let audioUrl;
 
     try {
-      const cachedBlob = await idb.get(cacheKey);
-      if (myRequestId !== this.latestRequestId) return;
+      const cached = await idb.get(cacheKey);
+      if (myReq !== this.latestRequestId) return;
 
-      if (cachedBlob) {
-        audioUrl = URL.createObjectURL(cachedBlob);
+      if (cached) {
+        audioUrl = URL.createObjectURL(cached);
       } else {
         const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
-        if (!res.ok) throw new Error("TTS Network Error");
+        if (!res.ok) throw new Error("TTS Error");
         const blob = await res.blob();
-        
-        if (myRequestId !== this.latestRequestId) return;
+        if (myReq !== this.latestRequestId) return;
         await idb.set(cacheKey, blob);
         audioUrl = URL.createObjectURL(blob);
       }
@@ -105,21 +98,17 @@ const audioController = {
       const audio = new Audio(audioUrl);
       audio.playbackRate = rate;
       this.currentAudio = audio;
-      
-      await audio.play().catch(e => {});
-      
+      await audio.play().catch(() => {});
       audio.onended = () => {
         if (this.currentAudio === audio) this.currentAudio = null;
         if (audioUrl) URL.revokeObjectURL(audioUrl); 
       };
-    } catch (e) { 
-      this.currentAudio = null;
-    }
+    } catch (e) { this.currentAudio = null; }
   }
 };
 
 // ==========================================
-// 3. 样式定义
+// 3. 样式定义 (修复按钮位置、禁止刷新)
 // ==========================================
 const cssStyles = `
   html, body {
@@ -146,7 +135,7 @@ const cssStyles = `
   
   .spacer { flex: 1; min-height: 10px; max-height: 40px; }
 
-  /* --- 题目卡片 --- */
+  /* 题目卡片 */
   .xzt-question-card {
     background: #ffffff;
     border-radius: 20px;
@@ -182,15 +171,15 @@ const cssStyles = `
   .py-text { font-size: 0.85rem; color: #64748b; font-family: monospace; margin-bottom: -2px; min-height: 1rem; line-height: 1; }
   .cn-text { font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.25; }
 
-  /* --- 选项区域 --- */
+  /* 选项区域 */
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
     gap: 12px;
     width: 100%;
     max-width: 500px;
-    /* 底部增加内边距，防止被固定按钮遮挡 */
-    padding-bottom: 160px; 
+    /* 底部预留足够空间，防止按钮遮挡 */
+    padding-bottom: 180px; 
   }
 
   .xzt-option-card {
@@ -202,7 +191,7 @@ const cssStyles = `
     cursor: pointer;
     transition: transform 0.1s, background 0.2s, border-color 0.2s;
     user-select: none;
-    display: flex;
+    display: flex; /* Flex布局保证内容撑开 */
     align-items: center; 
     width: 100%; 
     box-sizing: border-box;
@@ -219,7 +208,7 @@ const cssStyles = `
   .opt-img-wrapper { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: #f1f5f9; margin-right: 12px; flex-shrink: 0; }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* 修复 Flex 子元素导致点击只有一侧生效的问题 */
+  /* 点击区域修复：让文本盒子占据剩余所有空间，确保点击空白处也生效 */
   .opt-text-box { 
     flex: 1; 
     display: flex; 
@@ -234,11 +223,11 @@ const cssStyles = `
   .opt-cn { font-size: 1.15rem; font-weight: 700; color: #334155; line-height: 1.2; word-break: break-word; }
   .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
 
-  /* 底部固定区域 (调整高度适配全面屏) */
+  /* 底部固定区域：大幅提高 bottom 值 */
   .fixed-bottom-area {
     position: fixed;
-    /* 适配 iPhone 底部黑条，且默认抬高到 40px */
-    bottom: calc(40px + env(safe-area-inset-bottom));
+    /* 提升到 100px，确保不在屏幕最底端 */
+    bottom: 100px;
     left: 0;
     right: 0;
     display: flex;
@@ -301,9 +290,10 @@ const cssStyles = `
 `;
 
 // ==========================================
-// 4. 拼音处理 (严格过滤符号)
+// 4. 拼音处理 (严格过滤，修复符号问题)
 // ==========================================
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
+
 const generatePinyinData = (text) => {
   if (!text) return [];
   try {
@@ -311,13 +301,13 @@ const generatePinyinData = (text) => {
     const chars = text.split('');
     let pyIndex = 0;
     return chars.map((char) => {
-      // 只有纯汉字才去取拼音
+      // 核心修复：只有纯汉字才去匹配拼音
       if (isChineseChar(char)) {
         let py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } 
-      // 符号、数字、英文等，拼音强制为空，界面上不会乱显示
+      // 标点、数字、空格 -> 拼音设为空
       return { char, pinyin: '' };
     });
   } catch (e) {
@@ -326,11 +316,29 @@ const generatePinyinData = (text) => {
 };
 
 // ==========================================
-// 5. 主组件
+// 5. 辅助函数：统一获取正确答案ID列表
+// ==========================================
+const getCorrectIds = (question, correctAnswerProp) => {
+  let ids = [];
+  // 优先看 question.correct
+  if (question && question.correct !== undefined) {
+    ids = Array.isArray(question.correct) ? question.correct : [question.correct];
+  } 
+  // 如果没有，再看 props.correctAnswer
+  else if (correctAnswerProp !== undefined) {
+    ids = Array.isArray(correctAnswerProp) ? correctAnswerProp : [correctAnswerProp];
+  }
+  // 全部转为字符串，防止 1 !== "1" 的问题
+  return ids.map(id => String(id));
+};
+
+// ==========================================
+// 6. 主组件
 // ==========================================
 const XuanZeTi = ({ 
   question,         
-  options,          
+  options, // 兼容旧代码传入的 options
+  correctAnswer, // 兼容旧代码传入的 correctAnswer
   onNext,           
   explanation 
 }) => {
@@ -357,19 +365,21 @@ const XuanZeTi = ({
     };
   }, []);
 
-  // 2. 初始化逻辑
-  // 关键修复：依赖项改为 [question.id]，防止重试时重新乱序
+  // 2. 初始化逻辑 (修复乱序问题)
+  // 依赖项只写 question.id，保证只有换题时才刷新，答错重试时不刷新
   useEffect(() => {
     if (!question) return;
 
     audioController.stop();
 
+    // 生成拼音
     const text = question.text || "";
     setQuestionPinyin(generatePinyinData(text));
 
+    // 获取选项数据 (合并 question.options 和 props.options)
     const sourceOptions = question.options || options || [];
     
-    // 生成选项数据
+    // 处理选项 (加拼音)
     const processed = sourceOptions.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text || "");
       return {
@@ -388,12 +398,12 @@ const XuanZeTi = ({
     }
     setShuffledOptions(shuffled);
 
-    // 重置页面状态
+    // 重置状态
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // 读题
+    // 自动读题
     setTimeout(() => {
       if (isMounted.current && text) {
         setIsPlaying(true);
@@ -403,30 +413,25 @@ const XuanZeTi = ({
       }
     }, 300);
 
-  }, [question.id]); // <--- 只有题目ID变了才重置（即切题），原地重试不重置顺序
+  }, [question?.id]); // 核心修复：只依赖 ID 变化
 
+  // 点击选项
   const handleSelect = (option) => {
     if (isSubmitted) return;
     setSelectedId(option.id);
     if (option.text) audioController.play(option.text, 0.85);
   };
 
+  // 提交
   const handleSubmit = (e) => {
     e && e.stopPropagation();
     if (!selectedId || isSubmitted) return;
 
     setIsSubmitted(true);
     
-    // === 关键修复：正确答案比对逻辑 ===
-    // 1. 将题目中的 correct 转为数组 (防止是单值)
-    // 2. 全部转为 String 进行比对 (防止 1 !== "1")
-    const correctArray = Array.isArray(question.correct) 
-      ? question.correct 
-      : [question.correct];
-    
-    const correctIds = correctArray.map(id => String(id));
+    // 修复判题逻辑：合并获取正确答案ID，并转字符串比对
+    const correctIds = getCorrectIds(question, correctAnswer);
     const selectedStr = String(selectedId);
-    
     const isCorrect = correctIds.includes(selectedStr);
 
     if (isCorrect) {
@@ -452,11 +457,11 @@ const XuanZeTi = ({
         }, 600);
       }
 
-      // 错误后逻辑：等待2.5秒后重置状态，让用户重选
+      // 错误后：等待 2.5 秒重置状态（保留顺序，让用户重试）
       setTimeout(() => {
         if(isMounted.current) {
             setIsSubmitted(false);
-            // 保持 selectedId，让用户知道刚才选错了哪个
+            // 这里的 selectedId 可以保留，方便用户看到刚才选的是哪个
         }
       }, 2500);
     }
@@ -491,7 +496,7 @@ const XuanZeTi = ({
           <div className="pinyin-box">
             {questionPinyin.map((item, idx) => (
               <div key={idx} className="char-block">
-                {/* 只有非空拼音才显示，不显示符号占位 */}
+                {/* 只有有拼音才显示，符号不显示拼音 */}
                 <span className="py-text">{item.pinyin}</span>
                 <span className="cn-text">{item.char}</span>
               </div>
@@ -508,9 +513,8 @@ const XuanZeTi = ({
             const optId = String(option.id);
             const selId = String(selectedId);
             
-            // 安全处理 correct 数组
-            const rawCorrect = Array.isArray(question.correct) ? question.correct : [question.correct];
-            const corrIds = rawCorrect.map(id => String(id));
+            // 获取正确答案列表
+            const corrIds = getCorrectIds(question, correctAnswer);
 
             if (isSubmitted) {
               if (corrIds.includes(optId)) statusClass = 'correct'; 
@@ -526,7 +530,7 @@ const XuanZeTi = ({
                 key={option.id} 
                 className={`xzt-option-card ${layoutClass} ${statusClass}`}
                 onClick={(e) => {
-                    // 核心修复：点击卡片任何位置都触发，并且防止冒泡导致的问题
+                    // 修复：停止冒泡，确保点击整个卡片生效
                     e.stopPropagation(); 
                     if(showExplanation) setShowExplanation(false);
                     handleSelect(option);
@@ -560,7 +564,7 @@ const XuanZeTi = ({
           })}
         </div>
 
-        {/* 底部固定区域 */}
+        {/* 底部固定区域：已提升高度 */}
         <div className="fixed-bottom-area">
           {showExplanation && (
             <div className="explanation-card">
@@ -575,7 +579,7 @@ const XuanZeTi = ({
             disabled={!selectedId || (isSubmitted && !showExplanation)} 
           >
             {isSubmitted 
-              ? ((Array.isArray(question.correct) ? question.correct : [question.correct]).map(String).includes(String(selectedId)) ? "正确" : "请重试") 
+              ? (getCorrectIds(question, correctAnswer).includes(String(selectedId)) ? "正确" : "请重试") 
               : "确认"
             }
           </button>
