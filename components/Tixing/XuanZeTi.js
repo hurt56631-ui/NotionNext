@@ -1,113 +1,165 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaVolumeUp } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
+// --- 全局音频缓存池 (避免重复下载) ---
+const audioCache = new Map();
+
+// --- 样式定义 ---
 const cssStyles = `
-  /* 容器：占满高度，用于垂直布局 */
+  /* 容器布局：保证内容居中且有呼吸感 */
   .xzt-container { 
     width: 100%; 
     height: 100%; 
     display: flex; 
     flex-direction: column; 
+    justify-content: center; /* 垂直居中 */
+    align-items: center;
     position: relative; 
+    padding: 0 10px;
   }
-  
-  /* 
-     布局核心：
-     1. 上部空间 (flex-1)
-     2. 题目卡片 (无 flex，自然高度)
-     3. 中间空间 (flex-1)
-     这样可以把题目“夹”在中间
-  */
-  .spacer { flex: 1; min-height: 20px; }
 
   /* --- 题目卡片 --- */
   .xzt-question-card {
     background: #ffffff;
-    border-radius: 24px;
-    padding: 30px 20px;
+    border-radius: 28px;
+    padding: 24px 20px;
     text-align: center;
-    box-shadow: 0 12px 40px -12px rgba(59, 130, 246, 0.15);
-    border: 1px solid #f1f5f9;
+    /* 更加柔和且有层次的阴影 */
+    box-shadow: 0 10px 40px -10px rgba(147, 197, 253, 0.3), 
+                0 0 0 1px rgba(241, 245, 249, 1);
     cursor: pointer;
-    transition: transform 0.1s;
-    position: relative;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     width: 100%;
-    margin: 0 auto;
+    max-width: 480px; /* 限制最大宽度，防止太宽 */
+    margin-bottom: 30px; /* 与选项拉开距离 */
+    display: flex;
+    flex-direction: column; /* 图片在上，文字在下 */
+    align-items: center;
+    position: relative;
+    overflow: hidden;
   }
   .xzt-question-card:active { transform: scale(0.98); }
 
+  /* 题目图片样式 */
+  .question-img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain; /* 保持比例 */
+    border-radius: 16px;
+    margin-bottom: 16px;
+    background-color: #f8fafc;
+  }
+
   /* 喇叭图标 */
-  .icon-pulse { animation: pulse 1.5s infinite; color: #3b82f6; }
+  .icon-pulse { animation: pulse 1.5s infinite; color: #6366f1; }
   @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
-  /* 题目文字样式 */
-  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; row-gap: 12px; }
+  /* 拼音盒子 */
+  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; row-gap: 10px; }
   .char-block {
     display: flex;
     flex-direction: column;
     align-items: center;
-    /* 取消单个字的点击手势，改为整体点击 */
-    cursor: inherit; 
   }
   .py-text { font-size: 0.9rem; color: #94a3b8; font-weight: 500; margin-bottom: -2px; font-family: 'Courier New', monospace; min-height: 1.2em; }
-  .cn-text { font-size: 2.2rem; font-weight: 800; color: #1e2b3b; line-height: 1.1; font-family: sans-serif; }
+  .cn-text { font-size: 2.0rem; font-weight: 800; color: #1e293b; line-height: 1.2; font-family: sans-serif; }
 
   /* --- 选项区域 --- */
   .xzt-options-grid {
     display: grid;
-    grid-template-columns: 1fr; /* 单列 */
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 14px;
     width: 100%;
-    /* 底部留白，给提交按钮腾位置 */
-    padding-bottom: 110px; 
-    margin-top: auto; /* 把选项推到底部 */
+    max-width: 480px;
+    padding-bottom: 120px; /* 底部留白给按钮 */
   }
 
-  /* 选项卡片优化 */
+  /* 选项卡片基础样式 (浅色系 + 阴影) */
   .xzt-option-card {
     position: relative;
-    display: flex;
-    flex-direction: column; /* 上下排列：拼音在上，汉字在下 */
-    align-items: center;    /* 水平居中 */
-    justify-content: center;
-    padding: 10px 16px;     /* 减小内边距，让卡片变矮 */
-    background-color: #fff;
-    border-radius: 16px;
-    border: 2px solid #f8fafc;
-    box-shadow: 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+    background: linear-gradient(145deg, #ffffff, #f8fafc);
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 
+                0 2px 4px -1px rgba(0, 0, 0, 0.03);
     cursor: pointer;
-    transition: all 0.1s;
-    min-height: 68px;       /* 限制最小高度，不要太高 */
-    width: 100%;            /* 确保占满宽度，修复点击盲区 */
+    transition: all 0.2s;
+    overflow: hidden;
   }
   
-  .xzt-option-card:active { transform: scale(0.98); background-color: #f1f5f9; }
-  .xzt-option-card.selected { border-color: #3b82f6; background-color: #eff6ff; }
-  .xzt-option-card.correct { border-color: #22c55e; background-color: #f0fdf4; }
-  .xzt-option-card.incorrect { border-color: #ef4444; background-color: #fef2f2; animation: shake 0.4s; }
-
-  /* 选项中的文字样式 */
-  .opt-pinyin { 
-    font-size: 0.8rem; 
-    color: #94a3b8; 
-    margin-bottom: 2px; 
-    font-family: monospace;
+  /* 选中/正确/错误 状态 */
+  .xzt-option-card:active { transform: scale(0.97); background: #f1f5f9; }
+  .xzt-option-card.selected { 
+    border-color: #818cf8; 
+    background: #eef2ff; /* 浅紫色背景 */
+    box-shadow: 0 0 0 2px #c7d2fe;
   }
-  .opt-cn { 
-    font-size: 1.3rem; 
-    font-weight: 700; 
-    color: #334155; 
-    line-height: 1.2;
+  .xzt-option-card.correct { 
+    border-color: #4ade80; 
+    background: #f0fdf4; /* 浅绿色背景 */
+    box-shadow: 0 0 0 2px #bbf7d0;
   }
-  /* 纯英文选项的样式 */
-  .opt-en { font-size: 1.1rem; font-weight: 600; color: #334155; }
+  .xzt-option-card.incorrect { 
+    border-color: #f87171; 
+    background: #fef2f2; /* 浅红色背景 */
+    animation: shake 0.4s; 
+  }
 
-  /* 提交按钮悬浮条 */
+  /* 布局A：无图片 (文字居中，卡片紧凑) */
+  .layout-text-only {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 16px;
+    min-height: 70px;
+  }
+
+  /* 布局B：有图片 (左图右文，卡片变大) */
+  .layout-with-image {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 12px;
+    min-height: 90px; /* 更高一点 */
+  }
+
+  /* 选项内图片 */
+  .opt-img-wrapper {
+    width: 70px;
+    height: 70px;
+    flex-shrink: 0;
+    margin-right: 16px;
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: #f1f5f9;
+    border: 1px solid #e2e8f0;
+  }
+  .opt-img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* 选项文字容器 */
+  .opt-text-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1;
+  }
+  /* 文字居中模式 */
+  .layout-text-only .opt-text-box { align-items: center; }
+  /* 文字靠左模式 */
+  .layout-with-image .opt-text-box { align-items: flex-start; }
+
+  .opt-pinyin { font-size: 0.85rem; color: #94a3b8; margin-bottom: 2px; font-family: monospace; }
+  .opt-cn { font-size: 1.25rem; font-weight: 700; color: #334155; line-height: 1.2; }
+  .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
+
+  /* 提交按钮 */
   .submit-btn-wrapper {
     position: fixed;
-    bottom: 100px; /* 再次抬高，避开页码 */
+    bottom: 100px;
     left: 0;
     right: 0;
     display: flex;
@@ -117,25 +169,22 @@ const cssStyles = `
   }
   .submit-btn {
     pointer-events: auto;
-    width: 180px;
-    height: 54px;
-    border-radius: 54px;
+    min-width: 160px;
+    padding: 14px 32px;
+    border-radius: 50px;
     font-size: 1.1rem;
     font-weight: 800;
     color: white;
-    background: #3b82f6;
-    box-shadow: 0 8px 25px -6px rgba(59, 130, 246, 0.5);
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); /* 渐变紫蓝 */
+    box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
     border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     transition: all 0.2s;
   }
   .submit-btn:disabled { 
-    background: #e2e8f0; 
-    color: #94a3b8;
+    background: #cbd5e1; 
+    color: #fff;
     box-shadow: none; 
-    transform: translateY(10px); 
+    transform: translateY(20px); 
     opacity: 0;
   }
   .submit-btn:active:not(:disabled) { transform: scale(0.95); }
@@ -143,37 +192,60 @@ const cssStyles = `
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 `;
 
-// 工具：播放TTS
-const playTTS = (text) => {
+// --- 核心工具函数 ---
+
+// 1. 带缓存的 TTS 播放器 (支持语速)
+const playTTS = async (text, rate = 0.8) => {
   if (!text) return;
-  const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural`;
-  new Audio(url).play().catch(e => {});
+  
+  // 生成缓存键值 (文本+语速)
+  const cacheKey = `${text}-${rate}`;
+
+  try {
+    let audioUrl;
+    
+    // 检查缓存
+    if (audioCache.has(cacheKey)) {
+      audioUrl = audioCache.get(cacheKey);
+    } else {
+      // 没缓存，去下载
+      const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=${rate}`; // r参数控制语速? 假设API支持，或者需要前端控制
+      // 注意：微软TTS API 通常是在 ssml 里控制 rate，这里简单的 URL 参数可能不生效，
+      // 如果后端不支持 r 参数，我们可以在 audio 标签上控制 playbackRate。
+      
+      const response = await fetch(apiUrl);
+      const blob = await response.blob();
+      audioUrl = URL.createObjectURL(blob);
+      audioCache.set(cacheKey, audioUrl);
+    }
+
+    const audio = new Audio(audioUrl);
+    // 前端强制控制语速 (最稳妥的方式)
+    audio.playbackRate = rate; 
+    await audio.play();
+  } catch (e) {
+    console.error("TTS Playback failed", e);
+  }
 };
 
-// 工具：判断汉字
+// 2. 拼音生成器
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
-
-// 工具：给文本加拼音 (用于题目和选项)
 const generatePinyinData = (text) => {
   if (!text) return [];
   try {
-    // 1. 获取纯拼音数组
     const pinyins = pinyin(text, { type: 'array', toneType: 'symbol' }) || [];
     const chars = text.split('');
-    
     let pyIndex = 0;
     return chars.map((char) => {
-      // 只有汉字才消耗一个拼音
       if (isChineseChar(char)) {
         const py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } else {
-        return { char, pinyin: '' }; // 标点或英文无拼音
+        return { char, pinyin: '' };
       }
     });
   } catch (e) {
-    // 降级：直接返回字符，无拼音
     return text.split('').map(c => ({ char: c, pinyin: '' }));
   }
 };
@@ -182,39 +254,43 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [questionPinyin, setQuestionPinyin] = useState([]);
-  const [processedOptions, setProcessedOptions] = useState([]); // 存带拼音的选项
+  const [processedOptions, setProcessedOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // 初始化：处理题目和选项的拼音
+  // 初始化数据
   useEffect(() => {
-    // 1. 处理题目拼音
+    // 1. 题目拼音
     setQuestionPinyin(generatePinyinData(question.text));
 
-    // 2. 处理选项拼音 (给每个选项对象增加 pinyinHtml 结构数据)
+    // 2. 选项预处理 (生成拼音 + 标记是否有中文 + 标记是否有图)
     const newOptions = options.map(opt => {
-      // 如果选项包含中文，就生成拼音数据；否则(比如图片题或纯英文)保持原样
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text);
-      if (hasChinese) {
-        return {
-          ...opt,
-          pinyinData: generatePinyinData(opt.text),
-          isChinese: true
-        };
-      }
-      return { ...opt, isChinese: false };
+      return {
+        ...opt,
+        pinyinData: hasChinese ? generatePinyinData(opt.text) : [],
+        isChinese: hasChinese,
+        hasImage: !!opt.imageUrl // 标记是否有图
+      };
     });
     setProcessedOptions(newOptions);
 
-    // 重置状态
+    // 缓存题目音频
+    if (question.text) playTTS(question.text, 0.8).then(() => {}).catch(() => {}); // 预加载但不播放，或者不await
+
+    // 重置
     setSelectedId(null);
     setIsSubmitted(false);
   }, [question, options]);
 
-  // 选择逻辑
-  const handleSelect = (id) => {
+  // 选中逻辑
+  const handleSelect = (option) => {
     if (isSubmitted) return;
-    setSelectedId(id);
-    // 这里不需要 playSound('click')，因为通常用户希望安静选择，提交时再反馈
+    
+    setSelectedId(option.id);
+    // 选中时朗读选项文字，语速 0.8
+    if (option.text) {
+      playTTS(option.text, 0.8);
+    }
   };
 
   // 提交逻辑
@@ -222,16 +298,20 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     if (!selectedId || isSubmitted) return;
     setIsSubmitted(true);
     
-    // 转 String 防止类型不一致
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // 答对
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
+      // 答对特效
+      confetti({ 
+        particleCount: 150, 
+        spread: 80, 
+        origin: { y: 0.7 },
+        colors: ['#a786ff', '#fd8bbc', '#eca184', '#f8deb1'] // 彩带颜色
+      });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
-      if (onCorrect) setTimeout(onCorrect, 1200);
+      
+      if (onCorrect) setTimeout(onCorrect, 1500);
     } else {
-      // 答错
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
       setTimeout(() => {
@@ -241,11 +321,11 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     }
   };
 
-  // 朗读逻辑 (整句)
-  const handleRead = (e, text) => {
-    if(e) e.stopPropagation();
+  // 点击题目朗读
+  const handleReadQuestion = (e) => {
+    e.stopPropagation();
     setIsPlaying(true);
-    playTTS(text);
+    playTTS(question.text, 0.9); // 题目语速稍快一点点
     setTimeout(() => setIsPlaying(false), 2000);
   };
 
@@ -254,11 +334,15 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* 上部垫片：把题目往下顶一点 */}
-        <div className="spacer" />
+        {/* --- 题目卡片 (上图下文) --- */}
+        <div className="xzt-question-card" onClick={handleReadQuestion}>
+          
+          {/* 题目图片 (如果有) */}
+          {question.imageUrl && (
+            <img src={question.imageUrl} alt="Question" className="question-img" />
+          )}
 
-        {/* --- 题目卡片 (居中) --- */}
-        <div className="xzt-question-card" onClick={(e) => handleRead(e, question.text)}>
+          {/* 喇叭状态 */}
           <div className="absolute top-3 right-3 text-slate-300">
             <FaVolumeUp className={isPlaying ? 'icon-pulse' : ''} />
           </div>
@@ -266,16 +350,12 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
           <div className="pinyin-box">
             {questionPinyin.map((item, idx) => (
               <div key={idx} className="char-block">
-                {/* 汉字上方显示拼音 */}
                 {item.pinyin && <span className="py-text">{item.pinyin}</span>}
                 <span className="cn-text">{item.char}</span>
               </div>
             ))}
           </div>
         </div>
-
-        {/* 下部垫片：把题目和选项分开 */}
-        <div className="spacer" />
 
         {/* --- 选项区域 --- */}
         <div className="xzt-options-grid">
@@ -292,26 +372,38 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
               if (optId === selId) statusClass = 'selected';
             }
 
+            // 根据是否有图片决定布局类名
+            const layoutClass = option.hasImage ? 'layout-with-image' : 'layout-text-only';
+
             return (
               <div 
                 key={option.id} 
-                className={`xzt-option-card ${statusClass}`}
-                onClick={() => handleSelect(option.id)}
+                className={`xzt-option-card ${layoutClass} ${statusClass}`}
+                onClick={() => handleSelect(option)}
               >
-                {/* 如果是中文，显示拼音+汉字结构 */}
-                {option.isChinese ? (
-                  <>
-                    <div className="opt-pinyin">
-                      {option.pinyinData.map(d => d.pinyin).join(' ')}
-                    </div>
-                    <div className="opt-cn">{option.text}</div>
-                  </>
-                ) : (
-                  // 纯英文或数字，直接显示
-                  <div className="opt-en">{option.text}</div>
+                {/* 1. 左侧图片 (如果有) */}
+                {option.hasImage && (
+                  <div className="opt-img-wrapper">
+                    <img src={option.imageUrl} alt="opt" className="opt-img" />
+                  </div>
                 )}
+
+                {/* 2. 右侧/中间 文字区域 */}
+                <div className="opt-text-box">
+                  {option.isChinese ? (
+                    <>
+                      {/* 自动生成拼音 */}
+                      <div className="opt-pinyin">
+                        {option.pinyinData.map(d => d.pinyin).join(' ')}
+                      </div>
+                      <div className="opt-cn">{option.text}</div>
+                    </>
+                  ) : (
+                    <div className="opt-en">{option.text}</div>
+                  )}
+                </div>
                 
-                {/* 对错图标 */}
+                {/* 状态图标 (绝对定位在右侧) */}
                 {isSubmitted && corrIds.includes(optId) && <FaCheckCircle className="text-green-500 absolute right-3 text-xl"/>}
                 {isSubmitted && optId === selId && !corrIds.includes(optId) && <FaTimesCircle className="text-red-500 absolute right-3 text-xl"/>}
               </div>
