@@ -2,7 +2,7 @@
   {
     "type": "teaching",
     "content": {
-      "displayText": "HSK1 中文基础测试（缅甸语版）",
+      "displayText": "HSK1 中文基础测试",
       "pinyin": "HSK1 Zhōngwén Jīchǔ Cèshì (Miǎndiàn yǔ bǎn)",
       "translation": "HSK1 Chinese Basic Test (Burmese Version)",
       "narrationScript": "你好！欢迎参加HSK1中文测试。这些题目将帮助你学习基础中文。加油！",
@@ -12,131 +12,521 @@
   {
     "type": "choice",
     "content": {
-      "prompt": "【词汇】“你好”的中文意思是什么？",
+      "prompt": "【问候】“你好”是什么意思？",
       "choices": [
-        { "id": "A", "text": "Goodbye (နုတ်ဆက်ပါတယ်)" },
-        { "id": "B", "text": "Hello (မင်္ဂလာပါ)" },
-        { "id": "C", "text": "Thank you (ကျေးဇူးတင်ပါတယ်)" }
+        { "id": "A", "text": "နုတ်ဆက်ပါတယ်" },
+        { "id": "B", "text": "မင်္ဂလာပါ" },
+        { "id": "C", "text": "ကျေးဇူးတင်ပါတယ်" }
       ],
       "correctId": "B",
-      "explanation": "“你好”是最常见的问候语，意思是Hello。缅语：မင်္ဂလာပါ"
+      "explanation": "“你好”是最常见的问候语，意思是Hello。缅语：မင်္ဂလာပါ。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【人称】“我”在中文中是什么意思？",
+      "prompt": "【问候】别人对你说“你好”，你应该怎么回答？",
       "choices": [
-        { "id": "A", "text": "You (မင်း/သင်)" },
-        { "id": "B", "text": "I/Me (ကျွန်တော်/ကျွန်မ)" },
-        { "id": "C", "text": "He/She (သူ)" }
-      ],
-      "correctId": "B",
-      "explanation": "“我”是第一人称代词，意思是I或me。"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【数字】中文数字“一、二、三”之后是什么？",
-      "choices": [
-        { "id": "A", "text": "五 (ငါး)" },
-        { "id": "B", "text": "四 (လေး)" },
-        { "id": "C", "text": "六 (ခြောက်)" }
-      ],
-      "correctId": "B",
-      "explanation": "正确顺序是：一(yī)、二(èr)、三(sān)、四(sì)、五(wǔ)"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【语法】“我 ______ 学生。”（我是学生）",
-      "choices": [
-        { "id": "A", "text": "是 (ဖြစ်သည်)" },
-        { "id": "B", "text": "有 (ရှိသည်)" },
-        { "id": "C", "text": "在 (တွင်ရှိသည်)" }
+        { "id": "A", "text": "你好 မင်္ဂလာပါ" },
+        { "id": "B", "text": "再见 တာ့တာ" },
+        { "id": "C", "text": "谢谢 ကျေးဇူးတင်ပါတယ်" }
       ],
       "correctId": "A",
-      "explanation": "主语+是+名词，表示身份。例子：我是老师，他是医生。"
+      "explanation": "回复“你好”时，同样说“你好”即可。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【日常用语】早上见面时应该说什么？",
+      "prompt": "【感谢】“谢谢”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Sorry (တောင်းပန်ပါတယ်)" },
+        { "id": "B", "text": "You're welcome (ရပါတယ်)" },
+        { "id": "C", "text": "Thank you (ကျေးဇူးတင်ပါတယ်)" }
+      ],
+      "correctId": "C",
+      "explanation": "“谢谢”用来表达感谢。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【感谢】当别人对你说“谢谢”时，你应该回答什么？",
+      "choices": [
+        { "id": "A", "text": "不客气 (ရပါတယ်)" },
+        { "id": "B", "text": "对不起 (တောင်းပန်ပါတယ်)" },
+        { "id": "C", "text": "没关系 (ကိစ္စမရှိပါဘူး)" }
+      ],
+      "correctId": "A",
+      "explanation": "“不客气”是“谢谢”的标准回答，意思是 You're welcome。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【道歉】“对不起”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "It doesn't matter (ကိစ္စမရှိပါဘူး)" },
+        { "id": "B", "text": "Sorry (တောင်းပန်ပါတယ်)" },
+        { "id": "C", "text": "Goodbye (တာ့တာ)" }
+      ],
+      "correctId": "B",
+      "explanation": "“对不起”用于道歉。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【道歉】当别人对你说“对不起”，你应该回答什么？",
+      "choices": [
+        { "id": "A", "text": "谢谢 (ကျေးဇူးတင်ပါတယ်)" },
+        { "id": "B", "text": "你好 (မင်္ဂလာပါ)" },
+        { "id": "C", "text": "没关系 (ကိစ္စမရှိပါဘူး)" }
+      ],
+      "correctId": "C",
+      "explanation": "“没关系”是“对不起”的回答，表示原谅或不要紧。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【告别】“再见”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Hello (မင်္ဂလာပါ)" },
+        { "id": "B", "text": "Goodbye (တာ့တာ)" },
+        { "id": "C", "text": "Good morning (မနက်ခင်းပါ)" }
+      ],
+      "correctId": "B",
+      "explanation": "“再见”用于告别。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【问候】早上见面时，应该说什么？",
       "choices": [
         { "id": "A", "text": "晚上好 (ညနေခင်းပါ)" },
         { "id": "B", "text": "早上好 (မနက်ခင်းပါ)" },
         { "id": "C", "text": "下午好 (မွန်းလွဲပါ)" }
       ],
       "correctId": "B",
-      "explanation": "早上好 = Good morning，缅语：မနက်ခင်းပါ"
+      "explanation": "早上好 (zǎoshang hǎo) 的意思是 Good morning。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【家庭成员】“妈妈”在中文中是什么意思？",
+      "prompt": "【问候】“你好吗？”是什么意思？",
       "choices": [
-        { "id": "A", "text": "Father (အဖေ)" },
-        { "id": "B", "text": "Mother (အမေ)" },
-        { "id": "C", "text": "Brother (အစ်ကို/ညီ)" }
+        { "id": "A", "text": "What is your name? (နာမည်ဘယ်လိုခေါ်လဲ?)" },
+        { "id": "B", "text": "How are you? (နေကောင်းလား?)" },
+        { "id": "C", "text": "Where are you? (ဘယ်မှာလဲ?)" }
       ],
       "correctId": "B",
-      "explanation": "妈妈 = Mother/အမေ，爸爸 = Father/အဖေ"
+      "explanation": "“你好吗？”用来询问对方的状况。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【食物】“米饭”的中文拼音是什么？",
+      "prompt": "【问候】回答“你好吗？”可以说：",
       "choices": [
-        { "id": "A", "text": "miànbāo" },
-        { "id": "B", "text": "shuǐguǒ" },
-        { "id": "C", "text": "mǐfàn" }
+        { "id": "A", "text": "我很好 (ကျွန်တော်နေကောင်းပါတယ်)" },
+        { "id": "B", "text": "我叫大卫 (ကျွန်တော့်နာမည်ဒေးဗစ်ပါ)" },
+        { "id": "C", "text": "我是学生 (ကျွန်တော်ကကျောင်းသားပါ)" }
+      ],
+      "correctId": "A",
+      "explanation": "“我很好”意思是 I am fine，是“你好吗？”的常见回答。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【介绍】“我叫李月”中，“叫”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To be (ဖြစ်သည်)" },
+        { "id": "B", "text": "To be called (ဟုခေါ်သည်)" },
+        { "id": "C", "text": "To have (ရှိသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“叫”用在名字前面，表示 to be called。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【介绍】询问别人的名字，应该说：",
+      "choices": [
+        { "id": "A", "text": "你叫什么名字？ (သင့်နာမည်ဘယ်လိုခေါ်လဲ?)" },
+        { "id": "B", "text": "你是谁？ (သင်ဘယ်သူလဲ?)" },
+        { "id": "C", "text": "你好吗？ (နေကောင်းလား?)" }
+      ],
+      "correctId": "A",
+      "explanation": "“你叫什么名字？”是询问名字的标准句式。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【人称】“我”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "You (သင်)" },
+        { "id": "B", "text": "I / Me (ကျွန်တော်/ကျွန်မ)" },
+        { "id": "C", "text": "He / Him (သူ)" }
+      ],
+      "correctId": "B",
+      "explanation": "“我”是第一人称代词。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【人称】“你”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "You (သင်)" },
+        { "id": "B", "text": "I / Me (ကျွန်တော်/ကျွန်မ)" },
+        { "id": "C", "text": "She / Her (သူမ)" }
+      ],
+      "correctId": "A",
+      "explanation": "“你”是第二人称代词。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【人称】“他”和“她”的区别是什么？",
+      "choices": [
+        { "id": "A", "text": "没有区别 (ကွာခြားမှုမရှိ)" },
+        { "id": "B", "text": "“他”指男性，“她”指女性 (သူ(He)ကผู้ชาย၊ သူမ(She)ကผู้หญิง)" },
+        { "id": "C", "text": "“他”指人，“她”指动物 (သူ(He)ကလူ၊ သူမ(She)ကတိရစ္ဆာန်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“他” (tā) 指男性 (he/him)， “她” (tā) 指女性 (she/her)。发音相同，写法不同。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【语法】“是”在“我是学生”中是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To have (ရှိသည်)" },
+        { "id": "B", "text": "To go (သွားသည်)" },
+        { "id": "C", "text": "am / is / are (ဖြစ်သည်)" }
       ],
       "correctId": "C",
-      "explanation": "米饭 (mǐfàn) = rice/ထမင်း，面包 (miànbāo) = bread/ပေါင်မုန့်"
+      "explanation": "“是” (shì) 用来判断和连接两个名词，表示“是”。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【动词】“喝”是什么意思？",
+      "prompt": "【语法】选择正确的词填空：我 ______ 老师。",
       "choices": [
-        { "id": "A", "text": "To eat (စားသည်)" },
-        { "id": "B", "text": "To drink (သောက်သည်)" },
-        { "id": "C", "text": "To go (သွားသည်)" }
+        { "id": "A", "text": "叫 (ဟုခေါ်သည်)" },
+        { "id": "B", "text": "是 (ဖြစ်သည်)" },
+        { "id": "C", "text": "有 (ရှိသည်)" }
       ],
       "correctId": "B",
-      "explanation": "喝 (hē) = to drink，吃 (chī) = to eat"
+      "explanation": "表示身份时用“是”。我是老师 (Wǒ shì lǎoshī)。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【学校】“学生”在中文中是什么意思？",
+      "prompt": "【语法】否定句“我不是学生”中，“不”是什么意思？",
       "choices": [
-        { "id": "A", "text": "Teacher (ဆရာ/ဆရာမ)" },
-        { "id": "B", "text": "Student (ကျောင်းသား/ကျောင်းသူ)" },
-        { "id": "C", "text": "Doctor (ဆရာဝန်)" }
+        { "id": "A", "text": "Also (လည်းပဲ)" },
+        { "id": "B", "text": "Not / No (မဟုတ်)" },
+        { "id": "C", "text": "Very (အလွန်)" }
       ],
       "correctId": "B",
-      "explanation": "学生 (xuéshēng) = student，老师 (lǎoshī) = teacher"
+      "explanation": "“不” (bù) 是否定副词，放在动词或形容词前。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【颜色】“红色”的拼音是什么？",
+      "prompt": "【语法】选择正确的词填空：今天天气 ______ 好。",
       "choices": [
-        { "id": "A", "text": "lán sè" },
-        { "id": "B", "text": "hóng sè" },
-        { "id": "C", "text": "lǜ sè" }
+        { "id": "A", "text": "很 (အလွန်)" },
+        { "id": "B", "text": "是 (ဖြစ်သည်)" },
+        { "id": "C", "text": "不 (မဟုတ်)" }
+      ],
+      "correctId": "A",
+      "explanation": "“很” (hěn) 是程度副词，意思是 very，常放在形容词前。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“吗”通常用在句子的哪个位置？",
+      "choices": [
+        { "id": "A", "text": "开头 (အစ)" },
+        { "id": "B", "text": "中间 (အလယ်)" },
+        { "id": "C", "text": "结尾 (အဆုံး)" }
+      ],
+      "correctId": "C",
+      "explanation": "“吗” (ma) 是疑问助词，放在陈述句末尾，使其变成问句。例如：你好吗？"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“你是老师吗？” 的否定回答是：",
+      "choices": [
+        { "id": "A", "text": "我是老师。(ကျွန်တော်က ဆရာပါ)" },
+        { "id": "B", "text": "我不是老师。(ကျွန်တော် ဆရာ မဟုတ်ပါဘူး)" },
+        { "id": "C", "text": "他是老师。(သူက ဆရာပါ)" }
       ],
       "correctId": "B",
-      "explanation": "红色 (hóngsè) = red/အနီရောင်，蓝色 (lánsè) = blue/အပြာရောင်"
+      "explanation": "用“不”来否定“是”，构成否定回答。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“谁”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "What (ဘာ)" },
+        { "id": "B", "text": "Where (ဘယ်မှာ)" },
+        { "id": "C", "text": "Who (ဘယ်သူ)" }
+      ],
+      "correctId": "C",
+      "explanation": "“谁” (shéi) 是疑问代词，用来问人。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“什么”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "What (ဘာ)" },
+        { "id":- "B", "text": "How (ဘယ်လို)" },
+        { "id": "C", "text": "Why (ဘာဖြစ်လို့)" }
+      ],
+      "correctId": "A",
+      "explanation": "“什么” (shénme) 是疑问代词，用来问事物。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“哪”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "That (ထို)" },
+        { "id": "B", "text": "Which (ဘယ်)" },
+        { "id": "C", "text": "Here (ဒီမှာ)" }
+      ],
+      "correctId": "B",
+      "explanation": "“哪” (nǎ) 是疑问代词，用来问哪个。例如：你是哪国人？"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“几”通常用来问什么？",
+      "choices": [
+        { "id": "A", "text": "小于10的数量 (၁၀အောက် အရေအတွက်)" },
+        { "id": "B", "text": "价格 (စျေးနှုန်း)" },
+        { "id": "C", "text": "原因 (အကြောင်းအရင်း)" }
+      ],
+      "correctId": "A",
+      "explanation": "“几” (jǐ) 用来询问数量，通常是比较小的数目，比如10以下。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】“多少”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "How much / How many (ဘယ်လောက်)" },
+        { "id": "B", "text": "What (ဘာ)" },
+        { "id": "C", "text": "Who (ဘယ်သူ)" }
+      ],
+      "correctId": "A",
+      "explanation": "“多少” (duōshao) 用来询问数量或价格，不受数目大小限制。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【疑问】询问价格时可以说：",
+      "choices": [
+        { "id": "A", "text": "这个多少钱？ (ဒါဘယ်လောက်လဲ?)" },
+        { "id": "B", "text": "你叫什么名字？ (နာမည်ဘယ်လိုခေါ်လဲ?)" },
+        { "id": "C", "text": "现在几点了？ (အခုဘယ်နှနာရီရှိပြီလဲ?)" }
+      ],
+      "correctId": "A",
+      "explanation": "“钱” (qián) 是 money。 “多少钱”是询问价格的常用方式。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【数字】“一、二、三”之后是什么？",
+      "choices": [
+        { "id": "A", "text": "五 (ငါး)" },
+        { "id": "B", "text": "四 (လေး)" },
+        { "id": "C", "text": "六 (ခြောက်)" }
+      ],
+      "correctId": "B",
+      "explanation": "正确顺序是：一(yī)、二(èr)、三(sān)、四(sì)。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【数字】“八”的拼音是什么？",
+      "choices": [
+        { "id": "A", "text": "bā" },
+        { "id": "B", "text": "qī" },
+        { "id": "C", "text": "jiǔ" }
+      ],
+      "correctId": "A",
+      "explanation": "八 (bā) = 8, 七 (qī) = 7, 九 (jiǔ) = 9。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【数字】“十”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Zero (သုည)" },
+        { "id": "B", "text": "One (တစ်)" },
+        { "id": "C", "text": "Ten (ဆယ်)" }
+      ],
+      "correctId": "C",
+      "explanation": "十 (shí) 是数字 10。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【家庭】“爸爸”和“妈妈”分别是谁？",
+      "choices": [
+        { "id": "A", "text": "Brother and Sister (အစ်ကိုနှင့်ညီမ)" },
+        { "id": "B", "text": "Father and Mother (အဖေနှင့်အမေ)" },
+        { "id": "C", "text": "Teacher and Student (ဆရာနှင့်ကျောင်းသား)" }
+      ],
+      "correctId": "B",
+      "explanation": "爸爸 (bàba) = Father, 妈妈 (māma) = Mother。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【家庭】“家”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "School (ကျောင်း)" },
+        { "id": "B", "text": "Home / Family (အိမ် / မိသားစု)" },
+        { "id": "C", "text": "Shop (ဆိုင်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“家” (jiā) 可以指 family，也可以指 home。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【日常】“吃”和“喝”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To eat and to drink (စားသည် နှင့် သောက်သည်)" },
+        { "id": "B", "text": "To read and to write (ဖတ်သည် နှင့် ရေးသည်)" },
+        { "id": "C", "text": "To come and to go (လာသည် နှင့် သွားသည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "吃 (chī) = to eat, 喝 (hē) = to drink。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【日常】选择正确的词填空：我喜欢 ______ 米饭。",
+      "choices": [
+        { "id": "A", "text": "喝 (သောက်သည်)" },
+        { "id": "B", "text": "吃 (စားသည်)" },
+        { "id": "C", "text": "看 (ကြည့်သည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "米饭 (mǐfàn) 是 rice，用动词“吃”。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【日常】选择正确的词填空：请 ______ 一杯茶。",
+      "choices": [
+        { "id": "A", "text": "喝 (သောက်သည်)" },
+        { "id": "B", "text": "买 (ဝယ်သည်)" },
+        { "id": "C", "text": "写 (ရေးသည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "茶 (chá) 是 tea，用动词“喝”。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【日常】“看书”的“看”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To listen (နားထောင်သည်)" },
+        { "id": "B", "text": "To speak (ပြောသည်)" },
+        { "id": "C", "text": "To look / To read (ကြည့်သည်/ဖတ်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "“看” (kàn) 意思是 to look/watch/read。看书 = read a book。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【日常】“说话”的“说”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To speak / To say (ပြောသည်)" },
+        { "id": "B", "text": "To write (ရေးသည်)" },
+        { "id": "C", "text": "To do (လုပ်သည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "“说” (shuō) 意思是 to speak。说话 = to talk。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【地点】“去”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To come (လာသည်)" },
+        { "id": "B", "text": "To go (သွားသည်)" },
+        { "id": "C", "text": "To be at (တွင်ရှိသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“去” (qù) 是动词 to go。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【地点】“我在学校”的“在”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To be at / in / on (တွင်ရှိသည်)" },
+        { "id": "B", "text": "To want (လိုချင်သည်)" },
+        { "id": "C", "text": "To like (ကြိုက်သည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "“在” (zài) 表示位置，意思是 to be at/in/on。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【地点】选择正确的句子：",
+      "choices": [
+        { "id": "A", "text": "我去在商店。(ကျွန်တော် ဆိုင်မှာ သွားတယ်)" },
+        { "id": "B", "text": "我在去商店。(ကျွန်တော် ဆိုင်ကို သွားနေတယ်)" },
+        { "id": "C", "text": "我去商店。(ကျွန်တော် ဆိုင်ကို သွားတယ်)" }
+      ],
+      "correctId": "C",
+      "explanation": "正确的语序是 主语 + 去 + 地点。"
     }
   },
   {
@@ -144,116 +534,753 @@
     "content": {
       "prompt": "【时间】“今天”是什么意思？",
       "choices": [
-        { "id": "A", "text": "Yesterday (မနေ့က)" },
-        { "id": "B", "text": "Today (ဒီနေ့)" },
-        { "id": "C", "text": "Tomorrow (မနက်ဖြန်)" }
-      ],
-      "correctId": "B",
-      "explanation": "今天 (jīntiān) = today，昨天 (zuótiān) = yesterday"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【地点】“学校”的拼音是什么？",
-      "choices": [
-        { "id": "A", "text": "xuéxiào" },
-        { "id": "B", "text": "shāngdiàn" },
-        { "id": "C", "text": "yīyuàn" }
-      ],
-      "correctId": "A",
-      "explanation": "学校 (xuéxiào) = school/ကျောင်း，商店 (shāngdiàn) = shop/ဆိုင်"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【数量】“一个苹果”中的“个”是什么词？",
-      "choices": [
-        { "id": "A", "text": "Measure word (အရေအတွက်ပြစကားလုံး)" },
-        { "id": "B", "text": "Noun (နာမ်)" },
-        { "id": "C", "text": "Verb (ကြိယာ)" }
-      ],
-      "correctId": "A",
-      "explanation": "“个”是量词，用于计数一般物品。例如：一个人、一个苹果"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【疑问词】“什么”是什么意思？",
-      "choices": [
-        { "id": "A", "text": "Where (ဘယ်မှာ)" },
-        { "id": "B", "text": "Who (ဘယ်သူ)" },
-        { "id": "C", "text": "What (ဘာ)" }
+        { "id": "A", "text": "Tomorrow (မနက်ဖြန်)" },
+        { "id": "B", "text": "Yesterday (မနေ့က)" },
+        { "id": "C", "text": "Today (ဒီနေ့)" }
       ],
       "correctId": "C",
-      "explanation": "什么 (shénme) = what，谁 (shéi) = who，哪里 (nǎlǐ) = where"
+      "explanation": "今天 (jīntiān) = today。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【反义词】“大”的反义词是什么？",
+      "prompt": "【时间】“明天”和“昨天”分别是什么意思？",
       "choices": [
-        { "id": "A", "text": "多 (များသည်)" },
-        { "id": "B", "text": "小 (သေးသည်)" },
-        { "id": "C", "text": "好 (ကောင်းသည်)" }
+        { "id": "A", "text": "Today and Now (ဒီနေ့ နှင့် အခု)" },
+        { "id": "B", "text": "Tomorrow and Yesterday (မနက်ဖြန် နှင့် မနေ့က)" },
+        { "id": "C", "text": "Morning and Evening (မနက် နှင့် ညနေ)" }
       ],
       "correctId": "B",
-      "explanation": "大 (dà) = big，小 (xiǎo) = small，这是常见的反义词对"
+      "explanation": "明天 (míngtiān) = tomorrow, 昨天 (zuótiān) = yesterday。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【感谢】“谢谢”的正确回答是什么？",
+      "prompt": "【时间】“现在几点了？”是问什么？",
       "choices": [
-        { "id": "A", "text": "对不起 (တောင်းပန်ပါတယ်)" },
-        { "id": "B", "text": "不客气 (ရပါတယ်)" },
-        { "id": "C", "text": "你好 (မင်္ဂလာပါ)" }
+        { "id": "A", "text": "日期 (ရက်စွဲ)" },
+        { "id": "B", "text": "时间 (အချိန်)" },
+        { "id": "C", "text": "星期 (ရက်သတ္တပတ်)" }
       ],
       "correctId": "B",
-      "explanation": "当别人说“谢谢”时，应该回答“不客气”（You're welcome）"
+      "explanation": "“现在几点了?” (Xiànzài jǐ diǎn le?) 意思是 What time is it now?。"
     }
   },
   {
     "type": "choice",
     "content": {
-      "prompt": "【国家】“中国”的英文是什么？",
+      "prompt": "【时间】如果现在是三点，应该怎么说？",
       "choices": [
-        { "id": "A", "text": "Japan (ဂျပန်)" },
-        { "id": "B", "text": "China (တရုတ်)" },
-        { "id": "C", "text": "Korea (ကိုရီးယား)" }
-      ],
-      "correctId": "B",
-      "explanation": "中国 (Zhōngguó) = China，美国 (Měiguó) = America"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【计算】“一加一等于几？”",
-      "choices": [
-        { "id": "A", "text": "一 (Yī)" },
-        { "id": "B", "text": "二 (Èr)" },
-        { "id": "C", "text": "三 (Sān)" }
-      ],
-      "correctId": "B",
-      "explanation": "1+1=2，中文是“二”"
-    }
-  },
-  {
-    "type": "choice",
-    "content": {
-      "prompt": "【星期】“星期一”之后是哪一天？",
-      "choices": [
-        { "id": "A", "text": "星期二 (အင်္ဂါ)" },
-        { "id": "B", "text": "星期三 (ဗုဒ္ဓဟူး)" },
-        { "id": "C", "text": "星期日 (တနင်္ဂနွေ)" }
+        { "id": "A", "text": "现在三点。(အခုသုံးနာရီ)" },
+        { "id": "B", "text": "现在三月。(အခုသုံးလပိုင်း)" },
+        { "id": "C", "text": "现在三个。(အခုသုံးခု)" }
       ],
       "correctId": "A",
-      "explanation": "星期顺序：星期一、星期二、星期三、星期四、星期五、星期六、星期日"
+      "explanation": "“点” (diǎn) 是 o'clock。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【时间】“星期一”之后是哪一天？",
+      "choices": [
+        { "id": "A", "text": "星期三 (ဗုဒ္ဓဟူး)" },
+        { "id": "B", "text": "星期二 (အင်္ဂါ)" },
+        { "id": "C", "text": "星期日 (တနင်္ဂနွေ)" }
+      ],
+      "correctId": "B",
+      "explanation": "星期 (xīngqī) 的顺序是：一、二、三、四、五、六、日(天)。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【形容词】“大”的反义词是什么？",
+      "choices": [
+        { "id": "A", "text": "多 (များသော)" },
+        { "id": "B", "text": "好 (ကောင်းသော)" },
+        { "id": "C", "text": "小 (ငယ်သော)" }
+      ],
+      "correctId": "C",
+      "explanation": "大 (dà) = big, 小 (xiǎo) = small。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【形容词】“多”的反义词是什么？",
+      "choices": [
+        { "id": "A", "text": "少 (နည်းသော)" },
+        { "id": "B", "text": "冷 (အေးသော)" },
+        { "id": "C", "text": "热 (ပူသော)" }
+      ],
+      "correctId": "A",
+      "explanation": "多 (duō) = many/much, 少 (shǎo) = few/little。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【形容词】“冷”和“热”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Big and Small (ကြီးသော နှင့် ငယ်သော)" },
+        { "id": "B", "text": "Cold and Hot (အေးသော နှင့် ပူသော)" },
+        { "id": "C", "text": "Good and Bad (ကောင်းသော နှင့် ဆိုးသော)" }
+      ],
+      "correctId": "B",
+      "explanation": "冷 (lěng) = cold, 热 (rè) = hot。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【形容词】“高兴”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Happy (ပျော်ရွှင်သော)" },
+        { "id": "B", "text": "Sad (ဝမ်းနည်းသော)" },
+        { "id": "C", "text": "Tired (ပင်ပန်းသော)" }
+      ],
+      "correctId": "A",
+      "explanation": "高兴 (gāoxìng) = happy/glad。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【形容词】“漂亮”通常用来形容什么？",
+      "choices": [
+        { "id": "A", "text": "食物很好吃 (အစားအစာအရသာရှိတယ်)" },
+        { "id": "B", "text": "人或东西很好看 (လူ ဒါမှမဟုတ် ပစ္စည်းကလှတယ်)" },
+        { "id": "C", "text": "天气很热 (ရာသီဥတုအရမ်းပူတယ်)" }
+      ],
+      "correctId": "B",
+      "explanation": "漂亮 (piàoliang) = beautiful/pretty。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【量词】“一个苹果”的“个”是什么？",
+      "choices": [
+        { "id": "A", "text": "名词 (နာမ်)" },
+        { "id": "B", "text": "动词 (ကြိယာ)" },
+        { "id": "C", "text": "量词 (အရေအတွက်ပြစကားလုံး)" }
+      ],
+      "correctId": "C",
+      "explanation": "“个” (gè) 是最常用的量词，用在数字和名词之间。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【量词】说“三本书”时，用哪个量词？",
+      "choices": [
+        { "id": "A", "text": "本 (běn)" },
+        { "id": "B", "text": "块 (kuài)" },
+        { "id": "C", "text": "岁 (suì)" }
+      ],
+      "correctId": "A",
+      "explanation": "“本” (běn) 是书的量词。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【量词】询问年龄时说“你几岁了？”，这里的“岁”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Money (ငွေ)" },
+        { "id": "B", "text": "Year (of age) (အသက်)" },
+        { "id": "C", "text": "Minute (မိနစ်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“岁” (suì) 是年龄的量词。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【代词】“这”和“那”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "This and That (ဤ နှင့် ထို)" },
+        { "id": "B", "text": "Here and There (ဒီမှာ နှင့် ဟိုမှာ)" },
+        { "id": "C", "text": "Up and Down (အပေါ် နှင့် အောက်)" }
+      ],
+      "correctId": "A",
+      "explanation": "这 (zhè) = this, 那 (nà) = that。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【代词】选择正确的词填空：______ 是我的书。",
+      "choices": [
+        { "id": "A", "text": "这 (ဤ)" },
+        { "id": "B", "text": "哪 (ဘယ်)" },
+        { "id": "C", "text": "吗 (လား)" }
+      ],
+      "correctId": "A",
+      "explanation": "“这是我的书” (Zhè shì wǒ de shū) 意思是 This is my book。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【物品】“水”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Water (ရေ)" },
+        { "id": "B", "text": "Rice (ထမင်း)" },
+        { "id": "C", "text": "Tea (လက်ဖက်ရည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "水 (shuǐ) = water。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【物品】“苹果”是什么？",
+      "choices": [
+        { "id": "A", "text": "A kind of drink (အဖျော်ယမကာတစ်မျိုး)" },
+        { "id": "B", "text": "A kind of fruit (အသီးတစ်မျိုး)" },
+        { "id": "C", "text": "A kind of clothing (အဝတ်အစားတစ်မျိုး)" }
+      ],
+      "correctId": "B",
+      "explanation": "苹果 (píngguǒ) = apple。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【交通】“飞机”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Train (ရထား)" },
+        { "id": "B", "text": "Car (ကား)" },
+        { "id": "C", "text": "Airplane (လေယာဉ်ပျံ)" }
+      ],
+      "correctId": "C",
+      "explanation": "飞机 (fēijī) = airplane。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【交通】“坐”在“我坐出租车”中是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To drive (မောင်းသည်)" },
+        { "id": "B", "text": "To sit / To take (a vehicle) (ထိုင်သည် / စီးသည်)" },
+        { "id": "C", "text": "To buy (ဝယ်သည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“坐” (zuò) 可以表示乘坐交通工具。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【能力】“会”在“我会说汉语”中是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Can / To know how to (တတ်သည်)" },
+        { "id": "B", "text": "To like (ကြိုက်သည်)" },
+        { "id": "C", "text": "To want (လိုချင်သည်)" }
+      ],
+      "correctId": "A",
+      "explanation": "“会” (huì) 表示通过学习而获得的能力。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【能力】如果你能写汉字，应该怎么说？",
+      "choices": [
+        { "id": "A", "text": "我吃汉字。(ကျွန်တော် တရုတ်စာလုံး စားတယ်)" },
+        { "id": "B", "text": "我看汉字。(ကျွန်တော် တရုတ်စာလုံး ကြည့်တယ်)" },
+        { "id": "C", "text": "我会写汉字。(ကျွန်တော် တရုတ်စာလုံး ရေးတတ်တယ်)" }
+      ],
+      "correctId": "C",
+      "explanation": "写 (xiě) = to write, 汉字 (hànzì) = Chinese characters。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“没关系”的拼音是什么？",
+      "choices": [
+        { "id": "A", "text": "bú kè qi" },
+        { "id": "B", "text": "méi guān xi" },
+        { "id": "C", "text": "duì bu qǐ" }
+      ],
+      "correctId": "B",
+      "explanation": "没关系 (méi guānxi) = It doesn't matter。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“不客气”的拼音是什么？",
+      "choices": [
+        { "id": "A", "text": "bú kè qì" },
+        { "id": "B", "text": "zài jiàn" },
+        { "id": "C", "text": "xiè xie" }
+      ],
+      "correctId": "A",
+      "explanation": "不客气 (bú kèqì) = You're welcome。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【国家】“汉语”是什么？",
+      "choices": [
+        { "id": "A", "text": "Chinese language (တရုတ်ဘာသာစကား)" },
+        { "id": "B", "text": "English language (အင်္ဂလိပ်ဘာသာစကား)" },
+        { "id": "C", "text": "Myanmar language (မြန်မာဘာသာစကား)" }
+      ],
+      "correctId": "A",
+      "explanation": "汉语 (hànyǔ) 是中文的另一种说法。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【国家】“中国人”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "American people (အမေရိကန်လူမျိုး)" },
+        { "id": "B", "text": "Chinese people (တရုတ်လူမျိုး)" },
+        { "id": "C", "text": "Myanmar people (မြန်မာလူမျိုး)" }
+      ],
+      "correctId": "B",
+      "explanation": "中国 (Zhōngguó) = China, 人 (rén) = people。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【爱好】“喜欢”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To dislike (မကြိုက်)" },
+        { "id": "B", "text": "To eat (စားသည်)" },
+        { "id": "C", "text": "To like (ကြိုက်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "喜欢 (xǐhuan) = to like。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【爱好】选择正确的句子：",
+      "choices": [
+        { "id": "A", "text": "我喜欢是看书。(ကျွန်တော် စာဖတ်ရတာ ကြိုက်တယ်)" },
+        { "id": "B", "text": "我喜欢看书。(ကျွန်တော် စာဖတ်ရတာ ကြိုက်တယ်)" },
+        { "id": "C", "text": "我看书喜欢。(ကျွန်တော် စာဖတ်ရတာ ကြိုက်တယ်)" }
+      ],
+      "correctId": "B",
+      "explanation": "正确的语序是 主语 + 喜欢 + 动词/名词。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【朋友】“朋友”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Family (မိသားစု)" },
+        { "id": "B", "text": "Friend (သူငယ်ချင်း)" },
+        { "id": "C", "text": "Teacher (ဆရာ)" }
+      ],
+      "correctId": "B",
+      "explanation": "朋友 (péngyou) = friend。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【朋友】“他是我的好朋友”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "He is my teacher. (သူက ကျွန်တော့်ဆရာပါ)" },
+        { "id": "B", "text": "He is my good friend. (သူက ကျွန်တော့်သူငယ်ချင်းကောင်းပါ)" },
+        { "id": "C", "text": "He is my father. (သူက ကျွန်တော့်အဖေပါ)" }
+      ],
+      "correctId": "B",
+      "explanation": "好 (hǎo) 在这里修饰朋友，表示 good friend。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【学校】“同学”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Classmate (အတန်းဖော်)" },
+        { "id": "B", "text": "Teacher (ဆရာ)" },
+        { "id": "C", "text": "Student (ကျောင်းသား)" }
+      ],
+      "correctId": "A",
+      "explanation": "同学 (tóngxué) = classmate。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【学校】“老师”和“学生”是什么关系？",
+      "choices": [
+        { "id": "A", "text": "父子 (အဖေနှင့်သား)" },
+        { "id": "B", "text": "师生 (ဆရာနှင့်တပည့်)" },
+        { "id": "C", "text": "朋友 (သူငယ်ချင်း)" }
+      ],
+      "correctId": "B",
+      "explanation": "老师 (lǎoshī) = teacher, 学生 (xuéshēng) = student。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【身体】“名字”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Age (အသက်)" },
+        { "id": "B", "text": "Name (နာမည်)" },
+        { "id": "C", "text": "Health (ကျန်းမာရေး)" }
+      ],
+      "correctId": "B",
+      "explanation": "名字 (míngzi) = name。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【天气】“天气”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Weather (ရာသီဥတု)" },
+        { "id": "B", "text": "Time (အချိန်)" },
+        { "id": "C", "text": "Date (ရက်စွဲ)" }
+      ],
+      "correctId": "A",
+      "explanation": "天气 (tiānqì) = weather。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【天气】“下雨”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To be sunny (နေသာသည်)" },
+        { "id": "B", "text": "To be cold (အေးသည်)" },
+        { "id": "C", "text": "To rain (မိုးရွာသည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "下雨 (xià yǔ) = to rain。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【动物】“猫”和“狗”是什么？",
+      "choices": [
+        { "id": "A", "text": "Cat and Dog (ကြောင် နှင့် ခွေး)" },
+        { "id": "B", "text": "Fish and Bird (ငါး နှင့် ငှက်)" },
+        { "id": "C", "text": "Apple and Water (ပန်းသီး နှင့် ရေ)" }
+      ],
+      "correctId": "A",
+      "explanation": "猫 (māo) = cat, 狗 (gǒu) = dog。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【介词】“的”在“我的书”中有什么作用？",
+      "choices": [
+        { "id": "A", "text": "表示动作 (လုပ်ဆောင်ချက်ကိုပြသည်)" },
+        { "id": "B", "text": "表示所属关系 (ပိုင်ဆိုင်မှုကိုပြသည်)" },
+        { "id": "C", "text": "表示疑问 (မေးခွန်းကိုပြသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "“的” (de) 是结构助词，用在名词或代词后，表示所有、所属关系，类似 's。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【副词】“也”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Also / Too (လည်းပဲ)" },
+        { "id": "B", "text": "Very (အလွန်)" },
+        { "id": "C", "text": "Not (မဟုတ်)" }
+      ],
+      "correctId": "A",
+      "explanation": "也 (yě) 表示同样。例如：我是学生，他也是学生。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【副词】“都”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Only (သာလျှင်)" },
+        { "id": "B", "text": "Both / All (အားလုံး)" },
+        { "id": "C", "text": "Again (ထပ်မံ)" }
+      ],
+      "correctId": "B",
+      "explanation": "都 (dōu) 表示总括范围内的全部。例如：我们都是学生。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【购物】“买”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To sell (ရောင်းသည်)" },
+        { "id": "B", "text": "To eat (စားသည်)" },
+        { "id":- "C", "text": "To buy (ဝယ်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "买 (mǎi) = to buy。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【购物】“东西”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "East and west (အရှေ့ နှင့် အနောက်)" },
+        { "id": "B", "text": "Thing / Stuff (ပစ္စည်း)" },
+        { "id": "C", "text": "Money (ငွေ)" }
+      ],
+      "correctId": "B",
+      "explanation": "东西 (dōngxi) 是一个常用词，指代物品。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【动作】“听”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To see (မြင်သည်)" },
+        { "id": "B", "text": "To listen (နားထောင်သည်)" },
+        { "id": "C", "text": "To smell (အနံ့ခံသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "听 (tīng) = to listen/hear。例如：听音乐 (tīng yīnyuè) listen to music。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【动作】“读”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To write (ရေးသည်)" },
+        { "id": "B", "text": "To draw (ဆွဲသည်)" },
+        { "id": "C", "text": "To read (ဖတ်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "读 (dú) = to read, usually aloud。例如：读书 (dú shū) to read a book。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【位置】“里”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Inside (အတွင်း)" },
+        { "id": "B", "text": "Outside (အပြင်)" },
+        { "id": "C", "text": "On (အပေါ်)" }
+      ],
+      "correctId": "A",
+      "explanation": "里 (lǐ) = inside。例如：家里 (jiā lǐ) at home。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【位置】“上”和“下”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Left and Right (ဘယ် နှင့် ညာ)" },
+        { "id": "B", "text": "Front and Back (ရှေ့ နှင့် နောက်)" },
+        { "id": "C", "text": "Up and Down (အပေါ် နှင့် အောက်)" }
+      ],
+      "correctId": "C",
+      "explanation": "上 (shàng) = up/on, 下 (xià) = down/under。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【位置】“前面”和“后面”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Front and Back (ရှေ့ နှင့် နောက်)" },
+        { "id": "B", "text": "Inside and Outside (အတွင်း နှင့် အပြင်)" },
+        { "id": "C", "text": "Left and Right (ဘယ် နှင့် ညာ)" }
+      ],
+      "correctId": "A",
+      "explanation": "前面 (qiánmiàn) = front, 后面 (hòumiàn) = back。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“请问”通常用在什么时候？",
+      "choices": [
+        { "id": "A", "text": "告别时 (နုတ်ဆက်သည့်အခါ)" },
+        { "id": "B", "text": "感谢时 (ကျေးဇူးတင်သည့်အခါ)" },
+        { "id": "C", "text": "礼貌地提问前 (မေးခွန်းမမေးခင် ယဉ်ကျေးစွာပြောဆိုခြင်း)" }
+      ],
+      "correctId": "C",
+      "explanation": "“请问” (qǐngwèn) 意思是 excuse me，用在问问题之前，表示礼貌。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“请坐”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Please eat (ကျေးဇူးပြု၍ စားပါ)" },
+        { "id": "B", "text": "Please sit (ကျေးဇူးပြု၍ ထိုင်ပါ)" },
+        { "id": "C", "text": "Please drink (ကျေးဇူးပြု၍ သောက်ပါ)" }
+      ],
+      "correctId": "B",
+      "explanation": "请 (qǐng) = please, 坐 (zuò) = to sit。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“我爱你”的“爱”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To like (ကြိုက်သည်)" },
+        { "id": "B", "text": "To want (လိုချင်သည်)" },
+        { "id": "C", "text": "To love (ချစ်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "爱 (ài) = to love。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“工作”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To study (လေ့လာသည်)" },
+        { "id": "B", "text": "To work / Job (အလုပ်လုပ်သည် / အလုပ်)" },
+        { "id": "C", "text": "To rest (အနားယူသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "工作 (gōngzuò) 可以是动词 to work，也可以是名词 job。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“睡觉”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To get up (အိပ်ရာထသည်)" },
+        { "id": "B", "text": "To sleep (အိပ်သည်)" },
+        { "id": "C", "text": "To eat a meal (ထမင်းစားသည်)" }
+      ],
+      "correctId": "B",
+      "explanation": "睡觉 (shuìjiào) = to sleep。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“打电话”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "To watch TV (တီဗီကြည့်သည်)" },
+        { "id": "B", "text": "To read a book (စာအုပ်ဖတ်သည်)" },
+        { "id": "C", "text": "To make a phone call (ဖုန်းဆက်သည်)" }
+      ],
+      "correctId": "C",
+      "explanation": "打电话 (dǎ diànhuà) = to make a phone call。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【地点】“医院”是什么地方？",
+      "choices": [
+        { "id": "A", "text": "看病的地方 (ဆေးကုသသည့်နေရာ)" },
+        { "id": "B", "text": "学习的地方 (စာသင်သည့်နေရာ)" },
+        { "id": "C", "text": "吃饭的地方 (ထမင်းစားသည့်နေရာ)" }
+      ],
+      "correctId": "A",
+      "explanation": "医院 (yīyuàn) = hospital。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【地点】“饭店”是什么地方？",
+      "choices": [
+        { "id": "A", "text": "买东西的地方 (ပစ္စည်းဝယ်သည့်နေရာ)" },
+        { "id": "B", "text": "看电影的地方 (ရုပ်ရှင်ကြည့်သည့်နေရာ)" },
+        { "id": "C", "text": "吃饭的地方 (ထမင်းစားသည့်နေရာ)" }
+      ],
+      "correctId": "C",
+      "explanation": "饭店 (fàndiàn) = restaurant。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【职业】“医生”在哪里工作？",
+      "choices": [
+        { "id": "A", "text": "学校 (ကျောင်း)" },
+        { "id": "B", "text": "医院 (ဆေးရုံ)" },
+        { "id": "C", "text": "商店 (ဆိုင်)" }
+      ],
+      "correctId": "B",
+      "explanation": "医生 (yīshēng) = doctor, 他们在医院 (yīyuàn) 工作。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“认识你很高兴”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Nice to meet you (တွေ့ရတာဝမ်းသာပါတယ်)" },
+        { "id": "B", "text": "How are you? (နေကောင်းလား)" },
+        { "id": "C", "text": "See you tomorrow (မနက်ဖြန်တွေ့မယ်)" }
+      ],
+      "correctId": "A",
+      "explanation": "这是初次见面时常用的礼貌用语。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【常用语】“太好了！”表达什么情绪？",
+      "choices": [
+        { "id": "A", "text": "悲伤 (ဝမ်းနည်းခြင်း)" },
+        { "id": "B", "text": "高兴 (ပျော်ရွှင်ခြင်း)" },
+        { "id": "C", "text": "生气 (စိတ်ဆိုးခြင်း)" }
+      ],
+      "correctId": "B",
+      "explanation": "“太好了！” (Tài hǎo le!) 意思是 That's great!，用来表达兴奋和高兴。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【月份】“月”和“日”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Year and Hour (နှစ် နှင့် နာရီ)" },
+        { "id": "B", "text": "Month and Day (လ နှင့် နေ့)" },
+        { "id": "C", "text": "Minute and Second (မိနစ် နှင့် စက္ကန့်)" }
+      ],
+      "correctId": "B",
+      "explanation": "月 (yuè) = month, 日 (rì) = day。例如：今天 9月1号 (jīntiān jiǔ yuè yī hào)。"
+    }
+  },
+  {
+    "type": "choice",
+    "content": {
+      "prompt": "【衣物】“衣服”是什么意思？",
+      "choices": [
+        { "id": "A", "text": "Shoes (ဖိနပ်)" },
+        { "id": "B", "text": "Clothes (အဝတ်အစား)" },
+        { "id": "C", "text": "Hat (ဦးထုပ်)" }
+      ],
+      "correctId": "B",
+      "explanation": "衣服 (yīfu) = clothes。"
     }
   },
   {
