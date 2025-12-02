@@ -71,6 +71,7 @@ const audioController = {
   async play(text, rate = 1.0) {
     this.stop(); 
     if (!text) return;
+    // 朗读时过滤掉特殊符号，只保留汉字数字字母
     const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
     if (!textToRead.trim()) return; 
 
@@ -107,7 +108,7 @@ const audioController = {
 };
 
 // ==========================================
-// 3. 样式定义 (修复自适应、点击区域)
+// 3. 样式定义 (修改：卡片变短、震动、答对动画)
 // ==========================================
 const cssStyles = `
   html, body {
@@ -125,7 +126,8 @@ const cssStyles = `
     flex-direction: column; 
     align-items: center;
     position: relative; 
-    padding: 10px 16px;
+    /* 修改：增加左右 padding，让卡片看起来更短，不贴边 */
+    padding: 10px 32px; 
     box-sizing: border-box;
     overflow-y: auto; 
     -webkit-overflow-scrolling: touch;
@@ -144,7 +146,7 @@ const cssStyles = `
     border: 1px solid #f1f5f9;
     cursor: pointer;
     width: 100%;
-    max-width: 500px;
+    max-width: 460px; /* 稍微减小最大宽度 */
     margin: 0 auto 10px auto;
     display: flex;
     flex-direction: column;
@@ -174,60 +176,68 @@ const cssStyles = `
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     width: 100%;
-    max-width: 500px;
+    max-width: 460px; /* 限制最大宽度，使卡片不至于太长 */
     padding-bottom: 180px; 
   }
 
   .xzt-option-card {
     position: relative;
     background: #ffffff;
-    border-radius: 14px; /* 稍微减小圆角 */
+    border-radius: 16px;
     border: 2px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.03);
     cursor: pointer;
-    transition: transform 0.1s, background 0.2s, border-color 0.2s;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
     user-select: none;
     display: flex; 
     align-items: center; 
     width: 100%; 
     box-sizing: border-box;
-    /* 关键：取消固定高度，使用 auto + padding 实现自适应 */
-    min-height: auto; 
+    min-height: auto; /* 自适应高度 */
   }
   
-  .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
+  .xzt-option-card:active { transform: scale(0.97); background: #f8fafc; }
   .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); }
-  .xzt-option-card.correct { border-color: #22c55e; background: #f0fdf4; }
+  
+  /* 答对动画 */
+  .xzt-option-card.correct { 
+    border-color: #22c55e; 
+    background: #f0fdf4; 
+    animation: success-pop 0.5s ease-out forwards;
+  }
+  
   .xzt-option-card.incorrect { border-color: #ef4444; background: #fef2f2; animation: shake 0.4s; }
 
-  /* 调整内边距，使其紧凑 */
-  .layout-text-only { padding: 12px 16px; } 
-  .layout-with-image { padding: 10px; }
+  @keyframes success-pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.05); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+    100% { transform: scale(1); }
+  }
 
-  /* 图片包装器 */
+  .layout-text-only { padding: 14px 20px; } 
+  .layout-with-image { padding: 12px; }
+
   .opt-img-wrapper { 
-    width: 50px; height: 50px; /* 稍微缩小图片 */
-    border-radius: 8px; 
+    width: 48px; height: 48px; 
+    border-radius: 10px; 
     overflow: hidden; 
     background: #f1f5f9; 
-    margin-right: 12px; 
+    margin-right: 14px; 
     flex-shrink: 0; 
-    pointer-events: none; /* 关键：让点击穿透图片，直接触发卡片点击 */
+    pointer-events: none; 
   }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* 文本区域 */
   .opt-text-box { 
     flex: 1; 
     display: flex; 
     flex-direction: column; 
     justify-content: center;
     min-width: 0; 
-    /* 允许长文本换行 */
     word-break: break-word; 
-    pointer-events: none; /* 关键：让点击穿透文字，直接触发卡片点击 */
+    pointer-events: none; 
   }
   
   .layout-text-only .opt-text-box { align-items: center; text-align: center; } 
@@ -247,7 +257,7 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     z-index: 100;
-    padding: 0 20px;
+    padding: 0 32px; /* 保持与容器一致的内边距 */
     pointer-events: none; 
   }
 
@@ -264,7 +274,7 @@ const cssStyles = `
     line-height: 1.4;
     text-align: left;
     width: 100%;
-    max-width: 500px;
+    max-width: 460px;
     box-shadow: 0 4px 15px rgba(239, 68, 68, 0.15);
     display: flex;
     gap: 10px;
@@ -275,7 +285,7 @@ const cssStyles = `
   .submit-btn {
     pointer-events: auto;
     width: 100%;
-    max-width: 500px;
+    max-width: 460px;
     padding: 14px 0;
     border-radius: 999px;
     font-size: 1.1rem;
@@ -303,22 +313,25 @@ const cssStyles = `
 `;
 
 // ==========================================
-// 4. 拼音处理 (严格过滤，修复符号问题)
+// 4. 拼音处理 (严格过滤符号)
 // ==========================================
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
 
 const generatePinyinData = (text) => {
   if (!text) return [];
   try {
+    // 强制去掉符号的拼音生成逻辑
     const pinyins = pinyin(text, { type: 'array', toneType: 'symbol' }) || [];
     const chars = text.split('');
     let pyIndex = 0;
     return chars.map((char) => {
+      // 只有汉字才分配拼音，标点符号强制为空字符串
       if (isChineseChar(char)) {
         let py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } 
+      // 标点符号、数字、字母等不生成拼音
       return { char, pinyin: '' };
     });
   } catch (e) {
@@ -395,10 +408,7 @@ const XuanZeTi = ({
       };
     });
 
-    // 修复：直接使用 processed，不再乱序（Shuffle）
-    // 这样位置就永远固定了，除非传入的 options 本身变了
     setDisplayOptions(processed);
-
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
@@ -412,11 +422,17 @@ const XuanZeTi = ({
       }
     }, 300);
 
-  }, [question?.id]); // 依然依赖 ID，保证切换题目时更新
+  }, [question?.id]); 
 
-  // 点击选项
+  // 点击选项 (带震动)
   const handleSelect = (option) => {
     if (isSubmitted) return;
+    
+    // 增加选中震动反馈
+    if (navigator.vibrate) {
+        try { navigator.vibrate(30); } catch(e){}
+    }
+
     setSelectedId(option.id);
     if (option.text) audioController.play(option.text, 0.85);
   };
@@ -458,7 +474,6 @@ const XuanZeTi = ({
       setTimeout(() => {
         if(isMounted.current) {
             setIsSubmitted(false);
-            // 选项位置不会变，状态重置
         }
       }, 2500);
     }
@@ -525,7 +540,6 @@ const XuanZeTi = ({
                 key={option.id} 
                 className={`xzt-option-card ${layoutClass} ${statusClass}`}
                 onClick={(e) => {
-                    // 修复：停止冒泡，确保点击整个卡片生效
                     e.stopPropagation(); 
                     if(showExplanation) setShowExplanation(false);
                     handleSelect(option);
