@@ -301,7 +301,7 @@
       "prompt": "【疑问】“什么”是什么意思？",
       "choices": [
         { "id": "A", "text": "What (ဘာ)" },
-        { "id":- "B", "text": "How (ဘယ်လို)" },
+        { "id": "B", "text": "How (ဘယ်လို)" },
         { "id": "C", "text": "Why (ဘာဖြစ်လို့)" }
       ],
       "correctId": "A",
