@@ -64,7 +64,11 @@ const audioController = {
 
   async play(text, rate = 1.0) {
     if (!text) return;
-    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
+
+    // ✅ 修改重点：在正则中添加了 \u1000-\u109F (缅语 Unicode 范围)
+    // 含义：保留 中文、英文、数字、空格、缅语；其他符号(如标点)会被替换为空
+    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s\u1000-\u109F]/g, ''); 
+    
     if (!textToRead.trim()) return; 
 
     const myRequestId = ++this.latestRequestId;
@@ -83,7 +87,8 @@ const audioController = {
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
-        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
+        // ✅ 修改重点：强制使用 zh-CN-XiaoxiaoMultilingualNeural 以支持多语言混合
+        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         const blob = await res.blob();
         if (myRequestId !== this.latestRequestId) return;
@@ -117,7 +122,6 @@ const cssStyles = `
     overflow-y: auto; 
   }
   
-  /* ✅ 减少了空隙高度 */
   .spacer { flex: 1; min-height: 5px; max-height: 30px; }
 
   /* --- 题目卡片 --- */
@@ -132,7 +136,7 @@ const cssStyles = `
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     width: 100%;
     max-width: 480px;
-    margin: 0 auto 10px auto; /* ✅ 减少底部间距 */
+    margin: 0 auto 10px auto;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -144,17 +148,13 @@ const cssStyles = `
   .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
-  /* 
-     ✅ 关键修复：align-items: flex-end 
-     让没有拼音的符号（如【）底部对齐汉字，防止错位
-  */
   .pinyin-box { 
     display: flex; 
     flex-wrap: wrap; 
     justify-content: center; 
     gap: 4px; 
     row-gap: 8px;
-    align-items: flex-end; /* 底部对齐 */
+    align-items: flex-end;
   }
   .char-block { display: flex; flex-direction: column; align-items: center; }
   
@@ -165,10 +165,10 @@ const cssStyles = `
   .xzt-options-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 12px; /* 间距稍微调小 */
+    gap: 12px;
     width: 100%;
     max-width: 480px;
-    padding-bottom: 140px; /* 留出底部空间给按钮和解析 */
+    padding-bottom: 140px;
   }
 
   .xzt-option-card {
@@ -338,30 +338,22 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       if (onCorrect) setTimeout(onCorrect, 1500);
     } else {
-      // 答错逻辑
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
       
-      // ✅ 朗读解析逻辑
       if (explanation) {
         setShowExplanation(true);
-        // 延迟800ms（等错误音效播完）再读解析
         setTimeout(() => {
           audioController.play(explanation, 0.9);
         }, 800);
       }
 
-      // 允许重选 (如果没有解析，1.5秒后重置；如果有解析，让用户自己看，点击选项重选)
       setTimeout(() => {
         if (!explanation) {
             setIsSubmitted(false);
             setSelectedId(null);
         } else {
-            // 有解析时，保持Submitted状态让用户看，但点击选项会重置
-            // 这里我们设置一个标记，或者直接在 handleSelect 里重置
-            // 为了简单，我们这里不强制重置，而是让用户点其他选项时重置
-            setIsSubmitted(false); // 解锁交互
-            // 此时已显示解析，用户可以再次点击提交
+            setIsSubmitted(false);
         }
       }, 2000);
     }
@@ -422,7 +414,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 key={option.id} 
                 className={`xzt-option-card ${layoutClass} ${statusClass}`}
                 onClick={() => {
-                    // 如果之前显示了解析，点击选项时隐藏解析
                     if(showExplanation) setShowExplanation(false);
                     handleSelect(option);
                 }}
@@ -454,7 +445,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="fixed-bottom-area">
-          {/* ✅ 解析卡片 (只有答错且有解析时显示) */}
           {showExplanation && explanation && (
             <div className="explanation-card">
                <FaLightbulb className="flex-shrink-0 mt-1" />
@@ -465,7 +455,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <button 
             className="submit-btn" 
             onClick={handleSubmit}
-            disabled={!selectedId || (isSubmitted && !showExplanation)} // 允许在看解析后重新提交
+            disabled={!selectedId || (isSubmitted && !showExplanation)} 
           >
             {isSubmitted 
               ? (correctAnswer.map(String).includes(String(selectedId)) ? "正确" : "再试一次") 
