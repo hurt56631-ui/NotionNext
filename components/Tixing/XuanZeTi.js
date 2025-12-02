@@ -3,163 +3,257 @@ import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaVolumeUp } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- 全局音频缓存池 (避免重复下载) ---
-const audioCache = new Map();
+// --- 1. IndexedDB 简易封装 (缓存 TTS) ---
+const DB_NAME = 'LessonCacheDB';
+const STORE_NAME = 'tts_audio';
+const DB_VERSION = 1;
+
+const idb = {
+  db: null,
+  async init() {
+    if (this.db) return;
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+      };
+      request.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve();
+      };
+      request.onerror = (e) => reject(e);
+    });
+  },
+  async get(key) {
+    await this.init();
+    return new Promise((resolve) => {
+      const tx = this.db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    });
+  },
+  async set(key, blob) {
+    await this.init();
+    return new Promise((resolve) => {
+      const tx = this.db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put(blob, key);
+      tx.oncomplete = () => resolve();
+    });
+  }
+};
+
+// --- 2. 音频控制器 (修复重叠问题的核心) ---
+const audioController = {
+  currentAudio: null,
+  latestRequestId: 0, // 核心：请求计数器
+
+  stop() {
+    // 停止当前正在播放的
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio.currentTime = 0;
+      this.currentAudio = null;
+    }
+    // 增加计数器，这会让所有正在下载中的旧请求失效
+    this.latestRequestId++; 
+  },
+
+  async play(text, rate = 1.0) {
+    if (!text) return;
+
+    // 1. 生成本次播放的唯一 ID
+    const myRequestId = ++this.latestRequestId;
+
+    // 2. 立即停止上一首
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
+    }
+
+    const cacheKey = `tts-${text}-${rate}`;
+    let audioUrl;
+
+    try {
+      // 尝试取缓存
+      const cachedBlob = await idb.get(cacheKey);
+      
+      // --- 关键检查点 1 ---
+      // 如果在读取缓存期间用户又点了别的，ID 变了，直接退出
+      if (myRequestId !== this.latestRequestId) return;
+
+      if (cachedBlob) {
+        audioUrl = URL.createObjectURL(cachedBlob);
+      } else {
+        // 网络请求
+        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=${rate > 1 ? 20 : 0}`;
+        const res = await fetch(apiUrl);
+        const blob = await res.blob();
+        
+        // --- 关键检查点 2 ---
+        // 下载很慢，如果下载完发现用户切题了，直接退出，不要播放！
+        if (myRequestId !== this.latestRequestId) return;
+
+        await idb.set(cacheKey, blob);
+        audioUrl = URL.createObjectURL(blob);
+      }
+
+      // 3. 播放
+      const audio = new Audio(audioUrl);
+      audio.playbackRate = rate;
+      this.currentAudio = audio;
+      
+      await audio.play().catch(e => { /* 忽略自动播放限制错误 */ });
+      
+      audio.onended = () => {
+        if (this.currentAudio === audio) {
+          this.currentAudio = null;
+        }
+        if (audioUrl) URL.revokeObjectURL(audioUrl); 
+      };
+
+    } catch (e) {
+      console.error("Audio error:", e);
+    }
+  }
+};
 
 // --- 样式定义 ---
 const cssStyles = `
-  /* 容器布局：保证内容居中且有呼吸感 */
+  /* 容器 */
   .xzt-container { 
     width: 100%; 
     height: 100%; 
     display: flex; 
     flex-direction: column; 
-    justify-content: center; /* 垂直居中 */
     align-items: center;
     position: relative; 
-    padding: 0 10px;
+    padding: 0 16px;
+    overflow-y: auto; 
   }
+  
+  .spacer { flex: 1; min-height: 20px; }
 
   /* --- 题目卡片 --- */
   .xzt-question-card {
     background: #ffffff;
     border-radius: 28px;
-    padding: 24px 20px;
+    padding: 24px;
     text-align: center;
-    /* 更加柔和且有层次的阴影 */
-    box-shadow: 0 10px 40px -10px rgba(147, 197, 253, 0.3), 
-                0 0 0 1px rgba(241, 245, 249, 1);
+    box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.15), 
+                0 0 0 1px rgba(243, 244, 246, 1);
     cursor: pointer;
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     width: 100%;
-    max-width: 480px; /* 限制最大宽度，防止太宽 */
-    margin-bottom: 30px; /* 与选项拉开距离 */
-    display: flex;
-    flex-direction: column; /* 图片在上，文字在下 */
-    align-items: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .xzt-question-card:active { transform: scale(0.98); }
-
-  /* 题目图片样式 */
-  .question-img {
-    width: 100%;
-    max-height: 200px;
-    object-fit: contain; /* 保持比例 */
-    border-radius: 16px;
-    margin-bottom: 16px;
-    background-color: #f8fafc;
-  }
-
-  /* 喇叭图标 */
-  .icon-pulse { animation: pulse 1.5s infinite; color: #6366f1; }
-  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
-
-  /* 拼音盒子 */
-  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; row-gap: 10px; }
-  .char-block {
+    max-width: 480px;
+    margin: 0 auto 30px auto;
     display: flex;
     flex-direction: column;
     align-items: center;
+    position: relative;
   }
-  .py-text { font-size: 0.9rem; color: #94a3b8; font-weight: 500; margin-bottom: -2px; font-family: 'Courier New', monospace; min-height: 1.2em; }
-  .cn-text { font-size: 2.0rem; font-weight: 800; color: #1e293b; line-height: 1.2; font-family: sans-serif; }
+  .xzt-question-card:active { transform: scale(0.98); }
+
+  /* 题目图片 */
+  .question-img {
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    background-color: #f9fafb;
+  }
+
+  /* 喇叭图标 */
+  .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
+  @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
+
+  /* 题目文字 */
+  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; row-gap: 12px; }
+  .char-block { display: flex; flex-direction: column; align-items: center; }
+  .py-text { font-size: 0.9rem; color: #94a3b8; font-family: monospace; margin-bottom: -2px; }
+  .cn-text { font-size: 2.0rem; font-weight: 800; color: #1e293b; line-height: 1.2; }
 
   /* --- 选项区域 --- */
   .xzt-options-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 16px;
     width: 100%;
     max-width: 480px;
-    padding-bottom: 120px; /* 底部留白给按钮 */
+    padding-bottom: 120px; 
   }
 
-  /* 选项卡片基础样式 (浅色系 + 阴影) */
+  /* 选项卡片 */
   .xzt-option-card {
     position: relative;
-    background: linear-gradient(145deg, #ffffff, #f8fafc);
+    background: #ffffff;
     border-radius: 20px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 
-                0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    border: 2px solid #f1f5f9;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.04);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     overflow: hidden;
   }
   
-  /* 选中/正确/错误 状态 */
-  .xzt-option-card:active { transform: scale(0.97); background: #f1f5f9; }
-  .xzt-option-card.selected { 
-    border-color: #818cf8; 
-    background: #eef2ff; /* 浅紫色背景 */
-    box-shadow: 0 0 0 2px #c7d2fe;
-  }
-  .xzt-option-card.correct { 
-    border-color: #4ade80; 
-    background: #f0fdf4; /* 浅绿色背景 */
-    box-shadow: 0 0 0 2px #bbf7d0;
-  }
-  .xzt-option-card.incorrect { 
-    border-color: #f87171; 
-    background: #fef2f2; /* 浅红色背景 */
-    animation: shake 0.4s; 
-  }
+  .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
+  .xzt-option-card.selected { border-color: #a78bfa; background: #f5f3ff; }
+  .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; }
+  .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
 
-  /* 布局A：无图片 (文字居中，卡片紧凑) */
+  /* 布局A：纯文字 */
   .layout-text-only {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 12px 16px;
-    min-height: 70px;
+    min-height: 64px;
   }
 
-  /* 布局B：有图片 (左图右文，卡片变大) */
+  /* 布局B：有图片 (居中) */
   .layout-with-image {
     display: flex;
-    flex-direction: row;
+    flex-direction: row; 
     align-items: center;
-    justify-content: flex-start;
-    padding: 12px;
-    min-height: 90px; /* 更高一点 */
+    justify-content: center;
+    padding: 16px;
+    min-height: 90px;
   }
 
-  /* 选项内图片 */
   .opt-img-wrapper {
     width: 70px;
     height: 70px;
-    flex-shrink: 0;
-    margin-right: 16px;
     border-radius: 12px;
     overflow: hidden;
-    background-color: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    background: #f3f4f6;
+    margin-right: 16px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* 选项文字容器 */
   .opt-text-box {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    flex: 1;
   }
-  /* 文字居中模式 */
-  .layout-text-only .opt-text-box { align-items: center; }
-  /* 文字靠左模式 */
-  .layout-with-image .opt-text-box { align-items: flex-start; }
+  .layout-text-only .opt-text-box { align-items: center; } 
+  .layout-with-image .opt-text-box { align-items: flex-start; text-align: left; }
 
-  .opt-pinyin { font-size: 0.85rem; color: #94a3b8; margin-bottom: 2px; font-family: monospace; }
+  .opt-pinyin { font-size: 0.8rem; color: #94a3b8; font-family: monospace; }
   .opt-cn { font-size: 1.25rem; font-weight: 700; color: #334155; line-height: 1.2; }
   .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
 
   /* 提交按钮 */
   .submit-btn-wrapper {
     position: fixed;
-    bottom: 100px;
+    bottom: 90px;
     left: 0;
     right: 0;
     display: flex;
@@ -169,20 +263,20 @@ const cssStyles = `
   }
   .submit-btn {
     pointer-events: auto;
-    min-width: 160px;
-    padding: 14px 32px;
-    border-radius: 50px;
+    min-width: 150px;
+    padding: 14px 30px;
+    border-radius: 100px;
     font-size: 1.1rem;
     font-weight: 800;
     color: white;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); /* 渐变紫蓝 */
-    box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4);
     border: none;
     transition: all 0.2s;
   }
   .submit-btn:disabled { 
-    background: #cbd5e1; 
-    color: #fff;
+    background: #e5e7eb; 
+    color: #9ca3af;
     box-shadow: none; 
     transform: translateY(20px); 
     opacity: 0;
@@ -192,43 +286,7 @@ const cssStyles = `
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 `;
 
-// --- 核心工具函数 ---
-
-// 1. 带缓存的 TTS 播放器 (支持语速)
-const playTTS = async (text, rate = 0.8) => {
-  if (!text) return;
-  
-  // 生成缓存键值 (文本+语速)
-  const cacheKey = `${text}-${rate}`;
-
-  try {
-    let audioUrl;
-    
-    // 检查缓存
-    if (audioCache.has(cacheKey)) {
-      audioUrl = audioCache.get(cacheKey);
-    } else {
-      // 没缓存，去下载
-      const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=${rate}`; // r参数控制语速? 假设API支持，或者需要前端控制
-      // 注意：微软TTS API 通常是在 ssml 里控制 rate，这里简单的 URL 参数可能不生效，
-      // 如果后端不支持 r 参数，我们可以在 audio 标签上控制 playbackRate。
-      
-      const response = await fetch(apiUrl);
-      const blob = await response.blob();
-      audioUrl = URL.createObjectURL(blob);
-      audioCache.set(cacheKey, audioUrl);
-    }
-
-    const audio = new Audio(audioUrl);
-    // 前端强制控制语速 (最稳妥的方式)
-    audio.playbackRate = rate; 
-    await audio.play();
-  } catch (e) {
-    console.error("TTS Playback failed", e);
-  }
-};
-
-// 2. 拼音生成器
+// 工具函数
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
 const generatePinyinData = (text) => {
   if (!text) return [];
@@ -254,46 +312,63 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [questionPinyin, setQuestionPinyin] = useState([]);
-  const [processedOptions, setProcessedOptions] = useState([]);
+  const [shuffledOptions, setShuffledOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // 初始化数据
+  // 初始化
   useEffect(() => {
-    // 1. 题目拼音
+    // 1. 停止上一个音频 (防止快速切题时声音残留)
+    audioController.stop();
+
+    // 2. 处理题目拼音
     setQuestionPinyin(generatePinyinData(question.text));
 
-    // 2. 选项预处理 (生成拼音 + 标记是否有中文 + 标记是否有图)
-    const newOptions = options.map(opt => {
+    // 3. 处理选项
+    const processed = options.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text);
       return {
         ...opt,
         pinyinData: hasChinese ? generatePinyinData(opt.text) : [],
         isChinese: hasChinese,
-        hasImage: !!opt.imageUrl // 标记是否有图
+        hasImage: !!opt.imageUrl
       };
     });
-    setProcessedOptions(newOptions);
 
-    // 缓存题目音频
-    if (question.text) playTTS(question.text, 0.8).then(() => {}).catch(() => {}); // 预加载但不播放，或者不await
+    // 4. 随机排序
+    const shuffled = [...processed];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setShuffledOptions(shuffled);
 
-    // 重置
+    // 5. 自动播放题目音频 (语速 0.9)
+    if (question.text) {
+      setIsPlaying(true);
+      audioController.play(question.text, 0.9).then(() => {
+        setIsPlaying(false);
+      });
+    }
+
     setSelectedId(null);
     setIsSubmitted(false);
+
+    // 卸载时清理
+    return () => audioController.stop();
   }, [question, options]);
 
-  // 选中逻辑
+  // 选中
   const handleSelect = (option) => {
     if (isSubmitted) return;
-    
     setSelectedId(option.id);
-    // 选中时朗读选项文字，语速 0.8
+    
+    // 播放选项音 (语速 0.8)
     if (option.text) {
-      playTTS(option.text, 0.8);
+      audioController.play(option.text, 0.8);
     }
   };
 
-  // 提交逻辑
+  // 提交
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
     setIsSubmitted(true);
@@ -301,13 +376,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // 答对特效
-      confetti({ 
-        particleCount: 150, 
-        spread: 80, 
-        origin: { y: 0.7 },
-        colors: ['#a786ff', '#fd8bbc', '#eca184', '#f8deb1'] // 彩带颜色
-      });
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.7 }, colors: ['#a78bfa', '#f472b6', '#fbbf24'] });
+      // 这里的音效通常很短，可以用 new Audio 直接播，或者集成进 audioController
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       
       if (onCorrect) setTimeout(onCorrect, 1500);
@@ -325,8 +395,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
   const handleReadQuestion = (e) => {
     e.stopPropagation();
     setIsPlaying(true);
-    playTTS(question.text, 0.9); // 题目语速稍快一点点
-    setTimeout(() => setIsPlaying(false), 2000);
+    audioController.play(question.text, 0.9).then(() => setIsPlaying(false));
   };
 
   return (
@@ -334,16 +403,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* --- 题目卡片 (上图下文) --- */}
+        <div className="spacer" />
+
         <div className="xzt-question-card" onClick={handleReadQuestion}>
-          
-          {/* 题目图片 (如果有) */}
           {question.imageUrl && (
-            <img src={question.imageUrl} alt="Question" className="question-img" />
+            <img src={question.imageUrl} alt="Q" className="question-img" />
           )}
 
-          {/* 喇叭状态 */}
-          <div className="absolute top-3 right-3 text-slate-300">
+          <div className="absolute top-4 right-4 text-slate-400">
             <FaVolumeUp className={isPlaying ? 'icon-pulse' : ''} />
           </div>
 
@@ -357,9 +424,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
           </div>
         </div>
 
-        {/* --- 选项区域 --- */}
+        <div className="spacer" />
+
         <div className="xzt-options-grid">
-          {processedOptions.map(option => {
+          {shuffledOptions.map(option => {
             let statusClass = '';
             const optId = String(option.id);
             const selId = String(selectedId);
@@ -372,7 +440,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
               if (optId === selId) statusClass = 'selected';
             }
 
-            // 根据是否有图片决定布局类名
             const layoutClass = option.hasImage ? 'layout-with-image' : 'layout-text-only';
 
             return (
@@ -381,18 +448,15 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
                 className={`xzt-option-card ${layoutClass} ${statusClass}`}
                 onClick={() => handleSelect(option)}
               >
-                {/* 1. 左侧图片 (如果有) */}
                 {option.hasImage && (
                   <div className="opt-img-wrapper">
                     <img src={option.imageUrl} alt="opt" className="opt-img" />
                   </div>
                 )}
 
-                {/* 2. 右侧/中间 文字区域 */}
                 <div className="opt-text-box">
                   {option.isChinese ? (
                     <>
-                      {/* 自动生成拼音 */}
                       <div className="opt-pinyin">
                         {option.pinyinData.map(d => d.pinyin).join(' ')}
                       </div>
@@ -403,7 +467,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
                   )}
                 </div>
                 
-                {/* 状态图标 (绝对定位在右侧) */}
                 {isSubmitted && corrIds.includes(optId) && <FaCheckCircle className="text-green-500 absolute right-3 text-xl"/>}
                 {isSubmitted && optId === selId && !corrIds.includes(optId) && <FaTimesCircle className="text-red-500 absolute right-3 text-xl"/>}
               </div>
@@ -411,7 +474,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
           })}
         </div>
 
-        {/* --- 提交按钮 --- */}
         <div className="submit-btn-wrapper">
           <button 
             className="submit-btn" 
