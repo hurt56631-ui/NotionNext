@@ -51,7 +51,7 @@ const idb = {
 };
 
 // ==========================================
-// 2. 音频控制器 (强制打断 + 过滤符号)
+// 2. 音频控制器 (修改：增加预缓存功能)
 // ==========================================
 const audioController = {
   currentAudio: null,
@@ -68,10 +68,31 @@ const audioController = {
     }
   },
 
+  // 新增：预缓存音频函数
+  async precache(text, rate = 1.0) {
+    if (!text) return;
+    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '');
+    if (!textToRead.trim()) return;
+
+    const cacheKey = `tts-${textToRead}-${rate}`;
+    try {
+      const cached = await idb.get(cacheKey);
+      if (cached) return; // 如果已缓存，则跳过
+
+      const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
+      const res = await fetch(apiUrl);
+      if (!res.ok) throw new Error("TTS Precache Error");
+      const blob = await res.blob();
+      await idb.set(cacheKey, blob);
+    } catch (e) {
+      // 预缓存失败是正常的，不提示用户
+      // console.error(`Failed to precache audio for: "${textToRead}"`, e);
+    }
+  },
+
   async play(text, rate = 1.0) {
     this.stop(); 
     if (!text) return;
-    // 朗读时过滤掉特殊符号，只保留汉字数字字母
     const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
     if (!textToRead.trim()) return; 
 
@@ -108,7 +129,7 @@ const audioController = {
 };
 
 // ==========================================
-// 3. 样式定义 (修改：卡片变短、震动、答对动画)
+// 3. 样式定义 (修改：修复确认按钮点击区域)
 // ==========================================
 const cssStyles = `
   html, body {
@@ -126,7 +147,6 @@ const cssStyles = `
     flex-direction: column; 
     align-items: center;
     position: relative; 
-    /* 修改：增加左右 padding，让卡片看起来更短，不贴边 */
     padding: 10px 32px; 
     box-sizing: border-box;
     overflow-y: auto; 
@@ -146,7 +166,7 @@ const cssStyles = `
     border: 1px solid #f1f5f9;
     cursor: pointer;
     width: 100%;
-    max-width: 460px; /* 稍微减小最大宽度 */
+    max-width: 460px;
     margin: 0 auto 10px auto;
     display: flex;
     flex-direction: column;
@@ -178,7 +198,7 @@ const cssStyles = `
     flex-direction: column;
     gap: 12px;
     width: 100%;
-    max-width: 460px; /* 限制最大宽度，使卡片不至于太长 */
+    max-width: 460px;
     padding-bottom: 180px; 
   }
 
@@ -195,19 +215,16 @@ const cssStyles = `
     align-items: center; 
     width: 100%; 
     box-sizing: border-box;
-    min-height: auto; /* 自适应高度 */
+    min-height: auto;
   }
   
   .xzt-option-card:active { transform: scale(0.97); background: #f8fafc; }
   .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); }
-  
-  /* 答对动画 */
   .xzt-option-card.correct { 
     border-color: #22c55e; 
     background: #f0fdf4; 
     animation: success-pop 0.5s ease-out forwards;
   }
-  
   .xzt-option-card.incorrect { border-color: #ef4444; background: #fef2f2; animation: shake 0.4s; }
 
   @keyframes success-pop {
@@ -247,17 +264,17 @@ const cssStyles = `
   .opt-cn { font-size: 1.1rem; font-weight: 700; color: #334155; line-height: 1.3; }
   .opt-en { font-size: 1.05rem; font-weight: 600; color: #475569; }
 
-  /* 底部固定区域 */
+  /* 底部固定区域 (修改：修复点击区域) */
   .fixed-bottom-area {
     position: fixed;
     bottom: 100px;
-    left: 0;
-    right: 0;
+    /* 修改：使用 left/right 代替 padding，确保整个区域可交互 */
+    left: 32px;
+    right: 32px;
     display: flex;
     flex-direction: column;
     align-items: center;
     z-index: 100;
-    padding: 0 32px; /* 保持与容器一致的内边距 */
     pointer-events: none; 
   }
 
@@ -320,18 +337,15 @@ const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
 const generatePinyinData = (text) => {
   if (!text) return [];
   try {
-    // 强制去掉符号的拼音生成逻辑
     const pinyins = pinyin(text, { type: 'array', toneType: 'symbol' }) || [];
     const chars = text.split('');
     let pyIndex = 0;
     return chars.map((char) => {
-      // 只有汉字才分配拼音，标点符号强制为空字符串
       if (isChineseChar(char)) {
         let py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } 
-      // 标点符号、数字、字母等不生成拼音
       return { char, pinyin: '' };
     });
   } catch (e) {
@@ -354,14 +368,17 @@ const getCorrectIds = (question, correctAnswerProp) => {
 };
 
 // ==========================================
-// 6. 主组件
+// 6. 主组件 (修改：增加预缓存逻辑)
 // ==========================================
 const XuanZeTi = ({ 
   question,         
   options, 
   correctAnswer, 
   onNext,           
-  explanation 
+  explanation,
+  // 新增 props 用于预缓存
+  allQuestions = [],
+  currentIndex = 0,
 }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -397,7 +414,6 @@ const XuanZeTi = ({
 
     const sourceOptions = question.options || options || [];
     
-    // 生成选项数据
     const processed = sourceOptions.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text || "");
       return {
@@ -424,11 +440,57 @@ const XuanZeTi = ({
 
   }, [question?.id]); 
 
+  // 3. 新增：音频预缓存的 Effect
+  useEffect(() => {
+    if (!allQuestions || allQuestions.length === 0 || currentIndex >= allQuestions.length - 1) {
+        return;
+    }
+
+    // 定义一个延迟执行的预缓存函数，避免阻塞当前题目渲染
+    const precacheTask = setTimeout(() => {
+        const textsToCache = new Set();
+        // 缓存后5个题目
+        const nextQuestions = allQuestions.slice(currentIndex + 1, currentIndex + 1 + 6); 
+
+        nextQuestions.forEach(q => {
+            const content = q.content || q;
+            const promptText = content.prompt || content.text || '';
+            const explanationText = content.explanation || '';
+            const choices = content.choices || content.options || [];
+
+            if (promptText) {
+                textsToCache.add(promptText.replace(/【.*?】/g, ''));
+            }
+            if (explanationText) {
+                textsToCache.add(explanationText);
+            }
+            choices.forEach(choice => {
+                if (choice.text) {
+                    const match = choice.text.match(/[\u4e00-\u9fa5]+/);
+                    if (match) textsToCache.add(match[0]);
+                }
+            });
+        });
+
+        // 并行发起所有预缓存请求
+        textsToCache.forEach(text => {
+            if (text) {
+                // 使用不同的速率进行缓存，以备不同场景使用
+                audioController.precache(text, 0.9);  // 题目/解析速率
+                audioController.precache(text, 0.85); // 选项速率
+            }
+        });
+    }, 500); // 延迟 500ms 执行，不影响当前交互
+
+    return () => clearTimeout(precacheTask);
+
+  }, [currentIndex, allQuestions]);
+
+
   // 点击选项 (带震动)
   const handleSelect = (option) => {
     if (isSubmitted) return;
     
-    // 增加选中震动反馈
     if (navigator.vibrate) {
         try { navigator.vibrate(30); } catch(e){}
     }
@@ -495,7 +557,6 @@ const XuanZeTi = ({
       <div className="xzt-container">
         <div className="spacer" />
 
-        {/* 题目卡片 */}
         <div className="xzt-question-card" onClick={handleReadQuestion}>
           <div style={{position:'absolute', top:16, right:16, color: isPlaying ? '#8b5cf6' : '#cbd5e1', transition:'color 0.3s'}}>
             <FaVolumeUp className={isPlaying ? 'icon-pulse' : ''} size={20} />
@@ -517,7 +578,6 @@ const XuanZeTi = ({
 
         <div className="spacer" />
 
-        {/* 选项列表 */}
         <div className="xzt-options-grid">
           {displayOptions.map(option => {
             let statusClass = '';
@@ -573,7 +633,6 @@ const XuanZeTi = ({
           })}
         </div>
 
-        {/* 底部固定区域 */}
         <div className="fixed-bottom-area">
           {showExplanation && (
             <div className="explanation-card">
