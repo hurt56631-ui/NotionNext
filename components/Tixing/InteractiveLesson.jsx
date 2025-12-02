@@ -13,6 +13,11 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
+// --- 新引入的学习卡片组件 ---
+// ⚠️ 请确保这些文件路径正确，如果不在上一级目录，请修改路径
+import WordCard from '../WordCard';
+import PhraseCard from '../PhraseCard';
+
 // ---------------- Audio Manager ----------------
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 const audioManager = (() => {
@@ -34,89 +39,52 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- 👇 完整恢复的子组件 👇 ----------------
+// ---------------- 子组件适配器 ----------------
 
-// 1. 教学演示块 (TeachingBlock)
-const TeachingBlock = ({ data, onComplete, settings }) => {
-  useEffect(() => {
-    if (data?.narrationScript && settings?.playTTS) {
-      const timer = setTimeout(() => {
-        settings.playTTS(data.narrationScript, data.narrationLang || 'my');
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, [data, settings]);
-
-  const handleManualPlay = (e) => {
-    e.stopPropagation();
-    settings?.playTTS(data.displayText || data.narrationScript || '', 'zh');
-  };
-
+// 适配器：将 interactive lesson 的数据格式转换为 WordCard 需要的格式
+const WordCardAdapter = ({ data, onComplete }) => {
+  // 假设 data.words 是数组，我们渲染列表
   return (
-    <div className="w-full flex flex-col items-center animate-fade-in-up pb-20">
-      {data.pinyin && <p className="text-lg text-slate-500 font-medium mb-4 font-mono">{data.pinyin}</p>}
-      
-      <div className="relative bg-white w-full rounded-[2rem] p-10 shadow-xl shadow-blue-100/50 border border-slate-100 flex flex-col items-center justify-center min-h-[220px] mb-8">
-        <h1 className="text-5xl md:text-6xl font-black text-slate-800 text-center tracking-tight leading-tight">
-          {data.displayText}
-        </h1>
-        <button 
-          onClick={handleManualPlay} 
-          className="absolute -bottom-7 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/40 active:scale-90 transition-transform"
-        >
-          <HiSpeakerWave className="text-2xl" />
-        </button>
+    <div className="w-full h-full overflow-y-auto pb-20">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">{data.title || "生词学习"}</h2>
       </div>
-
-      {data.translation && (
-        <div className="bg-white/80 backdrop-blur-sm px-6 py-4 rounded-2xl border border-slate-200/60 shadow-sm mt-4">
-          <p className="text-xl text-slate-600 font-medium text-center leading-relaxed">
-            {data.translation}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-10 w-full px-4">
-        <button onClick={onComplete} className="w-full py-4 bg-slate-800 text-white font-bold text-lg rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
-          继续 <FaArrowRight />
-        </button>
+      <div className="grid grid-cols-1 gap-4">
+        {data.words?.map((word, i) => (
+          <WordCard 
+            key={i} 
+            word={word} // 传递单个单词数据
+            onPlay={() => audioManager.playTTS(word.chinese)}
+          />
+        ))}
       </div>
+      <button onClick={onComplete} className="w-full mt-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg active:scale-95">
+        我学会了
+      </button>
     </div>
   );
 };
 
-// 2. 生词学习块 (WordStudyBlock)
-const WordStudyBlock = ({ data, onComplete, settings }) => {
+// 适配器：将数据转换为 PhraseCard 需要的格式
+const PhraseCardAdapter = ({ data, onComplete }) => {
   return (
-    <div className="w-full h-full flex flex-col pb-24">
-      <div className="text-center mb-6 shrink-0">
-        <h2 className="text-2xl font-bold text-slate-800">{data.title || "生词学习"}</h2>
-        <p className="text-slate-400 text-sm mt-1">点击卡片听发音</p>
+    <div className="w-full h-full overflow-y-auto pb-20">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-slate-800">{data.title || "短句学习"}</h2>
       </div>
-
-      {/* 单词列表 - 允许滚动 */}
-      <div className="flex-1 w-full">
-        <div className="grid grid-cols-2 gap-4">
-          {data.words?.map((word, i) => (
-            <button
-              key={word.id || i}
-              onClick={() => settings?.playTTS(word.chinese, 'zh', word.rate || 0)}
-              className="flex flex-col items-center p-5 bg-white rounded-2xl shadow-sm border border-slate-100 active:scale-95 transition-all hover:border-blue-300 hover:shadow-md"
-            >
-              <span className="text-xs text-slate-400 font-medium mb-1 font-mono">{word.pinyin}</span>
-              <span className="text-2xl font-bold text-slate-800 mb-2">{word.chinese}</span>
-              <span className="text-sm text-slate-500 bg-slate-50 px-2 py-1 rounded-md w-full truncate text-center">{word.translation}</span>
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-4">
+        {data.words?.map((phrase, i) => (
+          // 复用 WordCard 结构，或者使用 PhraseCard
+          <PhraseCard 
+            key={i} 
+            phrase={phrase} 
+            onPlay={() => audioManager.playTTS(phrase.chinese)}
+          />
+        ))}
       </div>
-      
-      {/* 底部按钮 */}
-      <div className="mt-8 px-4 w-full">
-        <button onClick={onComplete} className="w-full py-3.5 bg-blue-600 text-white font-bold text-lg rounded-xl shadow-lg shadow-blue-500/30 active:scale-95 transition-all">
-          我学会了
-        </button>
-      </div>
+      <button onClick={onComplete} className="w-full mt-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg active:scale-95">
+        我学会了
+      </button>
     </div>
   );
 };
@@ -126,7 +94,6 @@ const CompletionBlock = ({ data, router }) => {
     audioManager?.playTTS("恭喜完成", 'zh');
     setTimeout(() => router.back(), 2500);
   }, [router]);
-  
   return (
     <div className="flex flex-col items-center justify-center animate-bounce-in">
       <div className="text-8xl mb-6">🎉</div>
@@ -136,7 +103,7 @@ const CompletionBlock = ({ data, router }) => {
 };
 
 const UnknownBlockHandler = ({ type, onSkip }) => (
-  <div onClick={onSkip} className="text-center text-gray-400">
+  <div onClick={onSkip} className="text-center text-gray-400 p-10 border-2 border-dashed rounded-xl">
     未知题型: {type} <br/> 点击跳过
   </div>
 );
@@ -172,7 +139,6 @@ export default function InteractiveLesson({ lesson }) {
     if (!currentBlock) return <div className="text-slate-400">Loading...</div>;
     const type = (currentBlock.type || '').toLowerCase();
     
-    // 传递 props
     const props = { 
       data: currentBlock.content, 
       onCorrect: delayedNextStep, 
@@ -181,7 +147,7 @@ export default function InteractiveLesson({ lesson }) {
       settings: { playTTS: audioManager?.playTTS } 
     };
     
-    // 通用容器：负责居中，但允许内容过长时滚动
+    // 通用容器
     const CommonWrapper = ({ children }) => (
       <div className="w-full h-full flex flex-col items-center justify-center pt-4">
         {children}
@@ -190,12 +156,24 @@ export default function InteractiveLesson({ lesson }) {
 
     try {
       switch (type) {
-        // Teaching 和 WordStudy 不用 CommonWrapper 强制居中，因为它们有自己的布局
-        case 'teaching': return <TeachingBlock {...props} />;
-        case 'word_study': return <WordStudyBlock {...props} />;
-        case 'grammar_study': return <div className="h-full w-full overflow-hidden"><GrammarPointPlayer grammarPoints={props.data.grammarPoints} onComplete={props.onComplete} /></div>;
+        // ✅ 替换为新的组件适配器
+        case 'word_study': return <WordCardAdapter {...props} />;
+        
+        // 如果你的数据里把短句也叫 word_study 但有区别，或者叫 phrase_study
+        case 'phrase_study': return <PhraseCardAdapter {...props} />; 
 
-        // 题型组件使用 CommonWrapper 居中显示
+        // ✅ 语法组件：给它一个撑满的高度，并且去掉 CommonWrapper 的强制居中，让它自己布局
+        case 'grammar_study': 
+          return (
+            <div className="w-full h-full flex flex-col">
+               <GrammarPointPlayer 
+                  grammarPoints={props.data.grammarPoints} 
+                  onComplete={props.onComplete} 
+               />
+            </div>
+          );
+
+        // 题型组件
         case 'choice': return <CommonWrapper><XuanZeTi {...props} question={{text: props.data.prompt, ...props.data}} options={props.data.choices||[]} correctAnswer={props.data.correctId?[props.data.correctId]:[]} /></CommonWrapper>;
         case 'panduan': return <CommonWrapper><PanDuanTi {...props} /></CommonWrapper>;
         case 'lianxian': const pairsMap = props.data.pairs?.reduce((acc,p)=>{acc[p.id]=`${p.id}_b`;return acc},{})||{}; return <CommonWrapper><LianXianTi title={props.data.prompt} columnA={props.data.pairs?.map(p=>({id:p.id,content:p.left}))} columnB={props.data.pairs?.map(p=>({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={pairsMap} onCorrect={props.onCorrect} /></CommonWrapper>;
@@ -205,6 +183,14 @@ export default function InteractiveLesson({ lesson }) {
         case 'dialogue_cinematic': return <DuiHua {...props} />;
         
         case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+        
+        // 忽略 teaching 类型，如果遇到直接显示 Unknown 或者自动跳过
+        case 'teaching': 
+             // 如果想直接跳过教学页：
+             // useEffect(() => { goNext(); }, []); return null;
+             // 如果想显示但简化：
+             return <div onClick={goNext} className="p-8 text-2xl font-bold text-center">{props.data.displayText}</div>;
+
         default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
       }
     } catch (e) { return <UnknownBlockHandler type={`${type} Error`} onSkip={goNext} />; }
@@ -226,22 +212,22 @@ export default function InteractiveLesson({ lesson }) {
         )}
       </div>
 
-      {/* 
-         主内容区 
-         1. overflow-y-auto: 允许生词列表等长内容滚动
-         2. overscroll-contain: 防止滚动传播到 body
-         3. touch-action-pan-y: 允许内部垂直滚动，但外层仍锁死
-      */}
+      {/* 主内容区 */}
       <main 
         className="relative flex-1 w-full max-w-xl mx-auto flex flex-col z-10 px-4 pb-32 overflow-y-auto overscroll-contain"
         style={{ touchAction: 'pan-y' }}
       >
-        <div className="flex-1 flex flex-col justify-center min-h-full">
+        {/* 
+            关键修改：
+            去掉 justify-center，改用 min-h-full 让内容自然排列。
+            这样语法组件（通常很高）就不会被挤压或者不显示。
+        */}
+        <div className="flex-1 flex flex-col min-h-full">
            {currentIndex >= totalBlocks ? <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} /> : renderBlock()}
         </div>
       </main>
 
-      {/* 底部导航 (只保留翻页) */}
+      {/* 底部导航 */}
       <div className="absolute bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-8 py-4 z-30 flex justify-between items-center pointer-events-none">
           <button onClick={goPrev} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/50 shadow-sm text-slate-400 flex items-center justify-center border border-slate-100/50 ${currentIndex === 0 ? 'opacity-0' : 'opacity-100'}`}><FaChevronLeft /></button>
           
@@ -255,4 +241,4 @@ export default function InteractiveLesson({ lesson }) {
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
-}
+                                            }
