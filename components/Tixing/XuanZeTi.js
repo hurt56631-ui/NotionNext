@@ -48,67 +48,62 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (修复重叠问题的核心) ---
+// --- 2. 音频控制器 (单例模式 + 标点过滤) ---
 const audioController = {
   currentAudio: null,
-  latestRequestId: 0, // 核心：请求计数器
+  latestRequestId: 0,
 
   stop() {
-    // 停止当前正在播放的
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
-    // 增加计数器，这会让所有正在下载中的旧请求失效
     this.latestRequestId++; 
   },
 
   async play(text, rate = 1.0) {
     if (!text) return;
 
-    // 1. 生成本次播放的唯一 ID
+    // ✅ 核心修改：过滤标点符号，只朗读汉字、字母和数字
+    // 这样 TTS 就不会读出逗号、句号的停顿或发音
+    const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
+    
+    if (!textToRead.trim()) return; // 如果过滤后没东西了就不读
+
     const myRequestId = ++this.latestRequestId;
 
-    // 2. 立即停止上一首
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio = null;
     }
 
-    const cacheKey = `tts-${text}-${rate}`;
+    const cacheKey = `tts-${textToRead}-${rate}`;
     let audioUrl;
 
     try {
-      // 尝试取缓存
       const cachedBlob = await idb.get(cacheKey);
       
-      // --- 关键检查点 1 ---
-      // 如果在读取缓存期间用户又点了别的，ID 变了，直接退出
       if (myRequestId !== this.latestRequestId) return;
 
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
-        // 网络请求
-        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=zh-CN-XiaoyouNeural&r=${rate > 1 ? 20 : 0}`;
+        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouNeural&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         const blob = await res.blob();
         
-        // --- 关键检查点 2 ---
-        // 下载很慢，如果下载完发现用户切题了，直接退出，不要播放！
         if (myRequestId !== this.latestRequestId) return;
 
         await idb.set(cacheKey, blob);
         audioUrl = URL.createObjectURL(blob);
       }
 
-      // 3. 播放
       const audio = new Audio(audioUrl);
       audio.playbackRate = rate;
       this.currentAudio = audio;
       
-      await audio.play().catch(e => { /* 忽略自动播放限制错误 */ });
+      await audio.play().catch(e => { /* Ignore auto-play errors */ });
       
       audio.onended = () => {
         if (this.currentAudio === audio) {
@@ -125,7 +120,6 @@ const audioController = {
 
 // --- 样式定义 ---
 const cssStyles = `
-  /* 容器 */
   .xzt-container { 
     width: 100%; 
     height: 100%; 
@@ -159,7 +153,6 @@ const cssStyles = `
   }
   .xzt-question-card:active { transform: scale(0.98); }
 
-  /* 题目图片 */
   .question-img {
     width: 100%;
     max-height: 220px;
@@ -169,15 +162,29 @@ const cssStyles = `
     background-color: #f9fafb;
   }
 
-  /* 喇叭图标 */
   .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
-  /* 题目文字 */
-  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; row-gap: 12px; }
+  /* 
+     ✅ 修改点：字体大小调整 
+     标题文字变小，更精致 
+  */
+  .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; row-gap: 8px; }
   .char-block { display: flex; flex-direction: column; align-items: center; }
-  .py-text { font-size: 0.9rem; color: #94a3b8; font-family: monospace; margin-bottom: -2px; }
-  .cn-text { font-size: 2.0rem; font-weight: 800; color: #1e293b; line-height: 1.2; }
+  
+  .py-text { 
+    font-size: 0.8rem; /* 拼音变小 */
+    color: #94a3b8; 
+    font-family: monospace; 
+    margin-bottom: -2px; 
+  }
+  
+  .cn-text { 
+    font-size: 1.1rem; /* 汉字从 2.0 改为 1.5 */
+    font-weight: 700; 
+    color: #1e293b; 
+    line-height: 1.3; 
+  }
 
   /* --- 选项区域 --- */
   .xzt-options-grid {
@@ -189,7 +196,6 @@ const cssStyles = `
     padding-bottom: 120px; 
   }
 
-  /* 选项卡片 */
   .xzt-option-card {
     position: relative;
     background: #ffffff;
@@ -206,7 +212,6 @@ const cssStyles = `
   .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; }
   .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
 
-  /* 布局A：纯文字 */
   .layout-text-only {
     display: flex;
     flex-direction: column;
@@ -216,7 +221,6 @@ const cssStyles = `
     min-height: 64px;
   }
 
-  /* 布局B：有图片 (居中) */
   .layout-with-image {
     display: flex;
     flex-direction: row; 
@@ -250,7 +254,6 @@ const cssStyles = `
   .opt-cn { font-size: 1.25rem; font-weight: 700; color: #334155; line-height: 1.2; }
   .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
 
-  /* 提交按钮 */
   .submit-btn-wrapper {
     position: fixed;
     bottom: 90px;
@@ -317,13 +320,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
 
   // 初始化
   useEffect(() => {
-    // 1. 停止上一个音频 (防止快速切题时声音残留)
     audioController.stop();
 
-    // 2. 处理题目拼音
     setQuestionPinyin(generatePinyinData(question.text));
 
-    // 3. 处理选项
     const processed = options.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text);
       return {
@@ -334,7 +334,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
       };
     });
 
-    // 4. 随机排序
     const shuffled = [...processed];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -342,9 +341,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     }
     setShuffledOptions(shuffled);
 
-    // 5. 自动播放题目音频 (语速 0.9)
     if (question.text) {
       setIsPlaying(true);
+      // 语速0.9，自动过滤标点
       audioController.play(question.text, 0.9).then(() => {
         setIsPlaying(false);
       });
@@ -353,22 +352,19 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     setSelectedId(null);
     setIsSubmitted(false);
 
-    // 卸载时清理
     return () => audioController.stop();
   }, [question, options]);
 
-  // 选中
   const handleSelect = (option) => {
     if (isSubmitted) return;
     setSelectedId(option.id);
     
-    // 播放选项音 (语速 0.8)
     if (option.text) {
+      // 语速0.8，自动过滤标点
       audioController.play(option.text, 0.8);
     }
   };
 
-  // 提交
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
     setIsSubmitted(true);
@@ -377,7 +373,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
 
     if (isCorrect) {
       confetti({ particleCount: 150, spread: 80, origin: { y: 0.7 }, colors: ['#a78bfa', '#f472b6', '#fbbf24'] });
-      // 这里的音效通常很短，可以用 new Audio 直接播，或者集成进 audioController
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       
       if (onCorrect) setTimeout(onCorrect, 1500);
@@ -391,10 +386,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect }
     }
   };
 
-  // 点击题目朗读
   const handleReadQuestion = (e) => {
     e.stopPropagation();
     setIsPlaying(true);
+    // 点击题目朗读，语速0.9，自动过滤标点
     audioController.play(question.text, 0.9).then(() => setIsPlaying(false));
   };
 
