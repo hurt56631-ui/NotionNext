@@ -4,7 +4,7 @@ import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb } from 'react-ico
 import { pinyin } from 'pinyin-pro';
 
 // ==========================================
-// 1. IndexedDB 缓存 (性能优化)
+// 1. IndexedDB 缓存 (保持不变)
 // ==========================================
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
@@ -71,7 +71,6 @@ const audioController = {
   async play(text, rate = 1.0) {
     this.stop(); 
     if (!text) return;
-    // 过滤掉所有符号，只读汉字、英文、数字
     const textToRead = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, ''); 
     if (!textToRead.trim()) return; 
 
@@ -108,7 +107,7 @@ const audioController = {
 };
 
 // ==========================================
-// 3. 样式定义 (修复按钮位置、禁止刷新)
+// 3. 样式定义 (修复自适应、点击区域)
 // ==========================================
 const cssStyles = `
   html, body {
@@ -154,7 +153,7 @@ const cssStyles = `
     user-select: none;
   }
   
-  .question-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 12px; margin-bottom: 12px; background-color: #f8fafc; }
+  .question-img { width: 100%; max-height: 200px; object-fit: contain; border-radius: 12px; margin-bottom: 12px; background-color: #f8fafc; }
   .icon-pulse { animation: pulse 1.2s infinite; color: #8b5cf6; }
   @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
 
@@ -175,26 +174,27 @@ const cssStyles = `
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
     max-width: 500px;
-    /* 底部预留足够空间，防止按钮遮挡 */
     padding-bottom: 180px; 
   }
 
   .xzt-option-card {
     position: relative;
     background: #ffffff;
-    border-radius: 16px;
+    border-radius: 14px; /* 稍微减小圆角 */
     border: 2px solid #e2e8f0;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     cursor: pointer;
     transition: transform 0.1s, background 0.2s, border-color 0.2s;
     user-select: none;
-    display: flex; /* Flex布局保证内容撑开 */
+    display: flex; 
     align-items: center; 
     width: 100%; 
     box-sizing: border-box;
+    /* 关键：取消固定高度，使用 auto + padding 实现自适应 */
+    min-height: auto; 
   }
   
   .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
@@ -202,31 +202,44 @@ const cssStyles = `
   .xzt-option-card.correct { border-color: #22c55e; background: #f0fdf4; }
   .xzt-option-card.incorrect { border-color: #ef4444; background: #fef2f2; animation: shake 0.4s; }
 
-  .layout-text-only { padding: 16px; min-height: 64px; }
-  .layout-with-image { padding: 12px; min-height: 80px; }
+  /* 调整内边距，使其紧凑 */
+  .layout-text-only { padding: 12px 16px; } 
+  .layout-with-image { padding: 10px; }
 
-  .opt-img-wrapper { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: #f1f5f9; margin-right: 12px; flex-shrink: 0; }
+  /* 图片包装器 */
+  .opt-img-wrapper { 
+    width: 50px; height: 50px; /* 稍微缩小图片 */
+    border-radius: 8px; 
+    overflow: hidden; 
+    background: #f1f5f9; 
+    margin-right: 12px; 
+    flex-shrink: 0; 
+    pointer-events: none; /* 关键：让点击穿透图片，直接触发卡片点击 */
+  }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
-  /* 点击区域修复：让文本盒子占据剩余所有空间，确保点击空白处也生效 */
+  /* 文本区域 */
   .opt-text-box { 
     flex: 1; 
     display: flex; 
     flex-direction: column; 
     justify-content: center;
     min-width: 0; 
+    /* 允许长文本换行 */
+    word-break: break-word; 
+    pointer-events: none; /* 关键：让点击穿透文字，直接触发卡片点击 */
   }
+  
   .layout-text-only .opt-text-box { align-items: center; text-align: center; } 
   .layout-with-image .opt-text-box { align-items: flex-start; text-align: left; }
 
-  .opt-pinyin { font-size: 0.8rem; color: #94a3b8; font-family: monospace; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .opt-cn { font-size: 1.15rem; font-weight: 700; color: #334155; line-height: 1.2; word-break: break-word; }
-  .opt-en { font-size: 1.1rem; font-weight: 600; color: #475569; }
+  .opt-pinyin { font-size: 0.8rem; color: #94a3b8; font-family: monospace; margin-bottom: 2px; line-height: 1.1; }
+  .opt-cn { font-size: 1.1rem; font-weight: 700; color: #334155; line-height: 1.3; }
+  .opt-en { font-size: 1.05rem; font-weight: 600; color: #475569; }
 
-  /* 底部固定区域：大幅提高 bottom 值 */
+  /* 底部固定区域 */
   .fixed-bottom-area {
     position: fixed;
-    /* 提升到 100px，确保不在屏幕最底端 */
     bottom: 100px;
     left: 0;
     right: 0;
@@ -244,10 +257,10 @@ const cssStyles = `
     border: 1px solid #fecaca;
     background-color: #fff1f2;
     color: #991b1b;
-    padding: 14px;
+    padding: 12px 14px;
     border-radius: 12px;
     margin-bottom: 12px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     line-height: 1.4;
     text-align: left;
     width: 100%;
@@ -263,7 +276,7 @@ const cssStyles = `
     pointer-events: auto;
     width: 100%;
     max-width: 500px;
-    padding: 16px 0;
+    padding: 14px 0;
     border-radius: 999px;
     font-size: 1.1rem;
     font-weight: 800;
@@ -283,7 +296,7 @@ const cssStyles = `
   }
   .submit-btn:active:not(:disabled) { transform: scale(0.97); }
 
-  .status-icon { position: absolute; right: 16px; font-size: 22px; }
+  .status-icon { position: absolute; right: 12px; font-size: 20px; }
 
   @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 80% { transform: translateX(6px); } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -301,13 +314,11 @@ const generatePinyinData = (text) => {
     const chars = text.split('');
     let pyIndex = 0;
     return chars.map((char) => {
-      // 核心修复：只有纯汉字才去匹配拼音
       if (isChineseChar(char)) {
         let py = pinyins[pyIndex] || '';
         pyIndex++;
         return { char, pinyin: py };
       } 
-      // 标点、数字、空格 -> 拼音设为空
       return { char, pinyin: '' };
     });
   } catch (e) {
@@ -320,15 +331,12 @@ const generatePinyinData = (text) => {
 // ==========================================
 const getCorrectIds = (question, correctAnswerProp) => {
   let ids = [];
-  // 优先看 question.correct
   if (question && question.correct !== undefined) {
     ids = Array.isArray(question.correct) ? question.correct : [question.correct];
   } 
-  // 如果没有，再看 props.correctAnswer
   else if (correctAnswerProp !== undefined) {
     ids = Array.isArray(correctAnswerProp) ? correctAnswerProp : [correctAnswerProp];
   }
-  // 全部转为字符串，防止 1 !== "1" 的问题
   return ids.map(id => String(id));
 };
 
@@ -337,8 +345,8 @@ const getCorrectIds = (question, correctAnswerProp) => {
 // ==========================================
 const XuanZeTi = ({ 
   question,         
-  options, // 兼容旧代码传入的 options
-  correctAnswer, // 兼容旧代码传入的 correctAnswer
+  options, 
+  correctAnswer, 
   onNext,           
   explanation 
 }) => {
@@ -346,7 +354,7 @@ const XuanZeTi = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
   const [questionPinyin, setQuestionPinyin] = useState([]);
-  const [shuffledOptions, setShuffledOptions] = useState([]);
+  const [displayOptions, setDisplayOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const isMounted = useRef(true);
 
@@ -365,21 +373,18 @@ const XuanZeTi = ({
     };
   }, []);
 
-  // 2. 初始化逻辑 (修复乱序问题)
-  // 依赖项只写 question.id，保证只有换题时才刷新，答错重试时不刷新
+  // 2. 初始化逻辑
   useEffect(() => {
     if (!question) return;
 
     audioController.stop();
 
-    // 生成拼音
     const text = question.text || "";
     setQuestionPinyin(generatePinyinData(text));
 
-    // 获取选项数据 (合并 question.options 和 props.options)
     const sourceOptions = question.options || options || [];
     
-    // 处理选项 (加拼音)
+    // 生成选项数据
     const processed = sourceOptions.map(opt => {
       const hasChinese = /[\u4e00-\u9fa5]/.test(opt.text || "");
       return {
@@ -390,20 +395,14 @@ const XuanZeTi = ({
       };
     });
 
-    // 乱序 (Fisher-Yates)
-    const shuffled = [...processed];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    setShuffledOptions(shuffled);
+    // 修复：直接使用 processed，不再乱序（Shuffle）
+    // 这样位置就永远固定了，除非传入的 options 本身变了
+    setDisplayOptions(processed);
 
-    // 重置状态
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // 自动读题
     setTimeout(() => {
       if (isMounted.current && text) {
         setIsPlaying(true);
@@ -413,7 +412,7 @@ const XuanZeTi = ({
       }
     }, 300);
 
-  }, [question?.id]); // 核心修复：只依赖 ID 变化
+  }, [question?.id]); // 依然依赖 ID，保证切换题目时更新
 
   // 点击选项
   const handleSelect = (option) => {
@@ -429,7 +428,6 @@ const XuanZeTi = ({
 
     setIsSubmitted(true);
     
-    // 修复判题逻辑：合并获取正确答案ID，并转字符串比对
     const correctIds = getCorrectIds(question, correctAnswer);
     const selectedStr = String(selectedId);
     const isCorrect = correctIds.includes(selectedStr);
@@ -457,11 +455,10 @@ const XuanZeTi = ({
         }, 600);
       }
 
-      // 错误后：等待 2.5 秒重置状态（保留顺序，让用户重试）
       setTimeout(() => {
         if(isMounted.current) {
             setIsSubmitted(false);
-            // 这里的 selectedId 可以保留，方便用户看到刚才选的是哪个
+            // 选项位置不会变，状态重置
         }
       }, 2500);
     }
@@ -496,7 +493,6 @@ const XuanZeTi = ({
           <div className="pinyin-box">
             {questionPinyin.map((item, idx) => (
               <div key={idx} className="char-block">
-                {/* 只有有拼音才显示，符号不显示拼音 */}
                 <span className="py-text">{item.pinyin}</span>
                 <span className="cn-text">{item.char}</span>
               </div>
@@ -508,12 +504,11 @@ const XuanZeTi = ({
 
         {/* 选项列表 */}
         <div className="xzt-options-grid">
-          {shuffledOptions.map(option => {
+          {displayOptions.map(option => {
             let statusClass = '';
             const optId = String(option.id);
             const selId = String(selectedId);
             
-            // 获取正确答案列表
             const corrIds = getCorrectIds(question, correctAnswer);
 
             if (isSubmitted) {
@@ -564,7 +559,7 @@ const XuanZeTi = ({
           })}
         </div>
 
-        {/* 底部固定区域：已提升高度 */}
+        {/* 底部固定区域 */}
         <div className="fixed-bottom-area">
           {showExplanation && (
             <div className="explanation-card">
