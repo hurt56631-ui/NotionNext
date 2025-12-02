@@ -83,7 +83,7 @@ const audioController = {
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
-        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoyouMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
+        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=zh-CN-XiaoxiaoMultilingualNeural&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         const blob = await res.blob();
         if (myRequestId !== this.latestRequestId) return;
