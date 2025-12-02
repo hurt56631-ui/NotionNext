@@ -1,5 +1,4 @@
-import React, 'react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb, FaSpinner, FaStop } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
