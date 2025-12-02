@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router'; 
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
-// ❌ 移除了 IoMdClose 引用
-// import { IoMdClose } from "react-icons/io";
+import { IoMdClose } from "react-icons/io";
 
 // --- 1. 外部题型组件 ---
 import XuanZeTi from './XuanZeTi';
@@ -13,10 +12,10 @@ import LianXianTi from './LianXianTi';
 import GaiCuoTi from './GaiCuoTi';
 import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
-// 语法组件
 import GrammarPointPlayer from './GrammarPointPlayer';
 
 // --- 2. 新引入的学习卡片 ---
+// 确保这些组件存在且路径正确
 import WordCard from '../WordCard';   
 import PhraseCard from '../PhraseCard'; 
 
@@ -41,10 +40,19 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- 3. 列表容器适配器 ----------------
+// ---------------- 3. 列表容器适配器 (核心修复) ----------------
 const CardListRenderer = ({ data, type, onComplete }) => {
   const isPhrase = type === 'phrase_study' || type === 'sentences';
-  const list = data.words || [];
+  // 确保 list 是数组，如果 data.words 不存在，尝试取 data 本身（如果是数组）
+  const list = Array.isArray(data.words) ? data.words : (Array.isArray(data) ? data : []);
+
+  if (list.length === 0) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+        <p>暂无{isPhrase ? "短句" : "生词"}数据</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full flex flex-col relative bg-slate-50">
@@ -64,14 +72,14 @@ const CardListRenderer = ({ data, type, onComplete }) => {
               <PhraseCard 
                 key={item.id || i} 
                 phrase={item} 
-                data={item}
+                data={item} // 兼容传递
                 onPlay={() => audioManager.playTTS(item.sentence || item.chinese)}
               />
             ) : (
               <WordCard 
                 key={item.id || i} 
                 word={item}
-                data={item}
+                data={item} // 兼容传递
                 onPlay={() => audioManager.playTTS(item.word || item.chinese)}
               />
             )
@@ -92,7 +100,7 @@ const CardListRenderer = ({ data, type, onComplete }) => {
   );
 };
 
-// CompletionBlock
+// ... 其他辅助组件保持不变 ...
 const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS("恭喜完成", 'zh'); setTimeout(() => router.back(), 2500); }, [router]); return <div className="flex flex-col items-center justify-center h-full animate-bounce-in"><div className="text-8xl mb-6">🎉</div><h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2></div>; };
 const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
 
@@ -146,7 +154,6 @@ export default function InteractiveLesson({ lesson }) {
       settings: { playTTS: audioManager?.playTTS } 
     };
     
-    // 容器策略
     const CommonWrapper = ({ children }) => <div className="w-full h-full flex flex-col items-center justify-center pt-4">{children}</div>;
     const FullHeightWrapper = ({ children }) => <div className="w-full h-full flex flex-col">{children}</div>;
 
@@ -154,6 +161,7 @@ export default function InteractiveLesson({ lesson }) {
       switch (type) {
         case 'teaching': return null; 
 
+        // ✅ 单词和短句使用 FullHeightWrapper + CardListRenderer
         case 'word_study': 
           return <FullHeightWrapper><CardListRenderer data={props.data} type="word_study" onComplete={props.onComplete} /></FullHeightWrapper>;
         
@@ -172,18 +180,8 @@ export default function InteractiveLesson({ lesson }) {
              </div>
           );
 
-        // 题型：居中显示 (这里传入 explanation 字段)
-        case 'choice': 
-          return <CommonWrapper>
-            <XuanZeTi 
-              {...props} 
-              question={{text: props.data.prompt, ...props.data}} 
-              options={props.data.choices||[]} 
-              correctAnswer={props.data.correctId?[props.data.correctId]:[]}
-              explanation={props.data.explanation} // ✅ 传递解析字段
-            />
-          </CommonWrapper>;
-          
+        // 题型
+        case 'choice': return <CommonWrapper><XuanZeTi {...props} question={{text: props.data.prompt, ...props.data}} options={props.data.choices||[]} correctAnswer={props.data.correctId?[props.data.correctId]:[]} explanation={props.data.explanation} /></CommonWrapper>;
         case 'panduan': return <CommonWrapper><PanDuanTi {...props} /></CommonWrapper>;
         case 'lianxian': const pairsMap = props.data.pairs?.reduce((acc,p)=>{acc[p.id]=`${p.id}_b`;return acc},{})||{}; return <CommonWrapper><LianXianTi title={props.data.prompt} columnA={props.data.pairs?.map(p=>({id:p.id,content:p.left}))} columnB={props.data.pairs?.map(p=>({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={pairsMap} onCorrect={props.onCorrect} /></CommonWrapper>;
         case 'paixu': return <CommonWrapper><PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...props.data.items].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={props.onCorrect} /></CommonWrapper>;
@@ -206,7 +204,7 @@ export default function InteractiveLesson({ lesson }) {
     <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans select-none" style={{ touchAction: 'none' }}>
       <style>{`::-webkit-scrollbar { display: none; } * { -webkit-tap-highlight-color: transparent; }`}</style>
       
-      {/* 顶部进度条 - ✅ 移除左上角X按钮 */}
+      {/* 顶部进度条 */}
       <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top)] px-4 py-3 z-30 pointer-events-none">
         {currentIndex < totalBlocks && (
           <div className="h-1.5 bg-slate-200/50 rounded-full overflow-hidden mx-4 backdrop-blur-sm">
@@ -233,4 +231,4 @@ export default function InteractiveLesson({ lesson }) {
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
-          }
+}
