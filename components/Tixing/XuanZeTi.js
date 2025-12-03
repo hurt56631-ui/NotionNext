@@ -57,25 +57,36 @@ const audioController = {
   _pendingFetches: [],
 
   stop() {
-    // cancel any pending fetch Promises where possible
+    // 1. 取消正在进行的 fetch 请求
     this.latestRequestId++;
     this._pendingFetches.forEach(ctrl => {
       try { ctrl.abort(); } catch (e) {}
     });
     this._pendingFetches = [];
 
+    // 2. 停止当前正在播放的音频，并清除事件回调防止后续触发
     if (this.currentAudio) {
       try {
+        this.currentAudio.onended = null;
+        this.currentAudio.onerror = null;
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
       } catch (e) {}
       this.currentAudio = null;
     }
+
+    // 3. 清理播放列表
     this.playlist.forEach(a => {
-      try { a.pause(); a.src = ''; } catch (e) {}
+      try { 
+        a.onended = null;
+        a.onerror = null;
+        a.pause(); 
+        a.src = ''; 
+      } catch (e) {}
     });
     this.playlist = [];
 
+    // 4. 释放 Blob URL
     if (this.activeBlobUrls.length > 0) {
       this.activeBlobUrls.forEach(url => {
         try { URL.revokeObjectURL(url); } catch (e) {}
@@ -91,7 +102,7 @@ const audioController = {
 
   // fetchAudioBlob 增加 AbortController 支持
   async fetchAudioBlob(text, lang) {
-    const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const rateParam = 0; 
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
@@ -125,7 +136,7 @@ const audioController = {
     if (onStart) onStart();
 
     const segments = [];
-    // 保持你修复后的分段正则：汉字与非汉字分段，允许非汉字段中含空格
+    // 保持分段正则：汉字与非汉字分段，允许非汉字段中含空格
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -187,17 +198,19 @@ const audioController = {
         }
         const audio = audioObjects[index];
         this.currentAudio = audio;
+        
+        // 关键：确保 onended 绑定正确
         audio.onended = () => playNext(index + 1);
         audio.onerror = (e) => {
           console.warn(`Audio segment error, skipping...`, e);
           playNext(index + 1);
         };
         audio.onloadedmetadata = () => {
-          // double-check rate
           try {
             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.7;
           } catch (e) {}
         };
+        
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
@@ -280,7 +293,7 @@ const cssStyles = `
     width: 100%; display: flex; flex-wrap: wrap;
     justify-content: center; align-items: flex-end;
     gap: 6px; line-height: 1.8; padding: 0 10px;
-    pointer-events: none; /* 背景文字不拦截点击，避免覆盖卡片点击 */
+    pointer-events: none;
   }
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; position: relative; pointer-events: auto; }
   .pinyin-top { font-size: 1rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
@@ -398,10 +411,10 @@ const parseOptionText = (text) => {
  Props:
   - question: { text, imageUrl, explanation, ... }
   - options: [{ id, text, imageUrl }]
-  - correctAnswer: array of ids (支持多选判断但当前 UI 为单选)
+  - correctAnswer: array of ids
   - onCorrect: ()=>void
-  - onIncorrect: ()=>void
-  - onNext: ()=>void  // 可选：父组件切换题目回调
+  - onIncorrect: (q)=>void
+  - onNext: ()=>void
 */
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
@@ -412,9 +425,36 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const [isPlaying, setIsPlaying] = useState(false);
 
   const activeExplanation = (question.explanation || '').trim();
+  
+  // Refs
   const autoNextTimerRef = useRef(null);
-  const explanationPlayRef = useRef(false);
   const mountedRef = useRef(true);
+  const transitioningRef = useRef(false); // 关键：防止重复跳转的锁
+
+  // --- 核心修复：统一的跳转处理函数 ---
+  // 确保在跳转前，清理所有定时器和音频，并锁定状态防止多次调用
+  const executeNext = (isCorrect) => {
+    // 1. 如果已经在跳转中，直接忽略后续调用
+    if (transitioningRef.current) return;
+    transitioningRef.current = true;
+
+    // 2. 立即清理所有副作用
+    audioController.stop();
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+
+    // 3. 执行回调
+    if (isCorrect) {
+      try { onCorrect && onCorrect(); } catch (e) { console.warn(e); }
+    } else {
+      try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
+    }
+    
+    // 4. 调用下一题
+    try { onNext && onNext(); } catch (e) { console.warn(e); }
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -422,11 +462,15 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   }, []);
 
   useEffect(() => {
-    // 清理上一次的音频和计时器
+    // 1. 重置所有状态
     audioController.stop();
-    clearTimeout(autoNextTimerRef.current);
-    autoNextTimerRef.current = null;
-    explanationPlayRef.current = false;
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    
+    // 2. 解除跳转锁，允许当前题目交互
+    transitioningRef.current = false;
 
     setIsPlaying(false);
     setSelectedId(null);
@@ -440,20 +484,22 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       hasImage: !!opt.imageUrl
     })));
 
-    // 自动朗读一次（如果题干有 text）
+    // 3. 自动朗读一次（如果题干有 text）
     if (question.text) {
-      // 延迟一点，保证界面渲染完毕
       setTimeout(() => {
-        if (!mountedRef.current) return;
+        // 只有在没被卸载且没开始跳转时才朗读
+        if (!mountedRef.current || transitioningRef.current) return;
         handleTitlePlay(null, true);
       }, 500);
     }
 
+    // 4. 组件卸载时的清理
     return () => {
-      // 组件卸载或 question 改变时的清理
       audioController.stop();
-      clearTimeout(autoNextTimerRef.current);
-      autoNextTimerRef.current = null;
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+        autoNextTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, options]);
@@ -461,6 +507,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   // 点击书本朗读
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
+    if (transitioningRef.current) return; // 跳转中禁止播放
     if (!isAuto && navigator.vibrate) navigator.vibrate(40);
 
     audioController.playMixed(
@@ -470,115 +517,87 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     );
   };
 
-  // 全局容器点击逻辑：用于在已提交后点击继续或触发下一题
+  // 全局容器点击逻辑
   const handleGlobalClick = (e) => {
-    // 防止点击被解释卡或按钮等覆盖
-    if (!isSubmitted) return;
-    // 如果答错，点击容器时立即跳到下一题（比自动等待更友好）
+    // 只有已提交且未在跳转中才响应
+    if (!isSubmitted || transitioningRef.current) return;
+    
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
-    if (!isCorrect) {
-      // 立即触发父层 onIncorrect/onNext（如果还没触发）
-      triggerIncorrectAndNext();
-    } else {
-      // 已答对，触发 onCorrect 即可（父组件一般已收到）
-      triggerCorrectAndNext();
-    }
+    
+    // 无论对错，点击屏幕意味着用户想立即继续
+    // 此时调用 executeNext 会自动清除正在跑的定时器
+    executeNext(isCorrect);
   };
 
   // 选项点击
   const handleCardClick = (option, e) => {
-    if (isSubmitted) return;
+    if (isSubmitted || transitioningRef.current) return;
     if (e) e.stopPropagation();
     setSelectedId(option.id);
     if (navigator.vibrate) navigator.vibrate(20);
     audioController.playMixed(option.text || '');
   };
 
-  // 触发正确回调并下一题（防重复）
-  const triggeredCorrectRef = useRef(false);
+  // 处理回答正确
   const triggerCorrectAndNext = () => {
-    if (triggeredCorrectRef.current) return;
-    triggeredCorrectRef.current = true;
-
-    // 播放奖励/声音并稍后触发回调
+    // 如果已经触发过（锁住了），不再执行
+    if (transitioningRef.current) return;
+    
+    // 播放奖励/声音
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     new Audio('/sounds/correct.mp3').play().catch(()=>{});
 
-    setTimeout(() => {
-      try { onCorrect && onCorrect(); } catch (e) { console.warn(e); }
-      try { onNext && onNext(); } catch (e) { console.warn(e); }
-      // reset flag after a tick to allow next question to reuse this component instance
-      triggeredCorrectRef.current = false;
+    // 1.5秒后自动跳转
+    autoNextTimerRef.current = setTimeout(() => {
+      executeNext(true);
     }, 1500);
   };
 
-  // 触发错误回调并下一题（防重复）
-  const triggeredIncorrectRef = useRef(false);
+  // 处理回答错误
   const triggerIncorrectAndNext = () => {
-    if (triggeredIncorrectRef.current) return;
-    triggeredIncorrectRef.current = true;
+    if (transitioningRef.current) return;
 
     // 先播放错误音
     new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
     if (navigator.vibrate) navigator.vibrate([50,50,50]);
 
-    // 如果有解析文本，显示并朗读解析，再在 3s 后触发 onIncorrect/onNext
+    // 如果有解析文本，显示并朗读
     if (activeExplanation) {
       setShowExplanation(true);
-      // 延迟一点播放解析，确保 showExplanation 已渲染
       setTimeout(() => {
-        explanationPlayRef.current = true;
-        audioController.playMixed(activeExplanation, () => {}, () => {
-          explanationPlayRef.current = false;
-        });
+        // 如果用户在朗读前就已经点击跳转了，这里就不读了
+        if (transitioningRef.current) return;
+        
+        audioController.playMixed(activeExplanation, () => {}, () => {});
       }, 400);
     }
 
-    // 3 秒后触发回调并进入下一题（如果父组件没立即切换）
+    // 5 秒后触发自动跳转
+    // 如果用户在这 5 秒内点击了屏幕，handleGlobalClick 会调用 executeNext
+    // executeNext 会清除这个 timer，避免双重跳转
     autoNextTimerRef.current = setTimeout(() => {
-      try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
-      try { onNext && onNext(); } catch (e) { console.warn(e); }
-      triggeredIncorrectRef.current = false;
-      setShowExplanation(false);
-      autoNextTimerRef.current = null;
-    }, 5000);
+      executeNext(false);
+    }, 8000);
   };
 
   // 提交逻辑
   const handleSubmit = () => {
-    if (!selectedId || isSubmitted) return;
+    if (!selectedId || isSubmitted || transitioningRef.current) return;
     setIsSubmitted(true);
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
     if (isCorrect) {
-      // 触发正确处理（内部会调用 onCorrect/onNext）
       triggerCorrectAndNext();
     } else {
-      // 显示解析并安排自动下一题
       triggerIncorrectAndNext();
     }
   };
 
-  // 点击解析卡片：立即继续（等效于全局点击）
+  // 点击解析卡片
   const handleExplanationClick = (e) => {
     e.stopPropagation();
-    // 如果正在播放解析，尽量停止并直接跳下一题
-    audioController.stop();
-    clearTimeout(autoNextTimerRef.current);
-    autoNextTimerRef.current = null;
-    try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
-    try { onNext && onNext(); } catch (e) { console.warn(e); }
-    setShowExplanation(false);
-    triggeredIncorrectRef.current = false;
+    // 视为用户想立即跳过
+    executeNext(false); 
   };
-
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
-      audioController.stop();
-      clearTimeout(autoNextTimerRef.current);
-      autoNextTimerRef.current = null;
-    };
-  }, []);
 
   return (
     <>
