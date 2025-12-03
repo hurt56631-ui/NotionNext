@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router'; 
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
-import { IoMdClose } from "react-icons/io";
 
 // --- 1. 外部题型组件 ---
 import XuanZeTi from './XuanZeTi';
