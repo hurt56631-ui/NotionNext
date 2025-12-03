@@ -5,7 +5,7 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// ⚠️ 请确保这个路径下有您的 AI 聊天组件
+// ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果报错 404 请检查此路径
 import AiChatAssistant from '../AiChatAssistant'; 
 
 // =================================================================================
@@ -59,7 +59,7 @@ const idb = {
 // =================================================================================
 function useMixedTTS() {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isPaused, setIsPaused] = useState(false); // 新增：暂停状态
+    const [isPaused, setIsPaused] = useState(false);
     const [loadingId, setLoadingId] = useState(null);
     const [playingId, setPlayingId] = useState(null);
     
@@ -67,7 +67,6 @@ function useMixedTTS() {
     const audioQueueRef = useRef([]); 
     const currentAudioRef = useRef(null);
     const latestRequestIdRef = useRef(0);
-    // 使用 ref 追踪 playingId，避免在 play 函数依赖中导致死循环
     const playingIdRef = useRef(null);
 
     // 组件卸载时清理
@@ -90,17 +89,15 @@ function useMixedTTS() {
         latestRequestIdRef.current++;
     }, []);
 
-    // 新增：暂停/继续 切换功能
+    // 暂停/继续 切换功能
     const toggle = useCallback((uniqueId) => {
         if (playingIdRef.current !== uniqueId) return;
 
         if (currentAudioRef.current) {
             if (currentAudioRef.current.paused) {
-                // 继续播放
                 currentAudioRef.current.play().catch(e => console.error("Resume failed", e));
                 setIsPaused(false);
             } else {
-                // 暂停播放
                 currentAudioRef.current.pause();
                 setIsPaused(true);
             }
@@ -131,7 +128,7 @@ function useMixedTTS() {
     const play = useCallback(async (text, uniqueId) => {
         if (!text) return;
 
-        // 如果点击的是当前正在播放的 ID，则执行暂停/继续逻辑，而不是重播
+        // 如果点击的是当前正在播放的 ID，则执行暂停/继续逻辑
         if (playingIdRef.current === uniqueId) {
             toggle(uniqueId);
             return;
@@ -168,9 +165,9 @@ function useMixedTTS() {
 
             const audioObjects = blobs.map((blob, index) => {
                 const audio = new Audio(URL.createObjectURL(blob));
+                // ✅ 修复音调问题：去掉 preservesPitch = false，让浏览器自动处理音高
                 if (segments[index].lang === 'zh') {
                     audio.playbackRate = 0.7; 
-                    audio.preservesPitch = false; 
                 } else {
                     audio.playbackRate = 1.0;
                 }
@@ -180,7 +177,6 @@ function useMixedTTS() {
             audioQueueRef.current = audioObjects;
             setLoadingId(null);
             
-            // 更新状态和 Ref
             setPlayingId(uniqueId);
             playingIdRef.current = uniqueId;
             setIsPlaying(true);
@@ -200,7 +196,6 @@ function useMixedTTS() {
                 const audio = audioObjects[index];
                 currentAudioRef.current = audio;
 
-                // 确保每次播放前设置正确的倍速（部分浏览器在pause后可能会重置）
                 const targetRate = segments[index].lang === 'zh' ? 0.7 : 1.0;
                 audio.playbackRate = targetRate;
 
@@ -210,13 +205,11 @@ function useMixedTTS() {
 
                 audio.onerror = (e) => {
                     console.error("Audio play error", e);
-                    // 增加一个小延时防止死循环过快
                     setTimeout(() => playNext(index + 1), 50);
                 };
 
                 audio.play().catch(e => {
                     console.error("Play prevented", e);
-                    // 只有非交互错误才停止，否则尝试继续
                     if (e.name === 'NotAllowedError') {
                          setIsPlaying(false);
                          setPlayingId(null);
@@ -269,6 +262,12 @@ const DraggableAiBtn = ({ contextText }) => {
     const [isOpen, setIsOpen] = useState(false);
     const constraintsRef = useRef(null);
 
+    // 阻止事件冒泡，防止拖拽或点击时触发底层的其他事件
+    const handleOpen = (e) => {
+        e.stopPropagation();
+        setIsOpen(true);
+    };
+
     return (
         <>
             <div 
@@ -282,7 +281,7 @@ const DraggableAiBtn = ({ contextText }) => {
                 dragMomentum={false}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                onClick={() => setIsOpen(true)}
+                onClick={handleOpen}
                 style={{
                     position: 'absolute', bottom: '120px', right: '20px', width: '56px', height: '56px', borderRadius: '50%',
                     background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)',
@@ -297,12 +296,13 @@ const DraggableAiBtn = ({ contextText }) => {
                     <>
                         <motion.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            onClick={() => setIsOpen(false)}
+                            onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
                             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1001, backdropFilter: 'blur(3px)' }}
                         />
                         <motion.div
                             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()} // 防止点击内部内容关闭
                             style={{
                                 position: 'fixed', bottom: 0, left: 0, right: 0, height: '75vh', background: 'white',
                                 borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
@@ -319,10 +319,10 @@ const DraggableAiBtn = ({ contextText }) => {
                                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>随时解答您的疑问</div>
                                     </div>
                                 </div>
-                                <button onClick={() => setIsOpen(false)} style={{ padding: '8px', background: '#f8fafc', borderRadius: '50%', border: 'none', color: '#64748b', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaTimes size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} style={{ padding: '8px', background: '#f8fafc', borderRadius: '50%', border: 'none', color: '#64748b', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaTimes size={16} /></button>
                             </div>
                             <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#f8fafc' }}>
-                                {AiChatAssistant ? <AiChatAssistant context={contextText} /> : <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6 text-center"><FaRobot size={48} className="mb-4 opacity-50" /><p>请确保已正确导入 components/AiChatAssistant.js 组件</p></div>}
+                                {AiChatAssistant ? <AiChatAssistant context={contextText} /> : <div className="flex flex-col items-center justify-center h-full text-gray-400 p-6 text-center"><FaRobot size={48} className="mb-4 opacity-50" /><p>未检测到 AI 组件，请检查路径</p></div>}
                             </div>
                         </motion.div>
                     </>
@@ -352,9 +352,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const contentRef = useRef(null);
     const [canGoNext, setCanGoNext] = useState(false);
 
-    // 使用新的混合 TTS Hook
     const { play, stop, toggle, playingId, isPaused, loadingId, preload } = useMixedTTS();
 
+    // 切换页面时：停止之前的播放，重置滚动条
     useEffect(() => {
         stop();
         if (contentRef.current) {
@@ -363,19 +363,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setCanGoNext(true);
     }, [currentIndex, stop]);
 
-    // ✅ 修复：依赖项移除 play，防止无限循环
+    // ✅ 修复：移除了自动播放逻辑，只保留预加载
     useEffect(() => {
-        const currentGp = grammarPoints[currentIndex];
-
-        // 自动播放解说
-        const autoPlayTimer = setTimeout(() => {
-            if (currentGp?.narrationScript) {
-                // 这里直接调用 play，因为 play 内部已经处理了 ref 状态
-                play(currentGp.narrationScript, `narration_${currentGp.id}`);
-            }
-        }, 600);
-
-        // 预加载
+        // 预加载下两条
         const preloadNextItems = (count) => {
             for (let i = 1; i <= count; i++) {
                 const nextIndex = currentIndex + i;
@@ -390,10 +380,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         };
         preloadNextItems(2);
         
-        return () => { clearTimeout(autoPlayTimer); };
-        // ⚠️ 关键：这里只依赖 data 和 index，不依赖 play，防止无限重渲染
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentIndex, grammarPoints]); 
+        // 此处不调用 play，实现“点击后朗读”
+    }, [currentIndex, grammarPoints, preload]); 
     
     // 滚动监听
     const handleScroll = () => {
@@ -454,7 +442,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         const isCurrentPlaying = playingId === id;
         const isLoading = loadingId === id;
         
-        // 按钮图标逻辑：加载中 -> Spinner; 当前播放且未暂停 -> 暂停; 当前播放且已暂停 -> 播放; 其他 -> 播放/音量
         let Icon = FaVolumeUp;
         if (isLoading) Icon = FaSpinner;
         else if (isCurrentPlaying) Icon = isPaused ? FaPlay : FaPause;
@@ -465,7 +452,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 style={isSmall ? styles.playButtonSmall : styles.playButton} 
                 onClick={(e) => {
                     e.stopPropagation();
-                    play(script, id); // play 内部已经封装了 toggle 逻辑
+                    play(script, id); 
                 }}
             >
                 <Icon className={isLoading ? "spin" : ""} />
@@ -503,7 +490,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <span style={styles.sectionTitleText}>💡 详解</span>
-                                        {/* 顶部主解说按钮 */}
                                         {renderPlayButton(gp.narrationScript, narrationId, false)}
                                     </div>
                                     <div style={styles.textBlock}>
@@ -548,7 +534,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                         </div>
                                                         <div style={styles.exampleTranslation}>{ex.translation}</div>
                                                     </div>
-                                                    {/* 例句播放按钮 */}
                                                     {renderPlayButton(ex.narrationScript || ex.sentence, exId, true)}
                                                 </div>
                                             );
