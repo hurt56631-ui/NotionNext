@@ -1,0 +1,44 @@
+[
+  {
+    "id": "s1",
+    "sentence": "မင်္ဂလာပါ",
+    "pinyin": "ming ga la ba",
+    "translation": "你好",
+    "example": "မင်္ဂလာပါဆရာ (老师好)"
+  },
+  {
+    "id": "s2",
+    "sentence": "နေကောင်းလား",
+    "pinyin": "nay kaung lar",
+    "translation": "你好吗？/ 身体好吗？",
+    "example": "အမေ နေကောင်းလား (妈妈身体好吗？)"
+  },
+  {
+    "id": "s3",
+    "sentence": "ထမင်းစားပြီးပြီလား",
+    "pinyin": "hta min sar pi bi lar",
+    "translation": "吃饭了吗？",
+    "example": "မနက်စာ စားပြီးပြီလား (早饭吃了吗？)"
+  },
+  {
+    "id": "s4",
+    "sentence": "ကျေးဇူးတင်ပါတယ်",
+    "pinyin": "kyay zu tin ba de",
+    "translation": "谢谢",
+    "example": "အကူအညီအတွက် ကျေးဇူးတင်ပါတယ် (谢谢你的帮助)"
+  },
+  {
+    "id": "s5",
+    "sentence": "တွေ့ရတာ ဝမ်းသာပါတယ်",
+    "pinyin": "tway ya dar wan thar ba de",
+    "translation": "很高兴见到你",
+    "example": ""
+  },
+  {
+    "id": "s6",
+    "sentence": "နာမည် ဘယ်လိုခေါ်လဲ",
+    "pinyin": "nar mal bel lo khaw le",
+    "translation": "你叫什么名字？",
+    "example": ""
+  }
+]
