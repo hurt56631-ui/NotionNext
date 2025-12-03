@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 (保持不变) ---
+// --- 1. IndexedDB 缓存 ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -29,6 +29,7 @@ const idb = {
       const req = tx.objectStore(STORE_NAME).get(key);
       req.onsuccess = () => {
         const res = req.result;
+        // 只有当 blob 确实有内容时才返回
         if (res && res.size > 0) resolve(res);
         else resolve(null);
       };
@@ -46,18 +47,28 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (保持不变) ---
+// --- 2. 音频控制器 (针对“标题不朗读”做出的终极内存修复) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
+  // 专门用来记录生成的临时链接，用于后续销毁
+  activeBlobUrls: [], 
   latestRequestId: 0,
 
   stop() {
+    // 1. 停止当前正在响的声音
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
+    
+    // 2. 关键修复：把之前生成的所有音频链接彻底销毁，释放内存
+    if (this.activeBlobUrls.length > 0) {
+      this.activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+      this.activeBlobUrls = [];
+    }
+
     this.playlist = [];
     this.latestRequestId++;
   },
@@ -68,7 +79,7 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const rateParam = 0; 
     
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
@@ -85,13 +96,14 @@ const audioController = {
   },
 
   async playMixed(text, onStart, onEnd) {
-    this.stop();
+    this.stop(); // 播放前先大扫除
     if (!text) return;
     const reqId = ++this.latestRequestId;
 
     if (onStart) onStart();
 
     const segments = [];
+    // 使用正则切分中文和非中文
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5\s]+)/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -107,6 +119,7 @@ const audioController = {
     }
 
     try {
+      // 并行下载所有音频段
       const blobs = await Promise.all(
         segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang))
       );
@@ -114,7 +127,11 @@ const audioController = {
       if (reqId !== this.latestRequestId) return;
 
       const audioObjects = blobs.map((blob, index) => {
-        const audio = new Audio(URL.createObjectURL(blob));
+        // 创建 URL 并立即记录到清理列表中
+        const url = URL.createObjectURL(blob);
+        this.activeBlobUrls.push(url);
+
+        const audio = new Audio(url);
         if (segments[index].lang === 'zh') {
           audio.playbackRate = 0.7; 
         } else {
@@ -127,6 +144,8 @@ const audioController = {
 
       const playNext = (index) => {
         if (reqId !== this.latestRequestId) return;
+        
+        // 播放结束
         if (index >= audioObjects.length) {
             this.currentAudio = null;
             if (onEnd) onEnd();
@@ -137,7 +156,12 @@ const audioController = {
         this.currentAudio = audio;
         
         audio.onended = () => playNext(index + 1);
-        audio.onerror = () => playNext(index + 1);
+        
+        // 错误容错：如果这一段坏了，直接跳下一段，不要卡死
+        audio.onerror = () => {
+            console.warn('Audio segment error, skipping...');
+            playNext(index + 1);
+        };
         
         audio.onloadedmetadata = () => {
              if (segments[index].lang === 'zh') audio.playbackRate = 0.7;
@@ -147,7 +171,8 @@ const audioController = {
         if (playPromise !== undefined) {
             playPromise.catch(error => {
                 console.error("Playback prevented:", error);
-                playNext(index + 1);
+                // 停止播放状态，不再强制继续，以免报错刷屏
+                if (onEnd) onEnd();
             });
         }
       };
@@ -159,7 +184,7 @@ const audioController = {
   }
 };
 
-// --- 3. 样式定义 (保持富文本样式) ---
+// --- 3. 样式定义 ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -261,7 +286,7 @@ const cssStyles = `
   .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
   .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
-  /* 解析卡片：增加了 "点击继续" 的淡提示 */
+  /* 解析卡片 */
   .explanation-card {
     pointer-events: auto;
     background: #fff1f2; color: #be123c;
@@ -274,10 +299,9 @@ const cssStyles = `
     box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
     animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex; gap: 12px; align-items: flex-start;
-    cursor: pointer; /* 提示可点击 */
+    cursor: pointer;
   }
   
-  /* 解析下面的小提示文字 */
   .tap-hint {
     font-size: 0.8rem; color: #f87171; opacity: 0.7; margin-top: 8px; font-weight: 400;
   }
@@ -327,8 +351,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const activeExplanation = explanation || question.explanation || "";
 
   useEffect(() => {
-    // 重置状态
+    // 强制停止音频并清理内存
     audioController.stop();
+    
     setIsPlaying(false);
     setSelectedId(null);
     setIsSubmitted(false);
@@ -349,7 +374,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
   // 点击书本朗读
   const handleTitlePlay = (e, isAuto = false) => {
-    if(e) e.stopPropagation(); // 阻止冒泡：避免在答错后点击书本误触发“下一题”
+    if(e) e.stopPropagation(); 
     
     if (!isAuto && navigator.vibrate) navigator.vibrate(40);
 
@@ -360,9 +385,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     );
   };
 
-  // 全局容器点击逻辑：处理“点击任意处下一题”
+  // 点击空白处下一题
   const handleGlobalClick = () => {
-    // 只有在：已提交 + 答错 的情况下，点击空白处才跳转
     if (isSubmitted) {
       const isCorrect = correctAnswer.map(String).includes(String(selectedId));
       if (!isCorrect && onIncorrect) {
@@ -388,12 +412,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // --- 答对：保持自动跳转 ---
       confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       setTimeout(() => onCorrect && onCorrect(), 1500);
     } else {
-      // --- 答错：不自动跳转，等待用户点击 ---
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
       
@@ -403,7 +425,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       } else {
         setShowExplanation(false);
       }
-      // 注意：这里删除了 setTimeout 自动跳转
     }
   };
 
@@ -411,10 +432,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
       
-      {/* 最外层容器增加了 onClick，用于“点击空白处下一题” */}
       <div className="xzt-container" onClick={handleGlobalClick}>
         
-        {/* 书本图标：stopPropagation 已处理，点击它不会跳下一题 */}
         <div 
           className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
           onClick={handleTitlePlay}
@@ -422,7 +441,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <FaBookOpen />
         </div>
 
-        {/* 标题区域 */}
         <div className="xzt-question-area">
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
@@ -444,7 +462,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <div className="title-divider"></div>
         </div>
 
-        {/* 选项区域 */}
         <div className="xzt-options-grid">
           {orderedOptions.map(opt => {
             let status = '';
@@ -460,11 +477,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 key={opt.id} 
                 className={`xzt-option-card ${status}`} 
                 onClick={(e) => {
-                  // 如果已提交，点击卡片也可以触发“下一题”
                   if (isSubmitted) {
-                     // 不阻止冒泡，让它传递给 xzt-container
                   } else {
-                     e.stopPropagation(); // 还没提交时，阻止冒泡，防止触发外层
+                     e.stopPropagation(); 
                      handleCardClick(opt);
                   }
                 }}
@@ -491,7 +506,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <button 
             className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
             onClick={(e) => {
-              e.stopPropagation(); // 防止点击按钮触发容器点击
+              e.stopPropagation(); 
               handleSubmit();
             }}
             disabled={!selectedId}
@@ -500,7 +515,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           </button>
 
           {showExplanation && activeExplanation && (
-            // 解析卡片：点击它也冒泡到容器，触发下一题
             <div className="explanation-card">
               <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
               <div>
