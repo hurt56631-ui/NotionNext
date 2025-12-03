@@ -149,49 +149,77 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 50px 32px 180px 32px; 
+    padding: 40px 32px 180px 32px; 
     overflow-y: auto;
     background-color: #fdfdfd;
   }
 
-  /* 顶部图标容器 (书本图标) */
-  .top-icon-wrapper {
-    width: 50px;
-    height: 50px;
+  /* 标题区域容器 - 整体 */
+  .xzt-question-area {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto 30px auto; 
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .question-img { 
+    width: 100%; 
+    max-height: 200px; 
+    object-fit: contain; 
+    border-radius: 12px; 
+    background-color: #f8fafc; 
+    margin-bottom: 16px; 
+  }
+
+  /* 透明卡片：包裹书本图标和文字 */
+  .title-card-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: row; /* 横向排列 */
+    align-items: center; /* 垂直居中 */
+    justify-content: center; /* 内容居中 */
+    gap: 16px; /* 图标和文字的间距 */
+    padding: 16px 20px;
+    border-radius: 20px;
+    /* 关键修改：增加半透明背景，确保点击区域是实心的 */
+    background-color: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(226, 232, 240, 0.6);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    transition: background-color 0.2s;
+  }
+  
+  .title-card-wrapper:active {
+    background-color: rgba(241, 245, 249, 0.8); /* 点击时的反馈颜色 */
+  }
+
+  /* 书本图标样式 - 移到左侧后调整大小 */
+  .book-icon-left {
+    flex-shrink: 0; /* 防止图标被压缩 */
+    width: 44px;
+    height: 44px;
     background-color: #f3e8ff;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #8b5cf6;
-    font-size: 1.5rem;
-    margin-bottom: 16px;
-    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.1);
+    font-size: 1.3rem;
+    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.15);
   }
 
-  /* 标题区域 */
-  .xzt-question-area {
-    width: 100%;
-    max-width: 500px;
-    margin: 0 auto 30px auto; 
-    text-align: center;
-    cursor: pointer;
-    position: relative;
-    /* 移除播放按钮后，保持居中和点击感 */
-  }
-  
-  .question-img { 
-    width: 100%; max-height: 200px; object-fit: contain; 
-    border-radius: 12px; background-color: #f8fafc; margin-bottom: 12px; 
-  }
-
+  /* 文字容器 */
   .title-text-container {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
-    align-items: flex-end;
+    align-items: flex-end; /* 拼音对齐 */
+    justify-content: flex-start; /* 文字左对齐 */
     gap: 4px;
     line-height: 1.6;
+    flex: 1; /* 占据剩余空间 */
   }
 
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
@@ -208,7 +236,7 @@ const cssStyles = `
     max-width: 500px;
   }
 
-  /* 卡片浮动阴影效果 */
+  /* 选项卡片 */
   .xzt-option-card {
     position: relative; 
     background: #fff; 
@@ -268,7 +296,6 @@ const cssStyles = `
   }
   .submit-btn:active { transform: scale(0.95); }
   .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
-  /* 提交后隐藏按钮 */
   .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
   /* 解析卡片 */
@@ -333,7 +360,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     // 每次题目更新时，强制停止音频并重置所有状态
     audioController.stop();
     
-    // 强制重置状态，解决“复制网址显示已完成”的问题
+    // 强制重置状态
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
@@ -382,7 +409,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         setShowExplanation(false);
       }
 
-      // ✅ 强制 1.5 秒后自动下一题 (不管有没有解析，统一节奏)
+      // ✅ 强制 1.5 秒后自动下一题
       setTimeout(() => {
          if (onIncorrect) onIncorrect(question);
       }, 1500);
@@ -394,31 +421,38 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* 顶部书本图标 */}
-        <div className="top-icon-wrapper">
-          <FaBookOpen />
-        </div>
-
-        {/* 标题区域：已移除播放图标，但保留点击朗读功能 */}
+        {/* 标题区域：改为点击“透明卡片”区域触发朗读 */}
         <div className="xzt-question-area" onClick={() => audioController.playMixed(question.text)}>
+          
+          {/* 图片在最上方 */}
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
-          <div className="title-text-container">
-            {titleSegments.map((seg, i) => {
-              if (seg.type === 'zh') {
-                return (
-                  <div key={i} className="cn-block">
-                    <span className="pinyin-top">{seg.pinyin}</span>
-                    <span className="cn-char">{seg.char}</span>
-                  </div>
-                );
-              } else {
-                return <span key={i} className="other-text-block">{seg.text}</span>;
-              }
-            })}
+          {/* 这里是修改后的结构：一个包含书本图标和文字的“卡片” */}
+          <div className="title-card-wrapper">
+            {/* 放在左侧的书本图标 */}
+            <div className="book-icon-left">
+              <FaBookOpen />
+            </div>
+
+            {/* 文字区域 */}
+            <div className="title-text-container">
+              {titleSegments.map((seg, i) => {
+                if (seg.type === 'zh') {
+                  return (
+                    <div key={i} className="cn-block">
+                      <span className="pinyin-top">{seg.pinyin}</span>
+                      <span className="cn-char">{seg.char}</span>
+                    </div>
+                  );
+                } else {
+                  return <span key={i} className="other-text-block">{seg.text}</span>;
+                }
+              })}
+            </div>
           </div>
         </div>
 
+        {/* 选项区域 */}
         <div className="xzt-options-grid">
           {orderedOptions.map(opt => {
             let status = '';
