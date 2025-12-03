@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes } from 'react-icons/fa';
+import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ⚠️ 请确保这个路径下有您的 AI 聊天组件
@@ -55,17 +55,20 @@ const idb = {
 };
 
 // =================================================================================
-// ===== 2. 混合 TTS 核心 Hook (HTML5 Audio 链式播放 - 极速版) =====
+// ===== 2. 混合 TTS 核心 Hook (支持暂停/继续/缓存) =====
 // =================================================================================
 function useMixedTTS() {
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isPaused, setIsPaused] = useState(false); // 新增：暂停状态
     const [loadingId, setLoadingId] = useState(null);
     const [playingId, setPlayingId] = useState(null);
     
-    // 引用：用于存储当前播放队列，方便随时停止
+    // 引用：用于存储当前播放队列
     const audioQueueRef = useRef([]); 
     const currentAudioRef = useRef(null);
     const latestRequestIdRef = useRef(0);
+    // 使用 ref 追踪 playingId，避免在 play 函数依赖中导致死循环
+    const playingIdRef = useRef(null);
 
     // 组件卸载时清理
     useEffect(() => {
@@ -73,44 +76,54 @@ function useMixedTTS() {
     }, []);
 
     const stop = useCallback(() => {
-        // 停止当前正在播放的
         if (currentAudioRef.current) {
             currentAudioRef.current.pause();
             currentAudioRef.current.currentTime = 0;
             currentAudioRef.current = null;
         }
-        // 清空队列引用
         audioQueueRef.current = [];
-        // 更新状态
         setIsPlaying(false);
+        setIsPaused(false);
         setPlayingId(null);
+        playingIdRef.current = null;
         setLoadingId(null);
-        // 增加请求ID，使旧的异步操作失效
         latestRequestIdRef.current++;
     }, []);
 
-    // 语种检测
+    // 新增：暂停/继续 切换功能
+    const toggle = useCallback((uniqueId) => {
+        if (playingIdRef.current !== uniqueId) return;
+
+        if (currentAudioRef.current) {
+            if (currentAudioRef.current.paused) {
+                // 继续播放
+                currentAudioRef.current.play().catch(e => console.error("Resume failed", e));
+                setIsPaused(false);
+            } else {
+                // 暂停播放
+                currentAudioRef.current.pause();
+                setIsPaused(true);
+            }
+        }
+    }, []);
+
     const detectLanguage = (text) => {
-        if (/[\u1000-\u109F]/.test(text)) return 'my'; // 缅文
-        return 'zh'; // 默认中文
+        if (/[\u1000-\u109F]/.test(text)) return 'my';
+        return 'zh';
     };
 
-    // 获取音频 Blob
     const fetchAudioBlob = async (text, lang) => {
         const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
         const cacheKey = `tts-blob-${voice}-${text}`;
         
-        // 1. 查缓存
         const cached = await idb.get(cacheKey);
         if (cached) return cached;
 
-        // 2. 请求
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
         const blob = await res.blob();
 
-        // 3. 存缓存
         await idb.set(cacheKey, blob);
         return blob;
     };
@@ -118,21 +131,20 @@ function useMixedTTS() {
     const play = useCallback(async (text, uniqueId) => {
         if (!text) return;
 
-        // 如果点击的是当前正在播放的，则停止
-        if (playingId === uniqueId) {
-            stop();
+        // 如果点击的是当前正在播放的 ID，则执行暂停/继续逻辑，而不是重播
+        if (playingIdRef.current === uniqueId) {
+            toggle(uniqueId);
             return;
         }
 
-        stop(); // 停止之前的
+        stop(); // 停止旧的
         setLoadingId(uniqueId);
         const myRequestId = ++latestRequestIdRef.current;
 
         try {
-            // 1. 文本清洗与拆分
             let cleanText = text.replace(/<[^>]+>/g, '').replace(/\{\{| \}\}|\}\}/g, '').replace(/\n/g, ' ');
             const segments = [];
-            const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g; // 简单拆分中文和非中文
+            const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
             let match;
             while ((match = regex.exec(cleanText)) !== null) {
                 if (match[0].trim()) {
@@ -148,18 +160,14 @@ function useMixedTTS() {
                 return;
             }
 
-            // 2. 并行请求所有片段
             const blobs = await Promise.all(
                 segments.map(seg => fetchAudioBlob(seg.text, seg.lang))
             );
 
-            // 如果请求期间被停止了，直接返回
             if (myRequestId !== latestRequestIdRef.current) return;
 
-            // 3. 创建 Audio 对象队列
             const audioObjects = blobs.map((blob, index) => {
                 const audio = new Audio(URL.createObjectURL(blob));
-                // ✅ 中文 0.7 倍速，缅文 1.0 倍速
                 if (segments[index].lang === 'zh') {
                     audio.playbackRate = 0.7; 
                     audio.preservesPitch = false; 
@@ -171,16 +179,20 @@ function useMixedTTS() {
 
             audioQueueRef.current = audioObjects;
             setLoadingId(null);
+            
+            // 更新状态和 Ref
             setPlayingId(uniqueId);
+            playingIdRef.current = uniqueId;
             setIsPlaying(true);
+            setIsPaused(false);
 
-            // 4. 递归播放函数
             const playNext = (index) => {
                 if (myRequestId !== latestRequestIdRef.current) return;
                 
                 if (index >= audioObjects.length) {
                     setIsPlaying(false);
                     setPlayingId(null);
+                    playingIdRef.current = null;
                     currentAudioRef.current = null;
                     return;
                 }
@@ -188,6 +200,7 @@ function useMixedTTS() {
                 const audio = audioObjects[index];
                 currentAudioRef.current = audio;
 
+                // 确保每次播放前设置正确的倍速（部分浏览器在pause后可能会重置）
                 const targetRate = segments[index].lang === 'zh' ? 0.7 : 1.0;
                 audio.playbackRate = targetRate;
 
@@ -197,13 +210,20 @@ function useMixedTTS() {
 
                 audio.onerror = (e) => {
                     console.error("Audio play error", e);
-                    playNext(index + 1);
+                    // 增加一个小延时防止死循环过快
+                    setTimeout(() => playNext(index + 1), 50);
                 };
 
                 audio.play().catch(e => {
                     console.error("Play prevented", e);
-                    setIsPlaying(false);
-                    setPlayingId(null);
+                    // 只有非交互错误才停止，否则尝试继续
+                    if (e.name === 'NotAllowedError') {
+                         setIsPlaying(false);
+                         setPlayingId(null);
+                         playingIdRef.current = null;
+                    } else {
+                         playNext(index + 1);
+                    }
                 });
             };
 
@@ -213,8 +233,9 @@ function useMixedTTS() {
             console.error("TTS Play Error:", e);
             setLoadingId(null);
             setPlayingId(null);
+            playingIdRef.current = null;
         }
-    }, [stop, playingId]); // playingId 加入依赖，确保状态正确判断
+    }, [stop, toggle]); 
 
     const preload = useCallback((text) => {
         if (!text) return;
@@ -230,7 +251,7 @@ function useMixedTTS() {
         }
     }, []);
 
-    return { play, stop, isPlaying, playingId, loadingId, preload };
+    return { play, stop, toggle, isPlaying, isPaused, playingId, loadingId, preload };
 }
 
 // =================================================================================
@@ -332,32 +353,29 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const [canGoNext, setCanGoNext] = useState(false);
 
     // 使用新的混合 TTS Hook
-    const { play, stop, playingId, loadingId, preload } = useMixedTTS();
+    const { play, stop, toggle, playingId, isPaused, loadingId, preload } = useMixedTTS();
 
-    // ✅ 关键修复：将滚动条重置逻辑单独抽离，仅依赖 currentIndex
     useEffect(() => {
-        // 切换页面时，停止之前的音频
         stop();
-        // 只有切换页面时，才重置滚动条
         if (contentRef.current) {
             contentRef.current.scrollTop = 0;
         }
-        // 重置按钮状态
         setCanGoNext(true);
     }, [currentIndex, stop]);
 
-    // ✅ 处理自动播放和预加载（不再包含 scrollTop 逻辑）
+    // ✅ 修复：依赖项移除 play，防止无限循环
     useEffect(() => {
         const currentGp = grammarPoints[currentIndex];
 
         // 自动播放解说
         const autoPlayTimer = setTimeout(() => {
             if (currentGp?.narrationScript) {
+                // 这里直接调用 play，因为 play 内部已经处理了 ref 状态
                 play(currentGp.narrationScript, `narration_${currentGp.id}`);
             }
         }, 600);
 
-        // 预加载下两条
+        // 预加载
         const preloadNextItems = (count) => {
             for (let i = 1; i <= count; i++) {
                 const nextIndex = currentIndex + i;
@@ -373,7 +391,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         preloadNextItems(2);
         
         return () => { clearTimeout(autoPlayTimer); };
-    }, [currentIndex, grammarPoints, play, preload]);
+        // ⚠️ 关键：这里只依赖 data 和 index，不依赖 play，防止无限重渲染
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentIndex, grammarPoints]); 
     
     // 滚动监听
     const handleScroll = () => {
@@ -383,7 +403,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (isBottom && !canGoNext) setCanGoNext(true);
     };
 
-    // 翻页逻辑
     const handleNext = () => {
         if (currentIndex < grammarPoints.length - 1) {
             lastDirection.current = 1;
@@ -408,7 +427,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         config: { mass: 1, tension: 280, friction: 30 },
     });
     
-    // 渲染混合文本 (用于显示)
     const renderMixedText = (text, isPattern = false) => {
         const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
         return parts.map((part, pIndex) => {
@@ -429,6 +447,30 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const renderRichExplanation = (htmlContent) => {
         if (!htmlContent) return null;
         return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+    };
+
+    // 渲染播放/暂停按钮的逻辑封装
+    const renderPlayButton = (script, id, isSmall = false) => {
+        const isCurrentPlaying = playingId === id;
+        const isLoading = loadingId === id;
+        
+        // 按钮图标逻辑：加载中 -> Spinner; 当前播放且未暂停 -> 暂停; 当前播放且已暂停 -> 播放; 其他 -> 播放/音量
+        let Icon = FaVolumeUp;
+        if (isLoading) Icon = FaSpinner;
+        else if (isCurrentPlaying) Icon = isPaused ? FaPlay : FaPause;
+
+        return (
+            <button 
+                className={`play-button ${isCurrentPlaying && !isPaused ? 'playing' : ''}`} 
+                style={isSmall ? styles.playButtonSmall : styles.playButton} 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    play(script, id); // play 内部已经封装了 toggle 逻辑
+                }}
+            >
+                <Icon className={isLoading ? "spin" : ""} />
+            </button>
+        );
     };
 
     const currentGp = grammarPoints[currentIndex];
@@ -461,13 +503,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                 <div style={styles.sectionContainer}>
                                     <div style={styles.sectionHeader}>
                                         <span style={styles.sectionTitleText}>💡 详解</span>
-                                        <button 
-                                            className={`play-button ${playingId === narrationId ? 'playing' : ''}`} 
-                                            style={styles.playButton} 
-                                            onClick={() => play(gp.narrationScript, narrationId)}
-                                        >
-                                            {loadingId === narrationId ? <FaSpinner className="spin" /> : (playingId === narrationId ? <FaStop/> : <FaVolumeUp/>) }
-                                        </button>
+                                        {/* 顶部主解说按钮 */}
+                                        {renderPlayButton(gp.narrationScript, narrationId, false)}
                                     </div>
                                     <div style={styles.textBlock}>
                                         {renderRichExplanation(gp.visibleExplanation)}
@@ -511,13 +548,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                                                         </div>
                                                         <div style={styles.exampleTranslation}>{ex.translation}</div>
                                                     </div>
-                                                    <button 
-                                                        className={`play-button ${playingId === exId ? 'playing' : ''}`}
-                                                        style={styles.playButtonSmall} 
-                                                        onClick={() => play(ex.narrationScript || ex.sentence, exId)}
-                                                    >
-                                                         {loadingId === exId ? <FaSpinner className="spin" /> : (playingId === exId ? <FaStop/> : <FaVolumeUp/>) }
-                                                    </button>
+                                                    {/* 例句播放按钮 */}
+                                                    {renderPlayButton(ex.narrationScript || ex.sentence, exId, true)}
                                                 </div>
                                             );
                                         })}
