@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaVolumeUp } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
 // --- 1. IndexedDB 缓存 (保持不变) ---
@@ -154,7 +154,22 @@ const cssStyles = `
     background-color: #fdfdfd;
   }
 
-  /* 标题区域容器 */
+  /* 顶部书本图标 (回归顶部) */
+  .top-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    background-color: #f3e8ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b5cf6;
+    font-size: 1.4rem;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.1);
+  }
+
+  /* 标题区域整体容器 */
   .xzt-question-area {
     width: 100%;
     max-width: 500px;
@@ -163,7 +178,6 @@ const cssStyles = `
     display: flex;
     flex-direction: column;
     align-items: center;
-    /* 注意：移除了外层的 onClick 和 cursor，移交给内部卡片 */
   }
   
   .question-img { 
@@ -172,49 +186,37 @@ const cssStyles = `
     object-fit: contain; 
     border-radius: 12px; 
     background-color: #f8fafc; 
-    margin-bottom: 16px; 
+    margin-bottom: 12px; 
   }
 
-  /* 标题透明卡片：增加 user-select: none 防止选中文本干扰点击 */
+  /* 
+   * 标题卡片：包含文字和播放按钮 
+   * 增加了 padding 和 flex 布局，确保整条横向区域都是可点击实体
+   */
   .title-card-wrapper {
     width: 100%;
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 16px 20px;
+    justify-content: space-between; /* 左右两端对齐 */
+    gap: 12px;
+    
+    padding: 16px 16px 16px 20px; /* 右侧padding稍微小一点，给按钮腾位置 */
     border-radius: 20px;
     
-    background-color: rgba(255, 255, 255, 0.6);
-    border: 1px solid rgba(226, 232, 240, 0.6);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+    background-color: rgba(255, 255, 255, 0.8); /* 稍微加深一点不透明度 */
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
     
     cursor: pointer;
-    user-select: none; /* 关键修复：禁止文字被选中，确保点击一定触发 */
+    user-select: none;
     -webkit-user-select: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
-  /* 增加按压效果，让用户知道点中了 */
   .title-card-wrapper:active {
-    background-color: rgba(241, 245, 249, 0.9);
-    transform: scale(0.98); 
-  }
-
-  /* 书本图标 */
-  .book-icon-left {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    background-color: #f3e8ff;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #8b5cf6;
-    font-size: 1.3rem;
-    box-shadow: 0 2px 4px rgba(139, 92, 246, 0.15);
+    background-color: #f1f5f9;
+    transform: scale(0.98);
   }
 
   /* 文字容器 */
@@ -225,8 +227,28 @@ const cssStyles = `
     justify-content: flex-start;
     gap: 4px;
     line-height: 1.6;
-    flex: 1;
-    pointer-events: none; /* 让文字不响应鼠标事件，事件全部由父级卡片处理 */
+    flex: 1; /* 占据剩余空间 */
+    pointer-events: none; /* 事件穿透，统一由父级 Card 处理 */
+  }
+
+  /* 播放按钮样式 */
+  .play-btn-circle {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 6px rgba(109, 40, 217, 0.3);
+    transition: transform 0.2s;
+  }
+  /* 按钮被按下时的微动效 */
+  .title-card-wrapper:active .play-btn-circle {
+    transform: scale(0.9);
   }
 
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
@@ -256,7 +278,7 @@ const cssStyles = `
     padding: 16px 20px;
     min-height: 72px;
     transform: translateY(0);
-    user-select: none; /* 选项也不要让选中文字 */
+    user-select: none;
     -webkit-user-select: none;
   }
   
@@ -386,7 +408,18 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (question.text) audioController.playMixed(question.text);
   }, [question, options]);
 
-  // 点击卡片仅选中
+  // 处理标题点击朗读（带震动）
+  const handleTitlePlay = (e) => {
+    // 防止冒泡或其他默认行为
+    if(e) e.stopPropagation(); 
+    
+    // 震动反馈
+    if (navigator.vibrate) navigator.vibrate(30);
+    
+    audioController.playMixed(question.text);
+  };
+
+  // 点击选项卡片仅选中
   const handleCardClick = (option) => {
     if (isSubmitted) return;
     
@@ -431,30 +464,24 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* 标题区域：外层只负责布局，点击事件交给内部卡片 */}
+        {/* 1. 书本图标 (放回顶部) */}
+        <div className="top-icon-wrapper">
+          <FaBookOpen />
+        </div>
+
+        {/* 2. 标题区域 */}
         <div className="xzt-question-area">
-          
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
           {/* 
-              修改说明：
-              1. onClick 移到了这个 div 上。
-              2. CSS 中加入了 user-select: none 防止选中文本。
-              3. CSS 中加入了 :active 缩放效果，提供点击反馈。
+              标题卡片：
+              - 整个区域可点击
+              - 增加了右侧的播放按钮图标
+              - 点击触发震动
           */}
-          <div 
-            className="title-card-wrapper" 
-            onClick={(e) => {
-              e.stopPropagation(); // 防止事件冒泡干扰
-              audioController.playMixed(question.text);
-            }}
-          >
-            {/* 书本图标 */}
-            <div className="book-icon-left">
-              <FaBookOpen />
-            </div>
-
-            {/* 文字区域 */}
+          <div className="title-card-wrapper" onClick={handleTitlePlay}>
+            
+            {/* 左侧：文字内容 */}
             <div className="title-text-container">
               {titleSegments.map((seg, i) => {
                 if (seg.type === 'zh') {
@@ -469,10 +496,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 }
               })}
             </div>
+
+            {/* 右侧：播放按钮 */}
+            <div className="play-btn-circle">
+              <FaVolumeUp />
+            </div>
+
           </div>
         </div>
 
-        {/* 选项区域 */}
+        {/* 3. 选项区域 */}
         <div className="xzt-options-grid">
           {orderedOptions.map(opt => {
             let status = '';
