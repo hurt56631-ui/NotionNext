@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb, FaBookOpen } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
 // --- 1. IndexedDB 缓存 (保持不变) ---
@@ -42,7 +42,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (支持不同语速) ---
+// --- 2. 音频控制器 ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -64,9 +64,7 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
-    // 中文语速控制逻辑在 playMixed 中通过 playbackRate 实现
     const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    // 这里的 r 参数请求标准语速音频
     const rateParam = 0; 
     
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
@@ -106,11 +104,11 @@ const audioController = {
 
       const audioObjects = blobs.map((blob, index) => {
         const audio = new Audio(URL.createObjectURL(blob));
-        // ✅ 中文语速 0.7，缅文/其他保持 1.0
+        // 设置中文语速 0.7，其他语言 1.0 (正常)
         if (segments[index].lang === 'zh') {
-          audio.playbackRate = 0.65; 
+          audio.playbackRate = 0.7; 
         } else {
-          audio.playbackRate = 0.86;
+          audio.playbackRate = 1.0;
         }
         return audio;
       });
@@ -126,7 +124,6 @@ const audioController = {
         this.currentAudio = audio;
         audio.onended = () => playNext(index + 1);
         
-        // 兼容处理：playbackRate 必须在加载元数据后设置才一定生效
         audio.onloadedmetadata = () => {
              if (segments[index].lang === 'zh') audio.playbackRate = 0.7;
         };
@@ -152,17 +149,16 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    /* ✅ 顶部 padding 50px，增加留白 */
     padding: 50px 32px 180px 32px; 
     overflow-y: auto;
     background-color: #fdfdfd;
   }
 
-  /* ✅ 顶部图标容器 */
+  /* 顶部图标容器 (书本图标) */
   .top-icon-wrapper {
     width: 50px;
     height: 50px;
-    background-color: #f3e8ff; /* 淡紫色背景 */
+    background-color: #f3e8ff;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -181,6 +177,7 @@ const cssStyles = `
     text-align: center;
     cursor: pointer;
     position: relative;
+    /* 移除播放按钮后，保持居中和点击感 */
   }
   
   .question-img { 
@@ -211,7 +208,7 @@ const cssStyles = `
     max-width: 500px;
   }
 
-  /* ✅ 卡片浮动阴影效果 */
+  /* 卡片浮动阴影效果 */
   .xzt-option-card {
     position: relative; 
     background: #fff; 
@@ -245,7 +242,7 @@ const cssStyles = `
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
   .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
   
-  /* ✅ 底部固定区域：抬高 15% */
+  /* 底部固定区域：抬高 15% */
   .fixed-bottom-area {
     position: fixed;
     bottom: 15vh;
@@ -333,16 +330,20 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const activeExplanation = explanation || question.explanation || "";
 
   useEffect(() => {
+    // 每次题目更新时，强制停止音频并重置所有状态
     audioController.stop();
+    
+    // 强制重置状态，解决“复制网址显示已完成”的问题
+    setSelectedId(null);
+    setIsSubmitted(false);
+    setShowExplanation(false);
+
     setTitleSegments(parseTitleText(question.text));
     setOrderedOptions(options.map(opt => ({
       ...opt,
       parsed: parseOptionText(opt.text),
       hasImage: !!opt.imageUrl
     })));
-    setSelectedId(null);
-    setIsSubmitted(false);
-    setShowExplanation(false);
 
     // 自动朗读标题一次
     if (question.text) audioController.playMixed(question.text);
@@ -357,7 +358,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     audioController.playMixed(option.text);
   };
 
-  // ✅ 点击“提交”按钮触发的逻辑
+  // 点击“提交”按钮触发的逻辑
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
 
@@ -377,19 +378,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       if (activeExplanation && activeExplanation.trim() !== '') {
         setShowExplanation(true);
         setTimeout(() => audioController.playMixed(activeExplanation), 500);
-        
-        // ✅ 强制修改：答错且有解析，固定 1500毫秒 (1.5秒) 后自动下一题
-        setTimeout(() => {
-           if (onIncorrect) onIncorrect(question);
-        }, 1700);
-
       } else {
         setShowExplanation(false);
-        // 答错无解析，也是 1.5 秒后自动下一题
-        setTimeout(() => {
-           if (onIncorrect) onIncorrect(question);
-        }, 1500);
       }
+
+      // ✅ 强制 1.5 秒后自动下一题 (不管有没有解析，统一节奏)
+      setTimeout(() => {
+         if (onIncorrect) onIncorrect(question);
+      }, 1500);
     }
   };
 
@@ -403,6 +399,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <FaBookOpen />
         </div>
 
+        {/* 标题区域：已移除播放图标，但保留点击朗读功能 */}
         <div className="xzt-question-area" onClick={() => audioController.playMixed(question.text)}>
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
@@ -419,7 +416,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 return <span key={i} className="other-text-block">{seg.text}</span>;
               }
             })}
-             <FaVolumeUp className="text-purple-400 ml-2 mb-1" size={20} />
           </div>
         </div>
 
