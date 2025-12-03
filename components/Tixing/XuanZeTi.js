@@ -29,7 +29,6 @@ const idb = {
       const req = tx.objectStore(STORE_NAME).get(key);
       req.onsuccess = () => {
         const res = req.result;
-        // 只有当 blob 确实有内容时才返回
         if (res && res.size > 0) resolve(res);
         else resolve(null);
       };
@@ -47,26 +46,25 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (针对“标题不朗读”做出的终极内存修复) ---
+// --- 2. 音频控制器 (带详细日志) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
-  // 专门用来记录生成的临时链接，用于后续销毁
   activeBlobUrls: [], 
   latestRequestId: 0,
 
   stop() {
-    // 1. 停止当前正在响的声音
+    console.log('[Audio] Stopping playback & cleaning up...');
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
     
-    // 2. 关键修复：把之前生成的所有音频链接彻底销毁，释放内存
     if (this.activeBlobUrls.length > 0) {
       this.activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
       this.activeBlobUrls = [];
+      console.log('[Audio] Memory released.');
     }
 
     this.playlist = [];
@@ -83,27 +81,35 @@ const audioController = {
     const rateParam = 0; 
     
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
-    const cached = await idb.get(cacheKey);
-    if (cached) return cached;
+    console.log(`[Audio] Fetching: "${text}" (${lang})`);
 
+    const cached = await idb.get(cacheKey);
+    if (cached) {
+      console.log(`[Audio] Cache HIT: "${text}"`);
+      return cached;
+    }
+
+    console.log(`[Audio] Network Request: "${text}"`);
     const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateParam}`;
     const res = await fetch(apiUrl);
-    if (!res.ok) throw new Error('TTS Fetch failed');
+    if (!res.ok) throw new Error(`TTS Fetch failed: ${res.status}`);
     const blob = await res.blob();
     if (blob.size === 0) throw new Error('Empty Audio Blob');
+    
     await idb.set(cacheKey, blob);
+    console.log(`[Audio] Downloaded & Cached: "${text}"`);
     return blob;
   },
 
   async playMixed(text, onStart, onEnd) {
-    this.stop(); // 播放前先大扫除
+    this.stop(); 
     if (!text) return;
     const reqId = ++this.latestRequestId;
+    console.log(`[Audio] Starting PlayMixed (ReqID: ${reqId}) - Text: ${text}`);
 
     if (onStart) onStart();
 
     const segments = [];
-    // 使用正则切分中文和非中文
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5\s]+)/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
@@ -114,20 +120,22 @@ const audioController = {
     }
 
     if (segments.length === 0) {
+      console.warn('[Audio] No segments found to play.');
       if (onEnd) onEnd();
       return;
     }
 
     try {
-      // 并行下载所有音频段
       const blobs = await Promise.all(
         segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang))
       );
       
-      if (reqId !== this.latestRequestId) return;
+      if (reqId !== this.latestRequestId) {
+        console.log('[Audio] Request aborted (new request came in).');
+        return;
+      }
 
       const audioObjects = blobs.map((blob, index) => {
-        // 创建 URL 并立即记录到清理列表中
         const url = URL.createObjectURL(blob);
         this.activeBlobUrls.push(url);
 
@@ -145,8 +153,8 @@ const audioController = {
       const playNext = (index) => {
         if (reqId !== this.latestRequestId) return;
         
-        // 播放结束
         if (index >= audioObjects.length) {
+            console.log('[Audio] All segments finished.');
             this.currentAudio = null;
             if (onEnd) onEnd();
             return;
@@ -155,11 +163,15 @@ const audioController = {
         const audio = audioObjects[index];
         this.currentAudio = audio;
         
-        audio.onended = () => playNext(index + 1);
+        console.log(`[Audio] Playing segment ${index + 1}/${audioObjects.length}`);
+
+        audio.onended = () => {
+          console.log(`[Audio] Segment ${index + 1} ended.`);
+          playNext(index + 1);
+        };
         
-        // 错误容错：如果这一段坏了，直接跳下一段，不要卡死
-        audio.onerror = () => {
-            console.warn('Audio segment error, skipping...');
+        audio.onerror = (e) => {
+            console.error(`[Audio] Error playing segment ${index + 1}:`, e);
             playNext(index + 1);
         };
         
@@ -170,15 +182,14 @@ const audioController = {
         const playPromise = audio.play();
         if (playPromise !== undefined) {
             playPromise.catch(error => {
-                console.error("Playback prevented:", error);
-                // 停止播放状态，不再强制继续，以免报错刷屏
-                if (onEnd) onEnd();
+                console.error("[Audio] Play prevented:", error);
+                if (onEnd) onEnd(); // 停止而不是跳过，防止死循环
             });
         }
       };
       playNext(0);
     } catch (e) {
-      console.error("Audio Load Error:", e);
+      console.error("[Audio] Load Error (Network/Cache):", e);
       if (onEnd) onEnd();
     }
   }
@@ -188,10 +199,15 @@ const audioController = {
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
+  /* 
+     修复点1：min-height: 100vh 
+     确保容器至少占满整个屏幕高度，这样点击底部空白处才能被 capture 到
+  */
   .xzt-container {
     font-family: "Padauk", "Noto Sans SC", sans-serif;
     width: 100%;
     height: 100%;
+    min-height: 100vh; 
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -299,7 +315,10 @@ const cssStyles = `
     box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
     animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex; gap: 12px; align-items: flex-start;
+    /* 修复点2：强制手型，且确保它是可点击的实体 */
     cursor: pointer;
+    position: relative;
+    z-index: 101; 
   }
   
   .tap-hint {
@@ -385,11 +404,13 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     );
   };
 
-  // 点击空白处下一题
+  // 全局容器点击逻辑：处理“点击任意处下一题”
   const handleGlobalClick = () => {
+    console.log('[UI] Global Click Detected');
     if (isSubmitted) {
       const isCorrect = correctAnswer.map(String).includes(String(selectedId));
       if (!isCorrect && onIncorrect) {
+        console.log('[UI] Triggering Next Question (Incorrect)');
         onIncorrect(question);
       }
     }
@@ -478,6 +499,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 className={`xzt-option-card ${status}`} 
                 onClick={(e) => {
                   if (isSubmitted) {
+                    // 已提交后，点击卡片也可以触发下一题 (不阻止冒泡)
+                    console.log('[UI] Card Clicked (Submitted)');
                   } else {
                      e.stopPropagation(); 
                      handleCardClick(opt);
@@ -515,7 +538,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           </button>
 
           {showExplanation && activeExplanation && (
-            <div className="explanation-card">
+            /* 
+               修复点3：给解析卡片直接加上 onClick={handleGlobalClick}
+               这样无论点左边的灯泡还是右边的文字，都能触发下一题
+            */
+            <div 
+              className="explanation-card"
+              onClick={handleGlobalClick} 
+            >
               <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
               <div>
                 <div>{activeExplanation}</div>
