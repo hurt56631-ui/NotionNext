@@ -42,7 +42,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (混合朗读无缝拼接) ---
+// --- 2. 音频控制器 (混合朗读) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -59,7 +59,6 @@ const audioController = {
   },
 
   detectLanguage(text) {
-    // 检测是否包含缅文
     if (/[\u1000-\u109F]/.test(text)) return 'my';
     return 'zh';
   },
@@ -83,9 +82,6 @@ const audioController = {
     if (!text) return;
     const reqId = ++this.latestRequestId;
 
-    // 分割文本：一段中文，或者一段非中文（缅文/英文/符号）
-    // 逻辑：遇到中文单独切分或组合，遇到缅文保持连续
-    // 这里简单按“语言块”分割
     const segments = [];
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
     let match;
@@ -126,20 +122,20 @@ const audioController = {
   }
 };
 
-// --- 3. 样式定义 (修复乱码与按钮位置) ---
+// --- 3. 样式定义 (已按要求调整) ---
 const cssStyles = `
-  /* 引入缅文字体，解决乱码根本问题 */
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
 
   .xzt-container {
-    font-family: "Padauk", "Noto Sans SC", sans-serif; /* 优先使用 Padauk 渲染缅文 */
+    font-family: "Padauk", "Noto Sans SC", sans-serif;
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 10px 16px 140px 16px; /* 底部留白给浮动按钮 */
+    /* ✅ 修改：左右内边距增加到 32px，让卡片看起来更短（两边留白更多） */
+    padding: 10px 32px 160px 32px; 
     overflow-y: auto;
     background-color: #fff;
   }
@@ -159,7 +155,6 @@ const cssStyles = `
     border-radius: 12px; background-color: #f8fafc; margin-bottom: 12px; 
   }
 
-  /* 标题文本容器 */
   .title-text-container {
     display: flex;
     flex-wrap: wrap;
@@ -169,99 +164,86 @@ const cssStyles = `
     line-height: 1.6;
   }
 
-  /* 中文单字块 */
-  .cn-block {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 0 1px;
-  }
-  .pinyin-top {
-    font-size: 0.85rem;
-    color: #94a3b8;
-    font-family: monospace;
-    height: 1.2em; /* 占位防止跳动 */
-  }
-  .cn-char {
-    font-size: 1.6rem; /* 字体适中 */
-    font-weight: 600;
-    color: #1e293b;
-  }
-
-  /* 缅文/其他文本块 - 关键修复：不切分，保持连贯 */
-  .other-text-block {
-    font-size: 1.5rem;
-    font-weight: 500;
-    color: #334155;
-    padding: 0 4px; /* 增加一点呼吸感 */
-    display: inline-block;
-  }
+  .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
+  .pinyin-top { font-size: 0.85rem; color: #94a3b8; font-family: monospace; height: 1.2em; }
+  .cn-char { font-size: 1.6rem; font-weight: 600; color: #1e293b; }
+  .other-text-block { font-size: 1.5rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; }
 
   /* 选项列表 */
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
     width: 100%;
     max-width: 500px;
   }
 
   .xzt-option-card {
-    position: relative; background: #fff; border-radius: 16px; border: 2px solid #f1f5f9;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.03); cursor: pointer; transition: all 0.15s;
-    display: flex; align-items: center;
-    padding: 12px 16px;
-    min-height: 64px;
+    position: relative; background: #fff; border-radius: 18px; border: 2px solid #f1f5f9;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; /* 内容居中 */
+    padding: 14px 16px;
+    min-height: 68px;
   }
   .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
   .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; }
   .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; animation: bounce 0.4s; }
   .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
 
-  .opt-content { flex: 1; text-align: left; }
-  .opt-py { font-size: 0.8rem; color: #94a3b8; line-height: 1; margin-bottom: 2px;}
-  .opt-txt { font-size: 1.1rem; font-weight: 600; color: #334155; }
+  /* ✅ 修改：选项文字居中 */
+  .opt-content { 
+    flex: 1; 
+    text-align: center; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+  }
   
-  /* 底部固定区域 */
+  .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
+  .opt-txt { font-size: 1.2rem; font-weight: 600; color: #334155; }
+  
+  /* ✅ 修改：底部固定区域，bottom 增加到 85px (约2cm + 安全区) */
   .fixed-bottom-area {
     position: fixed;
-    bottom: 5vh; /* 距离底部 5% 的高度，明显抬高 */
+    bottom: 85px; 
     left: 0; right: 0;
     display: flex;
     flex-direction: column-reverse; /* 解析在按钮上方 */
     align-items: center;
     pointer-events: none;
     z-index: 100;
-    gap: 16px;
+    gap: 20px;
   }
 
-  /* 提交按钮 - 短小精悍 */
+  /* 提交按钮 */
   .submit-btn {
     pointer-events: auto;
     width: auto;
-    min-width: 140px;
-    padding: 12px 40px;
-    border-radius: 99px; /* 完全胶囊圆角 */
-    font-size: 1.1rem; font-weight: 700; color: white; border: none;
-    background: #6366f1;
-    box-shadow: 0 6px 15px rgba(99, 102, 241, 0.4);
+    min-width: 160px; /* 稍微宽一点点 */
+    padding: 14px 40px;
+    border-radius: 99px;
+    font-size: 1.15rem; font-weight: 700; color: white; border: none;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
     transition: all 0.2s;
   }
   .submit-btn:active { transform: scale(0.95); }
-  .submit-btn:disabled { opacity: 0; transform: translateY(20px); }
+  .submit-btn:disabled { opacity: 0; transform: translateY(20px); pointer-events: none; }
 
   /* 解析卡片 */
   .explanation-card {
     pointer-events: auto;
     background: #fff1f2; color: #be123c;
     border: 1px solid #fecaca;
-    padding: 12px 16px; 
-    border-radius: 12px;
-    width: 90%; max-width: 400px;
-    font-size: 0.95rem;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 14px 20px; 
+    border-radius: 16px;
+    width: 85%; max-width: 420px;
+    font-size: 1rem;
+    line-height: 1.5;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
     animation: slideUp 0.3s ease-out;
-    display: flex; gap: 8px; align-items: flex-start;
+    display: flex; gap: 10px; align-items: flex-start;
   }
 
   @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
@@ -269,19 +251,14 @@ const cssStyles = `
   @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
-// --- 4. 关键：混合文本解析器 (解决缅文乱码) ---
+// --- 4. 文本解析逻辑 ---
 const parseTitleText = (text) => {
   if (!text) return [];
   const result = [];
-  
-  // 正则：捕获所有中文(含标点)，或者 非中文连续片段
-  // \p{Script=Han} 匹配汉字
   const regex = /([\p{Script=Han}]+)|([^\p{Script=Han}]+)/gu;
-  
   let match;
   while ((match = regex.exec(text)) !== null) {
     const segment = match[0];
-    // 如果是中文片段，再按字切分生成拼音
     if (/\p{Script=Han}/u.test(segment)) {
       const pinyins = pinyin(segment, { type: 'array', toneType: 'symbol' });
       const chars = segment.split('');
@@ -289,24 +266,18 @@ const parseTitleText = (text) => {
         result.push({ type: 'zh', char, pinyin: pinyins[i] || '' });
       });
     } else {
-      // 如果是非中文（缅文、英文、数字、空格），整体作为一个块，不要切分！
-      // 这里的关键是保留 segment 原样，不 split
       result.push({ type: 'other', text: segment });
     }
   }
   return result;
 };
 
-// 选项也用类似逻辑，简单生成拼音数据
 const parseOptionText = (text) => {
   const isZh = /[\u4e00-\u9fa5]/.test(text);
   if (!isZh) return { isZh: false, text };
-  
   const pinyins = pinyin(text, { type: 'array', toneType: 'symbol', nonZh: 'consecutive' });
-  // 这里简化处理，选项一般比较短
   return { isZh: true, text, pinyins: pinyins.join(' ') };
 };
-
 
 // --- 5. 组件主体 ---
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, explanation }) => {
@@ -318,25 +289,17 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
   useEffect(() => {
     audioController.stop();
-    
-    // 1. 解析标题：混合排版
     setTitleSegments(parseTitleText(question.text));
-
-    // 2. 解析选项
     setOrderedOptions(options.map(opt => ({
       ...opt,
       parsed: parseOptionText(opt.text),
       hasImage: !!opt.imageUrl
     })));
-
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // 自动播放题目
-    if (question.text) {
-      audioController.playMixed(question.text);
-    }
+    if (question.text) audioController.playMixed(question.text);
   }, [question, options]);
 
   const handleSelect = (option) => {
@@ -353,25 +316,33 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // 答对
+      // --- 答对 ---
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       setTimeout(() => onCorrect && onCorrect(), 1500);
     } else {
-      // 答错
+      // --- 答错 ---
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
       
-      if (explanation) {
+      // ✅ 关键逻辑修改：判断是否有解析
+      if (explanation && explanation.trim() !== '') {
+        // 有解析：显示卡片，播放音频，延迟较长
         setShowExplanation(true);
-        setTimeout(() => audioController.playMixed(explanation), 800);
+        setTimeout(() => audioController.playMixed(explanation), 600);
+        
+        // 估算阅读时间，至少 3 秒
+        const waitTime = Math.max(3000, explanation.length * 300);
+        setTimeout(() => {
+           onIncorrect && onIncorrect(question);
+        }, waitTime);
+      } else {
+        // ✅ 无解析：不显示卡片，1.2秒后自动下一题
+        setShowExplanation(false);
+        setTimeout(() => {
+           onIncorrect && onIncorrect(question);
+        }, 1200);
       }
-
-      // 答错逻辑：等待解析读完或固定时间，再触发 onIncorrect (用于重随)
-      const waitTime = explanation ? Math.max(3000, explanation.length * 300) : 2000;
-      setTimeout(() => {
-        onIncorrect && onIncorrect(question);
-      }, waitTime);
     }
   };
 
@@ -380,7 +351,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* 标题区域：支持缅文完整显示 + 中文拼音 */}
         <div className="xzt-question-area" onClick={() => audioController.playMixed(question.text)}>
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
@@ -394,7 +364,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                   </div>
                 );
               } else {
-                // 缅文或标点，直接渲染，不拆分
                 return <span key={i} className="other-text-block">{seg.text}</span>;
               }
             })}
@@ -402,7 +371,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           </div>
         </div>
 
-        {/* 选项区域 */}
         <div className="xzt-options-grid">
           {orderedOptions.map(opt => {
             let status = '';
@@ -423,18 +391,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                       <div className="opt-txt">{opt.text}</div>
                     </>
                   ) : (
-                    // 缅文选项直接显示，不加拼音
                     <div className="opt-txt font-medium">{opt.text}</div>
                   )}
                 </div>
-                {status === 'correct' && <FaCheckCircle className="text-green-500 text-xl" />}
-                {status === 'incorrect' && <FaTimesCircle className="text-red-500 text-xl" />}
+                {status === 'correct' && <FaCheckCircle className="text-green-500 text-xl absolute right-4" />}
+                {status === 'incorrect' && <FaTimesCircle className="text-red-500 text-xl absolute right-4" />}
               </div>
             );
           })}
         </div>
 
-        {/* 悬浮底部区域：解析 + 按钮 */}
         <div className="fixed-bottom-area">
           <button className="submit-btn" onClick={handleSubmit} disabled={!selectedId || isSubmitted}>
             提 交
@@ -442,7 +408,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
           {showExplanation && explanation && (
             <div className="explanation-card">
-              <FaLightbulb className="flex-shrink-0 mt-1" />
+              <FaLightbulb className="flex-shrink-0 mt-1 text-red-500" />
               <div>{explanation}</div>
             </div>
           )}
