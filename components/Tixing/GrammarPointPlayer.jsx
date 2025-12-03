@@ -5,6 +5,13 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// ----------------------------------------------------------------------------
+// ⚠️ 新增依赖：Markdown 渲染组件
+// 请确保已安装: npm install react-markdown remark-gfm
+// ----------------------------------------------------------------------------
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 // ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果报错 404 请检查此路径
 import AiChatAssistant from '../AiChatAssistant';
 
@@ -50,7 +57,6 @@ const idb = {
         if (blob && blob.size > 100) {
           resolve(blob);
         } else {
-          // 清理可疑缓存
           if (blob) {
             this.del(key).catch(() => {});
           }
@@ -90,7 +96,6 @@ const idb = {
   }
 };
 
-// 用于去重进行中的请求，避免同一文本重复下载
 const inFlightRequests = new Map();
 
 // =================================================================================
@@ -104,15 +109,13 @@ function useMixedTTS() {
 
   const audioQueueRef = useRef([]);
   const currentAudioRef = useRef(null);
-  const createdObjectURLsRef = useRef(new Set()); // 追踪 objectURLs，用于 revoke
+  const createdObjectURLsRef = useRef(new Set());
   const latestRequestIdRef = useRef(0);
   const playingIdRef = useRef(null);
 
   useEffect(() => {
     return () => {
-      // 组件卸载时彻底清理
       stop();
-      // revoke any remaining URLs
       for (const url of createdObjectURLsRef.current) {
         try { URL.revokeObjectURL(url); } catch (e) {}
       }
@@ -122,9 +125,7 @@ function useMixedTTS() {
   }, []);
 
   const stop = useCallback(() => {
-    // increase request id to abort pending flows
     latestRequestIdRef.current++;
-    // stop current audio
     if (currentAudioRef.current) {
       try {
         currentAudioRef.current.pause();
@@ -132,7 +133,6 @@ function useMixedTTS() {
       } catch (e) {}
       currentAudioRef.current = null;
     }
-    // stop all queued audios
     if (audioQueueRef.current && audioQueueRef.current.length) {
       audioQueueRef.current.forEach(a => {
         try { a.pause(); } catch (e) {}
@@ -140,11 +140,9 @@ function useMixedTTS() {
       });
       audioQueueRef.current = [];
     }
-    // cancel native speech
     if (window.speechSynthesis && window.speechSynthesis.cancel) {
       try { window.speechSynthesis.cancel(); } catch (e) {}
     }
-    // revoke created URLs
     for (const url of createdObjectURLsRef.current) {
       try { URL.revokeObjectURL(url); } catch (e) {}
     }
@@ -169,7 +167,6 @@ function useMixedTTS() {
         setIsPaused(true);
       }
     } else if (window.speechSynthesis && window.speechSynthesis.speaking) {
-      // toggle native speech
       try {
         if (window.speechSynthesis.paused) {
           window.speechSynthesis.resume();
@@ -185,10 +182,8 @@ function useMixedTTS() {
   }, []);
 
   const detectLanguage = (text) => {
-    // 缅甸文范围常用 \u1000-\u109F，中文汉字 \u4e00-\u9fff（更广）
     if (/[\u1000-\u109F]/.test(text)) return 'my';
     if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
-    // 默认 latin -> 返回 'other'（当作非中文，使用默认英文/缅甸 TTS）
     return 'other';
   };
 
@@ -198,7 +193,6 @@ function useMixedTTS() {
     const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const cacheKey = `tts-blob-${voice}-${text}`;
 
-    // 1. 尝试缓存
     try {
       const cached = await idb.get(cacheKey);
       if (cached) return cached;
@@ -206,12 +200,10 @@ function useMixedTTS() {
       console.warn('Cache read failed', e);
     }
 
-    // 2. 若已有进行中请求，复用它
     if (inFlightRequests.has(cacheKey)) {
       return inFlightRequests.get(cacheKey);
     }
 
-    // 3. 发起网络请求（并加入 inFlight）
     const promise = (async () => {
       try {
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
@@ -223,11 +215,9 @@ function useMixedTTS() {
         if (!blob || blob.size < 100) {
           throw new Error('TTS Response too small or invalid');
         }
-        // 尝试写入缓存（异步）
         idb.set(cacheKey, blob).catch(e => console.warn('Cache write failed', e));
         return blob;
       } catch (e) {
-        // 如果网络失败，确保删除疑似坏缓存
         try { idb.del(cacheKey).catch(()=>{}); } catch (_) {}
         throw e;
       } finally {
@@ -241,7 +231,6 @@ function useMixedTTS() {
 
   const play = useCallback(async (text, uniqueId, options = { allowNativeFallback: true }) => {
     if (!text) return;
-    // 如果点击的是当前播放项，切换暂停/继续
     if (playingIdRef.current === uniqueId) {
       toggle(uniqueId);
       return;
@@ -252,13 +241,21 @@ function useMixedTTS() {
     const myRequestId = ++latestRequestIdRef.current;
 
     try {
-      let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+      // 移除 markdown 符号以便阅读
+      let cleanText = String(text)
+        .replace(/<[^>]+>/g, '') // Remove HTML tags
+        .replace(/\{\{|\}\}/g, '') // Remove ruby markers
+        .replace(/\*\*/g, '') // Remove bold
+        .replace(/`/g, '') // Remove code
+        .replace(/#/g, '') // Remove headers
+        .replace(/\n+/g, ' ')
+        .trim();
+
       if (!cleanText) {
         setLoadingId(null);
         return;
       }
 
-      // 划分中/非中文段（尽量保持原有逻辑）
       const segments = [];
       const regex = /([\u4e00-\u9fff]+)|([^\u4e00-\u9fff]+)/g;
       let match;
@@ -275,13 +272,11 @@ function useMixedTTS() {
         return;
       }
 
-      // fetchBlobs: 注意 segments.map 生成 promise 数组
       const blobPromises = segments.map(seg => fetchAudioBlob(seg.text, seg.lang === 'other' ? 'zh' : seg.lang));
       const blobs = await Promise.all(blobPromises);
 
-      if (myRequestId !== latestRequestIdRef.current) return; // 请求被取消
+      if (myRequestId !== latestRequestIdRef.current) return;
 
-      // create Audio objects
       const audioObjects = blobs.map((blob, idx) => {
         const objectURL = URL.createObjectURL(blob);
         createdObjectURLsRef.current.add(objectURL);
@@ -298,16 +293,13 @@ function useMixedTTS() {
       setIsPlaying(true);
       setIsPaused(false);
 
-      // play sequentially
       const playNext = (index) => {
         if (myRequestId !== latestRequestIdRef.current) return;
         if (index >= audioObjects.length) {
-          // finished
           setIsPlaying(false);
           setPlayingId(null);
           playingIdRef.current = null;
           currentAudioRef.current = null;
-          // revoke used urls for this run
           audioObjects.forEach(item => {
             try { URL.revokeObjectURL(item.objectURL); } catch (e) {}
             createdObjectURLsRef.current.delete(item.objectURL);
@@ -320,7 +312,6 @@ function useMixedTTS() {
         currentAudioRef.current = audio;
 
         const cleanupAndNext = () => {
-          // revoke this objectURL after use
           try { URL.revokeObjectURL(objectURL); } catch (e) {}
           createdObjectURLsRef.current.delete(objectURL);
           playNext(index + 1);
@@ -329,17 +320,14 @@ function useMixedTTS() {
         audio.onended = cleanupAndNext;
         audio.onerror = (e) => {
           console.error('Audio play error', e);
-          // 尝试跳到下一个
           setTimeout(cleanupAndNext, 30);
         };
         audio.play().catch((e) => {
           console.error('Play prevented', e);
-          // 如果播放被策略阻止或发生异常，尝试降级到 native（仅当允许且 segments 都非空）
           if (options.allowNativeFallback && window.speechSynthesis) {
             try {
               const utterText = segments.map(s => s.text).join(' ');
               const utter = new SpeechSynthesisUtterance(utterText);
-              // 尝试选择语言（优先中文）
               utter.lang = /[\u1000-\u109F]/.test(utterText) ? 'my-MM' : 'zh-CN';
               utter.rate = 0.8;
               utter.onend = () => {
@@ -363,7 +351,6 @@ function useMixedTTS() {
               playingIdRef.current = null;
             }
           } else {
-            // 不允许 native fallback 或不支持 -> 直接继续下一个
             setTimeout(cleanupAndNext, 30);
           }
         });
@@ -375,7 +362,6 @@ function useMixedTTS() {
       console.error('网络 TTS 失败：', e);
       setLoadingId(null);
 
-      // 降级到原生（仅当允许）
       if (options.allowNativeFallback && window.speechSynthesis) {
         try {
           const utter = new SpeechSynthesisUtterance(String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim());
@@ -407,7 +393,6 @@ function useMixedTTS() {
           setIsPlaying(false);
         }
       } else {
-        // 不允许 native 降级 -> 直接失败
         setPlayingId(null);
         playingIdRef.current = null;
         setIsPlaying(false);
@@ -418,7 +403,13 @@ function useMixedTTS() {
 
   const preload = useCallback((text) => {
     if (!text) return;
-    let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+    let cleanText = String(text)
+      .replace(/<[^>]+>/g, '')
+      .replace(/\{\{|\}\}/g, '')
+      .replace(/\*\*/g, '')
+      .replace(/\n+/g, ' ')
+      .trim();
+
     const regex = /([\u4e00-\u9fff]+)|([^\u4e00-\u9fff]+)/g;
     let match;
     while ((match = regex.exec(cleanText)) !== null) {
@@ -438,11 +429,9 @@ function useMixedTTS() {
 // =================================================================================
 const generateRubyHTML = (text) => {
   if (!text) return '';
-  // 只对连续汉字做拼音
   return text.replace(/[\u4e00-\u9fff]+/g, word => {
     try {
       const pinyin = pinyinConverter(word, { toneType: 'numeric', type: 'array', multiple: false });
-      // pinyin-pro 返回数组，合并为空格分隔
       const rt = Array.isArray(pinyin) ? pinyin.join(' ') : pinyin || '';
       return `<ruby>${word}<rt>${rt}</rt></ruby>`;
     } catch (e) {
@@ -565,7 +554,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
-    // 仅在 mount 时修改 overscrollBehavior，unmount 时恢复
     const prev = document.body.style.overscrollBehavior;
     document.body.style.overscrollBehavior = 'none';
     return () => {
@@ -590,7 +578,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     setCanGoNext(true);
   }, [currentIndex, stop]);
 
-  // 只做预加载（不自动播放）
   useEffect(() => {
     const preloadNextItems = (count) => {
       for (let i = 1; i <= count; i++) {
@@ -640,7 +627,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
   const renderMixedText = (text, isPattern = false) => {
     if (!text) return null;
-    // 支持 {{汉字}} 与其余文字混合渲染
     const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
     return parts.map((part, pIndex) => {
       const isChinese = part.startsWith('{{') && part.endsWith('}}');
@@ -660,16 +646,21 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     });
   };
 
-  const renderRichExplanation = (htmlContent) => {
-    if (!htmlContent) return null;
-    return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+  // ⚠️ 关键修改：使用 ReactMarkdown 渲染内容
+  const renderMarkdown = (content) => {
+    if (!content) return null;
+    return (
+      <div className="rich-text-content" style={styles.richTextContainer}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    );
   };
 
-  // render play button (allow options to control fallback behavior)
   const renderPlayButton = (script, id, isSmall = false, opts = { allowNativeFallback: true }) => {
     const isCurrentPlaying = playingId === id;
     const isLoading = loadingId === id;
-
     let Icon = FaVolumeUp;
     if (isLoading) Icon = FaSpinner;
     else if (isCurrentPlaying) Icon = isPaused ? FaPlay : FaPause;
@@ -723,7 +714,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     {renderPlayButton(gp.narrationScript, narrationId, false, { allowNativeFallback: true })}
                   </div>
                   <div style={styles.textBlock}>
-                    {renderRichExplanation(gp.visibleExplanation)}
+                    {/* 使用 Markdown 渲染 */}
+                    {renderMarkdown(gp.visibleExplanation)}
                   </div>
                 </div>
 
@@ -733,7 +725,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                       <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 使用场景</span>
                     </div>
                     <div style={{ ...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-                      {renderRichExplanation(gp.usage)}
+                      {renderMarkdown(gp.usage)}
                     </div>
                   </div>
                 )}
@@ -744,33 +736,34 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                       <span style={{ ...styles.sectionTitleText, color: '#ef4444' }}>⚠️ 易错点</span>
                     </div>
                     <div style={{ ...styles.textBlock, background: '#fff1f2', border: '1px solid #fecaca' }}>
-                      {renderRichExplanation(gp.attention)}
+                      {renderMarkdown(gp.attention)}
                     </div>
                   </div>
                 )}
 
-                <div style={styles.sectionContainer}>
-                  <div style={styles.sectionHeader}>
-                    <span style={styles.sectionTitleText}>🗣️ 例句</span>
-                  </div>
-                  <div style={styles.examplesList}>
-                    {Array.isArray(gp.examples) && gp.examples.map((ex) => {
-                      const exId = `example_${ex.id}`;
-                      // 例句不允许走本地原生 tts 降级
-                      return (
-                        <div key={ex.id} style={styles.exampleItem}>
-                          <div style={styles.exampleMain}>
-                            <div style={styles.exampleSentence}>
-                              {renderMixedText(ex.sentence)}
+                {gp.examples && gp.examples.length > 0 && (
+                  <div style={styles.sectionContainer}>
+                    <div style={styles.sectionHeader}>
+                      <span style={styles.sectionTitleText}>🗣️ 例句</span>
+                    </div>
+                    <div style={styles.examplesList}>
+                      {gp.examples.map((ex) => {
+                        const exId = `example_${ex.id}`;
+                        return (
+                          <div key={ex.id} style={styles.exampleItem}>
+                            <div style={styles.exampleMain}>
+                              <div style={styles.exampleSentence}>
+                                {renderMixedText(ex.sentence)}
+                              </div>
+                              <div style={styles.exampleTranslation}>{ex.translation}</div>
                             </div>
-                            <div style={styles.exampleTranslation}>{ex.translation}</div>
+                            {renderPlayButton(ex.narrationScript || ex.sentence, exId, true, { allowNativeFallback: false })}
                           </div>
-                          {renderPlayButton(ex.narrationScript || ex.sentence, exId, true, { allowNativeFallback: false })}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div style={{ height: '120px' }} />
               </div>
@@ -815,7 +808,7 @@ GrammarPointPlayer.propTypes = {
 };
 
 // =================================================================================
-// ===== 5. 样式与全局动画（保留并增强富文本） =====
+// ===== 5. 样式与全局动画（已更新 Markdown 样式支持） =====
 // =================================================================================
 const styles = {
   container: { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif' },
@@ -835,7 +828,7 @@ const styles = {
   playButton: { background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.18s' },
   playButtonSmall: { background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '50%', width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.18s' },
   textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e6eef8', fontSize: '1rem', lineHeight: 1.75, color: '#475569' },
-  richTextContainer: { whiteSpace: 'normal' },
+  richTextContainer: { whiteSpace: 'normal', overflowWrap: 'break-word' },
   examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   exampleItem: { background: '#f8fafc', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #e2e8f0' },
   exampleMain: { flex: 1 },
@@ -856,13 +849,28 @@ if (styleTag) {
     .play-button:active { transform: scale(0.94); }
     .playing { animation: pulse-ring 2s infinite; background-color: rgba(37, 99, 235, 0.12) !important; color: #2563eb !important; border-color: #2563eb !important; }
     @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
-    .rich-text-content h1, .rich-text-content h2, .rich-text-content h3 { color: #0f172a; margin: 1.2em 0 0.5em 0; padding-bottom: 0.2em; border-bottom: 1px solid #eef2ff; font-weight: 700; }
-    .rich-text-content p { margin: 0.6em 0; color: #475569; line-height: 1.8; }
-    .rich-text-content strong, .rich-text-content b { color: #0b3d91; font-weight: 700; }
-    .rich-text-content ul, .rich-text-content ol { margin: 0.6em 0 0.6em 1.2em; padding-left: 0.6em; }
-    .rich-text-content li { margin: 0.4em 0; color: #475569; }
-    .rich-text-content code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
-    ruby rt { font-size: 0.65em; color: #0b3d91; }
+    
+    /* Markdown 样式增强 */
+    .rich-text-content h1, .rich-text-content h2, .rich-text-content h3 { color: #0f172a; margin: 1em 0 0.5em 0; padding-bottom: 0.2em; border-bottom: 1px solid #eef2ff; font-weight: 700; font-size: 1.1em; }
+    .rich-text-content p { margin: 0.8em 0; color: #475569; line-height: 1.8; }
+    .rich-text-content strong, .rich-text-content b { color: #0b3d91; font-weight: 700; background: rgba(37, 99, 235, 0.05); padding: 0 2px; border-radius: 2px; }
+    .rich-text-content em { font-style: italic; color: #64748b; }
+    .rich-text-content ul, .rich-text-content ol { margin: 0.6em 0 0.6em 1.4em; padding-left: 0; }
+    .rich-text-content li { margin: 0.4em 0; color: #475569; padding-left: 4px; }
+    .rich-text-content blockquote { border-left: 4px solid #cbd5e1; margin: 1em 0; padding: 4px 16px; background: #f8fafc; color: #64748b; font-style: italic; }
+    .rich-text-content code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; color: #e11d48; font-size: 0.9em; }
+    .rich-text-content pre { background: #1e293b; padding: 12px; border-radius: 8px; overflow-x: auto; color: #e2e8f0; }
+    .rich-text-content pre code { background: transparent; color: inherit; padding: 0; }
+    .rich-text-content a { color: #2563eb; text-decoration: none; border-bottom: 1px dashed #2563eb; }
+    .rich-text-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 1.5em 0; }
+    
+    /* 表格样式支持 */
+    .rich-text-content table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95em; }
+    .rich-text-content th { background: #f1f5f9; color: #334155; font-weight: 600; text-align: left; padding: 10px; border: 1px solid #e2e8f0; }
+    .rich-text-content td { padding: 10px; border: 1px solid #e2e8f0; color: #475569; vertical-align: top; }
+    .rich-text-content tr:nth-child(even) { background: #f8fafc; }
+
+    ruby rt { font-size: 0.65em; color: #0b3d91; user-select: none; }
   `;
   if (!document.getElementById('grammar-player-styles')) document.head.appendChild(styleTag);
 }
