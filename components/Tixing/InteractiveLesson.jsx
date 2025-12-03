@@ -108,7 +108,24 @@ export default function InteractiveLesson({ lesson }) {
   const currentBlock = blocks[currentIndex];
 
   useEffect(() => { setHasMounted(true); }, []);
-  useEffect(() => { if (lesson?.id && hasMounted) { const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); if (saved && parseInt(saved) < totalBlocks) setCurrentIndex(parseInt(saved)); } }, [lesson, hasMounted, totalBlocks]);
+  
+  // ✅ 修复逻辑：如果读取的进度已经是最后一页（已完成），则重置为0，允许重新开始
+  useEffect(() => { 
+    if (lesson?.id && hasMounted) { 
+      const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); 
+      if (saved) {
+        const savedIndex = parseInt(saved);
+        // 只有当进度小于总页数时才恢复进度，否则重置为0
+        if (savedIndex < totalBlocks) {
+          setCurrentIndex(savedIndex); 
+        } else {
+          setCurrentIndex(0); // 重置进度
+          localStorage.removeItem(`lesson-progress-${lesson.id}`);
+        }
+      }
+    } 
+  }, [lesson, hasMounted, totalBlocks]);
+
   useEffect(() => { if (hasMounted && lesson?.id && currentIndex > 0) localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString()); audioManager?.stop(); }, [currentIndex, lesson?.id, hasMounted]);
 
   // 自动跳过 Teaching
@@ -228,4 +245,4 @@ export default function InteractiveLesson({ lesson }) {
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
-}
+          }
