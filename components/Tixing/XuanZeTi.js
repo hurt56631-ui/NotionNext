@@ -46,7 +46,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (修复了标点符号导致崩溃的问题) ---
+// --- 2. 音频控制器 ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -54,14 +54,12 @@ const audioController = {
   latestRequestId: 0,
 
   stop() {
-    // 停止当前播放
     if (this.currentAudio) {
       this.currentAudio.pause();
       this.currentAudio.currentTime = 0;
       this.currentAudio = null;
     }
     
-    // 清理内存
     if (this.activeBlobUrls.length > 0) {
       this.activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
       this.activeBlobUrls = [];
@@ -77,28 +75,19 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const rateParam = 0; 
     
-    // 缓存 Key
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
-
-    // 1. 查缓存
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
 
-    // 2. 联网下载
-    console.log(`[Audio] Fetching network: "${text}"`);
     const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateParam}`;
     const res = await fetch(apiUrl);
     if (!res.ok) throw new Error(`TTS Fetch failed: ${res.status}`);
     const blob = await res.blob();
     
-    // 3. 检查文件大小 (如果是空文件，返回 null，不要报错)
-    if (blob.size === 0) {
-      console.warn(`[Audio] Empty blob received for: "${text}"`);
-      return null; 
-    }
+    if (blob.size === 0) return null; 
     
     await idb.set(cacheKey, blob);
     return blob;
@@ -112,40 +101,36 @@ const audioController = {
     if (onStart) onStart();
 
     const segments = [];
-    // 正则分割：中文 vs 其他
-    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5\s]+)/g;
+    
+    // ★★★ 修复点1：正则去掉了 \s ★★★
+    // 以前是 ([^\u4e00-\u9fa5\s]+) 会导致遇到空格就切断
+    // 现在是 ([^\u4e00-\u9fa5]+) 允许包含空格，整句缅文/英文会连在一起读
+    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
     let match;
     
     while ((match = regex.exec(text)) !== null) {
-      const segmentText = match[0].trim();
+      const segmentText = match[0].trim(); // 只去掉首尾空格，保留中间空格
       
-      // ★★★ 核心修复：过滤掉纯标点符号 ★★★
-      // 只要不包含 汉字、字母、数字、缅文 中的任意一个，就视为无效片段
       const isValidContent = /[\u4e00-\u9fa5a-zA-Z0-9\u1000-\u109F]/.test(segmentText);
       
       if (segmentText && isValidContent) {
         const lang = this.detectLanguage(segmentText);
         segments.push({ text: segmentText, lang });
-      } else {
-        console.log(`[Audio] Skipped punctuation/symbol: "${segmentText}"`);
       }
     }
 
     if (segments.length === 0) {
-      console.warn('[Audio] No playable segments found.');
       if (onEnd) onEnd();
       return;
     }
 
     try {
-      // 并行下载
       const blobs = await Promise.all(
         segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang))
       );
       
       if (reqId !== this.latestRequestId) return;
 
-      // 过滤掉下载失败的 (null)
       const validBlobs = [];
       const validSegments = [];
       blobs.forEach((b, i) => {
@@ -160,14 +145,13 @@ const audioController = {
         return;
       }
 
-      // 创建 Audio 对象
       const audioObjects = validBlobs.map((blob, index) => {
         const url = URL.createObjectURL(blob);
         this.activeBlobUrls.push(url);
 
         const audio = new Audio(url);
         if (validSegments[index].lang === 'zh') {
-          audio.playbackRate = 1.0; 
+          audio.playbackRate = 0.7; 
         } else {
           audio.playbackRate = 1.0;
         }
@@ -176,7 +160,6 @@ const audioController = {
       
       this.playlist = audioObjects;
 
-      // 递归播放
       const playNext = (index) => {
         if (reqId !== this.latestRequestId) return;
         
@@ -191,30 +174,28 @@ const audioController = {
         
         audio.onended = () => playNext(index + 1);
         
-        // 如果单个音频出错，自动跳下一个，不卡死
         audio.onerror = (e) => {
-            console.error(`[Audio] Segment error, skipping...`, e);
+            console.warn(`Audio segment error, skipping...`, e);
             playNext(index + 1);
         };
         
         audio.onloadedmetadata = () => {
-             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.8;
+             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.7;
         };
         
         const playPromise = audio.play();
         if (playPromise !== undefined) {
             playPromise.catch(error => {
-                console.error("[Audio] Play prevented:", error);
+                console.error("Playback prevented:", error);
                 if (onEnd) onEnd();
             });
         }
       };
       
-      // 开始播放第一个
       playNext(0);
 
     } catch (e) {
-      console.error("[Audio] Fatal Load Error:", e);
+      console.error("Fatal Load Error:", e);
       if (onEnd) onEnd();
     }
   }
@@ -224,10 +205,6 @@ const audioController = {
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
-  /* 
-     修复点：absolute + inset-0 
-     强制容器占满整个浏览器视口，解决“点击下方空白处无效”的问题 
-  */
   .xzt-container {
     font-family: "Padauk", "Noto Sans SC", sans-serif;
     position: absolute; 
@@ -237,7 +214,11 @@ const cssStyles = `
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 24px 180px 24px; 
+    /* 
+       修复点2：加大底部 padding 
+       从 180px 加大到 220px，防止固定在底部的提交按钮遮挡住最后的选项卡片
+    */
+    padding: 20px 24px 220px 24px; 
     overflow-y: auto;
     background-color: #fcfcfc;
   }
@@ -259,7 +240,7 @@ const cssStyles = `
     position: relative;
     z-index: 10;
     -webkit-tap-highlight-color: transparent;
-    flex-shrink: 0; /* 防止被挤压 */
+    flex-shrink: 0;
   }
   .book-read-btn:active { transform: scale(0.9); box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.3); }
   .book-read-btn.playing { animation: pulse-purple 2s infinite; background: #7c3aed; }
@@ -291,7 +272,12 @@ const cssStyles = `
   .other-text-block { font-size: 1.6rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; }
   .title-divider { width: 60px; height: 4px; background-color: #f1f5f9; border-radius: 2px; margin-top: 24px; }
 
-  .xzt-options-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 500px; padding-bottom: 20px; }
+  /* 修复点3：增加 Z-index 确保卡片位于背景之上 */
+  .xzt-options-grid { 
+    display: flex; flex-direction: column; gap: 16px; 
+    width: 100%; max-width: 500px; padding-bottom: 20px;
+    z-index: 5; 
+  }
   
   .xzt-option-card {
     position: relative; background: #fff; border-radius: 20px; 
@@ -342,10 +328,18 @@ const cssStyles = `
     box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
     animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex; gap: 12px; align-items: flex-start;
-    /* 确保整个卡片可点击 */
     cursor: pointer;
     position: relative;
     z-index: 101; 
+  }
+  
+  /* 
+     修复点4：文字穿透 
+     给卡片内的内容加上 pointer-events: none
+     这样点击文字时，事件会直接穿透到父级 .explanation-card，保证 onClick 100% 触发
+  */
+  .explanation-card > * {
+    pointer-events: none;
   }
   
   .tap-hint {
@@ -433,11 +427,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
   // 全局容器点击逻辑
   const handleGlobalClick = () => {
-    console.log('[UI] Global Click Detected');
     if (isSubmitted) {
       const isCorrect = correctAnswer.map(String).includes(String(selectedId));
       if (!isCorrect && onIncorrect) {
-        console.log('[UI] Triggering Next Question');
         onIncorrect(question);
       }
     }
@@ -480,7 +472,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
       
-      {/* 最外层容器点击事件 */}
       <div className="xzt-container" onClick={handleGlobalClick}>
         
         <div 
