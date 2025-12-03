@@ -108,9 +108,9 @@ const audioController = {
         const audio = new Audio(URL.createObjectURL(blob));
         // ✅ 中文语速 0.7，缅文/其他保持 1.0
         if (segments[index].lang === 'zh') {
-          audio.playbackRate = 0.7; 
+          audio.playbackRate = 0.65; 
         } else {
-          audio.playbackRate = 1.0;
+          audio.playbackRate = 0.86;
         }
         return audio;
       });
