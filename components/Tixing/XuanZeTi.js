@@ -446,7 +446,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       setTimeout(() => {
         if (!mountedRef.current) return;
         handleTitlePlay(null, true);
-      }, 200);
+      }, 500);
     }
 
     return () => {
@@ -541,7 +541,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       triggeredIncorrectRef.current = false;
       setShowExplanation(false);
       autoNextTimerRef.current = null;
-    }, 3000);
+    }, 5000);
   };
 
   // 提交逻辑
