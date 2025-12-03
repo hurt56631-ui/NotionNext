@@ -61,20 +61,18 @@ const audioController = {
   },
 
   isBurmese(text) {
-    // 检测是否包含缅文 Unicode 区块
     return /[\u1000-\u109F]/.test(text);
   },
 
+  // 获取语音包逻辑 (严格按照你的要求)
   getVoice(text, isTitle) {
-    // 1. 标题强制使用 Ava
+    // 1. 标题 -> 强制 Ava
     if (isTitle) return 'en-US-AvaMultilingualNeural';
     
-    // 2. 包含缅文 -> 使用 Ava
-    if (this.isBurmese(text)) {
-      return 'en-US-AvaMultilingualNeural'; 
-    }
+    // 2. 含缅文 -> 强制 Ava
+    if (this.isBurmese(text)) return 'en-US-AvaMultilingualNeural'; 
     
-    // 3. 全是中文/其他 -> 使用晓悠
+    // 3. 其他(纯中文) -> 晓悠
     return 'zh-CN-XiaoyouMultilingualNeural';
   },
 
@@ -84,22 +82,24 @@ const audioController = {
     const myRequestId = ++this.latestRequestId;
     this.stop(); 
 
-    // ✅ 修复：正则确保保留中文、缅文、英文、数字
-    // 之前的正则可能太严格了，这里放宽一点
-    const textToRead = text.replace(/[^\u4e00-\u9fa5\u1000-\u109Fa-zA-Z0-9\s，。！？、]/g, ''); 
+    // ✅ 修复正则：保留标点符号，只过滤特殊括号，确保 TTS 语意通顺
+    let textToRead = text.replace(/[【】\[\]\(\)]/g, ''); 
     if (!textToRead.trim()) return;
 
     const voice = this.getVoice(text, isTitle);
+    // 缓存Key加入voice，防止同个词用不同声音读时缓存冲突
     const cacheKey = `tts-${voice}-${textToRead}-${rate}`;
     let audioUrl;
 
     try {
+      // 1. 查缓存
       const cachedBlob = await idb.get(cacheKey);
       if (myRequestId !== this.latestRequestId) return;
 
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
+        // 2. 请求接口
         const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${voice}&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         if (!res.ok) throw new Error(`TTS API error: ${res.status}`);
@@ -111,10 +111,17 @@ const audioController = {
         audioUrl = URL.createObjectURL(blob);
       }
 
+      // 3. 播放
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
       
-      await audio.play().catch(e => console.warn("Auto-play blocked:", e));
+      // 捕获播放错误 (常见于手机浏览器限制)
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.warn("Audio Playback Failed (Interrupted or Blocked):", error);
+        });
+      }
 
       audio.onended = () => {
         if (this.currentAudio === audio) this.currentAudio = null;
@@ -122,13 +129,13 @@ const audioController = {
       };
 
     } catch (e) {
-      console.error("Audio playback error:", e);
+      console.error("Audio Critical Error:", e);
     }
   },
 
   async preload(text, isTitle = false) {
     if (!text || !text.trim()) return;
-    const textToRead = text.replace(/[^\u4e00-\u9fa5\u1000-\u109Fa-zA-Z0-9\s]/g, '');
+    const textToRead = text.replace(/[【】\[\]\(\)]/g, ''); 
     if (!textToRead.trim()) return;
 
     const voice = this.getVoice(text, isTitle);
@@ -145,7 +152,7 @@ const audioController = {
         await idb.set(cacheKey, blob);
       }
     } catch (e) {
-      console.error("Preload error:", e);
+      console.error("Preload Error:", e);
     }
   }
 };
@@ -160,19 +167,27 @@ export const preloadNextLessonAudios = (texts = []) => {
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
 
-  /* ✅ 禁止页面整体下拉刷新 */
-  html, body {
+  /* ✅ 禁止页面回弹/下拉刷新 */
+  html, body, #root {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
     overscroll-behavior: none;
     touch-action: manipulation;
+    overflow: hidden; /* 防止body滚动，只让容器滚动 */
   }
 
   .xzt-container { 
-    width: 100%; height: 100%; display: flex; flex-direction: column; 
-    align-items: center; position: relative; padding: 0 16px; overflow-y: auto; 
-    overscroll-behavior: none; /* 容器也加上 */
+    width: 100%; height: 100%; 
+    display: flex; flex-direction: column; 
+    align-items: center; 
+    position: relative; 
+    padding: 0 16px; 
+    overflow-y: auto; /* 内容区域滚动 */
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
   
-  .spacer { flex: 1; min-height: 5px; max-height: 30px; }
+  .spacer { flex: 1; min-height: 10px; max-height: 40px; }
 
   /* 标题区域 */
   .xzt-question-title {
@@ -195,7 +210,7 @@ const cssStyles = `
   .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
-  /* 拼音/文字容器：强制横向排列，居中 */
+  /* 拼音/文字容器：强制横向排列 */
   .pinyin-box { 
     display: flex; 
     flex-wrap: wrap; 
@@ -213,12 +228,16 @@ const cssStyles = `
   .my-text-title { font-family: 'Padauk', sans-serif; font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.4; }
 
   /* 选项区域 */
-  .xzt-options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; width: 100%; max-width: 480px; padding-bottom: 140px; }
+  .xzt-options-grid { 
+    display: grid; grid-template-columns: 1fr; gap: 10px; 
+    width: 100%; max-width: 480px; 
+    /* ✅ 增加底部留白，防止被固定按钮遮挡 */
+    padding-bottom: 180px; 
+  }
   
   .xzt-option-card {
     position: relative; background: #ffffff; border-radius: 18px; border: 2px solid #f1f5f9;
-    /* ✅ 修复：减少内边距，防止卡片太长 */
-    padding: 12px; 
+    padding: 12px; /* 紧凑Padding */
     box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.04); cursor: pointer; transition: all 0.2s ease; overflow: hidden;
     min-height: 60px;
   }
@@ -237,39 +256,40 @@ const cssStyles = `
   /* 选项文字容器 */
   .opt-text-box { display: flex; width: 100%; }
   
-  /* ✅ 修复：纯文字模式下，内容强制居中 */
-  .layout-text-only .opt-text-box { 
-    justify-content: center; 
-    align-items: center; 
-  } 
-  
-  /* 有图片模式下，内容左对齐 */
-  .layout-with-image .opt-text-box { 
-    justify-content: flex-start; 
-    align-items: center; /* 垂直居中 */
-  }
+  /* ✅ 纯文字居中 */
+  .layout-text-only .opt-text-box { justify-content: center; align-items: center; } 
+  /* 有图片左对齐 */
+  .layout-with-image .opt-text-box { justify-content: flex-start; align-items: center; }
 
   .opt-pinyin { font-size: 0.75rem; color: #94a3b8; font-family: monospace; margin-bottom: -2px; }
   .opt-cn { font-size: 1.2rem; font-weight: 700; color: #334155; line-height: 1.2; }
   .opt-my { font-family: 'Padauk', sans-serif; font-size: 1.25rem; font-weight: 600; color: #334155; }
 
-  /* 底部固定区域 */
+  /* ✅ 底部固定区域：固定定位，层级最高 */
   .fixed-bottom-area { 
-    position: fixed; bottom: 80px; left: 0; right: 0; 
+    position: fixed; 
+    bottom: 0; left: 0; right: 0; 
     display: flex; flex-direction: column; align-items: center; 
-    pointer-events: none; z-index: 60; padding: 0 20px; 
+    pointer-events: none; /* 让点击穿透空白区域 */
+    z-index: 100; 
+    padding: 0 20px 30px 20px; /* 底部预留空间 */
+    background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.8) 60%, rgba(255,255,255,0) 100%);
   }
   
+  /* 解析卡片：从底部按钮上方浮现 */
   .explanation-card { 
     background: #fff; border: 1px solid #fecaca; background-color: #fef2f2; 
     color: #b91c1c; padding: 12px 16px; border-radius: 16px; margin-bottom: 12px; 
-    font-size: 0.95rem; line-height: 1.4; text-align: left; width: 100%; 
-    max-width: 480px; pointer-events: auto; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); 
-    display: flex; align-items: flex-start; gap: 8px; animation: slideUp 0.3s ease-out; 
+    font-size: 0.95rem; line-height: 1.4; text-align: left; 
+    width: 100%; max-width: 480px; 
+    pointer-events: auto; /* 解析卡片可交互 */
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); 
+    display: flex; align-items: flex-start; gap: 8px; 
+    animation: slideUp 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28); 
   }
 
   .submit-btn { 
-    pointer-events: auto; min-width: 150px; padding: 14px 30px; border-radius: 100px; 
+    pointer-events: auto; min-width: 160px; padding: 14px 30px; border-radius: 100px; 
     font-size: 1.1rem; font-weight: 800; color: white; 
     background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); 
     box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4); border: none; transition: all 0.2s; 
@@ -278,7 +298,7 @@ const cssStyles = `
   .submit-btn:active:not(:disabled) { transform: scale(0.95); }
 
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 `;
 
 // 工具函数
@@ -309,7 +329,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const [shuffledOptions, setShuffledOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // 分割混合文本
+  // 分割混合文本逻辑
   const generateDisplayParts = (text) => {
     if(!text) return [];
     const regex = /([\u1000-\u109F]+|[\u4e00-\u9fa5]+|[^ \u4e00-\u9fa5\u1000-\u109F]+)/g;
@@ -334,7 +354,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     setShuffledOptions([...processed].sort(() => Math.random() - 0.5));
 
-    // 自动播放题目 (isTitle=true -> 强制 Ava)
+    // 自动播放题目 (Title=true -> Ava)
     if (question.text) {
       setIsPlaying(true);
       audioController.play(question.text, true, 0.9).finally(() => setIsPlaying(false));
@@ -369,14 +389,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
       
-      // ✅ 朗读解析
+      // ✅ 错误时逻辑：先显示解析，然后朗读
       if (explanation) {
         setShowExplanation(true);
+        // 稍微延迟让UI先渲染出来，再开始读
         setTimeout(() => {
            audioController.play(explanation, false, 0.9);
         }, 500);
       }
       
+      // 延时重置允许重新选择
       setTimeout(() => setIsSubmitted(false), 2000);
     }
   };
@@ -384,7 +406,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const handleReadQuestion = (e) => {
     e.stopPropagation();
     setIsPlaying(true);
-    // 点击标题朗读 (isTitle=true)
     audioController.play(question.text, true, 0.9).finally(() => setIsPlaying(false));
   };
 
@@ -395,7 +416,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
             display: 'flex', 
             flexDirection: 'row', 
             flexWrap: 'wrap',
-            // ✅ 修复：如果是标题 OR (没有图片且非标题)，则居中
+            // ✅ 居中逻辑：如果是标题，或者(没有图片的选项)，都强制居中
             justifyContent: (isTitle || !hasImage) ? 'center' : 'flex-start', 
             alignItems: isTitle ? 'flex-end' : 'center',
         }}
@@ -484,14 +505,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           })}
         </div>
 
-        {/* 底部固定区域 */}
+        {/* 底部固定区域 (包含解析和按钮) */}
         <div className="fixed-bottom-area">
+          {/* 解析卡片 (如果有解析且需要显示，会浮现在按钮上方) */}
           {showExplanation && explanation && (
             <div className="explanation-card">
                <FaLightbulb className="flex-shrink-0 mt-1" />
                <div>{explanation}</div>
             </div>
           )}
+          
           <button 
             className="submit-btn" 
             onClick={handleSubmit} 
