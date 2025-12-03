@@ -64,7 +64,7 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang, rate) {
-    const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const cacheKey = `tts-${voice}-${text}-${rate}`;
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
