@@ -46,117 +46,152 @@ const idb = {
   }
 };
 
-// --- 2. 增强版音频控制器 (支持中/缅语 + 预加载) ---
+// --- 2. ✅ 重构后的高级音频控制器 (支持混合语言拼接 + 预加载) ---
 const audioController = {
-  currentAudio: null,
+  currentAudioSource: null,
   latestRequestId: 0,
+  audioContext: null,
 
-  // 用于组件卸载等场景的强制停止
-  stop() {
-    if (this.currentAudio) {
-      this.currentAudio.pause();
-      this.currentAudio.currentTime = 0;
-      this.currentAudio = null;
+  _getAudioContext() {
+    if (!this.audioContext || this.audioContext.state === 'closed') {
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-    this.latestRequestId++; // 使所有正在进行的请求失效
+    return this.audioContext;
   },
 
-  isBurmese(text) {
-    return /[\u1000-\u109F]/.test(text);
+  stop() {
+    if (this.currentAudioSource) {
+      this.currentAudioSource.stop();
+      this.currentAudioSource = null;
+    }
+    this.latestRequestId++;
+  },
+  
+  // 1. 将文本按语言分割成片段
+  _segmentText(text) {
+    if (!text) return [];
+    // 正则表达式匹配连续的缅文、中文或英文/数字
+    const regex = /([\u1000-\u109F]+|[\u4e00-\u9fa5]+|[a-zA-Z0-9\s]+)/g;
+    const parts = text.match(regex) || [];
+    const segments = [];
+    
+    parts.forEach(part => {
+      part = part.trim();
+      if (!part) return;
+
+      if (/[\u1000-\u109F]/.test(part)) {
+        segments.push({ text: part, lang: 'my' });
+      } else if (/[\u4e00-\u9fa5]/.test(part)) {
+        segments.push({ text: part, lang: 'zh' });
+      }
+      // 英文和其他内容暂时不朗读，可以按需扩展
+    });
+    return segments;
   },
 
-  // ✅ 修复：修正了朗读逻辑，恢复正常播放
+  // 2. 获取单个音频片段 (带缓存)
+  async _getAudioBlob(segment, rate = 1.0) {
+    const { text, lang } = segment;
+    const textToRead = lang === 'zh' ? text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '') : text;
+    if (!textToRead) return null;
+
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const cacheKey = `tts-${lang}-${textToRead}-${rate}`;
+
+    const cachedBlob = await idb.get(cacheKey);
+    if (cachedBlob) return cachedBlob;
+    
+    try {
+      const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${voice}&r=${rate > 1 ? 20 : 0}`;
+      const res = await fetch(apiUrl);
+      if (!res.ok) throw new Error(`TTS API failed for: ${text}`);
+      const blob = await res.blob();
+      await idb.set(cacheKey, blob);
+      return blob;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  },
+
+  // 3. 核心播放函数：分割 -> 并行获取 -> 拼接 -> 播放
   async play(text, rate = 1.0) {
     if (!text || !text.trim()) return;
 
-    // 1. 为本次播放请求生成唯一ID
     const myRequestId = ++this.latestRequestId;
+    this.stop();
 
-    // 2. 如果有正在播放的音频，先停止它
-    if (this.currentAudio) {
-      this.currentAudio.pause();
-      this.currentAudio = null;
-    }
-
-    // 3. 根据语言过滤文本（仅用于TTS，不影响显示）
-    const isMy = this.isBurmese(text);
-    // 移除符号，避免TTS读出奇怪的标点
-    const textToRead = isMy ? text : text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '');
-    if (!textToRead.trim()) return;
-
-    const lang = isMy ? 'my-MM' : 'zh-CN';
-    const voice = isMy ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-${lang}-${textToRead}-${rate}`;
-    let audioUrl;
+    const segments = this._segmentText(text);
+    if (segments.length === 0) return;
 
     try {
-      // 检查请求是否已过时
+      // 并行获取所有音频片段
+      const blobPromises = segments.map(seg => this._getAudioBlob(seg, rate));
+      const blobs = (await Promise.all(blobPromises)).filter(Boolean); // 过滤掉失败的请求
+
+      if (myRequestId !== this.latestRequestId || blobs.length === 0) return;
+
+      const context = this._getAudioContext();
+      
+      // 将Blobs解码为Web Audio API的AudioBuffers
+      const bufferPromises = blobs.map(blob => blob.arrayBuffer().then(ab => context.decodeAudioData(ab)));
+      const audioBuffers = await Promise.all(bufferPromises);
+
       if (myRequestId !== this.latestRequestId) return;
 
-      const cachedBlob = await idb.get(cacheKey);
+      // 计算总时长并创建用于拼接的空白Buffer
+      const totalLength = audioBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
+      // 假设所有音频源的声道和采样率都相同
+      const outputBuffer = context.createBuffer(
+        audioBuffers[0].numberOfChannels,
+        totalLength,
+        audioBuffers[0].sampleRate
+      );
 
-      // 在异步操作后再次检查，防止旧请求播放
-      if (myRequestId !== this.latestRequestId) return;
-
-      if (cachedBlob) {
-        audioUrl = URL.createObjectURL(cachedBlob);
-      } else {
-        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${voice}&r=${rate > 1 ? 20 : 0}`;
-        const res = await fetch(apiUrl);
-        if (!res.ok) throw new Error(`TTS API failed with status ${res.status}`);
-        const blob = await res.blob();
-        
-        if (myRequestId !== this.latestRequestId) return;
-        
-        await idb.set(cacheKey, blob);
-        audioUrl = URL.createObjectURL(blob);
+      // 依次将解码后的音频数据复制到输出Buffer中
+      let offset = 0;
+      for (const buffer of audioBuffers) {
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+          outputBuffer.getChannelData(channel).set(buffer.getChannelData(channel), offset);
+        }
+        offset += buffer.length;
       }
 
-      const audio = new Audio(audioUrl);
-      this.currentAudio = audio;
-      await audio.play();
-
-      audio.onended = () => {
-        if (this.currentAudio === audio) this.currentAudio = null;
-        if (audioUrl && audioUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(audioUrl);
+      // 创建音源节点并播放拼接好的音频
+      const source = context.createBufferSource();
+      source.buffer = outputBuffer;
+      source.connect(context.destination);
+      source.start();
+      
+      this.currentAudioSource = source;
+      source.onended = () => {
+        if (this.currentAudioSource === source) {
+          this.currentAudioSource = null;
         }
       };
+
     } catch (e) {
-      console.error("Audio playback error:", e);
+      console.error("Audio processing error:", e);
     }
   },
 
   async preload(text) {
     if (!text || !text.trim()) return;
-    const isMy = this.isBurmese(text);
-    const textToRead = isMy ? text : text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '');
-    if (!textToRead.trim()) return;
-    const lang = isMy ? 'my-MM' : 'zh-CN';
-    const voice = isMy ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-${lang}-${textToRead}-1.0`;
-    try {
-      const cachedBlob = await idb.get(cacheKey);
-      if (cachedBlob) return;
-      const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${voice}&r=0`;
-      const res = await fetch(apiUrl);
-      if (!res.ok) return;
-      const blob = await res.blob();
-      await idb.set(cacheKey, blob);
-    } catch (e) {
-      console.error("Audio preload error:", e);
-    }
+    const segments = this._segmentText(text);
+    if (segments.length === 0) return;
+
+    // 并行预加载所有片段
+    const preloadPromises = segments.map(seg => this._getAudioBlob(seg, 1.0));
+    await Promise.allSettled(preloadPromises);
   }
 };
-
 
 export const preloadNextLessonAudios = (texts = []) => {
     if (!Array.isArray(texts)) return;
     Promise.allSettled(texts.map(text => audioController.preload(text)));
 };
 
-
-// --- 样式定义 ---
+// --- 样式定义 --- (无变化)
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
   .xzt-container { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; position: relative; padding: 0 16px; overflow-y: auto; }
@@ -198,13 +233,10 @@ const cssStyles = `
 
 // 工具函数
 const isChineseChar = (char) => /[\u4e00-\u9fa5]/.test(char);
-const isBurmese = (text) => /[\u1000-\u109F]/.test(text);
 
-// ✅ 修复：恢复拼音的音调显示
 const generatePinyinData = (text) => {
   if (!text) return [];
   try {
-    // 使用 toneType: 'symbol' 来获取带音调的拼音
     const pinyins = pinyin(text, { type: 'array', toneType: 'symbol' }) || [];
     const chars = text.split('');
     let pyIndex = 0;
@@ -212,45 +244,43 @@ const generatePinyinData = (text) => {
       if (isChineseChar(char)) {
         return { char, pinyin: pinyins[pyIndex++] || '' };
       }
-      // 对于非中文字符（如【】），正常显示字符，拼音留空
       return { char, pinyin: '' };
     });
   } catch (e) {
-    console.error("Pinyin generation error:", e);
     return text.split('').map(c => ({ char: c, pinyin: '' }));
   }
 };
-
 
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, explanation }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [questionData, setQuestionData] = useState({ pinyin: [], isBurmese: false });
+  const [questionData, setQuestionData] = useState({ pinyin: [], hasBurmese: false, displayParts: [] });
   const [shuffledOptions, setShuffledOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // 用于混合语言显示
+  const generateDisplayParts = (text) => {
+    if(!text) return [];
+    const regex = /([\u1000-\u109F]+|[\u4e00-\u9fa5]+|[^ \u4e00-\u9fa5\u1000-\u109F]+)/g;
+    const parts = text.match(regex) || [];
+    return parts.map(part => {
+        if (/[\u1000-\u109F]/.test(part)) return { type: 'my', text: part };
+        if (/[\u4e00-\u9fa5]/.test(part)) return { type: 'zh', text: part, pinyinData: generatePinyinData(part) };
+        return { type: 'other', text: part };
+    });
+  }
+
   useEffect(() => {
-    // 组件加载时停止上一题可能在播放的音频
     audioController.stop();
 
-    const qIsBurmese = isBurmese(question.text);
-    setQuestionData({
-        pinyin: qIsBurmese ? [] : generatePinyinData(question.text),
-        isBurmese: qIsBurmese
-    });
+    setQuestionData({ displayParts: generateDisplayParts(question.text) });
     
-    const processed = options.map(opt => {
-      const optIsBurmese = isBurmese(opt.text);
-      const optIsChinese = !optIsBurmese && /[\u4e00-\u9fa5]/.test(opt.text);
-      return {
-        ...opt,
-        pinyinData: optIsChinese ? generatePinyinData(opt.text) : [],
-        isChinese: optIsChinese,
-        isBurmese: optIsBurmese,
-        hasImage: !!opt.imageUrl
-      };
-    });
+    const processed = options.map(opt => ({
+      ...opt,
+      displayParts: generateDisplayParts(opt.text),
+      hasImage: !!opt.imageUrl
+    }));
 
     setShuffledOptions([...processed].sort(() => Math.random() - 0.5));
 
@@ -263,7 +293,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // 组件卸载时确保停止所有音频
     return () => audioController.stop();
   }, [question, options]);
 
@@ -271,7 +300,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (isSubmitted) return;
     setSelectedId(option.id);
     if (showExplanation) setShowExplanation(false);
-    // ✅ 修复：现在可以正常朗读选项了
     if (option.text) audioController.play(option.text, 0.95);
   };
 
@@ -282,28 +310,53 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      confetti({ particleCount: 150, spread: 80, origin: { y: 0.7 }, colors: ['#a78bfa', '#f472b6', '#fbbf24'] });
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.7 } });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       if (onCorrect) setTimeout(onCorrect, 1500);
     } else {
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
       
+      // ✅ 答错时显示并朗读解析
       if (explanation) {
         setShowExplanation(true);
-        setTimeout(() => audioController.play(explanation, 0.9), 800);
+        // 延迟一点等待UI动画
+        setTimeout(() => audioController.play(explanation, 0.9), 500);
       }
       
-      setTimeout(() => setIsSubmitted(false), 1500);
+      setTimeout(() => setIsSubmitted(false), 2000);
     }
   };
 
   const handleReadQuestion = (e) => {
     e.stopPropagation();
     setIsPlaying(true);
-    // ✅ 修复：现在可以正常朗读题目了
     audioController.play(question.text, 0.9).finally(() => setIsPlaying(false));
   };
+
+  const renderTextParts = (parts, isTitle = false) => (
+    <div className={isTitle ? "pinyin-box" : ""}>
+        {parts.map((part, index) => {
+            if (part.type === 'zh') {
+                return (
+                    <span key={index} style={{display: 'inline-flex', flexDirection: isTitle ? 'row' : 'column', alignItems: 'center'}}>
+                        {part.pinyinData.map((item, idx) => (
+                             <div key={idx} className="char-block">
+                                <span className={isTitle ? "py-text" : "opt-pinyin"}>{item.pinyin || ' '}</span>
+                                <span className={isTitle ? "cn-text" : "opt-cn"}>{item.char}</span>
+                            </div>
+                        ))}
+                    </span>
+                );
+            }
+            if (part.type === 'my') {
+                return <span key={index} className={isTitle ? "my-text-title" : "opt-my"}>{part.text}</span>;
+            }
+            // 渲染其他文本，比如空格和标点
+            return <span key={index} className={isTitle ? "cn-text" : "opt-cn"}>{part.text}</span>;
+        })}
+    </div>
+  );
 
   return (
     <>
@@ -315,18 +368,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           <div className="absolute top-4 right-4 text-slate-400">
             <FaVolumeUp size={20} className={isPlaying ? 'icon-pulse' : ''} />
           </div>
-          {questionData.isBurmese ? (
-            <div className="my-text-title">{question.text}</div>
-          ) : (
-            <div className="pinyin-box">
-              {questionData.pinyin.map((item, idx) => (
-                <div key={idx} className="char-block">
-                  <span className="py-text">{item.pinyin || ' '}</span>
-                  <span className="cn-text">{item.char}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {renderTextParts(questionData.displayParts, true)}
         </div>
         <div className="spacer" />
         <div className="xzt-options-grid">
@@ -345,15 +387,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
             return (
               <div key={option.id} className={`xzt-option-card ${layoutClass} ${statusClass}`} onClick={() => handleSelect(option)}>
                 {option.hasImage && <div className="opt-img-wrapper"><img src={option.imageUrl} alt="option" className="opt-img" /></div>}
-                <div className="opt-text-box">
-                  {option.isChinese ? (
-                    <><div className="opt-pinyin">{option.pinyinData.map(d => d.pinyin).join(' ')}</div><div className="opt-cn">{option.text}</div></>
-                  ) : option.isBurmese ? (
-                    <div className="opt-my">{option.text}</div>
-                  ) : (
-                    <div className="opt-en">{option.text}</div>
-                  )}
-                </div>
+                <div className="opt-text-box">{renderTextParts(option.displayParts)}</div>
                 {isSubmitted && correctIds.includes(optIdStr) && <FaCheckCircle className="text-green-500 absolute right-3 text-xl"/>}
                 {isSubmitted && optIdStr === selIdStr && !correctIds.includes(optIdStr) && <FaTimesCircle className="text-red-500 absolute right-3 text-xl"/>}
               </div>
