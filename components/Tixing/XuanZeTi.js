@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaLightbulb, FaBookOpen } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
 // --- 1. IndexedDB 缓存 (保持不变) ---
@@ -152,16 +152,32 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 10px 32px 180px 32px; 
+    /* ✅ 修改：顶部 padding 增加到 50px，增加留白 */
+    padding: 50px 32px 180px 32px; 
     overflow-y: auto;
     background-color: #fdfdfd;
+  }
+
+  /* ✅ 新增：顶部图标容器 */
+  .top-icon-wrapper {
+    width: 50px;
+    height: 50px;
+    background-color: #f3e8ff; /* 淡紫色背景 */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b5cf6;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.1);
   }
 
   /* 标题区域 */
   .xzt-question-area {
     width: 100%;
     max-width: 500px;
-    margin: 10px auto 30px auto;
+    margin: 0 auto 30px auto; /* 上边距减少，由 padding 控制 */
     text-align: center;
     cursor: pointer;
     position: relative;
@@ -341,7 +357,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     audioController.playMixed(option.text);
   };
 
-  // ✅ 新增：点击“提交”按钮触发的逻辑
+  // ✅ 点击“提交”按钮触发的逻辑
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
 
@@ -362,7 +378,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         setShowExplanation(true);
         setTimeout(() => audioController.playMixed(activeExplanation), 500);
         
-        const waitTime = Math.max(3500, activeExplanation.length * 350);
+        // ✅ 关键优化：调整等待时间，每字 200ms，最少等待 2.5s，最多等待 8s
+        // 之前的问题是时间太长，导致像卡死。现在设定了上限。
+        const waitTime = Math.min(3000, Math.max(1600, activeExplanation.length * 100));
+        
         setTimeout(() => {
            if (onIncorrect) onIncorrect(question);
         }, waitTime);
@@ -381,6 +400,11 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
+        {/* ✅ 新增：顶部书本图标，美化界面 */}
+        <div className="top-icon-wrapper">
+          <FaBookOpen />
+        </div>
+
         <div className="xzt-question-area" onClick={() => audioController.playMixed(question.text)}>
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
