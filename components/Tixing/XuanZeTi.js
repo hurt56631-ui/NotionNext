@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaVolumeUp } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
 // --- 1. IndexedDB 缓存 (保持不变) ---
@@ -27,7 +27,11 @@ const idb = {
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readonly');
       const req = tx.objectStore(STORE_NAME).get(key);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const res = req.result;
+        if (res && res.size > 0) resolve(res);
+        else resolve(null);
+      };
       req.onerror = () => resolve(null);
     });
   },
@@ -42,7 +46,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 ---
+// --- 2. 音频控制器 (保持不变) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -59,8 +63,8 @@ const audioController = {
   },
 
   detectLanguage(text) {
-    if (/[\u1000-\u109F]/.test(text)) return 'my'; // 缅文
-    return 'zh'; // 默认中文
+    if (/[\u1000-\u109F]/.test(text)) return 'my';
+    return 'zh';
   },
 
   async fetchAudioBlob(text, lang) {
@@ -75,17 +79,20 @@ const audioController = {
     const res = await fetch(apiUrl);
     if (!res.ok) throw new Error('TTS Fetch failed');
     const blob = await res.blob();
+    if (blob.size === 0) throw new Error('Empty Audio Blob');
     await idb.set(cacheKey, blob);
     return blob;
   },
 
-  async playMixed(text) {
+  async playMixed(text, onStart, onEnd) {
     this.stop();
     if (!text) return;
     const reqId = ++this.latestRequestId;
 
+    if (onStart) onStart();
+
     const segments = [];
-    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
+    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5\s]+)/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
       if (match[0].trim()) {
@@ -94,17 +101,20 @@ const audioController = {
       }
     }
 
-    if (segments.length === 0) return;
+    if (segments.length === 0) {
+      if (onEnd) onEnd();
+      return;
+    }
 
     try {
       const blobs = await Promise.all(
         segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang))
       );
+      
       if (reqId !== this.latestRequestId) return;
 
       const audioObjects = blobs.map((blob, index) => {
         const audio = new Audio(URL.createObjectURL(blob));
-        // 设置中文语速 0.7，其他语言 1.0 (正常)
         if (segments[index].lang === 'zh') {
           audio.playbackRate = 0.7; 
         } else {
@@ -116,30 +126,42 @@ const audioController = {
       this.playlist = audioObjects;
 
       const playNext = (index) => {
-        if (reqId !== this.latestRequestId || index >= audioObjects.length) {
+        if (reqId !== this.latestRequestId) return;
+        if (index >= audioObjects.length) {
             this.currentAudio = null;
+            if (onEnd) onEnd();
             return;
         }
+
         const audio = audioObjects[index];
         this.currentAudio = audio;
+        
         audio.onended = () => playNext(index + 1);
+        audio.onerror = () => playNext(index + 1);
         
         audio.onloadedmetadata = () => {
              if (segments[index].lang === 'zh') audio.playbackRate = 0.7;
         };
         
-        audio.play().catch(e => console.error(e));
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.error("Playback prevented:", error);
+                playNext(index + 1);
+            });
+        }
       };
       playNext(0);
     } catch (e) {
-      console.error(e);
+      console.error("Audio Load Error:", e);
+      if (onEnd) onEnd();
     }
   }
 };
 
-// --- 3. 样式定义 ---
+// --- 3. 样式定义 (保持富文本样式) ---
 const cssStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
   .xzt-container {
     font-family: "Padauk", "Noto Sans SC", sans-serif;
@@ -149,188 +171,97 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 40px 32px 180px 32px; 
+    padding: 20px 24px 180px 24px; 
     overflow-y: auto;
-    background-color: #fdfdfd;
+    background-color: #fcfcfc;
   }
 
-  /* 顶部书本图标 (回归顶部) */
-  .top-icon-wrapper {
-    width: 48px;
-    height: 48px;
-    background-color: #f3e8ff;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #8b5cf6;
-    font-size: 1.4rem;
-    margin-bottom: 12px;
-    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.1);
-  }
-
-  /* 标题区域整体容器 */
-  .xzt-question-area {
-    width: 100%;
-    max-width: 500px;
-    margin: 0 auto 30px auto; 
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-  
-  .question-img { 
-    width: 100%; 
-    max-height: 200px; 
-    object-fit: contain; 
-    border-radius: 12px; 
-    background-color: #f8fafc; 
-    margin-bottom: 12px; 
-  }
-
-  /* 
-   * 标题卡片：包含文字和播放按钮 
-   * 增加了 padding 和 flex 布局，确保整条横向区域都是可点击实体
-   */
-  .title-card-wrapper {
-    width: 100%;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between; /* 左右两端对齐 */
-    gap: 12px;
-    
-    padding: 16px 16px 16px 20px; /* 右侧padding稍微小一点，给按钮腾位置 */
-    border-radius: 20px;
-    
-    background-color: rgba(255, 255, 255, 0.8); /* 稍微加深一点不透明度 */
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
-    
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  .title-card-wrapper:active {
-    background-color: #f1f5f9;
-    transform: scale(0.98);
-  }
-
-  /* 文字容器 */
-  .title-text-container {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: flex-start;
-    gap: 4px;
-    line-height: 1.6;
-    flex: 1; /* 占据剩余空间 */
-    pointer-events: none; /* 事件穿透，统一由父级 Card 处理 */
-  }
-
-  /* 播放按钮样式 */
-  .play-btn-circle {
-    flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  .book-read-btn {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.2rem;
-    box-shadow: 0 4px 6px rgba(109, 40, 217, 0.3);
-    transition: transform 0.2s;
+    font-size: 1.6rem;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 15px -3px rgba(124, 58, 237, 0.4);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    z-index: 10;
+    -webkit-tap-highlight-color: transparent;
   }
-  /* 按钮被按下时的微动效 */
-  .title-card-wrapper:active .play-btn-circle {
-    transform: scale(0.9);
-  }
+  .book-read-btn:active { transform: scale(0.9); box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.3); }
+  .book-read-btn.playing { animation: pulse-purple 2s infinite; background: #7c3aed; }
 
-  .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
-  .pinyin-top { font-size: 0.85rem; color: #94a3b8; font-family: monospace; height: 1.2em; }
-  .cn-char { font-size: 1.6rem; font-weight: 600; color: #1e293b; }
-  .other-text-block { font-size: 1.5rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; }
-
-  /* 选项列表 */
-  .xzt-options-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 16px; 
-    width: 100%;
-    max-width: 500px;
+  @keyframes pulse-purple {
+    0% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.7); }
+    70% { box-shadow: 0 0 0 15px rgba(124, 58, 237, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
   }
 
-  /* 选项卡片 */
+  .xzt-question-area {
+    width: 100%; max-width: 500px; margin: 0 auto 32px auto; 
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .question-img { 
+    width: 100%; max-height: 220px; object-fit: contain; 
+    border-radius: 16px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+
+  .rich-text-container {
+    width: 100%; display: flex; flex-wrap: wrap;
+    justify-content: center; align-items: flex-end;
+    gap: 6px; line-height: 1.8; padding: 0 10px;
+  }
+  .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; position: relative; }
+  .pinyin-top { font-size: 1rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
+  .cn-char { font-size: 1.85rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
+  .other-text-block { font-size: 1.6rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; }
+  .title-divider { width: 60px; height: 4px; background-color: #f1f5f9; border-radius: 2px; margin-top: 24px; }
+
+  .xzt-options-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 500px; }
+  
   .xzt-option-card {
-    position: relative; 
-    background: #fff; 
-    border-radius: 20px; 
+    position: relative; background: #fff; border-radius: 20px; 
     border: 2px solid #e2e8f0;
     box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 6px 0 #cbd5e1; 
-    cursor: pointer; 
-    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer; transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex; align-items: center; justify-content: center;
-    padding: 16px 20px;
-    min-height: 72px;
+    padding: 16px 20px; min-height: 72px;
     transform: translateY(0);
-    user-select: none;
-    -webkit-user-select: none;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
   }
-  
-  .xzt-option-card:active { 
-    transform: translateY(4px); 
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 2px 0 #cbd5e1; 
-    background: #f8fafc; 
-  }
-  
+  .xzt-option-card:active { transform: translateY(4px); box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 2px 0 #cbd5e1; background: #f8fafc; }
   .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; box-shadow: 0 6px 0 #ddd6fe; }
   .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; box-shadow: 0 6px 0 #bbf7d0; animation: bounce 0.4s; }
   .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; box-shadow: 0 6px 0 #fecaca; animation: shake 0.4s; }
 
-  .opt-content { 
-    flex: 1; 
-    text-align: center; 
-    display: flex; flex-direction: column; align-items: center; justify-content: center; 
-  }
-  
+  .opt-content { flex: 1; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
   .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
   
-  /* 底部固定区域 */
   .fixed-bottom-area {
-    position: fixed;
-    bottom: 15vh;
-    left: 0; right: 0;
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: center;
-    pointer-events: none;
-    z-index: 100;
-    gap: 20px;
+    position: fixed; bottom: 12vh; left: 0; right: 0;
+    display: flex; flex-direction: column-reverse; align-items: center;
+    pointer-events: none; z-index: 100; gap: 20px;
   }
 
-  /* 提交按钮 */
   .submit-btn {
-    pointer-events: auto;
-    width: auto; min-width: 180px;
-    padding: 14px 40px;
-    border-radius: 99px;
-    font-size: 1.1rem; font-weight: 700; color: white; border: none;
+    pointer-events: auto; width: auto; min-width: 180px; padding: 14px 40px;
+    border-radius: 99px; font-size: 1.1rem; font-weight: 700; color: white; border: none;
     background: linear-gradient(135deg, #6366f1, #8b5cf6);
     box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
-    transition: all 0.2s;
-    user-select: none;
+    transition: all 0.2s; user-select: none;
   }
   .submit-btn:active { transform: scale(0.95); }
   .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
   .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
-  /* 解析卡片 */
+  /* 解析卡片：增加了 "点击继续" 的淡提示 */
   .explanation-card {
     pointer-events: auto;
     background: #fff1f2; color: #be123c;
@@ -343,6 +274,12 @@ const cssStyles = `
     box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
     animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex; gap: 12px; align-items: flex-start;
+    cursor: pointer; /* 提示可点击 */
+  }
+  
+  /* 解析下面的小提示文字 */
+  .tap-hint {
+    font-size: 0.8rem; color: #f87171; opacity: 0.7; margin-top: 8px; font-weight: 400;
   }
 
   @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
@@ -385,14 +322,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const [showExplanation, setShowExplanation] = useState(false);
   const [titleSegments, setTitleSegments] = useState([]);
   const [orderedOptions, setOrderedOptions] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   
   const activeExplanation = explanation || question.explanation || "";
 
   useEffect(() => {
-    // 每次题目更新时，强制停止音频并重置所有状态
+    // 重置状态
     audioController.stop();
-    
-    // 强制重置状态
+    setIsPlaying(false);
     setSelectedId(null);
     setIsSubmitted(false);
     setShowExplanation(false);
@@ -404,31 +341,46 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       hasImage: !!opt.imageUrl
     })));
 
-    // 自动朗读标题一次
-    if (question.text) audioController.playMixed(question.text);
+    // 自动朗读一次
+    if (question.text) {
+      handleTitlePlay(null, true); 
+    }
   }, [question, options]);
 
-  // 处理标题点击朗读（带震动）
-  const handleTitlePlay = (e) => {
-    // 防止冒泡或其他默认行为
-    if(e) e.stopPropagation(); 
+  // 点击书本朗读
+  const handleTitlePlay = (e, isAuto = false) => {
+    if(e) e.stopPropagation(); // 阻止冒泡：避免在答错后点击书本误触发“下一题”
     
-    // 震动反馈
-    if (navigator.vibrate) navigator.vibrate(30);
-    
-    audioController.playMixed(question.text);
+    if (!isAuto && navigator.vibrate) navigator.vibrate(40);
+
+    audioController.playMixed(
+      question.text, 
+      () => setIsPlaying(true),
+      () => setIsPlaying(false)
+    );
   };
 
-  // 点击选项卡片仅选中
+  // 全局容器点击逻辑：处理“点击任意处下一题”
+  const handleGlobalClick = () => {
+    // 只有在：已提交 + 答错 的情况下，点击空白处才跳转
+    if (isSubmitted) {
+      const isCorrect = correctAnswer.map(String).includes(String(selectedId));
+      if (!isCorrect && onIncorrect) {
+        onIncorrect(question);
+      }
+    }
+  };
+
+  // 选项点击
   const handleCardClick = (option) => {
-    if (isSubmitted) return;
+    if (isSubmitted) return; 
     
     setSelectedId(option.id);
     if (navigator.vibrate) navigator.vibrate(20);
     audioController.playMixed(option.text);
   };
 
-  // 点击“提交”按钮触发的逻辑
+  // 提交逻辑
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
 
@@ -436,12 +388,12 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // --- 答对 ---
+      // --- 答对：保持自动跳转 ---
       confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       setTimeout(() => onCorrect && onCorrect(), 1500);
     } else {
-      // --- 答错 ---
+      // --- 答错：不自动跳转，等待用户点击 ---
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
       
@@ -451,61 +403,48 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       } else {
         setShowExplanation(false);
       }
-
-      // ✅ 强制 1.5 秒后自动下一题
-      setTimeout(() => {
-         if (onIncorrect) onIncorrect(question);
-      }, 1500);
+      // 注意：这里删除了 setTimeout 自动跳转
     }
   };
 
   return (
     <>
       <style>{cssStyles}</style>
-      <div className="xzt-container">
+      
+      {/* 最外层容器增加了 onClick，用于“点击空白处下一题” */}
+      <div className="xzt-container" onClick={handleGlobalClick}>
         
-        {/* 1. 书本图标 (放回顶部) */}
-        <div className="top-icon-wrapper">
+        {/* 书本图标：stopPropagation 已处理，点击它不会跳下一题 */}
+        <div 
+          className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
+          onClick={handleTitlePlay}
+        >
           <FaBookOpen />
         </div>
 
-        {/* 2. 标题区域 */}
+        {/* 标题区域 */}
         <div className="xzt-question-area">
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
-          {/* 
-              标题卡片：
-              - 整个区域可点击
-              - 增加了右侧的播放按钮图标
-              - 点击触发震动
-          */}
-          <div className="title-card-wrapper" onClick={handleTitlePlay}>
-            
-            {/* 左侧：文字内容 */}
-            <div className="title-text-container">
-              {titleSegments.map((seg, i) => {
-                if (seg.type === 'zh') {
-                  return (
-                    <div key={i} className="cn-block">
-                      <span className="pinyin-top">{seg.pinyin}</span>
-                      <span className="cn-char">{seg.char}</span>
-                    </div>
-                  );
-                } else {
-                  return <span key={i} className="other-text-block">{seg.text}</span>;
-                }
-              })}
-            </div>
-
-            {/* 右侧：播放按钮 */}
-            <div className="play-btn-circle">
-              <FaVolumeUp />
-            </div>
-
+          <div className="rich-text-container">
+            {titleSegments.map((seg, i) => {
+              if (seg.type === 'zh') {
+                return (
+                  <div key={i} className="cn-block">
+                    <span className="pinyin-top">{seg.pinyin}</span>
+                    <span className="cn-char">{seg.char}</span>
+                  </div>
+                );
+              } else {
+                return <span key={i} className="other-text-block">{seg.text}</span>;
+              }
+            })}
           </div>
+          
+          <div className="title-divider"></div>
         </div>
 
-        {/* 3. 选项区域 */}
+        {/* 选项区域 */}
         <div className="xzt-options-grid">
           {orderedOptions.map(opt => {
             let status = '';
@@ -520,7 +459,15 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               <div 
                 key={opt.id} 
                 className={`xzt-option-card ${status}`} 
-                onClick={() => handleCardClick(opt)}
+                onClick={(e) => {
+                  // 如果已提交，点击卡片也可以触发“下一题”
+                  if (isSubmitted) {
+                     // 不阻止冒泡，让它传递给 xzt-container
+                  } else {
+                     e.stopPropagation(); // 还没提交时，阻止冒泡，防止触发外层
+                     handleCardClick(opt);
+                  }
+                }}
               >
                 {opt.hasImage && <img src={opt.imageUrl} className="w-12 h-12 rounded mr-3 object-cover bg-gray-100" />}
                 <div className="opt-content">
@@ -543,16 +490,23 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         <div className="fixed-bottom-area">
           <button 
             className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
-            onClick={handleSubmit} 
+            onClick={(e) => {
+              e.stopPropagation(); // 防止点击按钮触发容器点击
+              handleSubmit();
+            }}
             disabled={!selectedId}
           >
             提 交
           </button>
 
           {showExplanation && activeExplanation && (
+            // 解析卡片：点击它也冒泡到容器，触发下一题
             <div className="explanation-card">
               <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
-              <div>{activeExplanation}</div>
+              <div>
+                <div>{activeExplanation}</div>
+                <div className="tap-hint">点击任意处继续...</div>
+              </div>
             </div>
           )}
         </div>
