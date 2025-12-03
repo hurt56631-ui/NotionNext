@@ -152,7 +152,7 @@ function useMixedTTS() {
     };
 
     const fetchAudioBlob = async (text, lang) => {
-        const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
+        const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
         const cacheKey = `tts-blob-${voice}-${text}`;
         
         // 1. 尝试读缓存
