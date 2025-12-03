@@ -46,7 +46,7 @@ const idb = {
   }
 };
 
-// --- 2. ✅ 修复后的音频控制器 (稳定版) ---
+// --- 2. ✅ 修复后的音频控制器 ---
 const audioController = {
   currentAudio: null,
   latestRequestId: 0,
@@ -61,21 +61,20 @@ const audioController = {
   },
 
   isBurmese(text) {
+    // 检测是否包含缅文 Unicode 区块
     return /[\u1000-\u109F]/.test(text);
   },
 
-  // 获取应该使用的语音包
   getVoice(text, isTitle) {
     // 1. 标题强制使用 Ava
     if (isTitle) return 'en-US-AvaMultilingualNeural';
     
-    // 2. 检查是否包含缅文
+    // 2. 包含缅文 -> 使用 Ava
     if (this.isBurmese(text)) {
-      // 包含缅文 -> 使用 Ava
       return 'en-US-AvaMultilingualNeural'; 
     }
     
-    // 3. 全是中文 -> 使用晓悠
+    // 3. 全是中文/其他 -> 使用晓悠
     return 'zh-CN-XiaoyouMultilingualNeural';
   },
 
@@ -85,9 +84,9 @@ const audioController = {
     const myRequestId = ++this.latestRequestId;
     this.stop(); 
 
-    // 移除特殊符号防止 TTS 读出来 (仅针对中文模式优化，Ava 模式通常不需要太严格过滤)
-    // 但为了保险，还是去掉纯符号
-    const textToRead = text.replace(/[^\u4e00-\u9fa5\u1000-\u109Fa-zA-Z0-9\s]/g, ''); 
+    // ✅ 修复：正则确保保留中文、缅文、英文、数字
+    // 之前的正则可能太严格了，这里放宽一点
+    const textToRead = text.replace(/[^\u4e00-\u9fa5\u1000-\u109Fa-zA-Z0-9\s，。！？、]/g, ''); 
     if (!textToRead.trim()) return;
 
     const voice = this.getVoice(text, isTitle);
@@ -95,14 +94,12 @@ const audioController = {
     let audioUrl;
 
     try {
-      // 1. 查缓存
       const cachedBlob = await idb.get(cacheKey);
       if (myRequestId !== this.latestRequestId) return;
 
       if (cachedBlob) {
         audioUrl = URL.createObjectURL(cachedBlob);
       } else {
-        // 2. 没缓存，请求接口
         const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(textToRead)}&v=${voice}&r=${rate > 1 ? 20 : 0}`;
         const res = await fetch(apiUrl);
         if (!res.ok) throw new Error(`TTS API error: ${res.status}`);
@@ -114,12 +111,10 @@ const audioController = {
         audioUrl = URL.createObjectURL(blob);
       }
 
-      // 3. 播放
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
       
-      // 手机浏览器必须捕获 play 的错误 (因为自动播放策略)
-      await audio.play().catch(e => console.log("Auto-play blocked (normal on mobile):", e));
+      await audio.play().catch(e => console.warn("Auto-play blocked:", e));
 
       audio.onended = () => {
         if (this.currentAudio === audio) this.currentAudio = null;
@@ -131,7 +126,6 @@ const audioController = {
     }
   },
 
-  // 预加载逻辑保持一致
   async preload(text, isTitle = false) {
     if (!text || !text.trim()) return;
     const textToRead = text.replace(/[^\u4e00-\u9fa5\u1000-\u109Fa-zA-Z0-9\s]/g, '');
@@ -158,7 +152,6 @@ const audioController = {
 
 export const preloadNextLessonAudios = (texts = []) => {
     if (!Array.isArray(texts)) return;
-    // 默认按照非标题逻辑预加载，如果需要更精确控制可以扩展参数
     Promise.allSettled(texts.map(text => audioController.preload(text, false)));
 };
 
@@ -167,16 +160,23 @@ export const preloadNextLessonAudios = (texts = []) => {
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
 
+  /* ✅ 禁止页面整体下拉刷新 */
+  html, body {
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
   .xzt-container { 
     width: 100%; height: 100%; display: flex; flex-direction: column; 
     align-items: center; position: relative; padding: 0 16px; overflow-y: auto; 
+    overscroll-behavior: none; /* 容器也加上 */
   }
   
   .spacer { flex: 1; min-height: 5px; max-height: 30px; }
 
   /* 标题区域 */
   .xzt-question-title {
-    padding: 16px;
+    padding: 12px;
     text-align: center;
     cursor: pointer;
     width: 100%;
@@ -191,11 +191,11 @@ const cssStyles = `
   }
   .xzt-question-title:active { background-color: #f9fafb; }
 
-  .question-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 16px; margin-bottom: 20px; background-color: #f9fafb; }
+  .question-img { width: 100%; max-height: 200px; object-fit: contain; border-radius: 16px; margin-bottom: 16px; background-color: #f9fafb; }
   .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
 
-  /* ✅ 修复：强制横向排列，自动换行 */
+  /* 拼音/文字容器：强制横向排列，居中 */
   .pinyin-box { 
     display: flex; 
     flex-wrap: wrap; 
@@ -203,44 +203,62 @@ const cssStyles = `
     gap: 4px; 
     row-gap: 8px; 
     align-items: flex-end; 
-    flex-direction: row !important; /* 强制横向 */
+    flex-direction: row !important;
   }
 
-  /* 单个字块：拼音在上，汉字在下，这里要是 column */
   .char-block { display: flex; flex-direction: column; align-items: center; }
   
-  .py-text { font-size: 0.8rem; color: #94a3b8; font-family: monospace; margin-bottom: -2px; height: 1.2em; }
-  .cn-text { font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.3; }
-  .my-text-title { font-family: 'Padauk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #1e293b; line-height: 1.5; }
+  .py-text { font-size: 0.8rem; color: #94a3b8; font-family: monospace; margin-bottom: -3px; height: 1em; }
+  .cn-text { font-size: 1.4rem; font-weight: 700; color: #1e293b; line-height: 1.2; }
+  .my-text-title { font-family: 'Padauk', sans-serif; font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.4; }
 
   /* 选项区域 */
-  .xzt-options-grid { display: grid; grid-template-columns: 1fr; gap: 12px; width: 100%; max-width: 480px; padding-bottom: 140px; }
+  .xzt-options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; width: 100%; max-width: 480px; padding-bottom: 140px; }
   
   .xzt-option-card {
-    position: relative; background: #ffffff; border-radius: 20px; border: 2px solid #f1f5f9;
+    position: relative; background: #ffffff; border-radius: 18px; border: 2px solid #f1f5f9;
+    /* ✅ 修复：减少内边距，防止卡片太长 */
+    padding: 12px; 
     box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.04); cursor: pointer; transition: all 0.2s ease; overflow: hidden;
+    min-height: 60px;
   }
   .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
   .xzt-option-card.selected { border-color: #a78bfa; background: #f5f3ff; }
   .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; }
   .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
 
-  .layout-text-only { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 16px; min-height: 64px; }
-  .layout-with-image { display: flex; flex-direction: row; align-items: center; padding: 16px; min-height: 90px; }
+  /* 布局控制 */
+  .layout-text-only { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .layout-with-image { display: flex; flex-direction: row; align-items: center; }
 
-  .opt-img-wrapper { width: 70px; height: 70px; border-radius: 12px; overflow: hidden; background: #f3f4f6; margin-right: 16px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .opt-img-wrapper { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: #f3f4f6; margin-right: 12px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   .opt-img { width: 100%; height: 100%; object-fit: cover; }
 
-  .opt-text-box { display: flex; flex-direction: column; justify-content: center; width: 100%; }
-  .layout-text-only .opt-text-box { align-items: center; } 
-  .layout-with-image .opt-text-box { align-items: flex-start; text-align: left; }
+  /* 选项文字容器 */
+  .opt-text-box { display: flex; width: 100%; }
+  
+  /* ✅ 修复：纯文字模式下，内容强制居中 */
+  .layout-text-only .opt-text-box { 
+    justify-content: center; 
+    align-items: center; 
+  } 
+  
+  /* 有图片模式下，内容左对齐 */
+  .layout-with-image .opt-text-box { 
+    justify-content: flex-start; 
+    align-items: center; /* 垂直居中 */
+  }
 
-  .opt-pinyin { font-size: 0.8rem; color: #94a3b8; font-family: monospace; }
-  .opt-cn { font-size: 1.25rem; font-weight: 700; color: #334155; line-height: 1.2; }
-  .opt-my { font-family: 'Padauk', sans-serif; font-size: 1.3rem; font-weight: 600; color: #334155; }
+  .opt-pinyin { font-size: 0.75rem; color: #94a3b8; font-family: monospace; margin-bottom: -2px; }
+  .opt-cn { font-size: 1.2rem; font-weight: 700; color: #334155; line-height: 1.2; }
+  .opt-my { font-family: 'Padauk', sans-serif; font-size: 1.25rem; font-weight: 600; color: #334155; }
 
   /* 底部固定区域 */
-  .fixed-bottom-area { position: fixed; bottom: 90px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 60; padding: 0 20px; }
+  .fixed-bottom-area { 
+    position: fixed; bottom: 80px; left: 0; right: 0; 
+    display: flex; flex-direction: column; align-items: center; 
+    pointer-events: none; z-index: 60; padding: 0 20px; 
+  }
   
   .explanation-card { 
     background: #fff; border: 1px solid #fecaca; background-color: #fef2f2; 
@@ -294,7 +312,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   // 分割混合文本
   const generateDisplayParts = (text) => {
     if(!text) return [];
-    // 匹配: 缅文块 OR 中文块 OR 其他(空格/英文/标点)
     const regex = /([\u1000-\u109F]+|[\u4e00-\u9fa5]+|[^ \u4e00-\u9fa5\u1000-\u109F]+)/g;
     const parts = text.match(regex) || [];
     return parts.map(part => {
@@ -305,7 +322,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   }
 
   useEffect(() => {
-    // 切换题目时停止上一段音频
     audioController.stop();
 
     setQuestionData({ displayParts: generateDisplayParts(question.text) });
@@ -318,7 +334,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     setShuffledOptions([...processed].sort(() => Math.random() - 0.5));
 
-    // 自动播放题目 (参数: text, isTitle=true)
+    // 自动播放题目 (isTitle=true -> 强制 Ava)
     if (question.text) {
       setIsPlaying(true);
       audioController.play(question.text, true, 0.9).finally(() => setIsPlaying(false));
@@ -335,7 +351,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (isSubmitted) return;
     setSelectedId(option.id);
     if (showExplanation) setShowExplanation(false);
-    // 点击选项朗读 (参数: text, isTitle=false)
+    // 朗读选项
     if (option.text) audioController.play(option.text, false, 0.95);
   };
 
@@ -353,17 +369,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
       
-      // ✅ 答错显示解析并朗读
+      // ✅ 朗读解析
       if (explanation) {
         setShowExplanation(true);
-        // 延迟 500ms 等 UI 渲染后再读
         setTimeout(() => {
-           // 解析通常也是混合文本，按 isTitle=false 处理，会自动判断是否含缅语
            audioController.play(explanation, false, 0.9);
         }, 500);
       }
       
-      // 2秒后允许重选
       setTimeout(() => setIsSubmitted(false), 2000);
     }
   };
@@ -371,31 +384,27 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const handleReadQuestion = (e) => {
     e.stopPropagation();
     setIsPlaying(true);
-    // 点击标题朗读 (isTitle=true -> 强制使用 Ava)
+    // 点击标题朗读 (isTitle=true)
     audioController.play(question.text, true, 0.9).finally(() => setIsPlaying(false));
   };
 
-  // ✅ 修复：渲染文本块的逻辑
-  const renderTextParts = (parts, isTitle = false) => (
-    // 外层容器：Flex Row (横向)，Wrap (换行)
-    // 之前的 bug 是这里用了 column 导致文字竖着排
+  const renderTextParts = (parts, isTitle = false, hasImage = false) => (
     <div 
         className={isTitle ? "pinyin-box" : "opt-text-box"}
         style={{ 
             display: 'flex', 
-            flexDirection: 'row', // 确保从左到右排列
-            flexWrap: 'wrap',     // 确保超出换行
+            flexDirection: 'row', 
+            flexWrap: 'wrap',
+            // ✅ 修复：如果是标题 OR (没有图片且非标题)，则居中
+            justifyContent: (isTitle || !hasImage) ? 'center' : 'flex-start', 
             alignItems: isTitle ? 'flex-end' : 'center',
-            justifyContent: isTitle ? 'center' : 'flex-start' 
         }}
     >
         {parts.map((part, index) => {
-            // 渲染中文块 (含拼音)
             if (part.type === 'zh') {
                 return (
                     <span key={index} style={{ display: 'inline-flex', flexDirection: 'row', alignItems: 'center' }}>
                         {part.pinyinData.map((item, idx) => (
-                             // char-block 内部是 column (拼音在上，汉字在下)
                              <div key={idx} className="char-block">
                                 <span className={isTitle ? "py-text" : "opt-pinyin"}>{item.pinyin || ' '}</span>
                                 <span className={isTitle ? "cn-text" : "opt-cn"}>{item.char}</span>
@@ -404,7 +413,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                     </span>
                 );
             }
-            // 渲染缅文块
             if (part.type === 'my') {
                 return (
                     <span key={index} className={isTitle ? "my-text-title" : "opt-my"} style={{ margin: '0 4px' }}>
@@ -412,7 +420,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                     </span>
                 );
             }
-            // 渲染其他 (英文/数字/标点)
             return (
                 <span key={index} className={isTitle ? "cn-text" : "opt-cn"} style={{ margin: '0 2px' }}>
                     {part.text}
@@ -468,8 +475,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                     </div>
                 )}
                 
-                {/* 这里的 renderTextParts 已经修复了布局方向 */}
-                {renderTextParts(option.displayParts, false)}
+                {renderTextParts(option.displayParts, false, option.hasImage)}
 
                 {isSubmitted && correctIds.includes(optIdStr) && <FaCheckCircle className="text-green-500 absolute right-3 text-xl"/>}
                 {isSubmitted && optIdStr === selIdStr && !correctIds.includes(optIdStr) && <FaTimesCircle className="text-red-500 absolute right-3 text-xl"/>}
