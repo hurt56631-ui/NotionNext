@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { createPortal } from 'react-dom'; 
-import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, X, Volume2, ArrowLeft } from 'lucide-react';
+import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, Volume2, ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
+import { pinyin } from 'pinyin-pro'; // 确保安装了 pinyin-pro
 
-// 导入目录数据
+// 导入目录数据 (假设路径不变)
 import speakingList from '@/data/speaking.json';
 
 // --- 核心组件 ---
@@ -28,65 +29,139 @@ const FullScreenPortal = ({ children }) => {
   );
 };
 
-// --- 音频缓存与播放逻辑 (单例缓存) ---
-const audioBlobCache = new Map(); // 全局缓存，切换页面后依然有效（刷新失效）
+// --- 全局音频缓存 (Blob URL) ---
+const audioBlobCache = new Map();
 
+// --- 升级版音频播放 Hook (支持 API Fetch & Abort) ---
 const useAudioPlayer = () => {
   const [playingId, setPlayingId] = useState(null);
   const audioRef = useRef(null);
+  const abortControllerRef = useRef(null); // 用于取消正在进行的 fetch
 
-  const playAudio = async (id, text) => {
-    // 停止当前正在播放的
+  const playAudio = useCallback(async (id, text) => {
+    // 1. 停止当前播放
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
+      audioRef.current.currentTime = 0;
+    }
+    // 2. 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
 
     setPlayingId(id);
 
     try {
       let audioUrl;
+      const cacheKey = text;
 
-      // 1. 检查缓存
-      if (audioBlobCache.has(text)) {
-        console.log("👉 命中音频缓存");
-        audioUrl = audioBlobCache.get(text);
+      // 3. 检查缓存
+      if (audioBlobCache.has(cacheKey)) {
+        audioUrl = audioBlobCache.get(cacheKey);
       } else {
-        // 2. 如果没有缓存，发起请求 (这里演示用浏览器自带TTS，如果是API请求请替换 fetch 逻辑)
-        // 真实场景示例：
-        // const res = await fetch(`/api/tts?text=${encodeURIComponent(text)}`);
-        // const blob = await res.blob();
-        // audioUrl = URL.createObjectURL(blob);
+        // 4. 发起网络请求
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const voice = 'zh-CN-XiaoyouNeural';
+        const rateParam = 0;
+        const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateParam}`;
+
+        const res = await fetch(apiUrl, { signal: controller.signal });
+        if (!res.ok) throw new Error('TTS Network response was not ok');
         
-        // --- 模拟生成音频 URL (实际项目中请替换为真实的 fetch) ---
-        // 这里为了演示代码可用性，使用了 Web Speech API，但在逻辑上模拟了缓存过程
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = 'zh-CN'; // 或目标语言
-        u.onend = () => setPlayingId(null);
-        window.speechSynthesis.speak(u);
-        return; 
-        // -----------------------------------------------------
-
-        // 如果你有真实的音频URL，请解开下面注释并使用缓存逻辑：
-        /*
-        audioBlobCache.set(text, audioUrl);
-        */
+        const blob = await res.blob();
+        audioUrl = URL.createObjectURL(blob);
+        audioBlobCache.set(cacheKey, audioUrl);
       }
 
-      // 3. 播放音频 (针对 Blob URL)
-      if (audioUrl) {
-        const audio = new Audio(audioUrl);
-        audioRef.current = audio;
-        audio.onended = () => setPlayingId(null);
-        audio.play();
-      }
+      // 5. 播放
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      
+      audio.onended = () => {
+        setPlayingId(null);
+        abortControllerRef.current = null;
+      };
+      
+      audio.onerror = (e) => {
+        console.error("Audio playback error", e);
+        setPlayingId(null);
+      };
+
+      await audio.play();
+
     } catch (err) {
-      console.error("播放失败", err);
-      setPlayingId(null);
+      if (err.name === 'AbortError') {
+        // 忽略取消的请求
+      } else {
+        console.error("TTS Error:", err);
+        setPlayingId(null);
+      }
     }
-  };
+  }, []);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) audioRef.current.pause();
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   return { playingId, playAudio };
+};
+
+// --- 辅助：Ruby 文本渲染 (拼音在汉字上方) ---
+const RubyText = ({ text }) => {
+  // 简单的解析逻辑：将文本拆分为汉字和非汉字
+  // 对于汉字，逐字生成拼音；对于非汉字，保持原样
+  const segments = [];
+  const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const zhPart = match[1];
+    const otherPart = match[2];
+
+    if (zhPart) {
+      // 对汉字部分，再次拆分成单字以对齐拼音
+      const chars = zhPart.split('');
+      const pinyins = pinyin(zhPart, { type: 'array', toneType: 'symbol' }); // 获取拼音数组
+      
+      chars.forEach((char, i) => {
+        segments.push({ type: 'zh', char, py: pinyins[i] || '' });
+      });
+    } else if (otherPart) {
+      segments.push({ type: 'other', text: otherPart });
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap justify-center items-end gap-x-1 leading-normal">
+      {segments.map((seg, i) => {
+        if (seg.type === 'zh') {
+          return (
+            <div key={i} className="flex flex-col items-center mx-[1px]">
+              <span className="text-[10px] sm:text-xs text-gray-500 font-mono mb-[-2px] select-none">
+                {seg.py}
+              </span>
+              <span className="text-xl sm:text-2xl font-bold text-gray-800">
+                {seg.char}
+              </span>
+            </div>
+          );
+        } else {
+          // 非汉字保持基线对齐，字体稍微大一点
+          return (
+            <span key={i} className="text-lg sm:text-xl text-gray-800 pb-[2px]">
+              {seg.text}
+            </span>
+          );
+        }
+      })}
+    </div>
+  );
 };
 
 // --- 新增：列表式学习组件 (生词/短句专用) ---
@@ -95,57 +170,68 @@ const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
+      {/* CSS 注入：美化滚动条 */}
+      <style jsx global>{`
+        .thin-scrollbar::-webkit-scrollbar {
+          width: 4px; /* 变细 */
+        }
+        .thin-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .thin-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1; /* gray-300 */
+          border-radius: 20px;
+        }
+        .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: #94a3b8; /* gray-400 */
+        }
+      `}</style>
+
       {/* 顶部导航 */}
-      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm border-b z-10">
+      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm border-b z-10 flex-shrink-0">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-600 active:scale-90 transition-transform">
           <ArrowLeft size={24} />
         </button>
         <h2 className="font-bold text-lg text-gray-800">{title}</h2>
-        <div className="w-8"></div> {/* 占位 */}
+        <div className="w-8"></div> {/* 占位平衡 */}
       </div>
 
       {/* 滚动列表区域 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-20">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 thin-scrollbar">
         {data?.map((item, index) => {
             const mainText = isSentence ? item.sentence : item.word;
-            const isPlaying = playingId === item.id;
+            // 如果数据源里没有 id，使用 index 作为 fallback id，但在播放时最好有唯一标识
+            const itemId = item.id || `item-${index}`;
+            const isPlaying = playingId === itemId;
 
             return (
               <motion.div 
-                key={item.id || index}
+                key={itemId}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                onClick={() => playAudio(item.id, mainText)}
+                onClick={() => playAudio(itemId, mainText)}
                 className={`
-                  relative bg-white p-4 rounded-xl border transition-all cursor-pointer select-none
-                  ${isPlaying ? 'border-teal-500 shadow-md ring-1 ring-teal-100' : 'border-gray-100 shadow-sm active:scale-[0.99]'}
+                  relative bg-white p-6 rounded-2xl transition-all cursor-pointer select-none
+                  flex flex-col items-center justify-center text-center
+                  ${isPlaying ? 'border-2 border-teal-400 shadow-lg scale-[1.01]' : 'border border-gray-100 shadow-sm active:scale-[0.98]'}
                 `}
               >
-                <div className="flex items-start gap-4">
-                  {/* 序号 */}
-                  <div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isPlaying ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                    {index + 1}
-                  </div>
-
-                  {/* 内容区 */}
-                  <div className="flex-1 space-y-1">
-                    <h3 className={`text-lg font-medium leading-relaxed ${isPlaying ? 'text-teal-700' : 'text-gray-800'}`}>
-                      {mainText}
-                    </h3>
-                    {(item.pinyin) && (
-                      <p className="text-sm text-gray-400 font-mono">{item.pinyin}</p>
-                    )}
-                    <p className="text-sm text-gray-500 pt-1 border-t border-gray-50 mt-2">
-                      {item.translation}
-                    </p>
-                  </div>
-
-                  {/* 播放图标 */}
-                  <div className={`p-2 rounded-full ${isPlaying ? 'text-teal-600 bg-teal-50' : 'text-gray-300'}`}>
-                    {isPlaying ? <Loader2 size={20} className="animate-spin" /> : <Volume2 size={20} />}
-                  </div>
+                {/* 播放状态指示 (右上角微标) */}
+                <div className={`absolute top-3 right-3 transition-colors ${isPlaying ? 'text-teal-500' : 'text-gray-200'}`}>
+                  {isPlaying ? <Loader2 size={18} className="animate-spin" /> : <Volume2 size={18} />}
                 </div>
+
+                {/* 文字内容区 */}
+                <div className="w-full mb-3 mt-1">
+                   {/* 自动生成拼音并渲染 */}
+                   <RubyText text={mainText} />
+                </div>
+
+                {/* 翻译 */}
+                <p className="text-sm text-gray-500 font-medium px-4 py-1 bg-gray-50 rounded-full">
+                  {item.translation}
+                </p>
               </motion.div>
             );
         })}
@@ -153,9 +239,6 @@ const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
         {(!data || data.length === 0) && (
           <div className="text-center text-gray-400 py-10">暂无内容</div>
         )}
-        
-        {/* 底部占位，防止最后一行被遮挡 */}
-        <div className="h-10"></div>
       </div>
     </div>
   );
@@ -253,9 +336,6 @@ const SpeakingContentBlock = () => {
 
   // ==================== 4. 渲染逻辑 ====================
   
-  // 辅助函数：判断是否使用新版列表组件
-  const isListComponent = activeModule === 'vocab' || activeModule === 'sentences';
-  
   // 准备数据
   let renderContent = null;
   const baseId = selectedCourse ? selectedCourse.id : 'temp';
@@ -271,7 +351,7 @@ const SpeakingContentBlock = () => {
       renderContent = <InteractiveLesson lesson={lessonData} />;
   }
   else if (activeModule === 'vocab') {
-      // ✅ 生词：使用新组件
+      // ✅ 生词
       renderContent = (
         <AudioListLesson 
             data={selectedCourse?.vocabulary} 
@@ -282,7 +362,7 @@ const SpeakingContentBlock = () => {
       );
   }
   else if (activeModule === 'sentences') {
-      // ✅ 短句：使用新组件
+      // ✅ 短句
       renderContent = (
         <AudioListLesson 
             data={selectedCourse?.sentences} 
