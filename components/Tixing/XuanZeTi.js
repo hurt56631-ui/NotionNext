@@ -152,13 +152,13 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    /* ✅ 修改：顶部 padding 增加到 50px，增加留白 */
+    /* ✅ 顶部 padding 50px，增加留白 */
     padding: 50px 32px 180px 32px; 
     overflow-y: auto;
     background-color: #fdfdfd;
   }
 
-  /* ✅ 新增：顶部图标容器 */
+  /* ✅ 顶部图标容器 */
   .top-icon-wrapper {
     width: 50px;
     height: 50px;
@@ -177,7 +177,7 @@ const cssStyles = `
   .xzt-question-area {
     width: 100%;
     max-width: 500px;
-    margin: 0 auto 30px auto; /* 上边距减少，由 padding 控制 */
+    margin: 0 auto 30px auto; 
     text-align: center;
     cursor: pointer;
     position: relative;
@@ -344,11 +344,11 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     setIsSubmitted(false);
     setShowExplanation(false);
 
-    // ✅ 自动朗读标题一次 (仅在 question 变化时触发)
+    // 自动朗读标题一次
     if (question.text) audioController.playMixed(question.text);
   }, [question, options]);
 
-  // ✅ 核心修改：点击卡片仅选中，不提交
+  // 点击卡片仅选中
   const handleCardClick = (option) => {
     if (isSubmitted) return;
     
@@ -378,19 +378,17 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         setShowExplanation(true);
         setTimeout(() => audioController.playMixed(activeExplanation), 500);
         
-        // ✅ 关键优化：调整等待时间，每字 200ms，最少等待 2.5s，最多等待 8s
-        // 之前的问题是时间太长，导致像卡死。现在设定了上限。
-        const waitTime = Math.min(3000, Math.max(1600, activeExplanation.length * 100));
-        
+        // ✅ 强制修改：答错且有解析，固定 1500毫秒 (1.5秒) 后自动下一题
         setTimeout(() => {
            if (onIncorrect) onIncorrect(question);
-        }, waitTime);
+        }, 1700);
 
       } else {
         setShowExplanation(false);
+        // 答错无解析，也是 1.5 秒后自动下一题
         setTimeout(() => {
            if (onIncorrect) onIncorrect(question);
-        }, 1200);
+        }, 1500);
       }
     }
   };
@@ -400,7 +398,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* ✅ 新增：顶部书本图标，美化界面 */}
+        {/* 顶部书本图标 */}
         <div className="top-icon-wrapper">
           <FaBookOpen />
         </div>
@@ -460,7 +458,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="fixed-bottom-area">
-          {/* 按钮绑定 handleSubmit，必须选中后才能点击 */}
           <button 
             className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
             onClick={handleSubmit} 
