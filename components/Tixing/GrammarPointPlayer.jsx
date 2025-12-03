@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AiChatAssistant from '../AiChatAssistant'; 
 
 // =================================================================================
-// ===== 1. IndexedDB 工具函数 (缓存 Blob) =====
+// ===== 1. IndexedDB 工具函数 (增强版：防坏死缓存) =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
 const STORE_NAME = 'audio_blobs';
@@ -38,12 +38,30 @@ const idb = {
         await this.init();
         return new Promise((resolve) => {
             const tx = this.db.transaction(STORE_NAME, 'readonly');
-            const req = tx.objectStore(STORE_NAME).get(key);
-            req.onsuccess = () => resolve(req.result);
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(key);
+            req.onsuccess = () => {
+                const blob = req.result;
+                // 🛡️ 防御性编程：如果缓存存在但太小（例如小于100字节），可能是存进去的报错信息
+                // 此时视为“未命中缓存”，强迫重新下载
+                if (blob && blob.size > 100) {
+                    resolve(blob);
+                } else {
+                    // 如果发现无效数据，顺便清理掉
+                    if (blob) {
+                         // 这里开启一个新的读写事务来删除
+                         this.del(key).catch(console.warn);
+                    }
+                    resolve(null);
+                }
+            };
             req.onerror = () => resolve(null);
         });
     },
     async set(key, blob) {
+        // 🛡️ 防御性编程：只存有效的大文件
+        if (!blob || blob.size < 100) return; 
+
         await this.init();
         return new Promise((resolve) => {
             const tx = this.db.transaction(STORE_NAME, 'readwrite');
@@ -51,11 +69,20 @@ const idb = {
             req.onsuccess = () => resolve();
             req.onerror = () => resolve();
         });
+    },
+    async del(key) {
+        await this.init();
+        return new Promise((resolve) => {
+            const tx = this.db.transaction(STORE_NAME, 'readwrite');
+            const req = tx.objectStore(STORE_NAME).delete(key);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+        });
     }
 };
 
 // =================================================================================
-// ===== 2. 混合 TTS 核心 Hook (支持暂停/继续/缓存) =====
+// ===== 2. 混合 TTS 核心 Hook (支持暂停/继续/缓存/自动降级) =====
 // =================================================================================
 function useMixedTTS() {
     const [isPlaying, setIsPlaying] = useState(false);
@@ -80,6 +107,10 @@ function useMixedTTS() {
             currentAudioRef.current.currentTime = 0;
             currentAudioRef.current = null;
         }
+        // 停止浏览器原生语音（如果有）
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
         audioQueueRef.current = [];
         setIsPlaying(false);
         setIsPaused(false);
@@ -93,12 +124,23 @@ function useMixedTTS() {
     const toggle = useCallback((uniqueId) => {
         if (playingIdRef.current !== uniqueId) return;
 
+        // 处理 Audio 对象播放
         if (currentAudioRef.current) {
             if (currentAudioRef.current.paused) {
                 currentAudioRef.current.play().catch(e => console.error("Resume failed", e));
                 setIsPaused(false);
             } else {
                 currentAudioRef.current.pause();
+                setIsPaused(true);
+            }
+        } 
+        // 处理原生语音播放 (原生语音暂停/继续支持较好)
+        else if (window.speechSynthesis.speaking) {
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+                setIsPaused(false);
+            } else {
+                window.speechSynthesis.pause();
                 setIsPaused(true);
             }
         }
@@ -113,15 +155,31 @@ function useMixedTTS() {
         const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
         const cacheKey = `tts-blob-${voice}-${text}`;
         
-        const cached = await idb.get(cacheKey);
-        if (cached) return cached;
+        // 1. 尝试读缓存
+        try {
+            const cached = await idb.get(cacheKey);
+            if (cached) return cached;
+        } catch (e) {
+            console.warn("Cache read failed", e);
+        }
 
+        // 2. 网络请求
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
+        
+        if (!res.ok) {
+            throw new Error(`TTS Fetch Failed: ${res.status}`);
+        }
+        
         const blob = await res.blob();
+        
+        // 3. 校验 Blob 是否合法 (防止存入空文件或报错信息)
+        if (blob.size < 100) {
+            throw new Error("TTS Response too small, likely an error");
+        }
 
-        await idb.set(cacheKey, blob);
+        // 4. 存入缓存
+        idb.set(cacheKey, blob).catch(e => console.warn("Cache write failed", e));
         return blob;
     };
 
@@ -157,6 +215,7 @@ function useMixedTTS() {
                 return;
             }
 
+            // 尝试获取音频 Blob
             const blobs = await Promise.all(
                 segments.map(seg => fetchAudioBlob(seg.text, seg.lang))
             );
@@ -165,7 +224,6 @@ function useMixedTTS() {
 
             const audioObjects = blobs.map((blob, index) => {
                 const audio = new Audio(URL.createObjectURL(blob));
-                // ✅ 修复音调问题：去掉 preservesPitch = false，让浏览器自动处理音高
                 if (segments[index].lang === 'zh') {
                     audio.playbackRate = 0.7; 
                 } else {
@@ -223,10 +281,59 @@ function useMixedTTS() {
             playNext(0);
 
         } catch (e) {
-            console.error("TTS Play Error:", e);
-            setLoadingId(null);
-            setPlayingId(null);
-            playingIdRef.current = null;
+            // 🚨 关键修改：如果有任何错误（接口挂了、网络断了、缓存坏了），降级使用浏览器原生朗读
+            console.error("网络 TTS 失败，切换到浏览器原生朗读:", e);
+            
+            if (myRequestId !== latestRequestIdRef.current) return;
+            
+            // 降级逻辑
+            try {
+                if (!window.speechSynthesis) {
+                     setLoadingId(null);
+                     setPlayingId(null);
+                     return;
+                }
+                
+                let cleanText = text.replace(/<[^>]+>/g, '').replace(/\{\{| \}\}|\}\}/g, '').replace(/\n/g, ' ');
+                const utter = new SpeechSynthesisUtterance(cleanText);
+                
+                // 简单判断主语言
+                if (/[\u1000-\u109F]/.test(cleanText)) {
+                     utter.lang = 'my-MM'; // 尝试缅甸语，浏览器不一定支持
+                } else {
+                     utter.lang = 'zh-CN';
+                }
+                utter.rate = 0.8;
+
+                setLoadingId(null);
+                setPlayingId(uniqueId);
+                playingIdRef.current = uniqueId;
+                setIsPlaying(true);
+                setIsPaused(false);
+
+                utter.onend = () => {
+                    if (playingIdRef.current === uniqueId) {
+                        setIsPlaying(false);
+                        setPlayingId(null);
+                        playingIdRef.current = null;
+                    }
+                };
+
+                utter.onerror = () => {
+                     setIsPlaying(false);
+                     setPlayingId(null);
+                     playingIdRef.current = null;
+                };
+
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utter);
+
+            } catch (nativeError) {
+                console.error("原生朗读也失败了", nativeError);
+                setLoadingId(null);
+                setPlayingId(null);
+                playingIdRef.current = null;
+            }
         }
     }, [stop, toggle]); 
 
@@ -239,6 +346,7 @@ function useMixedTTS() {
             if (match[0].trim()) {
                 const t = match[0];
                 const lang = detectLanguage(t);
+                // 预加载也遵循同样的检查逻辑
                 fetchAudioBlob(t, lang).catch(()=>{});
             }
         }
@@ -363,7 +471,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         setCanGoNext(true);
     }, [currentIndex, stop]);
 
-    // ✅ 修复：移除了自动播放逻辑，只保留预加载
+    // ✅ 逻辑：移除了自动播放逻辑，只保留预加载
     useEffect(() => {
         // 预加载下两条
         const preloadNextItems = (count) => {
@@ -379,8 +487,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             }
         };
         preloadNextItems(2);
-        
-        // 此处不调用 play，实现“点击后朗读”
+        // 不调用 play，只预加载
     }, [currentIndex, grammarPoints, preload]); 
     
     // 滚动监听
