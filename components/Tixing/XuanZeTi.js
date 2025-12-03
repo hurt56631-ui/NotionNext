@@ -60,9 +60,9 @@ const audioController = {
 
   detectLanguage(text) {
     if (/[\u1000-\u109F]/.test(text)) {
-      return 'my';
+      return 'my'; // Burmese
     }
-    return 'zh';
+    return 'zh'; // Chinese
   },
 
   async play(text, rate = 1.0) {
@@ -109,9 +109,13 @@ const audioController = {
 };
 
 
-// --- 3. ✅ 全面更新的样式定义 ---
+// --- 3. ✅ 最终修正版样式 ---
 const cssStyles = `
+  /* ✅ 修复：直接导入缅甸语字体，确保正确显示 */
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&display=swap');
+
   .xzt-container {
+    /* ✅ 修复：将缅甸语字体放在首位 */
     font-family: "Noto Sans Myanmar", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     width: 100%;
     height: 100%;
@@ -119,26 +123,22 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 20px 16px 0 16px; /* 增加顶部内边距 */
+    padding: 20px 16px 0 16px;
     overflow-y: auto;
     overscroll-behavior-y: contain; /* 禁止下拉刷新 */
+    background-color: #f8fafc; /* 添加一个柔和的背景色 */
   }
 
-  /* --- ✅ 新增：答对动画 --- */
-  @keyframes correctAnswerBounce {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
+  @keyframes correctAnswerBounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
   @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-  /* --- ✅ 修改：标题不再是卡片 --- */
   .xzt-question-area {
     text-align: center;
     cursor: pointer;
     width: 100%;
-    max-width: 500px;
+    max-width: 480px;
     margin: 0 auto 24px auto;
     padding: 16px 0;
     position: relative;
@@ -148,87 +148,85 @@ const cssStyles = `
     gap: 16px;
   }
   
-  .question-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 16px; background-color: #f9fafb; }
-  .icon-pulse { animation: pulse 1.5s infinite; color: #8b5cf6; }
-
+  .question-img { width: 100%; max-height: 220px; object-fit: contain; border-radius: 16px; background-color: #ffffff; }
+  
   .pinyin-box { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; row-gap: 12px; align-items: flex-end; }
   .char-block { display: flex; flex-direction: column; align-items: center; }
-  .py-text { font-size: 0.9rem; color: #94a3b8; font-family: monospace; margin-bottom: 2px; }
-  .cn-text { font-size: 1.8rem; font-weight: 700; color: #1e293b; line-height: 1.4; }
+  .py-text { font-size: 0.9rem; color: #64748b; font-family: monospace; margin-bottom: 2px; }
+  
+  /* ✅ 修复：减小标题字体大小 */
+  .cn-text { font-size: 1.6rem; font-weight: 700; color: #1e293b; line-height: 1.4; }
+  /* ✅ 新增：为缅甸语标题单独设置样式 */
+  .my-title-text { font-size: 1.8rem; font-weight: 600; color: #1e293b; line-height: 1.6; }
 
-  /* --- 选项区域 --- */
   .xzt-options-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 12px;
     width: 100%;
-    max-width: 500px;
-    padding-bottom: 200px; /* 留出足够空间给底部固定区域 */
+    max-width: 480px;
+    padding-bottom: 180px; /* 增加底部空间 */
   }
 
   .xzt-option-card {
-    position: relative; background: #ffffff; border-radius: 20px; border: 2px solid #f1f5f9;
-    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.04); cursor: pointer; transition: all 0.2s ease; overflow: hidden;
+    position: relative; background: #ffffff; border-radius: 20px; border: 2px solid #e2e8f0;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.03); cursor: pointer; transition: all 0.2s ease; overflow: hidden;
   }
   .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
-  .xzt-option-card.selected { border-color: #a78bfa; background: #f5f3ff; transform: scale(1.02); }
-  
-  /* ✅ 应用答对动画 */
-  .xzt-option-card.correct {
-    border-color: #4ade80;
-    background: #f0fdf4;
-    animation: correctAnswerBounce 0.5s ease-out;
-  }
-  .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
+  .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; transform: scale(1.02); }
+  .xzt-option-card.correct { border-color: #22c55e; background: #f0fdf4; animation: correctAnswerBounce 0.5s ease-out; }
+  .xzt-option-card.incorrect { border-color: #ef4444; background: #fef2f2; animation: shake 0.4s; }
 
   .layout-text-only { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; min-height: 68px; }
-  .layout-with-image { display: flex; align-items: center; padding: 16px; min-height: 90px; }
-  .opt-img-wrapper { width: 70px; height: 70px; border-radius: 12px; overflow: hidden; background: #f3f4f6; margin-right: 16px; flex-shrink: 0; }
-  .opt-img { width: 100%; height: 100%; object-fit: cover; }
-  .opt-text-box { display: flex; flex-direction: column; justify-content: center; width: 100%; }
-  .layout-text-only .opt-text-box { align-items: center; text-align: center; }
-  .layout-with-image .opt-text-box { align-items: flex-start; text-align: left; }
-  .opt-pinyin { font-size: 0.8rem; color: #94a3b8; font-family: monospace; }
-  .opt-cn { font-size: 1.25rem; font-weight: 700; color: #334155; line-height: 1.2; }
-  .opt-my, .opt-en { font-size: 1.2rem; font-weight: 600; color: #475569; }
-
-  /* --- ✅ 修改：底部固定区域，上移并增加安全区 --- */
+  .opt-pinyin { font-size: 0.85rem; color: #64748b; font-family: monospace; }
+  .opt-cn { font-size: 1.3rem; font-weight: 700; color: #1e293b; }
+  .opt-my, .opt-en { font-size: 1.25rem; font-weight: 600; color: #334155; }
+  
+  /* ✅ 修复：调整整个底部固定区域 */
   .fixed-bottom-area {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     display: flex;
-    flex-direction: column-reverse; /* 先按钮后解析，更符合视觉 */
+    flex-direction: column-reverse; /* 保持按钮在最下方 */
     align-items: center;
     gap: 12px;
-    padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); /* 适配 iPhone 安全区 */
-    background: linear-gradient(to top, white 60%, transparent 100%);
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); /* 适配 iPhone 安全区 */
+    background: linear-gradient(to top, #f8fafc 70%, transparent 100%);
     pointer-events: none;
     z-index: 60;
   }
   .explanation-card {
-    background-color: #fff1f2; color: #be123c; padding: 12px 16px;
-    border-radius: 16px; font-size: 0.95rem; line-height: 1.4; text-align: left;
-    width: 100%; max-width: 500px; pointer-events: auto;
+    background-color: #fff1f2; color: #be123c; padding: 12px 16px; border-radius: 16px;
+    font-size: 0.95rem; line-height: 1.5; text-align: left;
+    width: 100%; max-width: 480px; pointer-events: auto;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
     display: flex; align-items: flex-start; gap: 8px; animation: slideUp 0.3s ease-out;
     border: 1px solid #fecaca;
   }
+  /* ✅ 修复：调整提交按钮大小和外观 */
   .submit-btn {
-    pointer-events: auto; width: 100%; max-width: 500px; padding: 16px 30px; border-radius: 100px;
-    font-size: 1.1rem; font-weight: 800; color: white; border: none;
-    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-    box-shadow: 0 10px 25px -5px rgba(124, 58, 237, 0.4);
-    transition: all 0.2s;
+    pointer-events: auto;
+    width: 100%;
+    max-width: 480px;
+    padding: 14px 30px; /* 减小垂直内边距 */
+    border-radius: 100px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    border: none;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    box-shadow: 0 8px 20px -6px rgba(124, 58, 237, 0.5);
+    transition: all 0.2s ease-out;
   }
-  .submit-btn:disabled { background: #e5e7eb; color: #9ca3af; box-shadow: none; opacity: 0; pointer-events: none; transform: translateY(10px); }
-  .submit-btn:active:not(:disabled) { transform: scale(0.98); }
+  .submit-btn:disabled { background: #cbd5e1; color: #f1f5f9; box-shadow: none; opacity: 0; pointer-events: none; transform: translateY(10px); }
+  .submit-btn:active:not(:disabled) { transform: scale(0.98); box-shadow: 0 4px 10px -4px rgba(124, 58, 237, 0.5); }
 `;
 
 // --- 4. 工具函数 (不变) ---
 const isChineseChar = (char) => /\p{Script=Han}/u.test(char);
-const generateTextData = (text) => {
+const generatePinyinData = (text) => {
   if (!text) return [];
   const cleanText = text.replace(/[【】“”"'()]/g, '');
   try {
@@ -245,32 +243,33 @@ const generateTextData = (text) => {
 };
 
 
-// --- 5. ✅ 全面更新的 React 组件 ---
+// --- 5. ✅ 最终修正版 React 组件 ---
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, explanation }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [questionData, setQuestionData] = useState([]);
+  const [questionData, setQuestionData] = useState({ text: '', lang: 'zh', pinyin: [] });
   const [orderedOptions, setOrderedOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     audioController.stop();
     
-    // ✅ 统一使用 generateTextData 处理
-    setQuestionData(generateTextData(question.text));
+    const questionLang = audioController.detectLanguage(question.text || '');
+    setQuestionData({
+      text: question.text,
+      lang: questionLang,
+      pinyin: questionLang === 'zh' ? generatePinyinData(question.text) : []
+    });
 
     const processed = options.map(opt => {
       const lang = audioController.detectLanguage(opt.text);
       return {
         ...opt,
-        // ✅ 只为中文生成拼音数据
-        textData: lang === 'zh' ? generateTextData(opt.text) : [],
+        pinyinData: lang === 'zh' ? generatePinyinData(opt.text) : [],
         lang: lang,
-        hasImage: !!opt.imageUrl
       };
     });
-
     setOrderedOptions(processed);
 
     if (question.text) {
@@ -285,18 +284,15 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     return () => audioController.stop();
   }, [question, options]);
 
-  // ✅ 选中选项的处理函数
   const handleSelect = (option) => {
     if (isSubmitted) return;
     setSelectedId(option.id);
     audioController.play(option.text, 0.9);
-    // ✅ 新增：选中震动反馈
     if (navigator.vibrate) {
-      navigator.vibrate(50); // 50ms 的短促震动
+      navigator.vibrate(50);
     }
   };
 
-  // ✅ 提交答案的处理函数
   const handleSubmit = () => {
     if (!selectedId || isSubmitted) return;
     setIsSubmitted(true);
@@ -309,14 +305,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       if (onCorrect) setTimeout(onCorrect, 1500);
     } else {
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // 错误的震动模式
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
       
+      // ✅ 修复：确保解析卡片在有 explanation prop 时稳定显示
       if (explanation) {
         setShowExplanation(true);
         setTimeout(() => audioController.play(explanation, 0.9), 500);
       }
 
       if (onIncorrect) {
+        // 确保用户有时间看到解析
         setTimeout(() => {
             onIncorrect(question);
         }, 3000);
@@ -334,28 +332,32 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
       <div className="xzt-container">
-        {/* ✅ 修改：使用新的标题区域样式 */}
         <div className="xzt-question-area" onClick={handleReadQuestion}>
           {question.imageUrl && <img src={question.imageUrl} alt="Question" className="question-img" />}
           <div className="absolute top-4 right-4 text-slate-400">
             <FaVolumeUp size={22} className={isPlaying ? 'icon-pulse' : ''} />
           </div>
-          <div className="pinyin-box">
-            {questionData.map((item, idx) => (
-              <div key={idx} className="char-block">
-                {item.pinyin && <span className="py-text">{item.pinyin}</span>}
-                <span className="cn-text">{item.char}</span>
-              </div>
-            ))}
-          </div>
+          
+          {/* ✅ 修复：根据语言动态渲染标题 */}
+          {questionData.lang === 'zh' ? (
+            <div className="pinyin-box">
+              {questionData.pinyin.map((item, idx) => (
+                <div key={idx} className="char-block">
+                  {item.pinyin && <span className="py-text">{item.pinyin}</span>}
+                  <span className="cn-text">{item.char}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="my-title-text">{questionData.text}</div>
+          )}
         </div>
 
         <div className="xzt-options-grid">
           {orderedOptions.map(option => {
-            let statusClass = '';
             const isSelected = String(option.id) === String(selectedId);
             const isCorrectAnswer = correctAnswer.map(String).includes(String(option.id));
-
+            let statusClass = '';
             if (isSubmitted) {
               if (isCorrectAnswer) statusClass = 'correct'; 
               else if (isSelected) statusClass = 'incorrect';
@@ -363,24 +365,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               statusClass = 'selected';
             }
 
-            const layoutClass = option.hasImage ? 'layout-with-image' : 'layout-text-only';
-
             return (
               <div 
                 key={option.id} 
-                className={`xzt-option-card ${layoutClass} ${statusClass}`}
+                className={`xzt-option-card ${statusClass}`}
                 onClick={() => handleSelect(option)}
               >
-                {option.hasImage && (
-                  <div className="opt-img-wrapper">
-                    <img src={option.imageUrl} alt="Option" className="opt-img" />
-                  </div>
-                )}
-                <div className="opt-text-box">
-                  {/* ✅ 优化：根据语言选择渲染方式 */}
+                <div className="layout-text-only">
                   {option.lang === 'zh' ? (
                     <>
-                      <div className="opt-pinyin">{option.textData.map(d => d.pinyin).join(' ')}</div>
+                      <div className="opt-pinyin">{option.pinyinData.map(d => d.pinyin).join(' ')}</div>
                       <div className="opt-cn">{option.text}</div>
                     </>
                   ) : (
@@ -394,7 +388,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           })}
         </div>
         
-        {/* ✅ 修改：使用新的底部固定区域样式 */}
         <div className="fixed-bottom-area">
            <button className="submit-btn" onClick={handleSubmit} disabled={!selectedId || isSubmitted}>
             确认
