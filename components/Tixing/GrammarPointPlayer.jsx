@@ -9,16 +9,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AiChatAssistant from '../AiChatAssistant'; 
 
 // =================================================================================
-// ===== 1. IndexedDB 工具函数 (用于本地缓存拼接好的音频) =====
+// ===== 1. IndexedDB 工具函数 (缓存 Blob) =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
-const STORE_NAME = 'audios';
+const STORE_NAME = 'audio_blobs';
 const DB_VERSION = 1;
 
 const idb = {
     db: null,
     async init() {
-        if (this.db) return;
+        if (this.db) return Promise.resolve();
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION);
             request.onupgradeneeded = (e) => {
@@ -38,18 +38,16 @@ const idb = {
         await this.init();
         return new Promise((resolve) => {
             const tx = this.db.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
-            const req = store.get(key);
+            const req = tx.objectStore(STORE_NAME).get(key);
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => resolve(null);
         });
     },
-    async set(key, buffer) {
+    async set(key, blob) {
         await this.init();
         return new Promise((resolve) => {
             const tx = this.db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
-            const req = store.put(buffer, key); // 存储 ArrayBuffer
+            const req = tx.objectStore(STORE_NAME).put(blob, key);
             req.onsuccess = () => resolve();
             req.onerror = () => resolve();
         });
@@ -57,127 +55,69 @@ const idb = {
 };
 
 // =================================================================================
-// ===== 2. 混合 TTS 核心 Hook (拆分 -> 并行请求 -> 拼接) =====
+// ===== 2. 混合 TTS 核心 Hook (HTML5 Audio 链式播放 - 极速版) =====
 // =================================================================================
 function useMixedTTS() {
-    const audioCtxRef = useRef(null);
-    const sourceRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [loadingId, setLoadingId] = useState(null); // 记录当前正在加载哪个ID的音频
-    const [playingId, setPlayingId] = useState(null); // 记录当前正在播放哪个ID的音频
+    const [loadingId, setLoadingId] = useState(null);
+    const [playingId, setPlayingId] = useState(null);
+    
+    // 引用：用于存储当前播放队列，方便随时停止
+    const audioQueueRef = useRef([]); 
+    const currentAudioRef = useRef(null);
+    const latestRequestIdRef = useRef(0);
 
-    // 初始化 AudioContext
+    // 组件卸载时清理
     useEffect(() => {
-        if (!audioCtxRef.current) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtxRef.current = new AudioContext();
-        }
-        return () => {
-            stop(); // 组件卸载时停止
-            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-                audioCtxRef.current.close();
-            }
-        };
+        return () => stop();
     }, []);
 
-    // 文本拆分：汉字/缅文/其他
-    const splitMixedText = (text) => {
-        const reHan = /\p{Script=Han}/u;
-        const reMyanmar = /\p{Script=Myanmar}/u;
-        let segments = [];
-        let current = { lang: null, text: "" };
-
-        for (let ch of text) {
-            let type = 'other';
-            if (reHan.test(ch)) type = 'zh';
-            else if (reMyanmar.test(ch)) type = 'mm';
-            else if (/\s/.test(ch)) type = 'ws'; // 空格归类为ws
-
-            if (current.lang === null) {
-                current.lang = type === 'ws' ? 'other' : type;
-                current.text = ch;
-            } else {
-                if (type === 'ws' || type === 'other') {
-                    current.text += ch; // 标点符号跟随上一段
-                } else if (type === current.lang) {
-                    current.text += ch;
-                } else {
-                    segments.push(current);
-                    current = { lang: type, text: ch };
-                }
-            }
-        }
-        if (current.text) segments.push(current);
-
-        // 合并琐碎片段
-        let merged = [];
-        for (let i = 0; i < segments.length; i++) {
-            const seg = segments[i];
-            if (seg.lang === 'other') {
-                if (merged.length > 0) merged[merged.length - 1].text += seg.text;
-                else if (i + 1 < segments.length) segments[i + 1].text = seg.text + segments[i + 1].text;
-                else merged.push({ lang: 'zh', text: seg.text }); // 默认回退
-            } else {
-                merged.push(seg);
-            }
-        }
-        return merged.filter(s => s.text.trim().length > 0);
-    };
-
-    // 音频请求
-    const fetchSegmentAudio = async (text, lang) => {
-        // 映射发音人
-        const voice = lang === 'mm' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
-        // 您的代理接口
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
-        return res.arrayBuffer();
-    };
-
-    // 解码并拼接
-    const decodeAndConcat = async (arrayBuffers) => {
-        const ctx = audioCtxRef.current;
-        const decodedBuffers = await Promise.all(arrayBuffers.map(ab => ctx.decodeAudioData(ab.slice(0))));
-        
-        // 计算总长度
-        let totalLen = 0;
-        let channels = 1;
-        decodedBuffers.forEach(b => {
-            totalLen += b.length;
-            channels = Math.max(channels, b.numberOfChannels);
-        });
-
-        const output = ctx.createBuffer(channels, totalLen, decodedBuffers[0].sampleRate);
-        
-        let offset = 0;
-        for (const buf of decodedBuffers) {
-            for (let ch = 0; ch < channels; ch++) {
-                // 如果源音频通道少于输出通道，简单的复制第0通道
-                const chData = buf.numberOfChannels > ch ? buf.getChannelData(ch) : buf.getChannelData(0);
-                output.getChannelData(ch).set(chData, offset);
-            }
-            offset += buf.length;
-        }
-        return output;
-    };
-
     const stop = useCallback(() => {
-        if (sourceRef.current) {
-            try {
-                sourceRef.current.stop();
-                sourceRef.current.disconnect();
-            } catch (e) {}
-            sourceRef.current = null;
+        // 停止当前正在播放的
+        if (currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current.currentTime = 0;
+            currentAudioRef.current = null;
         }
+        // 清空队列引用
+        audioQueueRef.current = [];
+        // 更新状态
         setIsPlaying(false);
         setPlayingId(null);
         setLoadingId(null);
+        // 增加请求ID，使旧的异步操作失效
+        latestRequestIdRef.current++;
     }, []);
+
+    // 语种检测
+    const detectLanguage = (text) => {
+        if (/[\u1000-\u109F]/.test(text)) return 'my'; // 缅文
+        return 'zh'; // 默认中文
+    };
+
+    // 获取音频 Blob
+    const fetchAudioBlob = async (text, lang) => {
+        const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
+        const cacheKey = `tts-blob-${voice}-${text}`;
+        
+        // 1. 查缓存
+        const cached = await idb.get(cacheKey);
+        if (cached) return cached;
+
+        // 2. 请求
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
+        const blob = await res.blob();
+
+        // 3. 存缓存
+        await idb.set(cacheKey, blob);
+        return blob;
+    };
 
     const play = useCallback(async (text, uniqueId) => {
         if (!text) return;
-        
+
         // 如果点击的是当前正在播放的，则停止
         if (playingId === uniqueId) {
             stop();
@@ -186,87 +126,109 @@ function useMixedTTS() {
 
         stop(); // 停止之前的
         setLoadingId(uniqueId);
+        const myRequestId = ++latestRequestIdRef.current;
 
         try {
-            // 清理文本
+            // 1. 文本清洗与拆分
             let cleanText = text.replace(/<[^>]+>/g, '').replace(/\{\{| \}\}|\}\}/g, '').replace(/\n/g, ' ');
-            const cacheKey = `tts-mixed-${cleanText}`;
-            
-            // 1. 查缓存
-            let finalBuffer = await idb.get(cacheKey);
-
-            // 2. 如果没缓存，执行拆分请求逻辑
-            if (!finalBuffer) {
-                const segments = splitMixedText(cleanText);
-                const promises = segments.map(seg => fetchSegmentAudio(seg.text, seg.lang));
-                const rawBuffers = await Promise.all(promises);
-                
-                // 这里我们缓存的是 WAV 格式的 ArrayBuffer 或者是 decode 后的数据?
-                // IndexedDB 不能直接存 AudioBuffer。
-                // 简单起见，我们每次重新 decode，或者自己封装 WAV。
-                // 为了性能，我们这里采用：每次实时拼接解码，但如果太慢，可以把拼接好的 PCM 转 WAV 存。
-                // *优化*：为了简化，这里暂存第一个请求到的 buffer 模拟 (实际应该转WAV)。
-                // 既然使用了 Web Audio API，最好的缓存策略是缓存原始的 MP3 blob 数组，或者缓存合并后的 WAV ArrayBuffer。
-                // 为了代码稳健，这里我们使用 **AudioBuffer -> WAV ArrayBuffer** 转换逻辑 (简化版)
-                
-                const decodedBuffer = await decodeAndConcat(rawBuffers);
-                
-                // 播放逻辑
-                playAudioBuffer(decodedBuffer, uniqueId);
-
-                // 异步存缓存 (转WAV比较复杂，这里为了演示简化，建议缓存 segments 的 raw buffers 或者是转码后的 wav)
-                // 由于不引入额外 WAV Encoder 库，这里可以考虑只在内存复用，或者接受每次重新请求(如果浏览器有 HTTP cache)。
-                // 但为了满足"秒开"，我们使用一个简单的内存 Map 做一级缓存，IDB 做二级 (如果实现了wav encode)。
-                // 修正：利用浏览器自身的 HTTP 缓存通常已经足够快。但为了完全离线体验，
-                // 我们这里演示直接播放，不强制写入 IDB (除非引入 wav encoder)。
-                // *注：上面的 idb 代码保留，如果您有 wav encoder 可以用。*
-                
-            } else {
-                // 如果有缓存 (假设存的是 ArrayBuffer)
-                const ctx = audioCtxRef.current;
-                const decoded = await ctx.decodeAudioData(finalBuffer.slice(0));
-                playAudioBuffer(decoded, uniqueId);
+            const segments = [];
+            const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g; // 简单拆分中文和非中文
+            let match;
+            while ((match = regex.exec(cleanText)) !== null) {
+                if (match[0].trim()) {
+                    segments.push({
+                        text: match[0],
+                        lang: detectLanguage(match[0])
+                    });
+                }
             }
+
+            if (segments.length === 0) {
+                setLoadingId(null);
+                return;
+            }
+
+            // 2. 并行请求所有片段
+            const blobs = await Promise.all(
+                segments.map(seg => fetchAudioBlob(seg.text, seg.lang))
+            );
+
+            // 如果请求期间被停止了，直接返回
+            if (myRequestId !== latestRequestIdRef.current) return;
+
+            // 3. 创建 Audio 对象队列
+            const audioObjects = blobs.map((blob, index) => {
+                const audio = new Audio(URL.createObjectURL(blob));
+                // ✅ 中文 0.7 倍速，缅文 1.0 倍速
+                if (segments[index].lang === 'zh') {
+                    audio.playbackRate = 0.7; 
+                    audio.preservesPitch = false; 
+                } else {
+                    audio.playbackRate = 1.0;
+                }
+                return audio;
+            });
+
+            audioQueueRef.current = audioObjects;
+            setLoadingId(null);
+            setPlayingId(uniqueId);
+            setIsPlaying(true);
+
+            // 4. 递归播放函数
+            const playNext = (index) => {
+                if (myRequestId !== latestRequestIdRef.current) return;
+                
+                if (index >= audioObjects.length) {
+                    setIsPlaying(false);
+                    setPlayingId(null);
+                    currentAudioRef.current = null;
+                    return;
+                }
+
+                const audio = audioObjects[index];
+                currentAudioRef.current = audio;
+
+                const targetRate = segments[index].lang === 'zh' ? 0.7 : 1.0;
+                audio.playbackRate = targetRate;
+
+                audio.onended = () => {
+                    playNext(index + 1);
+                };
+
+                audio.onerror = (e) => {
+                    console.error("Audio play error", e);
+                    playNext(index + 1);
+                };
+
+                audio.play().catch(e => {
+                    console.error("Play prevented", e);
+                    setIsPlaying(false);
+                    setPlayingId(null);
+                });
+            };
+
+            playNext(0);
 
         } catch (e) {
             console.error("TTS Play Error:", e);
             setLoadingId(null);
+            setPlayingId(null);
         }
+    }, [stop, playingId]); // playingId 加入依赖，确保状态正确判断
 
-    }, [stop]);
-
-    const playAudioBuffer = (buffer, id) => {
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
-
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-        source.onended = () => {
-            if (playingId === id) {
-                setIsPlaying(false);
-                setPlayingId(null);
-            }
-        };
-        
-        sourceRef.current = source;
-        source.start(0);
-        setPlayingId(id);
-        setIsPlaying(true);
-        setLoadingId(null);
-    };
-
-    // 预加载功能 (简单发请求让浏览器缓存)
-    const preload = (text) => {
-        if(!text) return;
+    const preload = useCallback((text) => {
+        if (!text) return;
         let cleanText = text.replace(/<[^>]+>/g, '').replace(/\{\{| \}\}|\}\}/g, '').replace(/\n/g, ' ');
-        const segments = splitMixedText(cleanText);
-        segments.forEach(seg => {
-             const voice = seg.lang === 'mm' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoxiaoMultilingualNeural';
-             const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(seg.text)}&v=${voice}`;
-             fetch(url, {priority: 'low'}).catch(()=>{});
-        });
-    };
+        const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
+        let match;
+        while ((match = regex.exec(cleanText)) !== null) {
+            if (match[0].trim()) {
+                const t = match[0];
+                const lang = detectLanguage(t);
+                fetchAudioBlob(t, lang).catch(()=>{});
+            }
+        }
+    }, []);
 
     return { play, stop, isPlaying, playingId, loadingId, preload };
 }
@@ -372,12 +334,20 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     // 使用新的混合 TTS Hook
     const { play, stop, playingId, loadingId, preload } = useMixedTTS();
 
-    // 页面切换副作用
+    // ✅ 关键修复：将滚动条重置逻辑单独抽离，仅依赖 currentIndex
     useEffect(() => {
+        // 切换页面时，停止之前的音频
         stop();
-        if (contentRef.current) contentRef.current.scrollTop = 0;
+        // 只有切换页面时，才重置滚动条
+        if (contentRef.current) {
+            contentRef.current.scrollTop = 0;
+        }
+        // 重置按钮状态
         setCanGoNext(true);
+    }, [currentIndex, stop]);
 
+    // ✅ 处理自动播放和预加载（不再包含 scrollTop 逻辑）
+    useEffect(() => {
         const currentGp = grammarPoints[currentIndex];
 
         // 自动播放解说
@@ -402,8 +372,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         };
         preloadNextItems(2);
         
-        return () => { clearTimeout(autoPlayTimer); stop(); };
-    }, [currentIndex, grammarPoints, play, stop, preload]);
+        return () => { clearTimeout(autoPlayTimer); };
+    }, [currentIndex, grammarPoints, play, preload]);
     
     // 滚动监听
     const handleScroll = () => {
