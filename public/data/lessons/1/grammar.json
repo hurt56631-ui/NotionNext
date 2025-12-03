@@ -6,7 +6,7 @@
     "visibleExplanation": "<div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>语法核心</strong></div><div style='padding-left: 15px;'>汉语的时间词必须放在 <b>动词前面</b>。</div><hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#EAF2F8; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#3498DB;'>缅汉对比</strong></div><div style='padding-left: 15px;'>这个语序和缅甸语<b>完全一样</b>，非常容易掌握。<br><div style='margin-top:8px; padding-left:10px; border-left: 3px solid #3498DB;'><span style='color:#2980b9;'><b>中文:</b> 我 <b>早上七点</b> 起床。</span><br><span style='color:#27ae60;'><b>缅文:</b> ကျွန်တော် <b>မနက် ၇ နာရီ</b> အိပ်ရာထတယ်။</span></div></div>",
     "usage": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#E9F7EF; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#2ECC71;'>适用情境</strong></div><div style='padding-left: 15px;'>描述任何在<b>特定时间</b>发生的动作。</div>",
     "attention": "<hr style='border:0; border-top:1px solid #EAECEE; margin:15px 0;'><div style='background-color:#FEF5E7; padding: 12px; border-radius: 8px; margin-bottom:12px;'><strong style='color:#F39C12;'>⚠️ 常见偏误</strong></div><div style='padding-left: 15px;'>绝对不要说 “<del>我起床在早上七点</del>”。</div>",
-    "narrationScript": "ကျောင်းသားတို့ မှတ်ထားရမယ့် ရွှေစည်းမျဉ်းကတော့ - 'အချိန်' ဟာ 'အပြုအမူ' ရဲ့ ရှေ့မှာပဲ အမြဲရှိရပါမယ်။ ဒါဟာ မြန်မာလို စာစီပုံနဲ့ အတူတူပါပဲ။",
+    "narrationScript": "ကျောင်းသားတို့ မှတ်ထားရမယ့် ရွှေစည်းမျဉ်းကတော့ - 'အချိန်' ဟာ 'အပြုအမူ' ရဲ့ 我们什么时候 ရှေ့မှာပဲ အမြဲရှိရပါမယ်။ 在哪里见面呢 ဒါဟာ မြန်မာလို စာစီပုံနဲ့   你爱我吗 အတူတူပါပဲ။",
     "examples": [
       {
         "id": "ex14_1_1",
