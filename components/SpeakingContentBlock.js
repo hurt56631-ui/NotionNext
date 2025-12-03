@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { createPortal } from 'react-dom'; 
-import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, X } from 'lucide-react';
+import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, X, Volume2, ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -11,32 +11,158 @@ import speakingList from '@/data/speaking.json';
 // --- 核心组件 ---
 const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
-// 全屏传送门组件 (现在用于所有学习模块)
+// --- 全屏传送门 ---
 const FullScreenPortal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
     setMounted(true);
-    // 锁定背景滚动，防止底部页面滑动
     document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
+    return () => { document.body.style.overflow = ''; };
   }, []);
-
   if (!mounted || typeof document === 'undefined') return null;
-
   return createPortal(
-    <div 
-      className="fixed inset-0 z-[99999] bg-white flex flex-col"
-      style={{ touchAction: 'none' }} 
-    >
+    <div className="fixed inset-0 z-[99999] bg-gray-50 flex flex-col" style={{ touchAction: 'none' }}>
       {children}
     </div>,
     document.body
   );
 };
 
+// --- 音频缓存与播放逻辑 (单例缓存) ---
+const audioBlobCache = new Map(); // 全局缓存，切换页面后依然有效（刷新失效）
+
+const useAudioPlayer = () => {
+  const [playingId, setPlayingId] = useState(null);
+  const audioRef = useRef(null);
+
+  const playAudio = async (id, text) => {
+    // 停止当前正在播放的
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    setPlayingId(id);
+
+    try {
+      let audioUrl;
+
+      // 1. 检查缓存
+      if (audioBlobCache.has(text)) {
+        console.log("👉 命中音频缓存");
+        audioUrl = audioBlobCache.get(text);
+      } else {
+        // 2. 如果没有缓存，发起请求 (这里演示用浏览器自带TTS，如果是API请求请替换 fetch 逻辑)
+        // 真实场景示例：
+        // const res = await fetch(`/api/tts?text=${encodeURIComponent(text)}`);
+        // const blob = await res.blob();
+        // audioUrl = URL.createObjectURL(blob);
+        
+        // --- 模拟生成音频 URL (实际项目中请替换为真实的 fetch) ---
+        // 这里为了演示代码可用性，使用了 Web Speech API，但在逻辑上模拟了缓存过程
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'zh-CN'; // 或目标语言
+        u.onend = () => setPlayingId(null);
+        window.speechSynthesis.speak(u);
+        return; 
+        // -----------------------------------------------------
+
+        // 如果你有真实的音频URL，请解开下面注释并使用缓存逻辑：
+        /*
+        audioBlobCache.set(text, audioUrl);
+        */
+      }
+
+      // 3. 播放音频 (针对 Blob URL)
+      if (audioUrl) {
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        audio.onended = () => setPlayingId(null);
+        audio.play();
+      }
+    } catch (err) {
+      console.error("播放失败", err);
+      setPlayingId(null);
+    }
+  };
+
+  return { playingId, playAudio };
+};
+
+// --- 新增：列表式学习组件 (生词/短句专用) ---
+const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
+  const { playingId, playAudio } = useAudioPlayer();
+
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* 顶部导航 */}
+      <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm border-b z-10">
+        <button onClick={onBack} className="p-2 -ml-2 text-gray-600 active:scale-90 transition-transform">
+          <ArrowLeft size={24} />
+        </button>
+        <h2 className="font-bold text-lg text-gray-800">{title}</h2>
+        <div className="w-8"></div> {/* 占位 */}
+      </div>
+
+      {/* 滚动列表区域 */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-20">
+        {data?.map((item, index) => {
+            const mainText = isSentence ? item.sentence : item.word;
+            const isPlaying = playingId === item.id;
+
+            return (
+              <motion.div 
+                key={item.id || index}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                onClick={() => playAudio(item.id, mainText)}
+                className={`
+                  relative bg-white p-4 rounded-xl border transition-all cursor-pointer select-none
+                  ${isPlaying ? 'border-teal-500 shadow-md ring-1 ring-teal-100' : 'border-gray-100 shadow-sm active:scale-[0.99]'}
+                `}
+              >
+                <div className="flex items-start gap-4">
+                  {/* 序号 */}
+                  <div className={`mt-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isPlaying ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                    {index + 1}
+                  </div>
+
+                  {/* 内容区 */}
+                  <div className="flex-1 space-y-1">
+                    <h3 className={`text-lg font-medium leading-relaxed ${isPlaying ? 'text-teal-700' : 'text-gray-800'}`}>
+                      {mainText}
+                    </h3>
+                    {(item.pinyin) && (
+                      <p className="text-sm text-gray-400 font-mono">{item.pinyin}</p>
+                    )}
+                    <p className="text-sm text-gray-500 pt-1 border-t border-gray-50 mt-2">
+                      {item.translation}
+                    </p>
+                  </div>
+
+                  {/* 播放图标 */}
+                  <div className={`p-2 rounded-full ${isPlaying ? 'text-teal-600 bg-teal-50' : 'text-gray-300'}`}>
+                    {isPlaying ? <Loader2 size={20} className="animate-spin" /> : <Volume2 size={20} />}
+                  </div>
+                </div>
+              </motion.div>
+            );
+        })}
+
+        {(!data || data.length === 0) && (
+          <div className="text-center text-gray-400 py-10">暂无内容</div>
+        )}
+        
+        {/* 底部占位，防止最后一行被遮挡 */}
+        <div className="h-10"></div>
+      </div>
+    </div>
+  );
+};
+
+
+// --- 主组件 ---
 const SpeakingContentBlock = () => {
   const router = useRouter();
   
@@ -48,12 +174,10 @@ const SpeakingContentBlock = () => {
   const handleCourseClick = async (courseSummary) => {
     setIsLoading(true);
     const lessonId = courseSummary.id;
-    
     const fetchSafe = async (url) => {
         try { const res = await fetch(url); return res.ok ? await res.json() : []; } 
         catch (e) { return []; }
     };
-
     try {
       const [vocabData, grammarData, sentencesData, exercisesData] = await Promise.all([
           fetchSafe(`/data/lessons/${lessonId}/vocabulary.json`),
@@ -61,9 +185,7 @@ const SpeakingContentBlock = () => {
           fetchSafe(`/data/lessons/${lessonId}/sentences.json`),
           fetchSafe(`/data/lessons/${lessonId}/exercises.json`)
       ]);
-
       setSelectedCourse({ ...courseSummary, vocabulary: vocabData, grammar: grammarData, sentences: sentencesData, exercises: exercisesData });
-      
       router.push(router.asPath + '#course-menu', undefined, { shallow: true });
     } catch (error) {
       console.error(error);
@@ -78,7 +200,6 @@ const SpeakingContentBlock = () => {
     setActiveModule(type);
     router.push(router.asPath.split('#')[0] + `#course-${type}`, undefined, { shallow: true });
   };
-
   const handleBack = () => router.back();
 
   useEffect(() => {
@@ -88,45 +209,15 @@ const SpeakingContentBlock = () => {
       else if (hash.includes('#course-grammar')) setActiveModule('grammar');
       else if (hash.includes('#course-sentences')) setActiveModule('sentences');
       else if (hash.includes('#course-exercises')) setActiveModule('exercises');
-      else if (hash.includes('#course-menu')) {
-          setActiveModule(null); 
-      }
-      else { 
-          setSelectedCourse(null); 
-          setActiveModule(null); 
-      }
+      else if (hash.includes('#course-menu')) setActiveModule(null); 
+      else { setSelectedCourse(null); setActiveModule(null); }
     };
     window.addEventListener('popstate', handleHashChange);
     handleHashChange();
     return () => window.removeEventListener('popstate', handleHashChange);
   }, []);
 
-  // ==================== 3. 数据转换适配器 ====================
-
-  const transformToWordStudyLesson = (data, title, isSentence = false) => {
-    if (!data || data.length === 0) return { blocks: [] };
-    const type = isSentence ? "phrase_study" : "word_study";
-    return {
-      blocks: [
-        {
-          type: type, 
-          content: {
-            title: title,
-            words: data.map(item => ({
-              id: item.id,
-              chinese: isSentence ? item.sentence : item.word,
-              pinyin: item.pinyin,
-              translation: item.translation,
-              example: item.example,
-              ...item 
-            }))
-          }
-        },
-        { type: "complete", content: { title: "学习完成！" } }
-      ]
-    };
-  };
-
+  // ==================== 3. 旧的数据转换 (仅保留给语法和练习使用) ====================
   const transformGrammarToLesson = (data) => {
     if (!data || data.length === 0) return { blocks: [] };
     return {
@@ -162,27 +253,45 @@ const SpeakingContentBlock = () => {
 
   // ==================== 4. 渲染逻辑 ====================
   
-  let currentLessonData = null;
+  // 辅助函数：判断是否使用新版列表组件
+  const isListComponent = activeModule === 'vocab' || activeModule === 'sentences';
+  
+  // 准备数据
+  let renderContent = null;
   const baseId = selectedCourse ? selectedCourse.id : 'temp';
 
-  if (activeModule === 'vocab') {
-      currentLessonData = transformToWordStudyLesson(selectedCourse?.vocabulary, "核心生词");
-      if(currentLessonData) currentLessonData.id = `${baseId}_vocab`;
-  }
-  else if (activeModule === 'sentences') {
-      currentLessonData = transformToWordStudyLesson(selectedCourse?.sentences, "常用短句", true);
-      if(currentLessonData) currentLessonData.id = `${baseId}_sentences`;
-  }
-  else if (activeModule === 'grammar') {
-      currentLessonData = transformGrammarToLesson(selectedCourse?.grammar);
-      if(currentLessonData) currentLessonData.id = `${baseId}_grammar`;
+  if (activeModule === 'grammar') {
+      const lessonData = transformGrammarToLesson(selectedCourse?.grammar);
+      if(lessonData) lessonData.id = `${baseId}_grammar`;
+      renderContent = <InteractiveLesson lesson={lessonData} />;
   }
   else if (activeModule === 'exercises') {
-      currentLessonData = transformExercisesToLesson(selectedCourse?.exercises);
-      if(currentLessonData) currentLessonData.id = `${baseId}_exercises`;
+      const lessonData = transformExercisesToLesson(selectedCourse?.exercises);
+      if(lessonData) lessonData.id = `${baseId}_exercises`;
+      renderContent = <InteractiveLesson lesson={lessonData} />;
   }
-
-  // ✅ 核心修改：移除 useParentPortal 判断，所有 activeModule 都进入全屏 Portal
+  else if (activeModule === 'vocab') {
+      // ✅ 生词：使用新组件
+      renderContent = (
+        <AudioListLesson 
+            data={selectedCourse?.vocabulary} 
+            title="核心生词" 
+            onBack={handleBack} 
+            isSentence={false}
+        />
+      );
+  }
+  else if (activeModule === 'sentences') {
+      // ✅ 短句：使用新组件
+      renderContent = (
+        <AudioListLesson 
+            data={selectedCourse?.sentences} 
+            title="常用短句" 
+            onBack={handleBack} 
+            isSentence={true}
+        />
+      );
+  }
   
   return (
     <>
@@ -223,10 +332,10 @@ const SpeakingContentBlock = () => {
         )}
       </AnimatePresence>
 
-      {/* ✅ 修改点：所有模块统一使用全屏 Portal 渲染 */}
-      {activeModule && currentLessonData && (
+      {/* ✅ 全屏渲染区域：统一入口 */}
+      {activeModule && renderContent && (
          <FullScreenPortal>
-             <InteractiveLesson lesson={currentLessonData} />
+             {renderContent}
          </FullScreenPortal>
       )}
     </>
