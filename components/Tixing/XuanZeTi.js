@@ -167,7 +167,7 @@ const audioController = {
 
         const audio = new Audio(url);
         if (validSegments[index].lang === 'zh') {
-          audio.playbackRate = 0.7; 
+          audio.playbackRate = 1.0; 
         } else {
           audio.playbackRate = 1.0;
         }
@@ -198,7 +198,7 @@ const audioController = {
         };
         
         audio.onloadedmetadata = () => {
-             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.7;
+             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.8;
         };
         
         const playPromise = audio.play();
