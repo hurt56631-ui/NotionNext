@@ -64,13 +64,10 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
-    // ✅ 关键修改：中文语速设为 0.7 (API 参数 -30 左右，或者 rate=0.7)
-    // 这里假设 API 参数 r=0 是正常，r<0 是慢速。
-    // 如果你的 API r=0 是 1.0倍速，那么 0.7倍速大约对应 r=-30
-    // 这里为了通用，我们在 play 时控制 Audio 对象的 playbackRate 属性更稳妥，
-    // 但如果 API 支持生成慢速音频更好。这里采用 Audio.playbackRate 控制。
+    // 中文语速控制逻辑在 playMixed 中通过 playbackRate 实现
     const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const rateParam = 0; // 获取标准语速音频，后面用 JS 控制播放速度
+    // 这里的 r 参数请求标准语速音频
+    const rateParam = 0; 
     
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
@@ -109,7 +106,7 @@ const audioController = {
 
       const audioObjects = blobs.map((blob, index) => {
         const audio = new Audio(URL.createObjectURL(blob));
-        // ✅ 关键修改：中文语速 0.7，缅文/其他保持 1.0
+        // ✅ 中文语速 0.7，缅文/其他保持 1.0
         if (segments[index].lang === 'zh') {
           audio.playbackRate = 0.7; 
         } else {
@@ -155,7 +152,7 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    padding: 10px 32px 180px 32px; /* 底部留白增加，防止遮挡 */
+    padding: 10px 32px 180px 32px; 
     overflow-y: auto;
     background-color: #fdfdfd;
   }
@@ -193,18 +190,17 @@ const cssStyles = `
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
-    gap: 16px; /* 卡片间距 */
+    gap: 16px; 
     width: 100%;
     max-width: 500px;
   }
 
-  /* ✅ 卡片样式优化：增加底部厚阴影，制造悬浮感 */
+  /* ✅ 卡片浮动阴影效果 */
   .xzt-option-card {
     position: relative; 
     background: #fff; 
     border-radius: 20px; 
     border: 2px solid #e2e8f0;
-    /* 关键阴影：上方淡淡的投影 + 下方厚实的灰色块 */
     box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 6px 0 #cbd5e1; 
     cursor: pointer; 
     transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
@@ -214,7 +210,6 @@ const cssStyles = `
     transform: translateY(0);
   }
   
-  /* 点击时的按压效果 */
   .xzt-option-card:active { 
     transform: translateY(4px); 
     box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 2px 0 #cbd5e1; 
@@ -234,10 +229,10 @@ const cssStyles = `
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
   .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
   
-  /* ✅ 底部固定区域：抬高位置 */
+  /* ✅ 底部固定区域：抬高 15% */
   .fixed-bottom-area {
     position: fixed;
-    bottom: 15vh; /* 距离底部 15% 屏幕高度，约等于抬高 2-3cm */
+    bottom: 15vh;
     left: 0; right: 0;
     display: flex;
     flex-direction: column-reverse;
@@ -259,7 +254,8 @@ const cssStyles = `
     transition: all 0.2s;
   }
   .submit-btn:active { transform: scale(0.95); }
-  /* 提交后隐藏按钮，避免干扰 */
+  .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
+  /* 提交后隐藏按钮 */
   .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
   /* 解析卡片 */
@@ -318,7 +314,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const [titleSegments, setTitleSegments] = useState([]);
   const [orderedOptions, setOrderedOptions] = useState([]);
   
-  // ✅ 获取真正的解析内容：优先取 props.explanation，其次取 question.explanation
   const activeExplanation = explanation || question.explanation || "";
 
   useEffect(() => {
@@ -333,26 +328,25 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     setIsSubmitted(false);
     setShowExplanation(false);
 
+    // ✅ 自动朗读标题一次 (仅在 question 变化时触发)
     if (question.text) audioController.playMixed(question.text);
   }, [question, options]);
 
-  // ✅ 核心逻辑修改：点击卡片直接提交
+  // ✅ 核心修改：点击卡片仅选中，不提交
   const handleCardClick = (option) => {
-    if (isSubmitted) return; // 防止重复提交
+    if (isSubmitted) return;
     
     setSelectedId(option.id);
     if (navigator.vibrate) navigator.vibrate(20);
-    
-    // 播放选项音频
     audioController.playMixed(option.text);
-
-    // 立即执行提交逻辑（不设延迟，实现极速响应）
-    submitAnswer(option.id);
   };
 
-  const submitAnswer = (id) => {
+  // ✅ 新增：点击“提交”按钮触发的逻辑
+  const handleSubmit = () => {
+    if (!selectedId || isSubmitted) return;
+
     setIsSubmitted(true);
-    const isCorrect = correctAnswer.map(String).includes(String(id));
+    const isCorrect = correctAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
       // --- 答对 ---
@@ -364,22 +358,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
       
-      // ✅ 修复解析显示逻辑
       if (activeExplanation && activeExplanation.trim() !== '') {
         setShowExplanation(true);
-        // 延迟 0.5秒 播放解析音频，语速已在 AudioController 中设为慢速(0.7)
         setTimeout(() => audioController.playMixed(activeExplanation), 500);
         
-        // 智能计算等待时间：每3个字1秒，最少等待3.5秒，确保音频播完
         const waitTime = Math.max(3500, activeExplanation.length * 350);
-        
         setTimeout(() => {
-           // 触发 onIncorrect，通常父组件会刷新题目
            if (onIncorrect) onIncorrect(question);
         }, waitTime);
 
       } else {
-        // 无解析的情况：等待 1.2 秒后下一题
         setShowExplanation(false);
         setTimeout(() => {
            if (onIncorrect) onIncorrect(question);
@@ -448,10 +436,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="fixed-bottom-area">
-          {/* 只有在没提交时显示按钮，提交后隐藏，避免遮挡解析 */}
+          {/* 按钮绑定 handleSubmit，必须选中后才能点击 */}
           <button 
             className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
-            onClick={() => selectedId && submitAnswer(selectedId)} 
+            onClick={handleSubmit} 
             disabled={!selectedId}
           >
             提 交
