@@ -11,13 +11,13 @@ import speakingList from '@/data/speaking.json';
 // --- 核心组件 ---
 const InteractiveLesson = dynamic(() => import('@/components/Tixing/InteractiveLesson'), { ssr: false });
 
-// 全屏传送门组件 (仅用于语法和练习)
+// 全屏传送门组件 (现在用于所有学习模块)
 const FullScreenPortal = ({ children }) => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    // 锁定背景滚动
+    // 锁定背景滚动，防止底部页面滑动
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = '';
@@ -163,7 +163,6 @@ const SpeakingContentBlock = () => {
   // ==================== 4. 渲染逻辑 ====================
   
   let currentLessonData = null;
-  // ✅ 关键修复：为每个模块生成唯一的 ID，防止 InteractiveLesson 进度混淆
   const baseId = selectedCourse ? selectedCourse.id : 'temp';
 
   if (activeModule === 'vocab') {
@@ -183,9 +182,8 @@ const SpeakingContentBlock = () => {
       if(currentLessonData) currentLessonData.id = `${baseId}_exercises`;
   }
 
-  // ✅ 核心判断：只有 语法 和 练习 使用 Portal，其他（生词/短句）直接渲染
-  const useParentPortal = ['grammar', 'exercises'].includes(activeModule);
-
+  // ✅ 核心修改：移除 useParentPortal 判断，所有 activeModule 都进入全屏 Portal
+  
   return (
     <>
       {isLoading && (
@@ -225,19 +223,11 @@ const SpeakingContentBlock = () => {
         )}
       </AnimatePresence>
 
-      {/* ✅ 渲染逻辑分离 */}
+      {/* ✅ 修改点：所有模块统一使用全屏 Portal 渲染 */}
       {activeModule && currentLessonData && (
-         useParentPortal ? (
-             // 情况 A: 语法/练习 -> 使用 Portal 强行全屏
-             <FullScreenPortal>
-                 {/* ✅ 这里的关闭按钮已被移除，只有组件本身了 */}
-                 <InteractiveLesson lesson={currentLessonData} />
-             </FullScreenPortal>
-         ) : (
-             // 情况 B: 生词/短句 -> 直接渲染 (使用 InteractiveLesson 自带的 fixed inset-0)
-             // 这样不会受 Portal 影响，而是直接作为 React 组件树的一部分
+         <FullScreenPortal>
              <InteractiveLesson lesson={currentLessonData} />
-         )
+         </FullScreenPortal>
       )}
     </>
   );
