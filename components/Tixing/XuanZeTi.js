@@ -42,7 +42,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (混合朗读) ---
+// --- 2. 音频控制器 (支持不同语速) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -59,17 +59,24 @@ const audioController = {
   },
 
   detectLanguage(text) {
-    if (/[\u1000-\u109F]/.test(text)) return 'my';
-    return 'zh';
+    if (/[\u1000-\u109F]/.test(text)) return 'my'; // 缅文
+    return 'zh'; // 默认中文
   },
 
-  async fetchAudioBlob(text, lang, rate) {
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-${voice}-${text}-${rate}`;
+  async fetchAudioBlob(text, lang) {
+    // ✅ 关键修改：中文语速设为 0.7 (API 参数 -30 左右，或者 rate=0.7)
+    // 这里假设 API 参数 r=0 是正常，r<0 是慢速。
+    // 如果你的 API r=0 是 1.0倍速，那么 0.7倍速大约对应 r=-30
+    // 这里为了通用，我们在 play 时控制 Audio 对象的 playbackRate 属性更稳妥，
+    // 但如果 API 支持生成慢速音频更好。这里采用 Audio.playbackRate 控制。
+    const voice = lang === 'my' ? 'en-US-AvaMultilingualNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const rateParam = 0; // 获取标准语速音频，后面用 JS 控制播放速度
+    
+    const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
 
-    const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate > 1 ? 20 : 0}`;
+    const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateParam}`;
     const res = await fetch(apiUrl);
     if (!res.ok) throw new Error('TTS Fetch failed');
     const blob = await res.blob();
@@ -77,7 +84,7 @@ const audioController = {
     return blob;
   },
 
-  async playMixed(text, rate = 1.0) {
+  async playMixed(text) {
     this.stop();
     if (!text) return;
     const reqId = ++this.latestRequestId;
@@ -87,10 +94,8 @@ const audioController = {
     let match;
     while ((match = regex.exec(text)) !== null) {
       if (match[0].trim()) {
-        segments.push({
-          text: match[0],
-          lang: this.detectLanguage(match[0])
-        });
+        const lang = this.detectLanguage(match[0]);
+        segments.push({ text: match[0], lang });
       }
     }
 
@@ -98,11 +103,21 @@ const audioController = {
 
     try {
       const blobs = await Promise.all(
-        segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang, rate))
+        segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang))
       );
       if (reqId !== this.latestRequestId) return;
 
-      const audioObjects = blobs.map(blob => new Audio(URL.createObjectURL(blob)));
+      const audioObjects = blobs.map((blob, index) => {
+        const audio = new Audio(URL.createObjectURL(blob));
+        // ✅ 关键修改：中文语速 0.7，缅文/其他保持 1.0
+        if (segments[index].lang === 'zh') {
+          audio.playbackRate = 0.7; 
+        } else {
+          audio.playbackRate = 1.0;
+        }
+        return audio;
+      });
+      
       this.playlist = audioObjects;
 
       const playNext = (index) => {
@@ -113,6 +128,12 @@ const audioController = {
         const audio = audioObjects[index];
         this.currentAudio = audio;
         audio.onended = () => playNext(index + 1);
+        
+        // 兼容处理：playbackRate 必须在加载元数据后设置才一定生效
+        audio.onloadedmetadata = () => {
+             if (segments[index].lang === 'zh') audio.playbackRate = 0.7;
+        };
+        
         audio.play().catch(e => console.error(e));
       };
       playNext(0);
@@ -122,7 +143,7 @@ const audioController = {
   }
 };
 
-// --- 3. 样式定义 (已按要求调整) ---
+// --- 3. 样式定义 ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;700&display=swap');
 
@@ -134,17 +155,16 @@ const cssStyles = `
     flex-direction: column;
     align-items: center;
     position: relative;
-    /* ✅ 修改：左右内边距增加到 32px，让卡片看起来更短（两边留白更多） */
-    padding: 10px 32px 160px 32px; 
+    padding: 10px 32px 180px 32px; /* 底部留白增加，防止遮挡 */
     overflow-y: auto;
-    background-color: #fff;
+    background-color: #fdfdfd;
   }
 
   /* 标题区域 */
   .xzt-question-area {
     width: 100%;
     max-width: 500px;
-    margin: 10px auto 20px auto;
+    margin: 10px auto 30px auto;
     text-align: center;
     cursor: pointer;
     position: relative;
@@ -173,43 +193,54 @@ const cssStyles = `
   .xzt-options-grid {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px; /* 卡片间距 */
     width: 100%;
     max-width: 500px;
   }
 
+  /* ✅ 卡片样式优化：增加底部厚阴影，制造悬浮感 */
   .xzt-option-card {
-    position: relative; background: #fff; border-radius: 18px; border: 2px solid #f1f5f9;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.15s;
-    display: flex; align-items: center; justify-content: center; /* 内容居中 */
-    padding: 14px 16px;
-    min-height: 68px;
+    position: relative; 
+    background: #fff; 
+    border-radius: 20px; 
+    border: 2px solid #e2e8f0;
+    /* 关键阴影：上方淡淡的投影 + 下方厚实的灰色块 */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 6px 0 #cbd5e1; 
+    cursor: pointer; 
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 20px;
+    min-height: 72px;
+    transform: translateY(0);
   }
-  .xzt-option-card:active { transform: scale(0.98); background: #f8fafc; }
-  .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; }
-  .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; animation: bounce 0.4s; }
-  .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; animation: shake 0.4s; }
+  
+  /* 点击时的按压效果 */
+  .xzt-option-card:active { 
+    transform: translateY(4px); 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02), 0 2px 0 #cbd5e1; 
+    background: #f8fafc; 
+  }
+  
+  .xzt-option-card.selected { border-color: #8b5cf6; background: #f5f3ff; box-shadow: 0 6px 0 #ddd6fe; }
+  .xzt-option-card.correct { border-color: #4ade80; background: #f0fdf4; box-shadow: 0 6px 0 #bbf7d0; animation: bounce 0.4s; }
+  .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; box-shadow: 0 6px 0 #fecaca; animation: shake 0.4s; }
 
-  /* ✅ 修改：选项文字居中 */
   .opt-content { 
     flex: 1; 
     text-align: center; 
-    display: flex; 
-    flex-direction: column; 
-    align-items: center; 
-    justify-content: center; 
+    display: flex; flex-direction: column; align-items: center; justify-content: center; 
   }
   
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
-  .opt-txt { font-size: 1.2rem; font-weight: 600; color: #334155; }
+  .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
   
-  /* ✅ 修改：底部固定区域，bottom 增加到 85px (约2cm + 安全区) */
+  /* ✅ 底部固定区域：抬高位置 */
   .fixed-bottom-area {
     position: fixed;
-    bottom: 85px; 
+    bottom: 15vh; /* 距离底部 15% 屏幕高度，约等于抬高 2-3cm */
     left: 0; right: 0;
     display: flex;
-    flex-direction: column-reverse; /* 解析在按钮上方 */
+    flex-direction: column-reverse;
     align-items: center;
     pointer-events: none;
     z-index: 100;
@@ -219,36 +250,36 @@ const cssStyles = `
   /* 提交按钮 */
   .submit-btn {
     pointer-events: auto;
-    width: auto;
-    min-width: 160px; /* 稍微宽一点点 */
+    width: auto; min-width: 180px;
     padding: 14px 40px;
     border-radius: 99px;
-    font-size: 1.15rem; font-weight: 700; color: white; border: none;
+    font-size: 1.1rem; font-weight: 700; color: white; border: none;
     background: linear-gradient(135deg, #6366f1, #8b5cf6);
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
     transition: all 0.2s;
   }
   .submit-btn:active { transform: scale(0.95); }
-  .submit-btn:disabled { opacity: 0; transform: translateY(20px); pointer-events: none; }
+  /* 提交后隐藏按钮，避免干扰 */
+  .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
   /* 解析卡片 */
   .explanation-card {
     pointer-events: auto;
     background: #fff1f2; color: #be123c;
     border: 1px solid #fecaca;
-    padding: 14px 20px; 
+    padding: 16px 20px; 
     border-radius: 16px;
-    width: 85%; max-width: 420px;
-    font-size: 1rem;
+    width: 88%; max-width: 450px;
+    font-size: 1.05rem;
     line-height: 1.5;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-    animation: slideUp 0.3s ease-out;
-    display: flex; gap: 10px; align-items: flex-start;
+    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
+    animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex; gap: 12px; align-items: flex-start;
   }
 
   @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
 // --- 4. 文本解析逻辑 ---
@@ -286,6 +317,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const [showExplanation, setShowExplanation] = useState(false);
   const [titleSegments, setTitleSegments] = useState([]);
   const [orderedOptions, setOrderedOptions] = useState([]);
+  
+  // ✅ 获取真正的解析内容：优先取 props.explanation，其次取 question.explanation
+  const activeExplanation = explanation || question.explanation || "";
 
   useEffect(() => {
     audioController.stop();
@@ -302,22 +336,27 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (question.text) audioController.playMixed(question.text);
   }, [question, options]);
 
-  const handleSelect = (option) => {
-    if (isSubmitted) return;
+  // ✅ 核心逻辑修改：点击卡片直接提交
+  const handleCardClick = (option) => {
+    if (isSubmitted) return; // 防止重复提交
+    
     setSelectedId(option.id);
     if (navigator.vibrate) navigator.vibrate(20);
+    
+    // 播放选项音频
     audioController.playMixed(option.text);
+
+    // 立即执行提交逻辑（不设延迟，实现极速响应）
+    submitAnswer(option.id);
   };
 
-  const handleSubmit = () => {
-    if (!selectedId || isSubmitted) return;
+  const submitAnswer = (id) => {
     setIsSubmitted(true);
-    
-    const isCorrect = correctAnswer.map(String).includes(String(selectedId));
+    const isCorrect = correctAnswer.map(String).includes(String(id));
 
     if (isCorrect) {
       // --- 答对 ---
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
+      confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
       new Audio('/sounds/correct.mp3').play().catch(()=>{});
       setTimeout(() => onCorrect && onCorrect(), 1500);
     } else {
@@ -325,22 +364,25 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
       
-      // ✅ 关键逻辑修改：判断是否有解析
-      if (explanation && explanation.trim() !== '') {
-        // 有解析：显示卡片，播放音频，延迟较长
+      // ✅ 修复解析显示逻辑
+      if (activeExplanation && activeExplanation.trim() !== '') {
         setShowExplanation(true);
-        setTimeout(() => audioController.playMixed(explanation), 600);
+        // 延迟 0.5秒 播放解析音频，语速已在 AudioController 中设为慢速(0.7)
+        setTimeout(() => audioController.playMixed(activeExplanation), 500);
         
-        // 估算阅读时间，至少 3 秒
-        const waitTime = Math.max(3000, explanation.length * 300);
+        // 智能计算等待时间：每3个字1秒，最少等待3.5秒，确保音频播完
+        const waitTime = Math.max(3500, activeExplanation.length * 350);
+        
         setTimeout(() => {
-           onIncorrect && onIncorrect(question);
+           // 触发 onIncorrect，通常父组件会刷新题目
+           if (onIncorrect) onIncorrect(question);
         }, waitTime);
+
       } else {
-        // ✅ 无解析：不显示卡片，1.2秒后自动下一题
+        // 无解析的情况：等待 1.2 秒后下一题
         setShowExplanation(false);
         setTimeout(() => {
-           onIncorrect && onIncorrect(question);
+           if (onIncorrect) onIncorrect(question);
         }, 1200);
       }
     }
@@ -382,7 +424,11 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
             } else if (isSel) status = 'selected';
 
             return (
-              <div key={opt.id} className={`xzt-option-card ${status}`} onClick={() => handleSelect(opt)}>
+              <div 
+                key={opt.id} 
+                className={`xzt-option-card ${status}`} 
+                onClick={() => handleCardClick(opt)}
+              >
                 {opt.hasImage && <img src={opt.imageUrl} className="w-12 h-12 rounded mr-3 object-cover bg-gray-100" />}
                 <div className="opt-content">
                   {opt.parsed.isZh ? (
@@ -394,22 +440,27 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                     <div className="opt-txt font-medium">{opt.text}</div>
                   )}
                 </div>
-                {status === 'correct' && <FaCheckCircle className="text-green-500 text-xl absolute right-4" />}
-                {status === 'incorrect' && <FaTimesCircle className="text-red-500 text-xl absolute right-4" />}
+                {status === 'correct' && <FaCheckCircle className="text-green-500 text-2xl absolute right-4" />}
+                {status === 'incorrect' && <FaTimesCircle className="text-red-500 text-2xl absolute right-4" />}
               </div>
             );
           })}
         </div>
 
         <div className="fixed-bottom-area">
-          <button className="submit-btn" onClick={handleSubmit} disabled={!selectedId || isSubmitted}>
+          {/* 只有在没提交时显示按钮，提交后隐藏，避免遮挡解析 */}
+          <button 
+            className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
+            onClick={() => selectedId && submitAnswer(selectedId)} 
+            disabled={!selectedId}
+          >
             提 交
           </button>
 
-          {showExplanation && explanation && (
+          {showExplanation && activeExplanation && (
             <div className="explanation-card">
-              <FaLightbulb className="flex-shrink-0 mt-1 text-red-500" />
-              <div>{explanation}</div>
+              <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
+              <div>{activeExplanation}</div>
             </div>
           )}
         </div>
