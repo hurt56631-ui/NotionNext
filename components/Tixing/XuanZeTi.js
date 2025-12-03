@@ -154,16 +154,16 @@ const cssStyles = `
     background-color: #fdfdfd;
   }
 
-  /* 标题区域容器 - 整体 */
+  /* 标题区域容器 */
   .xzt-question-area {
     width: 100%;
     max-width: 500px;
     margin: 0 auto 30px auto; 
-    cursor: pointer;
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
+    /* 注意：移除了外层的 onClick 和 cursor，移交给内部卡片 */
   }
   
   .question-img { 
@@ -175,30 +175,36 @@ const cssStyles = `
     margin-bottom: 16px; 
   }
 
-  /* 透明卡片：包裹书本图标和文字 */
+  /* 标题透明卡片：增加 user-select: none 防止选中文本干扰点击 */
   .title-card-wrapper {
     width: 100%;
     display: flex;
-    flex-direction: row; /* 横向排列 */
-    align-items: center; /* 垂直居中 */
-    justify-content: center; /* 内容居中 */
-    gap: 16px; /* 图标和文字的间距 */
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
     padding: 16px 20px;
     border-radius: 20px;
-    /* 关键修改：增加半透明背景，确保点击区域是实心的 */
+    
     background-color: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(226, 232, 240, 0.6);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
-    transition: background-color 0.2s;
+    
+    cursor: pointer;
+    user-select: none; /* 关键修复：禁止文字被选中，确保点击一定触发 */
+    -webkit-user-select: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
+  /* 增加按压效果，让用户知道点中了 */
   .title-card-wrapper:active {
-    background-color: rgba(241, 245, 249, 0.8); /* 点击时的反馈颜色 */
+    background-color: rgba(241, 245, 249, 0.9);
+    transform: scale(0.98); 
   }
 
-  /* 书本图标样式 - 移到左侧后调整大小 */
+  /* 书本图标 */
   .book-icon-left {
-    flex-shrink: 0; /* 防止图标被压缩 */
+    flex-shrink: 0;
     width: 44px;
     height: 44px;
     background-color: #f3e8ff;
@@ -215,11 +221,12 @@ const cssStyles = `
   .title-text-container {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end; /* 拼音对齐 */
-    justify-content: flex-start; /* 文字左对齐 */
+    align-items: flex-end;
+    justify-content: flex-start;
     gap: 4px;
     line-height: 1.6;
-    flex: 1; /* 占据剩余空间 */
+    flex: 1;
+    pointer-events: none; /* 让文字不响应鼠标事件，事件全部由父级卡片处理 */
   }
 
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
@@ -249,6 +256,8 @@ const cssStyles = `
     padding: 16px 20px;
     min-height: 72px;
     transform: translateY(0);
+    user-select: none; /* 选项也不要让选中文字 */
+    -webkit-user-select: none;
   }
   
   .xzt-option-card:active { 
@@ -270,7 +279,7 @@ const cssStyles = `
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
   .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
   
-  /* 底部固定区域：抬高 15% */
+  /* 底部固定区域 */
   .fixed-bottom-area {
     position: fixed;
     bottom: 15vh;
@@ -293,6 +302,7 @@ const cssStyles = `
     background: linear-gradient(135deg, #6366f1, #8b5cf6);
     box-shadow: 0 10px 25px rgba(99, 102, 241, 0.4);
     transition: all 0.2s;
+    user-select: none;
   }
   .submit-btn:active { transform: scale(0.95); }
   .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
@@ -421,15 +431,25 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       <style>{cssStyles}</style>
       <div className="xzt-container">
         
-        {/* 标题区域：改为点击“透明卡片”区域触发朗读 */}
-        <div className="xzt-question-area" onClick={() => audioController.playMixed(question.text)}>
+        {/* 标题区域：外层只负责布局，点击事件交给内部卡片 */}
+        <div className="xzt-question-area">
           
-          {/* 图片在最上方 */}
           {question.imageUrl && <img src={question.imageUrl} alt="" className="question-img" />}
           
-          {/* 这里是修改后的结构：一个包含书本图标和文字的“卡片” */}
-          <div className="title-card-wrapper">
-            {/* 放在左侧的书本图标 */}
+          {/* 
+              修改说明：
+              1. onClick 移到了这个 div 上。
+              2. CSS 中加入了 user-select: none 防止选中文本。
+              3. CSS 中加入了 :active 缩放效果，提供点击反馈。
+          */}
+          <div 
+            className="title-card-wrapper" 
+            onClick={(e) => {
+              e.stopPropagation(); // 防止事件冒泡干扰
+              audioController.playMixed(question.text);
+            }}
+          >
+            {/* 书本图标 */}
             <div className="book-icon-left">
               <FaBookOpen />
             </div>
