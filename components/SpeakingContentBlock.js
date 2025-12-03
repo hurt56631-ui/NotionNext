@@ -163,10 +163,25 @@ const SpeakingContentBlock = () => {
   // ==================== 4. 渲染逻辑 ====================
   
   let currentLessonData = null;
-  if (activeModule === 'vocab') currentLessonData = transformToWordStudyLesson(selectedCourse?.vocabulary, "核心生词");
-  else if (activeModule === 'sentences') currentLessonData = transformToWordStudyLesson(selectedCourse?.sentences, "常用短句", true);
-  else if (activeModule === 'grammar') currentLessonData = transformGrammarToLesson(selectedCourse?.grammar);
-  else if (activeModule === 'exercises') currentLessonData = transformExercisesToLesson(selectedCourse?.exercises);
+  // ✅ 关键修复：为每个模块生成唯一的 ID，防止 InteractiveLesson 进度混淆
+  const baseId = selectedCourse ? selectedCourse.id : 'temp';
+
+  if (activeModule === 'vocab') {
+      currentLessonData = transformToWordStudyLesson(selectedCourse?.vocabulary, "核心生词");
+      if(currentLessonData) currentLessonData.id = `${baseId}_vocab`;
+  }
+  else if (activeModule === 'sentences') {
+      currentLessonData = transformToWordStudyLesson(selectedCourse?.sentences, "常用短句", true);
+      if(currentLessonData) currentLessonData.id = `${baseId}_sentences`;
+  }
+  else if (activeModule === 'grammar') {
+      currentLessonData = transformGrammarToLesson(selectedCourse?.grammar);
+      if(currentLessonData) currentLessonData.id = `${baseId}_grammar`;
+  }
+  else if (activeModule === 'exercises') {
+      currentLessonData = transformExercisesToLesson(selectedCourse?.exercises);
+      if(currentLessonData) currentLessonData.id = `${baseId}_exercises`;
+  }
 
   // ✅ 核心判断：只有 语法 和 练习 使用 Portal，其他（生词/短句）直接渲染
   const useParentPortal = ['grammar', 'exercises'].includes(activeModule);
@@ -215,9 +230,7 @@ const SpeakingContentBlock = () => {
          useParentPortal ? (
              // 情况 A: 语法/练习 -> 使用 Portal 强行全屏
              <FullScreenPortal>
-                 <button onClick={handleBack} className="fixed top-4 right-4 z-[210] p-2 bg-black/10 dark:bg-white/10 rounded-full backdrop-blur-sm hover:bg-black/20 transition-colors">
-                    <X size={20} className="text-gray-600 dark:text-gray-200" />
-                 </button>
+                 {/* ✅ 这里的关闭按钮已被移除，只有组件本身了 */}
                  <InteractiveLesson lesson={currentLessonData} />
              </FullScreenPortal>
          ) : (
