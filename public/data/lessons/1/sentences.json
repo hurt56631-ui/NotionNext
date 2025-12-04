@@ -1,44 +1,1185 @@
 [
   {
     "id": "s1",
-    "sentence": "မင်္ဂလာပါ",
-    "pinyin": "ming ga la ba",
-    "translation": "你好",
-    "example": "မင်္ဂလာပါဆရာ (老师好)"
+    "sentence": "你叫什么名字？",
+    "pinyin": "nǐ jiào shén me míng zi",
+    "translation": "နာမည် ဘယ်လိုခေါ်လဲ။",
+    "example": ""
   },
   {
     "id": "s2",
-    "sentence": "နေကောင်းလား",
-    "pinyin": "nay kaung lar",
-    "translation": "你好吗？/ 身体好吗？",
-    "example": "အမေ နေကောင်းလား (妈妈身体好吗？)"
+    "sentence": "您叫什么名字？",
+    "pinyin": "nín jiào shén me míng zi",
+    "translation": "နာမည် ဘယ်လိုခေါ်ပါသလဲ။ 【ရိုသေသောစကား】",
+    "example": ""
   },
   {
     "id": "s3",
-    "sentence": "ထမင်းစားပြီးပြီလား",
-    "pinyin": "hta min sar pi bi lar",
-    "translation": "吃饭了吗？",
-    "example": "မနက်စာ စားပြီးပြီလား (早饭吃了吗？)"
+    "sentence": "你姓什么？",
+    "pinyin": "nǐ xìng shén me",
+    "translation": "မျိုးရိုးနာမည် ဘယ်လိုခေါ်လဲ။",
+    "example": ""
   },
   {
     "id": "s4",
-    "sentence": "ကျေးဇူးတင်ပါတယ်",
-    "pinyin": "kyay zu tin ba de",
-    "translation": "谢谢",
-    "example": "အကူအညီအတွက် ကျေးဇူးတင်ပါတယ် (谢谢你的帮助)"
+    "sentence": "您贵姓？",
+    "pinyin": "nín guì xìng",
+    "translation": "မျိုးရိုးနာမည် ဘယ်လိုခေါ်ပါသလဲ။ 【အလွန်ရိုသေသောစကား】",
+    "example": ""
   },
   {
     "id": "s5",
-    "sentence": "တွေ့ရတာ ဝမ်းသာပါတယ်",
-    "pinyin": "tway ya dar wan thar ba de",
-    "translation": "很高兴见到你",
+    "sentence": "怎么称呼？",
+    "pinyin": "zěn me chēng hu",
+    "translation": "ဘယ်လိုခေါ်ရမလဲ။ 【ယဉ်ကျေးသောစကား】",
     "example": ""
   },
   {
     "id": "s6",
-    "sentence": "နာမည် ဘယ်လိုခေါ်လဲ",
-    "pinyin": "nar mal bel lo khaw le",
-    "translation": "你叫什么名字？",
+    "sentence": "您怎么称呼？",
+    "pinyin": "nín zěn me chēng hu",
+    "translation": "ခင်ဗျားကို ဘယ်လိုခေါ်ရမလဲ။ 【လူကြီးများကိုပြောရန် / တရားဝင်စကား】",
+    "example": ""
+  },
+  {
+    "id": "s7",
+    "sentence": "请问你的名字是？",
+    "pinyin": "qǐng wèn nǐ de míng zi shì",
+    "translation": "နာမည်လေး မေးလို့ရမလား။",
+    "example": ""
+  },
+  {
+    "id": "s8",
+    "sentence": "你的中文名字是什么？",
+    "pinyin": "nǐ de zhōng wén míng zi shì shén me",
+    "translation": "မင်းရဲ့ တရုတ်နာမည်က ဘာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s9",
+    "sentence": "你有中文名字吗？",
+    "pinyin": "nǐ yǒu zhōng wén míng zi ma",
+    "translation": "တရုတ်နာမည် ရှိလား။",
+    "example": ""
+  },
+  {
+    "id": "s10",
+    "sentence": "方便说下你的名字吗？",
+    "pinyin": "fāng biàn shuō xià nǐ de míng zi ma",
+    "translation": "နာမည်လေးပြောပြဖို့ အဆင်ပြေမလား။",
+    "example": ""
+  },
+  {
+    "id": "s11",
+    "sentence": "请问您贵姓大名？",
+    "pinyin": "qǐng wèn nín guì xìng dà míng",
+    "translation": "နာမည်လေး သိခွင့်ပြုပါ။ 【အလွန်တရားဝင်သောစကား】",
+    "example": ""
+  },
+  {
+    "id": "s12",
+    "sentence": "你常用什么名字？",
+    "pinyin": "nǐ cháng yòng shén me míng zi",
+    "translation": "ပုံမှန် ဘယ်နာမည်သုံးလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s13",
+    "sentence": "能告诉我你的名字吗？",
+    "pinyin": "néng gào su wǒ nǐ de míng zi ma",
+    "translation": "နာမည်လေး ပြောပြပေးလို့ရမလား။",
+    "example": ""
+  },
+  {
+    "id": "s14",
+    "sentence": "我该怎么称呼你？",
+    "pinyin": "wǒ gāi zěn me chēng hu nǐ",
+    "translation": "ခင်ဗျားကို ကျွန်တော် ဘယ်လိုခေါ်ရမလဲ။ 【အလွန်ယဉ်ကျေးသောစကား】",
+    "example": ""
+  },
+  {
+    "id": "s15",
+    "sentence": "你的名字怎么写？",
+    "pinyin": "nǐ de míng zi zěn me xiě",
+    "translation": "နာမည် ဘယ်လိုရေးလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s16",
+    "sentence": "我叫张华。",
+    "pinyin": "wǒ jiào zhāng huá",
+    "translation": "ကျွန်တော့်နာမည် ကျန်းဟွာ ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s17",
+    "sentence": "我是小明。",
+    "pinyin": "wǒ shì xiǎo míng",
+    "translation": "ကျွန်တော်က ရှောင်မင် ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s18",
+    "sentence": "我的名字是李娜。",
+    "pinyin": "wǒ de míng zi shì lǐ nà",
+    "translation": "ကျွန်မနာမည်က လီန ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s19",
+    "sentence": "叫我阿明就行。",
+    "pinyin": "jiào wǒ ā míng jiù xíng",
+    "translation": "အာမင် လို့ခေါ်ရင် ရပါပြီ။",
+    "example": ""
+  },
+  {
+    "id": "s20",
+    "sentence": "我的中文名字叫张伟。",
+    "pinyin": "wǒ de zhōng wén míng zi jiào zhāng wěi",
+    "translation": "ကျွန်တော့် တရုတ်နာမည်က ကျန်းဝေ ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s21",
+    "sentence": "我没有中文名字。",
+    "pinyin": "wǒ méi yǒu zhōng wén míng zi",
+    "translation": "ကျွန်တော့်မှာ တရုတ်နာမည် မရှိပါဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s22",
+    "sentence": "你可以叫我小王。",
+    "pinyin": "nǐ kě yǐ jiào wǒ xiǎo wáng",
+    "translation": "ကျွန်တော့်ကို ရှောင်ဝမ် လို့ခေါ်လို့ရပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s23",
+    "sentence": "大家一般叫我阿明。",
+    "pinyin": "dà jiā yì bān jiào wǒ ā míng",
+    "translation": "လူတွေကတော့ ကျွန်တော့်ကို အာမင် လို့ခေါ်ကြတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s24",
+    "sentence": "我姓陈。",
+    "pinyin": "wǒ xìng chén",
+    "translation": "ကျွန်တော့် မျိုးရိုးနာမည်က ချန် ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s25",
+    "sentence": "我叫张丽，也可以叫我阿丽。",
+    "pinyin": "wǒ jiào zhāng lì , yě kě yǐ jiào wǒ ā lì",
+    "translation": "ကျွန်မနာမည် ကျန်းလိ ပါ၊ အာလိ လို့ခေါ်လည်း ရပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s26",
+    "sentence": "免贵姓王。",
+    "pinyin": "miǎn guì xìng wáng",
+    "translation": "ကျွန်တော့် မျိုးရိုးနာမည်က ဝမ် ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s27",
+    "sentence": "这是我的朋友，王伟。",
+    "pinyin": "zhè shì wǒ de péng you , wáng wěi",
+    "translation": "ဒါက ကျွန်တော့်သူငယ်ချင်း ဝမ်ဝေ ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s28",
+    "sentence": "你是做什么的？",
+    "pinyin": "nǐ shì zuò shén me de",
+    "translation": "ဘာအလုပ်လုပ်လဲ။ 【အသုံးအများဆုံး】",
+    "example": ""
+  },
+  {
+    "id": "s29",
+    "sentence": "你做什么工作？",
+    "pinyin": "nǐ zuò shén me gōng zuò",
+    "translation": "ဘာအလုပ် လုပ်ကိုင်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s30",
+    "sentence": "他是做什么的？",
+    "pinyin": "tā shì zuò shén me de",
+    "translation": "သူက ဘာအလုပ်လုပ်တာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s31",
+    "sentence": "你从事什么职业？",
+    "pinyin": "nǐ cóng shì shén me zhí yè",
+    "translation": "ဘာအသက်မွေးဝမ်းကြောင်း လုပ်ကိုင်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s32",
+    "sentence": "他在哪儿上班？",
+    "pinyin": "tā zài nǎr shàng bān",
+    "translation": "သူ ဘယ်မှာ ရုံးတက်လဲ / အလုပ်လုပ်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s33",
+    "sentence": "你的工作是什么？",
+    "pinyin": "nǐ de gōng zuò shì shén me",
+    "translation": "ခင်ဗျားအလုပ်က ဘာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s34",
+    "sentence": "你在哪里工作？",
+    "pinyin": "nǐ zài nǎ li gōng zuò",
+    "translation": "ဘယ်မှာ အလုပ်လုပ်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s35",
+    "sentence": "你在哪家公司？",
+    "pinyin": "nǐ zài nǎ jiā gōng sī",
+    "translation": "ဘယ်ကုမ္ပဏီမှာ လုပ်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s36",
+    "sentence": "你具体是做什么的？",
+    "pinyin": "nǐ jù tǐ shì zuò shén me de",
+    "translation": "အလုပ်က ဘာလုပ်ရတာလဲ (အသေးစိတ်)။",
+    "example": ""
+  },
+  {
+    "id": "s37",
+    "sentence": "你的专业是什么？",
+    "pinyin": "nǐ de zhuān yè shì shén me",
+    "translation": "ဘာမေဂျာ ယူထားတာလဲ။ / ဘာကျွမ်းကျင်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s38",
+    "sentence": "你工作忙吗？",
+    "pinyin": "nǐ gōng zuò máng ma",
+    "translation": "အလုပ်မအားဘူးလား။ / အလုပ်များလား။",
+    "example": ""
+  },
+  {
+    "id": "s39",
+    "sentence": "你工作累不累？",
+    "pinyin": "nǐ gōng zuò lèi bú lèi",
+    "translation": "အလုပ်ပင်ပန်းလား။",
+    "example": ""
+  },
+  {
+    "id": "s40",
+    "sentence": "你工资高吗？",
+    "pinyin": "nǐ gōng zī gāo ma",
+    "translation": "လစာကောင်းလား။",
+    "example": ""
+  },
+  {
+    "id": "s41",
+    "sentence": "你工资多少？",
+    "pinyin": "nǐ gōng zī duō shao",
+    "translation": "လစာ ဘယ်လောက်ရလဲ။ 【အရမ်းတိုက်ရိုက်ကျသည်၊ ရိုင်းပြနိုင်သဖြင့် သတိထားသုံးပါ】",
+    "example": ""
+  },
+  {
+    "id": "s42",
+    "sentence": "你工作赚钱多吗？",
+    "pinyin": "nǐ gōng zuò zhuàn qián duō ma",
+    "translation": "အလုပ်က ပိုက်ဆံရလား။",
+    "example": ""
+  },
+  {
+    "id": "s43",
+    "sentence": "你做这份工作多久了？",
+    "pinyin": "nǐ zuò zhè fèn gōng zuò duō jiǔ le",
+    "translation": "ဒီအလုပ်လုပ်တာ ဘယ်လောက်ကြာပြီလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s44",
+    "sentence": "你喜欢自己的工作吗？",
+    "pinyin": "nǐ xǐ huan zì jǐ de gōng zuò ma",
+    "translation": "ကိုယ့်အလုပ်ကို ကိုယ်ကြိုက်လား။",
+    "example": ""
+  },
+  {
+    "id": "s45",
+    "sentence": "你的工作职责是什么？",
+    "pinyin": "nǐ de gōng zuò zhí zé shì shén me",
+    "translation": "အလုပ်တာဝန်က ဘာတွေလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s46",
+    "sentence": "你经常加班吗？",
+    "pinyin": "nǐ jīng cháng jiā bān ma",
+    "translation": "အိုတီ (OT) ခဏခဏ ဆင်းရလား။",
+    "example": ""
+  },
+  {
+    "id": "s47",
+    "sentence": "你上班远不远？",
+    "pinyin": "nǐ shàng bān yuǎn bù yuǎn",
+    "translation": "အလုပ်သွားရတာ ဝေးလား။",
+    "example": ""
+  },
+  {
+    "id": "s48",
+    "sentence": "我是学生。",
+    "pinyin": "wǒ shì xué sheng",
+    "translation": "ကျွန်တော်က ကျောင်းသားပါ။",
+    "example": ""
+  },
+  {
+    "id": "s49",
+    "sentence": "我是老师。",
+    "pinyin": "wǒ shì lǎo shī",
+    "translation": "ကျွန်မက ဆရာမပါ။",
+    "example": ""
+  },
+  {
+    "id": "s50",
+    "sentence": "我是医生。",
+    "pinyin": "wǒ shì yī shēng",
+    "translation": "ကျွန်တော်က ဆရာဝန်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s51",
+    "sentence": "他是工程师。",
+    "pinyin": "tā shì gōng chéng shī",
+    "translation": "သူက အင်ဂျင်နီယာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s52",
+    "sentence": "我不是老师。",
+    "pinyin": "wǒ bú shì lǎo shī",
+    "translation": "ကျွန်တော်က ဆရာဝန် မဟုတ်ပါဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s53",
+    "sentence": "我的工作是老师。",
+    "pinyin": "wǒ de gōng zuò shì lǎo shī",
+    "translation": "ကျွန်မအလုပ်ကတော့ ကျောင်းဆရာမပါ။",
+    "example": ""
+  },
+  {
+    "id": "s54",
+    "sentence": "我在一家公司工作。",
+    "pinyin": "wǒ zài yì jiā gōng sī gōng zuò",
+    "translation": "ကျွန်တော် ကုမ္ပဏီတစ်ခုမှာ လုပ်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s55",
+    "sentence": "我在医院工作。",
+    "pinyin": "wǒ zài yī yuàn gōng zuò",
+    "translation": "ဆေးရုံမှာ အလုပ်လုပ်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s56",
+    "sentence": "我在学校工作。",
+    "pinyin": "wǒ zài xué xiào gōng zuò",
+    "translation": "ကျောင်းမှာ အလုပ်လုပ်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s57",
+    "sentence": "我是一名商人。",
+    "pinyin": "wǒ shì yì míng shāng rén",
+    "translation": "ကျွန်တော်က ကုန်သည်တစ်ယောက်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s58",
+    "sentence": "我是做销售的。",
+    "pinyin": "wǒ shì zuò xiāo shòu de",
+    "translation": "ကျွန်တော်က အရောင်းပိုင်း လုပ်တာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s59",
+    "sentence": "我还没工作。",
+    "pinyin": "wǒ hái méi gōng zuò",
+    "translation": "ကျွန်တော် အလုပ်မရှိသေးဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s60",
+    "sentence": "我正在找工作。",
+    "pinyin": "wǒ zhèng zài zhǎo gōng zuò",
+    "translation": "အလုပ်ရှာနေတုန်းပဲ။",
+    "example": ""
+  },
+  {
+    "id": "s61",
+    "sentence": "我是商人。",
+    "pinyin": "wǒ shì shāng rén",
+    "translation": "စီးပွားရေးသမားပါ။",
+    "example": ""
+  },
+  {
+    "id": "s62",
+    "sentence": "我是护士。",
+    "pinyin": "wǒ shì hù shi",
+    "translation": "ကျွန်မက သူနာပြုဆရာမပါ။",
+    "example": ""
+  },
+  {
+    "id": "s63",
+    "sentence": "我是司机。",
+    "pinyin": "wǒ shì sī jī",
+    "translation": "ကျွန်တော်က ကားဆရာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s64",
+    "sentence": "我是厨师。",
+    "pinyin": "wǒ shì chú shī",
+    "translation": "ကျွန်တော်က စားဖိုမှူးပါ။",
+    "example": ""
+  },
+  {
+    "id": "s65",
+    "sentence": "我是设计师。",
+    "pinyin": "wǒ shì shè jì shī",
+    "translation": "ဒီဇိုင်နာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s66",
+    "sentence": "我在工厂上班。",
+    "pinyin": "wǒ zài gōng chǎng shàng bān",
+    "translation": "စက်ရုံမှာ အလုပ်လုပ်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s67",
+    "sentence": "我做服务行业的。",
+    "pinyin": "wǒ zuò fú wù háng yè de",
+    "translation": "ဝန်ဆောင်မှုလုပ်ငန်း (Service) လုပ်တာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s68",
+    "sentence": "我从事教育行业。",
+    "pinyin": "wǒ cóng shì jiào yù háng yè",
+    "translation": "ပညာရေးပိုင်း လုပ်တာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s69",
+    "sentence": "我工作挺忙的。",
+    "pinyin": "wǒ gōng zuò tǐng máng de",
+    "translation": "အလုပ်က တော်တော်များတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s70",
+    "sentence": "我工作不忙。",
+    "pinyin": "wǒ gōng zuò bù máng",
+    "translation": "အလုပ် မများပါဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s71",
+    "sentence": "还行，时忙时闲。",
+    "pinyin": "hái xíng , shí máng shí xián",
+    "translation": "အဆင်ပြေပါတယ်၊ တစ်ခါတစ်လေ အလုပ်များပြီး တစ်ခါတစ်လေ အားတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s72",
+    "sentence": "我很喜欢我的工作。",
+    "pinyin": "wǒ hěn xǐ huan wǒ de gōng zuò",
+    "translation": "ကိုယ့်အလုပ်ကို သဘောကျတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s73",
+    "sentence": "我做这份工作三年了。",
+    "pinyin": "wǒ zuò zhè fèn gōng zuò sān nián le",
+    "translation": "ဒီအလုပ်လုပ်တာ ၃ နှစ်ရှိပြီ။",
+    "example": ""
+  },
+  {
+    "id": "s74",
+    "sentence": "我暂时没上班。",
+    "pinyin": "wǒ zàn shí méi shàng bān",
+    "translation": "လောလောဆယ် အလုပ်မလုပ်ဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s75",
+    "sentence": "我是自由职业者。",
+    "pinyin": "wǒ shì zì yóu zhí yè zhě",
+    "translation": "အလွတ်တန်း အလုပ်လုပ်သူ (Freelancer) ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s76",
+    "sentence": "我自己做生意。",
+    "pinyin": "wǒ zì jǐ zuò shēng yì",
+    "translation": "ကိုယ်ပိုင်စီးပွားရေး လုပ်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s77",
+    "sentence": "你是哪国人？",
+    "pinyin": "nǐ shì nǎ guó rén",
+    "translation": "ဘယ်နိုင်ငံသားလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s78",
+    "sentence": "你也是缅甸人吗？",
+    "pinyin": "nǐ yě shì miǎn diàn rén ma",
+    "translation": "ခင်ဗျားလည်း မြန်မာပဲလား။",
+    "example": ""
+  },
+  {
+    "id": "s79",
+    "sentence": "他是哪国人？",
+    "pinyin": "tā shì nǎ guó rén",
+    "translation": "သူက ဘယ်နိုင်ငံသားလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s80",
+    "sentence": "你来自哪个国家？",
+    "pinyin": "nǐ lái zì nǎ ge guó jiā",
+    "translation": "ဘယ်နိုင်ငံက လာတာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s81",
+    "sentence": "你是中国人吗？",
+    "pinyin": "nǐ shì zhōng guó rén ma",
+    "translation": "တရုတ်လူမျိုးလား။",
+    "example": ""
+  },
+  {
+    "id": "s82",
+    "sentence": "他来自哪里？",
+    "pinyin": "tā lái zì nǎ li",
+    "translation": "သူ ဘယ်ကလာတာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s83",
+    "sentence": "你是哪里人？",
+    "pinyin": "nǐ shì nǎ li rén",
+    "translation": "ဘယ်ကလဲ / ဇာတိဘယ်ကလဲ။ 【အသုံးအများဆုံး】",
+    "example": ""
+  },
+  {
+    "id": "s84",
+    "sentence": "你的家乡在哪儿？",
+    "pinyin": "nǐ de jiā xiāng zài nǎr",
+    "translation": "မွေးရပ်မြေက ဘယ်မှာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s85",
+    "sentence": "你来自哪里？",
+    "pinyin": "nǐ lái zì nǎ li",
+    "translation": "ဘယ်က လာတာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s86",
+    "sentence": "你老家是哪儿的？",
+    "pinyin": "nǐ lǎo jiā shì nǎr de",
+    "translation": "ဇာတိက ဘယ်ကလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s87",
+    "sentence": "你出生在哪个城市？",
+    "pinyin": "nǐ chū shēng zài nǎ ge chéng shì",
+    "translation": "ဘယ်မြို့မှာ မွေးတာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s88",
+    "sentence": "我来自缅甸。",
+    "pinyin": "wǒ lái zì miǎn diàn",
+    "translation": "မြန်မာနိုင်ငံက လာတာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s89",
+    "sentence": "我来自仰光。",
+    "pinyin": "wǒ lái zì yǎng guāng",
+    "translation": "ရန်ကုန်က လာတာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s90",
+    "sentence": "我是曼德勒人。",
+    "pinyin": "wǒ shì màn dé lè rén",
+    "translation": "မန္တလေးသားပါ။",
+    "example": ""
+  },
+  {
+    "id": "s91",
+    "sentence": "我老家在北京。",
+    "pinyin": "wǒ lǎo jiā zài běi jīng",
+    "translation": "ကျွန်တော့်ဇာတိက ပေကျင်းပါ။",
+    "example": ""
+  },
+  {
+    "id": "s92",
+    "sentence": "我出生在仰光。",
+    "pinyin": "wǒ chū shēng zài yǎng guāng",
+    "translation": "ရန်ကုန်မှာ မွေးတာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s93",
+    "sentence": "我来自中国重庆。",
+    "pinyin": "wǒ lái zì zhōng guó chóng qìng",
+    "translation": "တရုတ်ပြည် ချုံချင့်က လာတာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s94",
+    "sentence": "我的故乡是曼德勒。",
+    "pinyin": "wǒ de gù xiāng shì màn dé lè",
+    "translation": "ကျွန်တော့်မွေးရပ်မြေက မန္တလေးပါ။",
+    "example": ""
+  },
+  {
+    "id": "s95",
+    "sentence": "我在仰光长大。",
+    "pinyin": "wǒ zài yǎng guāng zhǎng dà",
+    "translation": "ရန်ကုန်မှာ ကြီးပြင်းတာပါ။",
+    "example": ""
+  },
+  {
+    "id": "s96",
+    "sentence": "缅甸是个美丽的国家。",
+    "pinyin": "miǎn diàn shì gè měi lì de guó jiā",
+    "translation": "မြန်မာနိုင်ငံက လှပတဲ့နိုင်ငံပါ။",
+    "example": ""
+  },
+  {
+    "id": "s97",
+    "sentence": "我去过缅甸。",
+    "pinyin": "wǒ qù guò miǎn diàn",
+    "translation": "ကျွန်တော် မြန်မာနိုင်ငံကို ရောက်ဖူးတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s98",
+    "sentence": "我很喜欢你的国家。",
+    "pinyin": "wǒ hěn xǐ huan nǐ de guó jiā",
+    "translation": "ခင်ဗျားတို့နိုင်ငံကို ကျွန်တော် တော်တော်ကြိုက်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s99",
+    "sentence": "你的中文说得真好！",
+    "pinyin": "nǐ de zhōng wén shuō de zhēn hǎo",
+    "translation": "ခင်ဗျား တရုတ်စကားပြောတာ တကယ်ကောင်းတာပဲ။ 【အသုံးများသော ချီးကျူးစကား】",
+    "example": ""
+  },
+  {
+    "id": "s100",
+    "sentence": "仰光是个热闹的城市。",
+    "pinyin": "yǎng guāng shì gè rè nao de chéng shì",
+    "translation": "ရန်ကုန်က စည်ကားတဲ့ မြို့တစ်မြို့ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s101",
+    "sentence": "曼德勒风景很美。",
+    "pinyin": "màn dé lè fēng jǐng hěn měi",
+    "translation": "မန္တလေးက ရှုခင်းသိပ်လှတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s102",
+    "sentence": "我想去缅甸看看。",
+    "pinyin": "wǒ xiǎng qù miǎn diàn kàn kan",
+    "translation": "မြန်မာနိုင်ငံဘက် သွားကြည့်ချင်တယ်။",
+    "example": ""
+  },
+  {
+    "id": "s103",
+    "sentence": "你中文说得不错。",
+    "pinyin": "nǐ zhōng wén shuō de bú cuò",
+    "translation": "တရုတ်စကားပြောတာ မဆိုးဘူးပဲ။",
+    "example": ""
+  },
+  {
+    "id": "s104",
+    "sentence": "你的家乡很漂亮吧。",
+    "pinyin": "nǐ de jiā xiāng hěn piào liang ba",
+    "translation": "မင်းရဲ့ဇာတိက သိပ်လှမှာပဲနော်။",
+    "example": ""
+  },
+  {
+    "id": "s105",
+    "sentence": "哦！我知道那个地方！",
+    "pinyin": "ò ! wǒ zhī dào nà ge dì fang",
+    "translation": "ဪ! အဲဒီနေရာကို ကျွန်တော် သိတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s106",
+    "sentence": "那边天气怎么样？",
+    "pinyin": "nà biān tiān qì zěn me yàng",
+    "translation": "အဲဒီဘက် ရာသီဥတု ဘယ်လိုလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s107",
+    "sentence": "那里有啥好玩的？",
+    "pinyin": "nà lǐ yǒu shá hǎo wán de",
+    "translation": "အဲဒီမှာ ဘာလည်စရာကောင်းလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s108",
+    "sentence": "那边消费贵不贵？",
+    "pinyin": "nà biān xiāo fèi guì bú guì",
+    "translation": "ဟိုမှာ ကုန်ဈေးနှုန်း ကြီးလား။",
+    "example": ""
+  },
+  {
+    "id": "s109",
+    "sentence": "认识你很高兴。",
+    "pinyin": "rèn shi nǐ hěn gāo xìng",
+    "translation": "တွေ့ရတာ ဝမ်းသာပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s110",
+    "sentence": "很高兴认识你。",
+    "pinyin": "hěn gāo xìng rèn shi nǐ",
+    "translation": "ခင်ဗျားနဲ့ သိခွင့်ရလို့ ဝမ်းသာပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s111",
+    "sentence": "我也是。",
+    "pinyin": "wǒ yě shì",
+    "translation": "ကျွန်တော်လည်း (ဝမ်းသာပါတယ်)။",
+    "example": ""
+  },
+  {
+    "id": "s112",
+    "sentence": "请多关照。",
+    "pinyin": "qǐng duō guān zhào",
+    "translation": "ရှေ့လျှောက် ကူညီပေးပါဦးနော်။",
+    "example": ""
+  },
+  {
+    "id": "s113",
+    "sentence": "今天能认识你，太好了！",
+    "pinyin": "jīn tiān néng rèn shi nǐ , tài hǎo le",
+    "translation": "ဒီနေ့ ခင်ဗျားနဲ့ သိခွင့်ရတာ သိပ်ကောင်းတာပဲ။",
+    "example": ""
+  },
+  {
+    "id": "s114",
+    "sentence": "和你聊天很开心。",
+    "pinyin": "hé nǐ liáo tiān hěn kāi xīn",
+    "translation": "ခင်ဗျားနဲ့ စကားပြောရတာ ပျော်ဖို့ကောင်းတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s115",
+    "sentence": "希望下次还能见面。",
+    "pinyin": "xī wàng xià cì hái néng jiàn miàn",
+    "translation": "နောက်တစ်ခါ ထပ်တွေ့ဖို့ မျှော်လင့်ပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s116",
+    "sentence": "多多指教。",
+    "pinyin": "duō duō zhǐ jiào",
+    "translation": "များများ လမ်းညွှန်ပေးပါဦး။",
+    "example": ""
+  },
+  {
+    "id": "s117",
+    "sentence": "很高兴和你交流。",
+    "pinyin": "hěn gāo xìng hé nǐ jiāo liú",
+    "translation": "ခင်ဗျားနဲ့ ပြောဆိုဆွေးနွေးရတာ ဝမ်းသာပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s118",
+    "sentence": "认识你很荣幸。",
+    "pinyin": "rèn shi nǐ hěn róng xìng",
+    "translation": "ခင်ဗျားနဲ့ သိရတာ ဂုဏ်ယူပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s119",
+    "sentence": "期待下次再聊。",
+    "pinyin": "qī dài xià cì zài liáo",
+    "translation": "နောက်တစ်ခေါက် စကားထပ်ပြောဖို့ မျှော်လင့်ပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s120",
+    "sentence": "和你相处很愉快。",
+    "pinyin": "hé nǐ xiāng chǔ hěn yú kuài",
+    "translation": "ခင်ဗျားနဲ့ ပေါင်းသင်းရတာ ပျော်ဖို့ကောင်းပါတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s121",
+    "sentence": "请多多关照。",
+    "pinyin": "qǐng duō duō guān zhào",
+    "translation": "ရှေ့လျှောက် များများကူညီပေးပါဦးနော်။",
+    "example": ""
+  },
+  {
+    "id": "s122",
+    "sentence": "能加你的微信吗？",
+    "pinyin": "néng jiā nǐ de wēi xìn ma",
+    "translation": "WeChat အကောင့်အပ် (Add) လို့ရမလား။",
+    "example": ""
+  },
+  {
+    "id": "s123",
+    "sentence": "你的电话是多少？",
+    "pinyin": "nǐ de diàn huà shì duō shao",
+    "translation": "ဖုန်းနံပါတ် ဘယ်လောက်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s124",
+    "sentence": "这是我的名片。",
+    "pinyin": "zhè shì wǒ de míng piàn",
+    "translation": "ဒါ ကျွန်တော့် လိပ်စာကဒ်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s125",
+    "sentence": "我们保持联系。",
+    "pinyin": "wǒ men bǎo chí lián xì",
+    "translation": "ကျွန်တော်တို့ အဆက်အသွယ် မပြတ်စေနဲ့နော်။",
+    "example": ""
+  },
+  {
+    "id": "s126",
+    "sentence": "能加个联系方式吗？",
+    "pinyin": "néng jiā gè lián xì fāng shì ma",
+    "translation": "Contact လေးတစ်ခုလောက် အပ်လို့ရမလား။",
+    "example": ""
+  },
+  {
+    "id": "s127",
+    "sentence": "我扫你还是你扫我？",
+    "pinyin": "wǒ sǎo nǐ hái shì nǐ sǎo wǒ",
+    "translation": "ကျွန်တော်ပဲ Scan ဖတ်ရမလား၊ ခင်ဗျားပဲ ဖတ်မလား။ 【WeChat အကောင့်အပ်ရန် QR code ဖတ်ခြင်း】",
+    "example": ""
+  },
+  {
+    "id": "s128",
+    "sentence": "能留个联系方式吗？",
+    "pinyin": "néng liú gè lián xì fāng shì ma",
+    "translation": "ဆက်သွယ်ရန် လိပ်စာလေး ချန်ထားခဲ့လို့ ရမလား။",
+    "example": ""
+  },
+  {
+    "id": "s129",
+    "sentence": "我加你微信吧。",
+    "pinyin": "wǒ jiā nǐ wēi xìn ba",
+    "translation": "ကျွန်တော်ပဲ ခင်ဗျား WeChat ကို အပ်လိုက်မယ်လေ။",
+    "example": ""
+  },
+  {
+    "id": "s130",
+    "sentence": "你的微信号是多少？",
+    "pinyin": "nǐ de wēi xìn hào shì duō shao",
+    "translation": "WeChat ID က ဘယ်လောက်လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s131",
+    "sentence": "有空常联系。",
+    "pinyin": "yǒu kòng cháng lián xì",
+    "translation": "အားရင် ဆက်သွယ်လိုက်နော်။",
+    "example": ""
+  },
+  {
+    "id": "s132",
+    "sentence": "方便留个电话吗？",
+    "pinyin": "fāng biàn liú gè diàn huà ma",
+    "translation": "ဖုန်းနံပါတ်လေး ပေးထားလို့ အဆင်ပြေမလား။",
+    "example": ""
+  },
+  {
+    "id": "s133",
+    "sentence": "私信我。",
+    "pinyin": "sī xìn wǒ",
+    "translation": "Cb (Chat Box) မှာ လာပြောနော်။ / Private Message ပို့လိုက်နော်။",
+    "example": ""
+  },
+  {
+    "id": "s134",
+    "sentence": "你是李老师吗？",
+    "pinyin": "nǐ shì lǐ lǎo shī ma",
+    "translation": "ဆရာလီ လား။",
+    "example": ""
+  },
+  {
+    "id": "s135",
+    "sentence": "是的，我就是。",
+    "pinyin": "shì de , wǒ jiù shì",
+    "translation": "ဟုတ်ပါတယ်၊ ကျွန်တော်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s136",
+    "sentence": "不，我不是。",
+    "pinyin": "bù , wǒ bú shì",
+    "translation": "မဟုတ်ပါဘူး၊ ကျွန်တော်မဟုတ်ဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s137",
+    "sentence": "他是谁？",
+    "pinyin": "tā shì shuí",
+    "translation": "သူ ဘယ်သူလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s138",
+    "sentence": "谁是王经理？",
+    "pinyin": "shuí shì wáng jīng lǐ",
+    "translation": "ဘယ်သူက မန်နေဂျာဝမ် လဲ။",
+    "example": ""
+  },
+  {
+    "id": "s139",
+    "sentence": "那位是医生。",
+    "pinyin": "nà wèi shì yī shēng",
+    "translation": "ဟိုတစ်ယောက်က ဆရာဝန်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s140",
+    "sentence": "哪个是你爸爸？",
+    "pinyin": "nǎ ge shì nǐ bà ba",
+    "translation": "ဘယ်တစ်ယောက်က မင်းအဖေလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s141",
+    "sentence": "这个人是谁？",
+    "pinyin": "zhè ge rén shì shuí",
+    "translation": "ဒီလူက ဘယ်သူလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s142",
+    "sentence": "这是我的朋友。",
+    "pinyin": "zhè shì wǒ de péng you",
+    "translation": "ဒါ ကျွန်တော့်သူငယ်ချင်းပါ။",
+    "example": ""
+  },
+  {
+    "id": "s143",
+    "sentence": "你是张医生吗？",
+    "pinyin": "nǐ shì zhāng yī shēng ma",
+    "translation": "ခင်ဗျားက ဒေါက်တာကျန်းလား။",
+    "example": ""
+  },
+  {
+    "id": "s144",
+    "sentence": "他是你的同事吗？",
+    "pinyin": "tā shì nǐ de tóng shì ma",
+    "translation": "သူက မင်းရဲ့ လုပ်ဖော်ကိုင်ဖက်လား။",
+    "example": ""
+  },
+  {
+    "id": "s145",
+    "sentence": "她是你的同学吗？",
+    "pinyin": "tā shì nǐ de tóng xué ma",
+    "translation": "သူမက မင်းရဲ့ အတန်းဖော်လား။",
+    "example": ""
+  },
+  {
+    "id": "s146",
+    "sentence": "那位先生是谁？",
+    "pinyin": "nà wèi xiān sheng shì shuí",
+    "translation": "ဟိုအမျိုးသားက ဘယ်သူလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s147",
+    "sentence": "这位女士是谁？",
+    "pinyin": "zhè wèi nǚ shì shì shuí",
+    "translation": "ဒီအမျိုးသမီးက ဘယ်သူလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s148",
+    "sentence": "是的，他是我的同事。",
+    "pinyin": "shì de , tā shì wǒ de tóng shì",
+    "translation": "ဟုတ်ပါတယ်၊ သူက ကျွန်တော့် လုပ်ဖော်ကိုင်ဖက်ပါ။",
+    "example": ""
+  },
+  {
+    "id": "s149",
+    "sentence": "不，她不是我的同学。",
+    "pinyin": "bù , tā bú shì wǒ de tóng xué",
+    "translation": "မဟုတ်ဘူး၊ သူက ကျွန်တော့်အတန်းဖော် မဟုတ်ဘူး။",
+    "example": ""
+  },
+  {
+    "id": "s150",
+    "sentence": "你认识我吗？",
+    "pinyin": "nǐ rèn shi wǒ ma",
+    "translation": "ကျွန်တော့်ကို သိလား။",
+    "example": ""
+  },
+  {
+    "id": "s151",
+    "sentence": "我们以前见过面吗？",
+    "pinyin": "wǒ men yǐ qián jiàn guò miàn ma",
+    "translation": "ကျွန်တော်တို့ အရင်က တွေ့ဖူးလား။",
+    "example": ""
+  },
+  {
+    "id": "s152",
+    "sentence": "我觉得我见过你。",
+    "pinyin": "wǒ jué de wǒ jiàn guò nǐ",
+    "translation": "ခင်ဗျားကို ကျွန်တော် မြင်ဖူးသလိုပဲ။",
+    "example": ""
+  },
+  {
+    "id": "s153",
+    "sentence": "我对你有印象。",
+    "pinyin": "wǒ duì nǐ yǒu yìn xiàng",
+    "translation": "ခင်ဗျားကို ကျွန်တော် မှတ်မိနေတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s154",
+    "sentence": "我们见过面。",
+    "pinyin": "wǒ men jiàn guò miàn",
+    "translation": "ကျွန်တော်တို့ တွေ့ဖူးကြတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s155",
+    "sentence": "我们一起吃过饭。",
+    "pinyin": "wǒ men yì qǐ chī guò fàn",
+    "translation": "ကျွန်တော်တို့ အတူတူ ထမင်းစားဖူးတယ်။",
+    "example": ""
+  },
+  {
+    "id": "s156",
+    "sentence": "你们是怎么认识的？",
+    "pinyin": "nǐ men shì zěn me rèn shi de",
+    "translation": "ခင်ဗျားတို့ ဘယ်လို သိကြတာလဲ။",
+    "example": ""
+  },
+  {
+    "id": "s157",
+    "sentence": "再见，张明！",
+    "pinyin": "zài jiàn , zhāng míng",
+    "translation": "တာ့တာ၊ ကျန်းမင်။",
+    "example": ""
+  },
+  {
+    "id": "s158",
+    "sentence": "那我们下次再聊！",
+    "pinyin": "nà wǒ men xià cì zài liáo",
+    "translation": "ဒါဆို နောက်မှပဲ ဆက်ပြောကြတာပေါ့။",
+    "example": ""
+  },
+  {
+    "id": "s159",
+    "sentence": "拜拜，下次见。",
+    "pinyin": "bái bái , xià cì jiàn",
+    "translation": "Bye Bye, နောက်မှတွေ့မယ်။",
+    "example": ""
+  },
+  {
+    "id": "s160",
+    "sentence": "回头见，多保重。",
+    "pinyin": "huí tóu jiàn , duō bǎo zhòng",
+    "translation": "နောက်မှတွေ့မယ်၊ ဂရုစိုက်နော်။",
+    "example": ""
+  },
+  {
+    "id": "s161",
+    "sentence": "时间不早了，下次再聊。",
+    "pinyin": "shí jiān bù zǎo le , xià cì zài liáo",
+    "translation": "အချိန်လည်း နောက်ကျနေပြီ၊ နောက်မှပဲ ပြောတော့မယ်။",
+    "example": ""
+  },
+  {
+    "id": "s162",
+    "sentence": "我先走了。",
+    "pinyin": "wǒ xiān zǒu le",
+    "translation": "ကျွန်တော် အရင်သွားတော့မယ်။",
+    "example": ""
+  },
+  {
+    "id": "s163",
+    "sentence": "再见，祝你顺利。",
+    "pinyin": "zài jiàn , zhù nǐ shùn lì",
+    "translation": "တာ့တာ၊ အဆင်ပြေပါစေ။",
+    "example": ""
+  },
+  {
+    "id": "s164",
+    "sentence": "告辞了，有空常联系。",
+    "pinyin": "gào cí le , yǒu kòng cháng lián xì",
+    "translation": "သွားခွင့်ပြုပါဦး၊ အားရင် ဆက်သွယ်လိုက်နော်။",
+    "example": ""
+  },
+  {
+    "id": "s165",
+    "sentence": "再见，照顾好自己。",
+    "pinyin": "zài jiàn , zhào gù hǎo zì jǐ",
+    "translation": "တာ့တာ၊ ကိုယ့်ကိုယ်ကို ဂရုစိုက်နော်။",
+    "example": ""
+  },
+  {
+    "id": "s166",
+    "sentence": "先告辞，下次再会。",
+    "pinyin": "xiān gào cí , xià cì zài huì",
+    "translation": "အရင်သွားနှင့်တော့မယ်၊ နောက်မှ ပြန်ဆုံကြတာပေါ့။",
+    "example": ""
+  },
+  {
+    "id": "s167",
+    "sentence": "有空常见面。",
+    "pinyin": "yǒu kòng cháng jiàn miàn",
+    "translation": "အားရင် ခဏခဏ တွေ့ကြတာပေါ့။",
+    "example": ""
+  },
+  {
+    "id": "s168",
+    "sentence": "下次一起玩。",
+    "pinyin": "xià cì yì qǐ wán",
+    "translation": "နောက်တစ်ခေါက် အတူတူ လည်ကြတာပေါ့။",
+    "example": ""
+  },
+  {
+    "id": "s169",
+    "sentence": "那先这样，我还有点事。",
+    "pinyin": "nà xiān zhè yàng , wǒ hái yǒu diǎn shì",
+    "translation": "ဒါဆို ဒီလောက်ပဲထားလိုက်တော့မယ်၊ ကျွန်တော် ကိစ္စလေးရှိသေးလို့။",
     "example": ""
   }
 ]
