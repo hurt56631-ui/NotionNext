@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router'; 
 import { HiSpeakerWave } from "react-icons/hi2";
-import { FaChevronLeft, FaChevronRight, FaFacebook, FaTelegram, FaTiktok, FaLink, FaShareAlt, FaAngleUp, FaAngleDown } from "react-icons/fa";
+import { FaChevronRight, FaFacebook, FaTelegram, FaTiktok, FaLink, FaShareAlt, FaAngleUp, FaAngleDown } from "react-icons/fa";
 import confetti from 'canvas-confetti';
 
-// --- 外部题型组件 (保持不变) ---
-import XuanZeTi from './XuanZeTi';
-import PanDuanTi from './PanDuanTi';
-import PaiXuTi from './PaiXuTi';
-import LianXianTi from './LianXianTi';
-import GaiCuoTi from './GaiCuoTi';
-import DuiHua from './DuiHua';
-import TianKongTi from './TianKongTi';
-import GrammarPointPlayer from './GrammarPointPlayer';
+// --- 1. 外部题型组件 (路径已修正：指向 Tixing 文件夹) ---
+import XuanZeTi from './Tixing/XuanZeTi';
+import PanDuanTi from './Tixing/PanDuanTi';
+import PaiXuTi from './Tixing/PaiXuTi';
+import LianXianTi from './Tixing/LianXianTi';
+import GaiCuoTi from './Tixing/GaiCuoTi';
+import DuiHua from './Tixing/DuiHua';
+import TianKongTi from './Tixing/TianKongTi';
+import GrammarPointPlayer from './Tixing/GrammarPointPlayer';
 
-// ---------------- 1. Audio Manager (优化语速) ----------------
+// --- 2. 学习卡片 (假设在当前 components 目录下，如果报错请改为 '../WordCard') ---
+import WordCard from './WordCard';   
+import PhraseCard from './PhraseCard'; 
+
+// ---------------- Audio Manager (优化：语速变慢 -20%) ----------------
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 
 const audioManager = (() => {
@@ -55,11 +59,10 @@ const audioManager = (() => {
 
   return { 
     stop, 
-    // 修改：r (rate) 默认设置为 -20 (对应约 0.8 倍速，更慢更清晰)
+    // 修改：r='-20%' 降低语速，适合初学者
     playTTS: async (t, l='zh', r='-20%', cb=null) => { 
       if (!t) { if (cb) cb(); return; } 
       const v = ttsVoices[l]||ttsVoices.zh; 
-      // 这里的 API 参数 r 支持百分比或数值，根据实际 API 调整，这里假设支持字符串 '-20%'
       const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(t)}&v=${v}&r=${r}`;
       const u = await fetchToBlobUrl(url); 
       return playUrl(u, { onEnd: cb }); 
@@ -68,7 +71,7 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- 2. 分享组件 (新增) ----------------
+// ---------------- 3. 分享组件 ----------------
 const ShareSheet = ({ isOpen, onClose, textToShare }) => {
   if (!isOpen) return null;
   
@@ -80,10 +83,10 @@ const ShareSheet = ({ isOpen, onClose, textToShare }) => {
     switch (platform) {
       case 'facebook': shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`; break;
       case 'telegram': shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`; break;
-      case 'tiktok': alert("TikTok အက်ပ်ကိုဖွင့်ပြီး မျှဝေပါ။"); return; // TikTok web share is limited
+      case 'tiktok': alert("TikTok အက်ပ်ကိုဖွင့်ပြီး မျှဝေပါ။"); return; 
       case 'copy': 
         navigator.clipboard.writeText(`${text} ${url}`);
-        alert("လင့်ခ်ကို ကူးယူပြီးပါပြီ။"); // Link copied
+        alert("လင့်ခ်ကို ကူးယူပြီးပါပြီ။"); 
         onClose();
         return;
     }
@@ -97,8 +100,8 @@ const ShareSheet = ({ isOpen, onClose, textToShare }) => {
         <div className="flex justify-center mb-6">
           <div className="w-12 h-1.5 bg-gray-200 rounded-full"></div>
         </div>
-        <h3 className="text-center text-lg font-bold text-gray-700 mb-6 font-padauk">သူငယ်ချင်းများနှင့် မျှဝေရန်</h3>
-        <div className="grid grid-cols-4 gap-4">
+        <h3 className="text-center text-lg font-bold text-gray-700 font-padauk">သူငယ်ချင်းများနှင့် မျှဝေရန်</h3>
+        <div className="grid grid-cols-4 gap-4 mt-6">
           <ShareBtn icon={<FaFacebook className="text-blue-600 text-3xl" />} label="Facebook" onClick={() => handleShare('facebook')} />
           <ShareBtn icon={<FaTelegram className="text-sky-500 text-3xl" />} label="Telegram" onClick={() => handleShare('telegram')} />
           <ShareBtn icon={<FaTiktok className="text-black text-3xl" />} label="TikTok" onClick={() => handleShare('tiktok')} />
@@ -118,14 +121,14 @@ const ShareBtn = ({ icon, label, onClick }) => (
   </button>
 );
 
-// ---------------- 3. 美化后的卡片组件 (内部使用) ----------------
+// ---------------- 4. 美化后的卡片组件 ----------------
 
 // 单词卡片
 const BeautifulWordCard = ({ item, onPlay }) => {
   return (
     <div 
       onClick={onPlay}
-      className="relative bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all duration-200 hover:shadow-lg h-44"
+      className="relative bg-white rounded-2xl p-4 shadow-md border border-slate-100 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all duration-200 hover:shadow-lg h-48"
     >
       {/* 拼音 */}
       <span className="text-xs font-medium text-slate-400 font-mono">{item.pinyin || ''}</span>
@@ -133,15 +136,15 @@ const BeautifulWordCard = ({ item, onPlay }) => {
       {/* 中文大字 */}
       <h3 className="text-4xl font-black text-slate-800 tracking-wider mb-1">{item.word || item.chinese}</h3>
       
-      {/* 缅文谐音 (模拟发音) - 核心新增 */}
+      {/* 缅文谐音 (模拟发音) */}
       {item.burmese_sound && (
-        <div className="px-2 py-0.5 bg-orange-50 rounded text-orange-600 text-[10px] font-bold font-padauk border border-orange-100">
+        <div className="px-3 py-1 bg-orange-50 rounded-full text-orange-600 text-xs font-bold font-padauk border border-orange-100 shadow-sm">
           🔊 {item.burmese_sound}
         </div>
       )}
 
       {/* 缅文释义 */}
-      <p className="text-sm font-bold text-slate-600 font-padauk text-center line-clamp-2 mt-1">
+      <p className="text-sm font-bold text-slate-600 font-padauk text-center line-clamp-2 mt-2">
         {item.translation || item.burmese || "အဓိပ္ပာယ်"}
       </p>
 
@@ -176,7 +179,7 @@ const BeautifulPhraseCard = ({ item, onPlay }) => {
       <div className="flex flex-col gap-1">
         {/* 缅文谐音 */}
         {item.burmese_sound && (
-            <span className="text-xs text-orange-600 font-padauk font-semibold">
+            <span className="text-xs text-orange-600 font-padauk font-semibold mb-1">
               [{item.burmese_sound}]
             </span>
         )}
@@ -189,27 +192,24 @@ const BeautifulPhraseCard = ({ item, onPlay }) => {
   );
 };
 
-// ---------------- 4. 列表容器适配器 (优化顶部交互) ----------------
+// ---------------- 5. 列表容器适配器 ----------------
 const CardListRenderer = ({ data, type, onComplete }) => {
   const isPhrase = type === 'phrase_study' || type === 'sentences';
   const list = data.words || data.sentences || [];
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-
-  // 顶部拖动/点击逻辑
   const headerRef = useRef(null);
   
   return (
     <div className="w-full h-full flex flex-col relative bg-slate-50">
-      {/* 可收起的顶部标题栏 */}
+      {/* 顶部标题栏 */}
       <div 
         ref={headerRef}
         className={`flex-none w-full bg-white z-20 transition-all duration-300 shadow-sm rounded-b-3xl relative overflow-hidden ${isHeaderCollapsed ? 'h-12' : 'h-auto py-6'}`}
       >
-        {/* 拖动/收起 手柄 */}
         <div 
           onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-          className="absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center cursor-pointer active:bg-slate-50"
+          className="absolute bottom-0 left-0 right-0 h-8 flex items-center justify-center cursor-pointer active:bg-slate-50"
         >
           {isHeaderCollapsed ? <FaAngleDown className="text-slate-300" /> : <FaAngleUp className="text-slate-300" />}
         </div>
@@ -247,7 +247,6 @@ const CardListRenderer = ({ data, type, onComplete }) => {
       
       {/* 底部按钮 */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-20 pointer-events-none flex justify-between items-end">
-        {/* 下一步按钮 */}
         <button 
           onClick={onComplete} 
           className="pointer-events-auto flex-1 py-4 bg-blue-600 text-white font-bold text-lg rounded-full shadow-xl shadow-blue-200 active:scale-95 transition-all font-padauk mr-4"
@@ -255,7 +254,6 @@ const CardListRenderer = ({ data, type, onComplete }) => {
           လေ့လာပြီးပါပြီ (我学会了)
         </button>
 
-        {/* 悬浮分享按钮 */}
         <button 
           onClick={() => setShareOpen(true)}
           className="pointer-events-auto w-14 h-14 bg-white text-blue-600 rounded-full shadow-lg border border-blue-50 flex items-center justify-center active:scale-90 transition-all"
@@ -269,12 +267,12 @@ const CardListRenderer = ({ data, type, onComplete }) => {
   );
 };
 
-// ... CompletionBlock & UnknownBlockHandler (保持不变) ...
+// ... CompletionBlock & UnknownBlockHandler ...
 const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS("恭喜完成", 'zh'); setTimeout(() => router.back(), 2500); }, [router]); return <div className="flex flex-col items-center justify-center h-full animate-bounce-in"><div className="text-8xl mb-6">🎉</div><h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2></div>; };
 const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
 
 
-// ---------------- 5. 主组件 ----------------
+// ---------------- 6. 主组件 ----------------
 
 export default function InteractiveLesson({ lesson }) {
   const router = useRouter();
@@ -329,7 +327,6 @@ export default function InteractiveLesson({ lesson }) {
     if (!currentBlock) return <div className="text-slate-400 mt-20">Loading...</div>;
     const type = (currentBlock.type || '').toLowerCase();
     
-    // 向下传递 settings，包含慢速 TTS
     const props = { 
       data: currentBlock.content, 
       onCorrect: delayedNextStep, 
@@ -423,7 +420,7 @@ export default function InteractiveLesson({ lesson }) {
       {/* 底部导航 (练习题时显示) */}
       {!hideBottomNav && currentIndex < totalBlocks && (
         <div className="absolute bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-8 py-4 z-30 flex justify-between items-center pointer-events-none">
-            {/* 隐藏左侧返回箭头 */}
+            {/* 隐藏左侧返回箭头，只留占位 */}
             <div className="w-12 h-12"></div>
             
             <button onClick={() => setIsJumping(true)} className="pointer-events-auto px-4 py-2 rounded-xl active:bg-black/5 transition-colors">
