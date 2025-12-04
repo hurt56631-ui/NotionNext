@@ -1,8 +1,9 @@
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 (无修改) ---
+// --- 1. IndexedDB 缓存 (SSR 安全处理) ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -10,8 +11,13 @@ const DB_VERSION = 1;
 const idb = {
   db: null,
   async init() {
+    if (typeof window === 'undefined') return Promise.resolve(); // SSR 安全检查
     if (this.db) return Promise.resolve();
     return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        resolve(); // 如果浏览器不支持，直接跳过
+        return;
+      }
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
@@ -22,7 +28,9 @@ const idb = {
     });
   },
   async get(key) {
+    if (typeof window === 'undefined') return null; // SSR 安全检查
     await this.init();
+    if (!this.db) return null;
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readonly');
       const req = tx.objectStore(STORE_NAME).get(key);
@@ -35,7 +43,9 @@ const idb = {
     });
   },
   async set(key, blob) {
+    if (typeof window === 'undefined') return; // SSR 安全检查
     await this.init();
+    if (!this.db) return;
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(STORE_NAME, 'readwrite');
       tx.oncomplete = () => resolve();
@@ -45,7 +55,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (无修改) ---
+// --- 2. 音频控制器 (SSR 安全处理) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -54,6 +64,7 @@ const audioController = {
   _pendingFetches: [],
 
   stop() {
+    if (typeof window === 'undefined') return;
     this.latestRequestId++;
     this._pendingFetches.forEach(ctrl => {
       try { ctrl.abort(); } catch (e) {}
@@ -94,6 +105,7 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
+    if (typeof window === 'undefined') return null;
     const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const rateParam = 0;
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
@@ -111,12 +123,16 @@ const audioController = {
       if (blob.size === 0) return null;
       await idb.set(cacheKey, blob);
       return blob;
+    } catch (e) {
+        if (e.name !== 'AbortError') console.warn(e);
+        return null;
     } finally {
       this._pendingFetches = this._pendingFetches.filter(c => c !== controller);
     }
   },
 
   async playMixed(text, onStart, onEnd) {
+    if (typeof window === 'undefined') return;
     this.stop();
     if (!text) {
       if (onEnd) onEnd();
@@ -218,7 +234,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (包含分享按钮样式和下拉刷新修复) ---
+// --- 3. 样式定义 (包含分享按钮样式和 CSS 禁止下拉刷新) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -238,7 +254,7 @@ const cssStyles = `
     scrollbar-width: none; 
     -ms-overflow-style: none;
     
-    /* --- 修复：通过CSS禁止下拉刷新，比JS更高效稳定 --- */
+    /* --- 修复：通过CSS禁止下拉刷新，比JS更高效且SSR安全 --- */
     overscroll-behavior-y: contain;
   }
   .xzt-container::-webkit-scrollbar {
@@ -407,7 +423,7 @@ const cssStyles = `
 `;
 
 
-// --- 4. 文本解析逻辑 (无修改) ---
+// --- 4. 文本解析逻辑 ---
 const parseTitleText = (text) => {
   if (!text) return [];
   const result = [];
@@ -436,7 +452,7 @@ const parseOptionText = (text) => {
 };
 
 
-// --- 5. 组件主体 (包含所有修改和修复) ---
+// --- 5. 组件主体 ---
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -470,7 +486,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
-  // --- 修复：移除JS下拉刷新控制，仅保留组件挂载状态的跟踪 ---
   useEffect(() => {
     mountedRef.current = true;
     return () => { 
@@ -519,7 +534,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
     if (transitioningRef.current) return;
-    if (!isAuto && navigator.vibrate) navigator.vibrate(40);
+    if (!isAuto && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
 
     audioController.playMixed(
       question.text || '',
@@ -538,15 +553,19 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (isSubmitted || transitioningRef.current) return;
     if (e) e.stopPropagation();
     setSelectedId(option.id);
-    if (navigator.vibrate) navigator.vibrate(20);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
     audioController.playMixed(option.text || '');
   };
 
   const triggerCorrectAndNext = () => {
     if (transitioningRef.current) return;
     
-    confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
-    new Audio('/sounds/correct.mp3').play().catch(()=>{});
+    try {
+        if (typeof window !== 'undefined') {
+            confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
+            new Audio('/sounds/correct.mp3').play().catch(()=>{});
+        }
+    } catch(e) {}
 
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); 
@@ -556,8 +575,12 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const triggerIncorrectAndNext = () => {
     if (transitioningRef.current) return;
 
-    new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
-    if (navigator.vibrate) navigator.vibrate([50,50,50]);
+    try {
+        if (typeof window !== 'undefined') {
+            new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
+            if (navigator.vibrate) navigator.vibrate([50,50,50]);
+        }
+    } catch(e) {}
 
     if (activeExplanation) {
       setShowExplanation(true);
@@ -589,8 +612,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   };
   
   const handleShare = (platform) => {
+    if (typeof window === 'undefined') return;
     const shareUrl = window.location.href;
-    const shareText = `快来和我一起学习！ ${question.text}`;
+    const shareText = `快来和我一起学习！ ${question.text || ''}`;
     let url = '';
 
     switch (platform) {
