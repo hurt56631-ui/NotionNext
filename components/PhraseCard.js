@@ -1,9 +1,9 @@
-// components/Tixing/CombinedPhraseCard.js (支持手机本地多图上传版 - 非全屏版)
+// components/Tixing/CombinedPhraseCard.js (支持手机本地多图上传版)
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaImage, FaTrash } from 'react-icons/fa';
+import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaArrowRight, FaImage, FaTrash } from 'react-icons/fa'; // 新增图标
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
@@ -160,6 +160,7 @@ const PronunciationComparison = ({ correctWord, userText, onContinue, onClose })
 
 const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
+  // 如果是本地图片(blob)，不加参数；如果是网络图片，可以加优化参数
   const optimizedSrc = useMemo(() => src?.startsWith('blob:') ? src : (src ? `${src}?quality=30` : null), [src]);
   useEffect(() => { setImageLoaded(false); }, [src]);
   return (
@@ -170,14 +171,17 @@ const LazyImageWithSkeleton = React.memo(({ src, alt }) => {
   );
 });
 
+// MODIFIED: 增加了图片上传功能的设置面板
 const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose, localImages, setLocalImages }) => {
   const fileInputRef = useRef(null);
 
   const handleSettingChange = (key, value) => { setSettings(prev => ({...prev, [key]: value})); };
 
+  // 处理图片选择
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
+    // 创建本地预览链接
     const newImageUrls = files.map(file => URL.createObjectURL(file));
     setLocalImages(newImageUrls);
   };
@@ -192,6 +196,7 @@ const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose, lo
             <button style={styles.closeButton} onClick={onClose}><FaTimes /></button>
             <h2 style={{marginTop: 0}}>常规设置</h2>
             
+            {/* 新增：自定义图片上传区 */}
             <div style={{...styles.settingGroup, background: '#f0f9ff', padding: '15px', borderRadius: '10px', border: '1px solid #bae6fd'}}>
                 <label style={{...styles.settingLabel, color: '#0369a1'}}>使用手机/本地图片</label>
                 <div style={{fontSize: '0.85rem', color: '#64748b', marginBottom: '10px'}}>
@@ -247,8 +252,11 @@ const PhraseCardSettingsPanel = React.memo(({ settings, setSettings, onClose, lo
 // =================================================================================
 const CombinedPhraseCard = ({ flashcards = [] }) => {
   const [settings, setSettings] = usePhraseCardSettings();
+  
+  // MODIFIED: 存储本地上传的图片 Blob URL
   const [localImages, setLocalImages] = useState([]);
 
+  // 内存清理：组件销毁时释放 Blob URL
   useEffect(() => {
     return () => {
         localImages.forEach(url => URL.revokeObjectURL(url));
@@ -258,16 +266,20 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   const processedCards = useMemo(() => {
     try {
         if (!Array.isArray(flashcards)) return [];
+        
+        // MODIFIED: 将本地图片按照顺序合并到数据中
+        // 逻辑：如果上传了第N张本地图，就用第N张，否则用原来的
         let validCards = flashcards
             .filter(card => card && card.chinese && card.burmese)
             .map((card, index) => {
                 const customImage = localImages[index];
                 return {
                     ...card,
-                    imageUrl: customImage || card.imageUrl
+                    imageUrl: customImage || card.imageUrl // 优先使用本地图片
                 };
             });
 
+        // 随机逻辑保持不变，但因为已经在上面绑定了图片，所以图片会跟着单词走
         if (settings.order === 'random') { 
             for (let i = validCards.length - 1; i > 0; i--) { 
                 const j = Math.floor(Math.random() * (i + 1)); 
@@ -276,7 +288,7 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
         }
         return validCards;
     } catch (error) { console.error("处理 'flashcards' 出错:", error, flashcards); return []; }
-  }, [flashcards, settings.order, localImages]);
+  }, [flashcards, settings.order, localImages]); // 依赖项加入 localImages
 
   const cards = processedCards.length > 0 ? processedCards : [{ chinese: "示例短语", pinyin: "shì lì duǎn yǔ", burmese: "နမူနာစကားစု", burmesePhonetic: "နမူနာ", imageUrl: null }];
 
@@ -373,10 +385,10 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
   const phoneticDisplay = useMemo(() => currentCard?.burmesePhonetic?.replace(/\s*\(.*?\)\s*/g, ''), [currentCard]);
 
   return (
-    // 修改处 1: 容器样式从 fullScreen 改为 embeddedCard
-    <div style={styles.embeddedCard}>
+    <div style={styles.fullScreen}>
       {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
       
+      {/* MODIFIED: 传递图片相关Props给设置面板 */}
       {isSettingsOpen && (
           <PhraseCardSettingsPanel 
               settings={settings} 
@@ -405,6 +417,7 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
                       <div style={styles.textBurmese}>{cardData.burmese}</div>
                   </div>
               </div>
+              {/* 图片区域，会自动处理网络URL或本地Blob */}
               {cardData.imageUrl && <LazyImageWithSkeleton src={cardData.imageUrl} alt={cardData.chinese} />}
             </div>
           </animated.div>
@@ -441,28 +454,13 @@ const CombinedPhraseCard = ({ flashcards = [] }) => {
 // ===== Styles ====================================================================
 // =================================================================================
 const styles = {
-    // 修改处 2: 将 fullScreen 替换为 embeddedCard，去除 fixed 定位，添加边框和高度
-    embeddedCard: { 
-        position: 'relative', // 嵌入文档流
-        width: '100%', 
-        height: '600px', // 默认高度，可根据父容器调整
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        overflow: 'hidden', 
-        touchAction: 'none', 
-        background: '#ffffff', // 改为纯白背景
-        borderRadius: '16px', // 添加圆角
-        boxShadow: '0 4px 15px rgba(0,0,0,0.08)', // 添加阴影
-        border: '1px solid #f1f5f9', // 添加边框
-        margin: '0 auto' // 居中
-    },
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: '#f8fafc' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', boxSizing: 'border-box', gap: '20px' },
     contentBox: { width: '100%', textAlign: 'center', order: 1, boxSizing: 'border-box', cursor: 'pointer' },
-    imageWrapper: { width: '100%', maxWidth: '400px', maxHeight: '250px', position: 'relative', order: 2, marginTop: '20px', boxSizing: 'border-box', borderRadius: '12px', overflow: 'hidden' }, // 稍微调整图片容器样式
-    cardImage: { width: '100%', height: '100%', objectFit: 'contain', transition: 'opacity 0.3s ease-in-out' },
+    imageWrapper: { width: '100%', maxWidth: '500px', maxHeight: '35vh', position: 'relative', order: 2, marginTop: '20px', boxSizing: 'border-box', maskImage: 'radial-gradient(circle, black 80%, transparent 100%)' },
+    cardImage: { width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.3s ease-in-out' },
     skeleton: { position: 'absolute', inset: 0, background: '#e2e8f0', overflow: 'hidden' },
     shimmer: { position: 'absolute', inset: 0, transform: 'translateX(-100%)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)', animation: 'shimmer 2s infinite' },
     pinyin: { fontSize: '1.2rem', color: '#475569', marginBottom: '8px' },
@@ -470,12 +468,10 @@ const styles = {
     burmesePhonetic: { fontSize: '1.2rem', color: '#8b5cf6', marginBottom: '8px', fontFamily: 'sans-serif' },
     textBurmese: { fontSize: '2.2rem', color: '#1f2937', textShadow: '1px 1px 3px rgba(0,0,0,0.1)', fontFamily: '"Padauk", "Myanmar Text", sans-serif', wordBreak: 'break-word', lineHeight: 1.8 },
     
-    // 修改处 3: 按钮组改为 absolute 定位，相对于卡片右上角
-    topRightControls: { position: 'absolute', top: '15px', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'row', gap: '10px' },
+    topRightControls: { position: 'fixed', top: '20px', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'row', gap: '15px' },
     
-    rightIconButton: { background: 'white', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', transition: 'transform 0.2s', color: '#4a5568' },
+    rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
     
-    // 覆盖层依然保持 fixed，确保弹窗在最上层
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 },
     comparisonPanel: { width: '90%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
@@ -497,8 +493,6 @@ const styles = {
     actionButton: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
     continueButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     retryButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
-    
-    // 设置弹窗依然保持 fixed
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '90%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' },
