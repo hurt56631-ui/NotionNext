@@ -204,9 +204,24 @@ export default function InteractiveLesson({ lesson }) {
 
   if (!hasMounted) return null;
 
-  // ✅ 关键逻辑：定义哪些类型不需要底部导航
   const type = currentBlock?.type?.toLowerCase();
+
+  // 1. 不需要底部导航的类型
   const hideBottomNav = ['word_study', 'phrase_study', 'sentences', 'grammar_study', 'teaching', 'complete', 'end'].includes(type);
+
+  // 2. 不需要顶部进度条的类型 (语法 + 练习题 + 完成页)
+  const hideTopProgressBar = [
+    'grammar_study', 
+    'choice', 
+    'panduan', 
+    'lianxian', 
+    'paixu', 
+    'gaicuo', 
+    'image_match_blanks', 
+    'dialogue_cinematic', 
+    'complete', 
+    'end'
+  ].includes(type);
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans select-none" style={{ touchAction: 'none' }}>
@@ -214,7 +229,8 @@ export default function InteractiveLesson({ lesson }) {
       
       {/* 顶部进度条 */}
       <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top)] px-4 py-3 z-30 pointer-events-none">
-        {currentIndex < totalBlocks && (
+        {/* 修改：增加了 !hideTopProgressBar 判断 */}
+        {!hideTopProgressBar && currentIndex < totalBlocks && (
           <div className="h-1.5 bg-slate-200/50 rounded-full overflow-hidden mx-4 backdrop-blur-sm">
             <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / totalBlocks) * 100}%` }} />
           </div>
@@ -245,4 +261,4 @@ export default function InteractiveLesson({ lesson }) {
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
-          }
+}
