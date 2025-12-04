@@ -5,7 +5,6 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 
-// ✅ 1. 修复图标导入：补全 Star (收藏) 和 Heart (爱心) 等图标
 import { 
     ArrowLeft, BookOpen, ChevronRight, LayoutGrid, 
     Atom, Layers, Home, BrainCircuit, Globe,
@@ -18,7 +17,7 @@ import {
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false });
 
 // =================================================================================
-// ✅ 2. 数据库逻辑 (新增：用于读取 WordCard 存入 IndexedDB 的收藏)
+// 数据库逻辑 (保持不变)
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const DB_VERSION = 2;
@@ -47,7 +46,9 @@ const getFavoritesFromDB = async () => {
     });
 };
 
-// --- 数据中心 (保持不变) ---
+// =================================================================================
+// 数据加载
+// =================================================================================
 
 // 1. HSK 单词数据
 let hskWordsData = {};
@@ -61,8 +62,7 @@ try { hskWordsData[6] = require('@/data/hsk/hsk6.json'); } catch (e) {}
 // 2. 语义分类单词数据
 import semanticData from '@/data/semantic_words.json';
 
-// --- UI 数据与配置 (保持不变) ---
-
+// --- UI 数据配置 ---
 const hskLevels = [
   { level: 1, title: '入门级 (Introductory)', wordCount: 150 },
   { level: 2, title: '初级 (Basic)', wordCount: 300 },
@@ -72,7 +72,6 @@ const hskLevels = [
   { level: 6, title: '精通级 (Proficiency)', wordCount: 5000 }
 ];
 
-// 图标映射
 const mainCategoryIcons = { 1: Atom, 2: Layers, 3: Home, 4: BrainCircuit, 5: Globe };
 const mainCategoryColors = { 1: 'text-indigo-500', 2: 'text-sky-500', 3: 'text-emerald-500', 4: 'text-amber-500', 5: 'text-rose-500' };
 
@@ -84,9 +83,10 @@ const subCategoryIcons = {
     501: Sun, 502: Palette, 503: Film 
 };
 
-// --- 子组件 ---
+// =================================================================================
+// 子组件
+// =================================================================================
 
-// ✅ 3. 新增：收藏入口卡片 (风格与你的页面融合)
 const FavoritesCard = ({ onClick, isLoading }) => (
   <motion.div 
     initial={{ opacity: 0, y: -10 }}
@@ -107,20 +107,18 @@ const FavoritesCard = ({ onClick, isLoading }) => (
             <h3 className="text-xl font-bold text-white">
                 {isLoading ? '正在读取...' : '我的生词本 (My Favorites)'}
             </h3>
-            <p className="text-pink-100 text-sm mt-1">复习您收藏的重点词汇</p>
+            <p className="text-pink-100 text-sm mt-1">复习您收藏的重点词汇（本地存储）</p>
           </div>
         </div>
         <div className="p-2 bg-white/10 rounded-lg group-hover:bg-white/20 transition-colors">
             <ChevronRight size={24} className="text-white" />
         </div>
       </div>
-      {/* 装饰背景 */}
       <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
     </button>
   </motion.div>
 );
 
-// 4. HSK 列表组件 (保持你原版的浅粉色列表风格)
 const HskLevelList = ({ onVocabularyClick }) => (
   <div className="flex flex-col gap-3">
     {hskLevels.map((level, index) => (
@@ -159,7 +157,6 @@ const HskLevelList = ({ onVocabularyClick }) => (
   </div>
 );
 
-// 5. 主题场景视图 (保持你原版的清爽卡片风格)
 const ThemeView = ({ onVocabularyClick }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -241,32 +238,75 @@ const ThemeView = ({ onVocabularyClick }) => {
   );
 };
 
-// --- 主组件 WordsContentBlock ---
+// =================================================================================
+// 主组件 WordsContentBlock
+// =================================================================================
+
 const WordsContentBlock = () => {
   const router = useRouter();
   const [activeWords, setActiveWords] = useState(null);
   const [progressKey, setProgressKey] = useState(null);
   const [isLoadingFavorites, setIsLoadingFavorites] = useState(false);
 
+  // 判断当前 URL hash 是否为 vocabulary
   const isCardViewOpen = router.asPath.includes('#vocabulary');
 
-  // ✅ 6. 修改：支持 async 操作 (读取数据库)
-  const handleVocabularyClick = useCallback(async (type, data) => {
+  // ---------------------------------------------------------------------------------
+  // ✅ 核心修复：监听 URL 参数，自动恢复数据（解决刷新/分享后空白问题）
+  // ---------------------------------------------------------------------------------
+  useEffect(() => {
+    // 1. 等待路由就绪，且当前必须在 vocabulary 视图下
+    if (!router.isReady || !router.asPath.includes('#vocabulary')) return;
+
+    // 2. 如果 state 里已经有数据，避免重复加载
+    if (activeWords && activeWords.length > 0) return;
+
+    const { mode, itemId } = router.query;
+    
+    // 如果没有参数，说明可能是“收藏夹”或者无效链接
+    if (!mode || !itemId) return;
+
     let words = [];
     let key = '';
 
-    if (type === 'hsk') {
-      words = hskWordsData[data.level];
-      // ✅ 7. 优化：Key 加上 level，确保进度独立
-      key = `hsk_level_${data.level}_progress`;
+    // 3. 恢复 HSK 数据
+    if (mode === 'hsk') {
+        const level = parseInt(itemId, 10);
+        words = hskWordsData[level] || [];
+        key = `hsk_level_${level}_progress`;
+    } 
+    // 4. 恢复 Theme 数据
+    else if (mode === 'theme') {
+        const subId = parseInt(itemId, 10);
+        // 遍历 semanticData 查找对应子分类
+        for (const mainCat of semanticData) {
+            const sub = mainCat.sub_categories.find(s => s.sub_category_id === subId);
+            if (sub) {
+                words = sub.words;
+                key = `theme_cat_${subId}_progress`;
+                break;
+            }
+        }
+    }
+
+    // 5. 设置数据到 State
+    if (words.length > 0) {
+        setActiveWords(words);
+        setProgressKey(key);
+    }
+
+  }, [router.isReady, router.asPath, router.query, activeWords]);
+
+
+  // ---------------------------------------------------------------------------------
+  // ✅ 点击处理：更新 URL 参数，支持分享
+  // ---------------------------------------------------------------------------------
+  const handleVocabularyClick = useCallback(async (type, data) => {
+    let words = [];
+    let key = '';
     
-    } else if (type === 'theme') {
-      words = data.words;
-      // ✅ 8. 优化：Key 加上 sub_category_id，确保进度独立
-      key = `theme_cat_${data.sub_category_id}_progress`;
-    
-    } else if (type === 'favorites') {
-        // ✅ 9. 读取 IndexedDB 逻辑
+    // 收藏夹逻辑 (特殊处理：不写参数到 URL，因为本地数据不能分享)
+    if (type === 'favorites') {
         setIsLoadingFavorites(true);
         try {
             const favs = await getFavoritesFromDB();
@@ -275,51 +315,72 @@ const WordsContentBlock = () => {
                 setIsLoadingFavorites(false);
                 return;
             }
-            words = favs;
-            key = 'my_favorites_collection'; 
+            setActiveWords(favs);
+            setProgressKey('my_favorites_collection');
+            // 只打开弹窗，不带参数
+            router.push('/?tab=words#vocabulary', undefined, { shallow: true });
         } catch (e) {
             console.error(e);
             alert("读取收藏失败");
         } finally {
             setIsLoadingFavorites(false);
         }
+        return;
+    }
+
+    // 常规逻辑 (HSK / Theme)
+    let urlParams = {};
+
+    if (type === 'hsk') {
+      words = hskWordsData[data.level];
+      key = `hsk_level_${data.level}_progress`;
+      urlParams = { mode: 'hsk', itemId: data.level }; // 准备写入 URL
+    
+    } else if (type === 'theme') {
+      words = data.words;
+      key = `theme_cat_${data.sub_category_id}_progress`;
+      urlParams = { mode: 'theme', itemId: data.sub_category_id }; // 准备写入 URL
     }
 
     if (words && words.length > 0) {
       setActiveWords(words);
       setProgressKey(key);
-      router.push('/?tab=words#vocabulary', undefined, { shallow: true });
-    } else if (type !== 'favorites') {
-      alert(`数据准备中...`);
+      
+      // ✅ 重点：把 mode 和 itemId 写入 URL
+      router.push({
+        pathname: router.pathname,
+        query: { ...router.query, tab: 'words', ...urlParams },
+        hash: 'vocabulary'
+      }, undefined, { shallow: true });
+
+    } else {
+      alert(`数据加载中...`);
     }
   }, [router]);
 
+  // ---------------------------------------------------------------------------------
+  // ✅ 关闭处理：清除 URL 参数
+  // ---------------------------------------------------------------------------------
   const handleCloseCard = useCallback(() => {
     setActiveWords(null);
     setProgressKey(null);
-    if (window.location.hash.includes('#vocabulary')) {
-        router.back(); 
-    }
-  }, [router]);
 
-  useEffect(() => {
-    const handleHashChange = () => {
-      if (!window.location.hash.includes('vocabulary')) {
-        setActiveWords(null);
-        setProgressKey(null);
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
-  }, []);
+    // 关闭时，移除 mode 和 itemId 参数，同时去掉 hash
+    const { mode, itemId, ...restQuery } = router.query;
+    
+    router.push({
+        pathname: router.pathname,
+        query: restQuery, // 保留 tab=words，去掉 mode/itemId
+        hash: ''
+    }, undefined, { shallow: true });
+
+  }, [router]);
   
   return (
     <>
       <div className="max-w-4xl mx-auto p-4 sm:p-6 min-h-[60vh]">
         
-        {/* ✅ 10. 插入收藏入口 */}
+        {/* 收藏入口 */}
         <FavoritesCard 
             onClick={() => handleVocabularyClick('favorites')}
             isLoading={isLoadingFavorites} 
@@ -347,7 +408,7 @@ const WordsContentBlock = () => {
       {/* 单词卡片 */}
       <WordCard 
         isOpen={isCardViewOpen}
-        words={activeWords || []}
+        words={activeWords || []} // 如果没数据，给空数组，防止报错
         onClose={handleCloseCard}
         progressKey={progressKey || 'default-key'}
       />
