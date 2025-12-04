@@ -4,14 +4,12 @@ import { useTransition, animated } from '@react-spring/web';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { FaVolumeUp, FaStop, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 
-// ⚠️ 请确保这个路径下有您的 AI 聊天组件
+// ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果报错 404 请检查此路径
 import AiChatAssistant from '../AiChatAssistant';
 
 // =================================================================================
-// ===== 1. IndexedDB 工具函数 (保持不变，增加容错) =====
+// ===== 1. IndexedDB 工具函数（增强版：防坏死缓存 & in-flight 去重） =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
 const STORE_NAME = 'audio_blobs';
@@ -37,21 +35,39 @@ const idb = {
     });
   },
   async get(key) {
-    try { await this.init(); } catch (e) { return null; }
+    try {
+      await this.init();
+    } catch (e) {
+      console.warn('idb.init failed', e);
+      return null;
+    }
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readonly');
-      const req = tx.objectStore(STORE_NAME).get(key);
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
       req.onsuccess = () => {
         const blob = req.result;
-        // 校验 blob 有效性
-        resolve((blob && blob.size > 100 && blob.type.startsWith('audio')) ? blob : null);
+        if (blob && blob.size > 100) {
+          resolve(blob);
+        } else {
+          // 清理可疑缓存
+          if (blob) {
+            this.del(key).catch(() => {});
+          }
+          resolve(null);
+        }
       };
       req.onerror = () => resolve(null);
     });
   },
   async set(key, blob) {
     if (!blob || blob.size < 100) return;
-    try { await this.init(); } catch (e) { return; }
+    try {
+      await this.init();
+    } catch (e) {
+      console.warn('idb.init failed', e);
+      return;
+    }
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readwrite');
       const req = tx.objectStore(STORE_NAME).put(blob, key);
@@ -60,170 +76,197 @@ const idb = {
     });
   },
   async del(key) {
-    try { await this.init(); } catch (e) { return; }
+    try {
+      await this.init();
+    } catch (e) {
+      return;
+    }
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readwrite');
       const req = tx.objectStore(STORE_NAME).delete(key);
       req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
     });
   }
 };
 
+// 用于去重进行中的请求，避免同一文本重复下载
 const inFlightRequests = new Map();
 
 // =================================================================================
-// ===== 2. TTS Hook (已修复) =====
+// ===== 2. 混合 TTS Hook（支持可选原生降级、缓存、播放队列、资源回收） =====
 // =================================================================================
 function useMixedTTS() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
   const [playingId, setPlayingId] = useState(null);
-  
+
   const audioQueueRef = useRef([]);
   const currentAudioRef = useRef(null);
-  const createdObjectURLsRef = useRef(new Set());
+  const createdObjectURLsRef = useRef(new Set()); // 追踪 objectURLs，用于 revoke
   const latestRequestIdRef = useRef(0);
   const playingIdRef = useRef(null);
 
-  // 清理函数
-  const cleanup = useCallback(() => {
+  useEffect(() => {
+    return () => {
+      // 组件卸载时彻底清理
+      stop();
+      // revoke any remaining URLs
+      for (const url of createdObjectURLsRef.current) {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+      }
+      createdObjectURLsRef.current.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stop = useCallback(() => {
+    // increase request id to abort pending flows
+    latestRequestIdRef.current++;
+    // stop current audio
     if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.src = '';
+      try {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+      } catch (e) {}
       currentAudioRef.current = null;
     }
-    if (audioQueueRef.current.length) {
-      audioQueueRef.current.forEach(({ audio }) => {
-        if (audio) {
-          audio.pause();
-          audio.src = '';
-        }
+    // stop all queued audios
+    if (audioQueueRef.current && audioQueueRef.current.length) {
+      audioQueueRef.current.forEach(a => {
+        try { a.pause(); } catch (e) {}
+        try { a.src = ''; } catch (e) {}
       });
       audioQueueRef.current = [];
     }
-    // 释放 URL 对象
+    // cancel native speech
+    if (window.speechSynthesis && window.speechSynthesis.cancel) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    // revoke created URLs
     for (const url of createdObjectURLsRef.current) {
       try { URL.revokeObjectURL(url); } catch (e) {}
     }
     createdObjectURLsRef.current.clear();
-  }, []);
 
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
-
-  const stop = useCallback(() => {
-    latestRequestIdRef.current++;
-    cleanup();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    
     setIsPlaying(false);
     setIsPaused(false);
     setPlayingId(null);
     playingIdRef.current = null;
     setLoadingId(null);
-  }, [cleanup]);
+  }, []);
 
   const toggle = useCallback((uniqueId) => {
     if (playingIdRef.current !== uniqueId) return;
-    
+
     if (currentAudioRef.current) {
       if (currentAudioRef.current.paused) {
-        // 尝试恢复播放，处理 Promise 错误
-        const playPromise = currentAudioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error("Playback failed on toggle:", error);
-            stop(); // 如果恢复失败，直接停止
-          });
-        }
+        currentAudioRef.current.play().catch(e => console.error('Resume failed', e));
         setIsPaused(false);
       } else {
         currentAudioRef.current.pause();
         setIsPaused(true);
       }
+    } else if (window.speechSynthesis && window.speechSynthesis.speaking) {
+      // toggle native speech
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+          setIsPaused(false);
+        } else {
+          window.speechSynthesis.pause();
+          setIsPaused(true);
+        }
+      } catch (e) {
+        console.warn('SpeechSynthesis toggle failed', e);
+      }
     }
-  }, [stop]);
+  }, []);
 
   const detectLanguage = (text) => {
+    // 缅甸文范围常用 \u1000-\u109F，中文汉字 \u4e00-\u9fff（更广）
     if (/[\u1000-\u109F]/.test(text)) return 'my';
-    // 包含汉字则认为是中文，否则默认处理
     if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
+    // 默认 latin -> 返回 'other'（当作非中文，使用默认英文/缅甸 TTS）
     return 'other';
   };
 
   const fetchAudioBlob = async (text, lang) => {
     if (!text || !text.trim()) throw new Error('Empty text');
-    // 强制指定 voice 参数，确保后端能正确识别
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-blob-v2-${voice}-${text}`; // 更新缓存 Key 版本以防旧缓存损坏
 
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const cacheKey = `tts-blob-${voice}-${text}`;
+
+    // 1. 尝试缓存
     try {
       const cached = await idb.get(cacheKey);
       if (cached) return cached;
-    } catch (e) { console.warn("Cache read error", e); }
+    } catch (e) {
+      console.warn('Cache read failed', e);
+    }
 
-    if (inFlightRequests.has(cacheKey)) return inFlightRequests.get(cacheKey);
+    // 2. 若已有进行中请求，复用它
+    if (inFlightRequests.has(cacheKey)) {
+      return inFlightRequests.get(cacheKey);
+    }
 
+    // 3. 发起网络请求（并加入 inFlight）
     const promise = (async () => {
       try {
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
-        
-        const blob = await res.blob();
-        // 增加 Blob 类型检查
-        if (!blob || blob.size < 100 || !blob.type.startsWith('audio')) {
-            throw new Error('Invalid Audio Blob');
+        if (!res.ok) {
+          throw new Error(`TTS Fetch Failed: ${res.status}`);
         }
-        
-        idb.set(cacheKey, blob).catch(() => {});
+        const blob = await res.blob();
+        if (!blob || blob.size < 100) {
+          throw new Error('TTS Response too small or invalid');
+        }
+        // 尝试写入缓存（异步）
+        idb.set(cacheKey, blob).catch(e => console.warn('Cache write failed', e));
         return blob;
       } catch (e) {
-        idb.del(cacheKey).catch(() => {});
+        // 如果网络失败，确保删除疑似坏缓存
+        try { idb.del(cacheKey).catch(()=>{}); } catch (_) {}
         throw e;
       } finally {
         inFlightRequests.delete(cacheKey);
       }
     })();
-    
+
     inFlightRequests.set(cacheKey, promise);
     return promise;
   };
 
-  const play = useCallback(async (text, uniqueId) => {
+  const play = useCallback(async (text, uniqueId, options = { allowNativeFallback: true }) => {
     if (!text) return;
-    
-    // 如果点击的是当前正在播放/暂停的按钮
+    // 如果点击的是当前播放项，切换暂停/继续
     if (playingIdRef.current === uniqueId) {
       toggle(uniqueId);
       return;
     }
 
-    stop(); // 停止之前的
+    stop();
     setLoadingId(uniqueId);
     const myRequestId = ++latestRequestIdRef.current;
 
     try {
-      // 1. 文本清洗
-      let cleanText = String(text)
-        .replace(/<[^>]+>/g, '') // 去除 HTML 标签
-        .replace(/\{\{|}}/g, '') // 去除 {{ }}
-        .replace(/\*\*/g, '')
-        .replace(/`/g, '')
-        .replace(/#/g, '')
-        .replace(/\n+/g, ' ')
-        .trim();
+      let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+      if (!cleanText) {
+        setLoadingId(null);
+        return;
+      }
 
-      // 2. 分段逻辑：中文和其他语言分开，避免引擎混淆
+      // 划分中/非中文段（尽量保持原有逻辑）
       const segments = [];
-      const regex = /([\u4e00-\u9fff\uff00-\uffef]+)|([^\u4e00-\u9fff\uff00-\uffef]+)/g;
+      const regex = /([\u4e00-\u9fff]+)|([^\u4e00-\u9fff]+)/g;
       let match;
       while ((match = regex.exec(cleanText)) !== null) {
         const chunk = match[0];
         if (chunk && chunk.trim()) {
-          segments.push({ text: chunk.trim(), lang: detectLanguage(chunk) });
+          const lang = detectLanguage(chunk);
+          segments.push({ text: chunk.trim(), lang });
         }
       }
 
@@ -232,24 +275,20 @@ function useMixedTTS() {
         return;
       }
 
-      // 3. 并行请求所有音频段
-      const blobs = await Promise.all(
-        segments.map(seg => fetchAudioBlob(seg.text, seg.lang === 'other' ? 'zh' : seg.lang))
-      );
+      // fetchBlobs: 注意 segments.map 生成 promise 数组
+      const blobPromises = segments.map(seg => fetchAudioBlob(seg.text, seg.lang === 'other' ? 'zh' : seg.lang));
+      const blobs = await Promise.all(blobPromises);
 
-      // 如果请求期间用户点击了停止或其他，则取消
-      if (myRequestId !== latestRequestIdRef.current) return;
+      if (myRequestId !== latestRequestIdRef.current) return; // 请求被取消
 
-      // 4. 构建音频队列
+      // create Audio objects
       const audioObjects = blobs.map((blob, idx) => {
         const objectURL = URL.createObjectURL(blob);
         createdObjectURLsRef.current.add(objectURL);
         const audio = new Audio(objectURL);
         const segLang = segments[idx].lang;
-        // 中文语速稍微慢一点点，便于学习
-        audio.playbackRate = segLang === 'zh' ? 0.9 : 1.0; 
-        audio.preload = 'auto'; // 强制预加载
-        return { audio, objectURL };
+        audio.playbackRate = segLang === 'zh' ? 0.7 : 1.0;
+        return { audio, objectURL, lang: segLang };
       });
 
       audioQueueRef.current = audioObjects;
@@ -257,71 +296,153 @@ function useMixedTTS() {
       setPlayingId(uniqueId);
       playingIdRef.current = uniqueId;
       setIsPlaying(true);
+      setIsPaused(false);
 
-      // 5. 递归播放函数
-      const playNext = async (index) => {
+      // play sequentially
+      const playNext = (index) => {
         if (myRequestId !== latestRequestIdRef.current) return;
-        
         if (index >= audioObjects.length) {
-          stop(); // 全部播放完毕
+          // finished
+          setIsPlaying(false);
+          setPlayingId(null);
+          playingIdRef.current = null;
+          currentAudioRef.current = null;
+          // revoke used urls for this run
+          audioObjects.forEach(item => {
+            try { URL.revokeObjectURL(item.objectURL); } catch (e) {}
+            createdObjectURLsRef.current.delete(item.objectURL);
+          });
+          audioQueueRef.current = [];
           return;
         }
 
         const { audio, objectURL } = audioObjects[index];
         currentAudioRef.current = audio;
 
-        // 清理当前段并播放下一段
-        const handleEnd = () => {
-          try { URL.revokeObjectURL(objectURL); } catch(e){}
+        const cleanupAndNext = () => {
+          // revoke this objectURL after use
+          try { URL.revokeObjectURL(objectURL); } catch (e) {}
           createdObjectURLsRef.current.delete(objectURL);
           playNext(index + 1);
         };
 
-        audio.onended = handleEnd;
+        audio.onended = cleanupAndNext;
         audio.onerror = (e) => {
-          console.error("Audio playback error:", e);
-          handleEnd(); // 即使出错也尝试播下一段
+          console.error('Audio play error', e);
+          // 尝试跳到下一个
+          setTimeout(cleanupAndNext, 30);
         };
-
-        try {
-          // ⚠️ 关键修复：先 load 再 play，处理 Promise
-          audio.load();
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-            await playPromise;
+        audio.play().catch((e) => {
+          console.error('Play prevented', e);
+          // 如果播放被策略阻止或发生异常，尝试降级到 native（仅当允许且 segments 都非空）
+          if (options.allowNativeFallback && window.speechSynthesis) {
+            try {
+              const utterText = segments.map(s => s.text).join(' ');
+              const utter = new SpeechSynthesisUtterance(utterText);
+              // 尝试选择语言（优先中文）
+              utter.lang = /[\u1000-\u109F]/.test(utterText) ? 'my-MM' : 'zh-CN';
+              utter.rate = 0.8;
+              utter.onend = () => {
+                if (playingIdRef.current === uniqueId) {
+                  setIsPlaying(false);
+                  setPlayingId(null);
+                  playingIdRef.current = null;
+                }
+              };
+              utter.onerror = () => {
+                setIsPlaying(false);
+                setPlayingId(null);
+                playingIdRef.current = null;
+              };
+              window.speechSynthesis.cancel();
+              window.speechSynthesis.speak(utter);
+            } catch (nativeErr) {
+              console.error('Native TTS failed', nativeErr);
+              setIsPlaying(false);
+              setPlayingId(null);
+              playingIdRef.current = null;
+            }
+          } else {
+            // 不允许 native fallback 或不支持 -> 直接继续下一个
+            setTimeout(cleanupAndNext, 30);
           }
-        } catch (error) {
-          console.error("Autoplay prevented or network error:", error);
-          // 如果是被浏览器拦截，停止播放流程
-          stop();
-        }
+        });
       };
 
-      // 启动播放
       playNext(0);
 
     } catch (e) {
-      console.error('TTS execution failed:', e);
+      console.error('网络 TTS 失败：', e);
       setLoadingId(null);
-      setPlayingId(null);
-      playingIdRef.current = null;
-      setIsPlaying(false);
-      alert("朗读失败，请检查网络或点击重试");
+
+      // 降级到原生（仅当允许）
+      if (options.allowNativeFallback && window.speechSynthesis) {
+        try {
+          const utter = new SpeechSynthesisUtterance(String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim());
+          utter.lang = /[\u1000-\u109F]/.test(text) ? 'my-MM' : 'zh-CN';
+          utter.rate = 0.8;
+          setPlayingId(uniqueId);
+          playingIdRef.current = uniqueId;
+          setIsPlaying(true);
+          setIsPaused(false);
+
+          utter.onend = () => {
+            if (playingIdRef.current === uniqueId) {
+              setIsPlaying(false);
+              setPlayingId(null);
+              playingIdRef.current = null;
+            }
+          };
+          utter.onerror = () => {
+            setIsPlaying(false);
+            setPlayingId(null);
+            playingIdRef.current = null;
+          };
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(utter);
+        } catch (nativeError) {
+          console.error('Native TTS also failed', nativeError);
+          setPlayingId(null);
+          playingIdRef.current = null;
+          setIsPlaying(false);
+        }
+      } else {
+        // 不允许 native 降级 -> 直接失败
+        setPlayingId(null);
+        playingIdRef.current = null;
+        setIsPlaying(false);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stop, toggle]);
 
-  return { play, stop, toggle, isPlaying, isPaused, playingId, loadingId };
+  const preload = useCallback((text) => {
+    if (!text) return;
+    let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+    const regex = /([\u4e00-\u9fff]+)|([^\u4e00-\u9fff]+)/g;
+    let match;
+    while ((match = regex.exec(cleanText)) !== null) {
+      const chunk = match[0];
+      if (chunk && chunk.trim()) {
+        const lang = detectLanguage(chunk);
+        fetchAudioBlob(chunk.trim(), lang === 'other' ? 'zh' : lang).catch(()=>{});
+      }
+    }
+  }, []);
+
+  return { play, stop, toggle, isPlaying, isPaused, playingId, loadingId, preload };
 }
 
 // =================================================================================
 // ===== 3. 辅助函数与组件 =====
 // =================================================================================
-
 const generateRubyHTML = (text) => {
   if (!text) return '';
+  // 只对连续汉字做拼音
   return text.replace(/[\u4e00-\u9fff]+/g, word => {
     try {
-      const pinyin = pinyinConverter(word, { toneType: 'symbol', type: 'array', multiple: false });
+      const pinyin = pinyinConverter(word, { toneType: 'numeric', type: 'array', multiple: false });
+      // pinyin-pro 返回数组，合并为空格分隔
       const rt = Array.isArray(pinyin) ? pinyin.join(' ') : pinyin || '';
       return `<ruby>${word}<rt>${rt}</rt></ruby>`;
     } catch (e) {
@@ -334,24 +455,36 @@ const DraggableAiBtn = ({ contextText }) => {
   const [isOpen, setIsOpen] = useState(false);
   const constraintsRef = useRef(null);
 
+  const handleOpen = (e) => {
+    e.stopPropagation();
+    setIsOpen(true);
+  };
+
   return (
     <>
-      <div ref={constraintsRef} style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 80, pointerEvents: 'none', zIndex: 90 }} />
+      <div
+        ref={constraintsRef}
+        style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 100, pointerEvents: 'none', zIndex: 90 }}
+      />
       <motion.button
         drag
         dragConstraints={constraintsRef}
+        dragElastic={0.08}
+        dragMomentum={false}
         whileHover={{ scale: 1.06 }}
         whileTap={{ scale: 0.96 }}
-        onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+        onClick={handleOpen}
+        aria-label="打开 AI 语法助手"
+        title="打开 AI 语法助手"
         style={{
           position: 'absolute',
-          bottom: '100px',
-          right: '16px',
-          width: '40px',
-          height: '40px',
+          bottom: '120px',
+          right: '20px',
+          width: '56px',
+          height: '56px',
           borderRadius: '50%',
           background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-          boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+          boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)',
           color: 'white',
           display: 'flex',
           alignItems: 'center',
@@ -359,10 +492,11 @@ const DraggableAiBtn = ({ contextText }) => {
           zIndex: 100,
           cursor: 'pointer',
           border: 'none',
+          touchAction: 'none',
           outline: 'none'
         }}
       >
-        <FaRobot size={20} />
+        <FaRobot size={26} />
       </motion.button>
 
       <AnimatePresence>
@@ -370,26 +504,51 @@ const DraggableAiBtn = ({ contextText }) => {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1001, backdropFilter: 'blur(2px)' }}
+              onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1001, backdropFilter: 'blur(3px)' }}
             />
             <motion.div
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
               style={{
-                position: 'fixed', bottom: 0, left: 0, right: 0, height: '72vh',
-                background: 'white', borderTopLeftRadius: '20px', borderTopRightRadius: '20px',
-                zIndex: 1002, display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: '72vh',
+                background: 'white',
+                borderTopLeftRadius: '20px',
+                borderTopRightRadius: '20px',
+                boxShadow: '0 -4px 30px rgba(0,0,0,0.12)',
+                zIndex: 1002,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
               }}
             >
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                  <FaRobot size={18} color="#2563eb"/> AI 助手
+              <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', background: '#eff6ff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                    <FaRobot size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '1rem', color: '#0f172a' }}>AI 语法助手</div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748b' }}>随时解答您的疑问（上下文已注入）</div>
+                  </div>
                 </div>
-                <button onClick={() => setIsOpen(false)} style={{ border:'none', background:'transparent', padding:4 }}><FaTimes size={16}/></button>
+                <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} style={{ padding: '8px', background: '#f8fafc', borderRadius: '50%', border: 'none', color: '#64748b', cursor: 'pointer', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="关闭"><FaTimes size={14} /></button>
               </div>
-              <div style={{ flex: 1, overflow: 'hidden', background: '#fbfdff' }}>
-                {AiChatAssistant ? <AiChatAssistant context={contextText} /> : <div style={{padding:20, textAlign:'center', color:'#999'}}>AI 组件未加载</div>}
+
+              <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#fbfdff' }}>
+                {AiChatAssistant ? <AiChatAssistant context={contextText} /> : (
+                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', padding: 20 }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <FaRobot size={44} className="opacity-40" />
+                      <div style={{ marginTop: 12 }}>未检测到 AI 组件，请检查路径：../AiChatAssistant</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </>
@@ -403,78 +562,114 @@ const DraggableAiBtn = ({ contextText }) => {
 // ===== 4. 主组件: GrammarPointPlayer =====
 // =================================================================================
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
-  // 调试：使用内置数据（如果外部没传）
-  const dataToUse = (grammarPoints && Array.isArray(grammarPoints) && grammarPoints.length > 0) ? grammarPoints : TEST_DATA;
-  
-  // 状态
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+    // 仅在 mount 时修改 overscrollBehavior，unmount 时恢复
+    const prev = document.body.style.overscrollBehavior;
+    document.body.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overscrollBehavior = prev || '';
+    };
+  }, []);
+
+  if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) {
+    return <div className="flex h-full items-center justify-center text-gray-400">暂无语法数据</div>;
+  }
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const lastDirection = useRef(0);
   const contentRef = useRef(null);
-  
-  // TTS
-  const { play, stop, toggle, playingId, isPaused, loadingId } = useMixedTTS();
+  const [canGoNext, setCanGoNext] = useState(false);
 
-  // ⚠️ 关键修复：监听 grammarPoints 变化，重置索引
-  useEffect(() => {
-    setCurrentIndex(0);
-    stop(); // 切换数据时停止播放
-  }, [grammarPoints, stop]);
+  const { play, stop, toggle, playingId, isPaused, loadingId, preload } = useMixedTTS();
 
-  // 切换卡片时的副作用
   useEffect(() => {
-    stop(); // 翻页时停止播放
+    stop();
     if (contentRef.current) contentRef.current.scrollTop = 0;
+    setCanGoNext(true);
   }, [currentIndex, stop]);
 
+  // 只做预加载（不自动播放）
+  useEffect(() => {
+    const preloadNextItems = (count) => {
+      for (let i = 1; i <= count; i++) {
+        const nextIndex = currentIndex + i;
+        if (nextIndex < grammarPoints.length) {
+          const nextGp = grammarPoints[nextIndex];
+          if (nextGp.narrationScript) preload(nextGp.narrationScript);
+          if (Array.isArray(nextGp.examples)) {
+            nextGp.examples.forEach(ex => preload(ex.narrationScript || ex.sentence));
+          }
+        }
+      }
+    };
+    preloadNextItems(2);
+  }, [currentIndex, grammarPoints, preload]);
+
+  const handleScroll = () => {
+    if (!contentRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
+    const isBottom = scrollTop + clientHeight >= scrollHeight - 40;
+    if (isBottom && !canGoNext) setCanGoNext(true);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < grammarPoints.length - 1) {
+      lastDirection.current = 1;
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      onComplete();
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      lastDirection.current = -1;
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
   const transitions = useTransition(currentIndex, {
-    key: currentIndex,
+    key: grammarPoints[currentIndex]?.id || currentIndex,
     from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` },
     enter: { opacity: 1, transform: 'translateX(0%)' },
     leave: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
     config: { mass: 1, tension: 280, friction: 30 },
   });
 
-  const getGpData = (gp) => {
-    if (!gp) return null;
-    return {
-      id: gp.id,
-      title: gp['语法标题'] || gp['grammarPoint'],
-      pattern: gp['句型结构'] || gp['pattern'],
-      explanation: gp['语法详解'] || gp['visibleExplanation'],
-      usage: gp['适用场景'] || gp['usage'],
-      attention: gp['注意事项'] || gp['attention'],
-      script: gp['讲解脚本'] || gp['narrationScript'],
-      examples: gp['例句列表'] || gp['examples'] || [],
-    };
-  };
-
   const renderMixedText = (text, isPattern = false) => {
     if (!text) return null;
-    if (text.includes('{{')) {
-      const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
-      return parts.map((part, pIndex) => {
-        const isChinese = part.startsWith('{{') && part.endsWith('}}');
-        const content = isChinese ? part.slice(2, -2) : part;
-        let partStyle = isPattern
-          ? (isChinese ? styles.patternChinese : styles.patternMyanmar)
-          : (isChinese ? styles.textChinese : styles.textBurmese);
+    // 支持 {{汉字}} 与其余文字混合渲染
+    const parts = text.match(/\{\{.*?\}\}|[^{}]+/g) || [];
+    return parts.map((part, pIndex) => {
+      const isChinese = part.startsWith('{{') && part.endsWith('}}');
+      const content = isChinese ? part.slice(2, -2) : part;
+      const trimmed = String(content);
+      let partStyle = isPattern
+        ? (isChinese ? styles.patternChinese : styles.patternMyanmar)
+        : (isChinese ? styles.textChinese : styles.textBurmese);
 
-        if (isChinese || /[\u4e00-\u9fff]/.test(content)) {
-          return <span key={pIndex} style={partStyle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(content) }} />;
-        }
-        return <span key={pIndex} style={partStyle}>{content}</span>;
-      });
-    }
-
-    if (/[\u4e00-\u9fff]/.test(text)) {
-      return <span dangerouslySetInnerHTML={{ __html: generateRubyHTML(text) }} />;
-    }
-    return <span>{text}</span>;
+      if (isChinese) {
+        return (
+          <span key={pIndex} style={partStyle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(trimmed) }} />
+        );
+      } else {
+        return <span key={pIndex} style={partStyle}>{trimmed}</span>;
+      }
+    });
   };
 
-  const renderPlayButton = (script, id, isSmall = false) => {
+  const renderRichExplanation = (htmlContent) => {
+    if (!htmlContent) return null;
+    return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+  };
+
+  // render play button (allow options to control fallback behavior)
+  const renderPlayButton = (script, id, isSmall = false, opts = { allowNativeFallback: true }) => {
     const isCurrentPlaying = playingId === id;
     const isLoading = loadingId === id;
+
     let Icon = FaVolumeUp;
     if (isLoading) Icon = FaSpinner;
     else if (isCurrentPlaying) Icon = isPaused ? FaPlay : FaPause;
@@ -483,70 +678,62 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       <button
         className={`play-button ${isCurrentPlaying && !isPaused ? 'playing' : ''}`}
         style={isSmall ? styles.playButtonSmall : styles.playButton}
-        onClick={(e) => { e.stopPropagation(); play(script, id); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          play(script, id, opts);
+        }}
+        aria-label="播放朗读"
+        title="播放朗读"
       >
         <Icon className={isLoading ? "spin" : ""} />
       </button>
     );
   };
 
-  // 如果没有数据
-  if (!dataToUse || dataToUse.length === 0) return <div style={{padding:20,textAlign:'center'}}>暂无数据</div>;
-
-  const currentRawGp = dataToUse[currentIndex];
-  const currentGp = getGpData(currentRawGp); 
-  const contextText = currentGp ? `学习语法：${currentGp.title}` : '';
+  const currentGp = grammarPoints[currentIndex];
+  const contextText = currentGp ? `我在学习语法点：【${currentGp.grammarPoint}】。\n结构是：${currentGp.pattern || '无'}。\n解释：${(currentGp.visibleExplanation || '').replace(/<[^>]+>/g, '')}` : '';
 
   return (
     <div style={styles.container}>
       <DraggableAiBtn contextText={contextText} />
 
       {transitions((style, i) => {
-        const rawGp = dataToUse[i];
-        if (!rawGp) return null; // 保护性检查
-        const gp = getGpData(rawGp);
+        const gp = grammarPoints[i];
         if (!gp) return null;
-        
-        const narrationId = `narration_${gp.id || i}`;
+        const narrationId = `narration_${gp.id}`;
 
         return (
           <animated.div style={{ ...styles.page, ...style }} key={gp.id || i}>
-            <div style={styles.scrollContainer} ref={contentRef}>
+            <div style={styles.scrollContainer} ref={contentRef} onScroll={handleScroll}>
               <div style={styles.contentWrapper}>
                 <div style={styles.header}>
-                  <h2 style={styles.grammarPointTitle}>
-                    {renderMixedText(gp.title)} 
-                  </h2>
+                  <h2 style={styles.grammarPointTitle}>{gp.grammarPoint}</h2>
                 </div>
 
                 {gp.pattern && (
                   <div style={styles.patternBox}>
-                    <div style={styles.boxLabel}>句型结构 (Structure)</div>
+                    <div style={styles.boxLabel}>句型结构</div>
                     <div style={styles.patternContent}>{renderMixedText(gp.pattern, true)}</div>
                   </div>
                 )}
 
                 <div style={styles.sectionContainer}>
                   <div style={styles.sectionHeader}>
-                    <span style={styles.sectionTitleText}>💡 详解 (Explanation)</span>
-                    {renderPlayButton(gp.script, narrationId, false)}
+                    <span style={styles.sectionTitleText}>💡 详解</span>
+                    {renderPlayButton(gp.narrationScript, narrationId, false, { allowNativeFallback: true })}
                   </div>
                   <div style={styles.textBlock}>
-                    <div className="rich-text-content" style={styles.richTextContainer}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{gp.explanation}</ReactMarkdown>
-                    </div>
+                    {renderRichExplanation(gp.visibleExplanation)}
                   </div>
                 </div>
 
                 {gp.usage && (
                   <div style={styles.sectionContainer}>
                     <div style={styles.sectionHeader}>
-                      <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 适用场景 (Usage)</span>
+                      <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 使用场景</span>
                     </div>
                     <div style={{ ...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-                       <div className="rich-text-content" style={styles.richTextContainer}>
-                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{gp.usage}</ReactMarkdown>
-                       </div>
+                      {renderRichExplanation(gp.usage)}
                     </div>
                   </div>
                 )}
@@ -554,43 +741,36 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 {gp.attention && (
                   <div style={styles.sectionContainer}>
                     <div style={styles.sectionHeader}>
-                      <span style={{ ...styles.sectionTitleText, color: '#ef4444' }}>⚠️ 注意事项 (Attention)</span>
+                      <span style={{ ...styles.sectionTitleText, color: '#ef4444' }}>⚠️ 易错点</span>
                     </div>
                     <div style={{ ...styles.textBlock, background: '#fff1f2', border: '1px solid #fecaca' }}>
-                       <div className="rich-text-content" style={styles.richTextContainer}>
-                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{gp.attention}</ReactMarkdown>
-                       </div>
+                      {renderRichExplanation(gp.attention)}
                     </div>
                   </div>
                 )}
 
-                {gp.examples && gp.examples.length > 0 && (
-                  <div style={styles.sectionContainer}>
-                    <div style={styles.sectionHeader}>
-                      <span style={styles.sectionTitleText}>🗣️ 例句 (Examples)</span>
-                    </div>
-                    <div style={styles.examplesList}>
-                      {gp.examples.map((ex, exIndex) => {
-                        const exId = `example_${ex.id || exIndex}`;
-                        const sentence = ex['句子'] || ex['sentence'];
-                        const trans = ex['翻译'] || ex['translation'];
-                        const audioText = ex['例句发音'] || ex['narrationScript'] || sentence;
-
-                        return (
-                          <div key={exId} style={styles.exampleItem}>
-                            <div style={styles.exampleMain}>
-                              <div style={styles.exampleSentence}>
-                                {renderMixedText(sentence)}
-                              </div>
-                              <div style={styles.exampleTranslation}>{trans}</div>
+                <div style={styles.sectionContainer}>
+                  <div style={styles.sectionHeader}>
+                    <span style={styles.sectionTitleText}>🗣️ 例句</span>
+                  </div>
+                  <div style={styles.examplesList}>
+                    {Array.isArray(gp.examples) && gp.examples.map((ex) => {
+                      const exId = `example_${ex.id}`;
+                      // 例句不允许走本地原生 tts 降级
+                      return (
+                        <div key={ex.id} style={styles.exampleItem}>
+                          <div style={styles.exampleMain}>
+                            <div style={styles.exampleSentence}>
+                              {renderMixedText(ex.sentence)}
                             </div>
-                            {renderPlayButton(audioText, exId, true)}
+                            <div style={styles.exampleTranslation}>{ex.translation}</div>
                           </div>
-                        );
-                      })}
-                    </div>
+                          {renderPlayButton(ex.narrationScript || ex.sentence, exId, true, { allowNativeFallback: false })}
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
 
                 <div style={{ height: '120px' }} />
               </div>
@@ -598,23 +778,28 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
             <div style={styles.bottomBar}>
               <button
-                style={{ ...styles.navButton, visibility: i === 0 ? 'hidden' : 'visible', background: '#f1f5f9', color: '#64748b' }}
-                onClick={() => { if (currentIndex > 0) { lastDirection.current = -1; setCurrentIndex(p => p - 1); } }}
+                style={{
+                  ...styles.navButton,
+                  visibility: i === 0 ? 'hidden' : 'visible',
+                  background: '#f1f5f9',
+                  color: '#64748b'
+                }}
+                onClick={handlePrev}
+                aria-label="上一条"
               >
                 <FaChevronLeft /> 上一条
               </button>
               <button
-                style={{ ...styles.navButton, background: '#2563eb', color: 'white', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)' }}
-                onClick={() => {
-                   if (currentIndex < dataToUse.length - 1) { 
-                     lastDirection.current = 1; 
-                     setCurrentIndex(p => p + 1); 
-                   } else {
-                     onComplete();
-                   }
+                style={{
+                  ...styles.navButton,
+                  background: '#2563eb',
+                  color: 'white',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
                 }}
+                onClick={handleNext}
+                aria-label="下一条"
               >
-                {i === dataToUse.length - 1 ? '完成学习' : '下一条'} <FaChevronRight />
+                {i === grammarPoints.length - 1 ? '完成学习' : '下一条'} <FaChevronRight />
               </button>
             </div>
           </animated.div>
@@ -625,33 +810,12 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 };
 
 GrammarPointPlayer.propTypes = {
-  grammarPoints: PropTypes.array,
+  grammarPoints: PropTypes.array.isRequired,
   onComplete: PropTypes.func,
 };
 
 // =================================================================================
-// ===== 6. 默认数据 (用于测试) =====
-// =================================================================================
-const TEST_DATA = [
-  {
-    "id": "u1_rich",
-    "语法标题": "基础问候：你好 vs 您好",
-    "句型结构": "{{Subject}} + {{好}}",
-    "语法详解": "### 1. 核心概念\n这是中文里最万能的打招呼方式。结构非常简单：**对象 + 好**。\n\n| 中文 | 拼音 | 缅文含义 |\n| :--- | :--- | :--- |\n| **你好** | Nǐ hǎo | မင်္ဂလာပါ |\n| **您好** | Nín hǎo | မင်္ဂလာပါ (ယဉ်ကျေး) |",
-    "讲解脚本": "你好！这是测试音频。",
-    "例句列表": [
-      {
-        "id": "u1_ex1",
-        "句子": "{{你好}}！{{好久不见}}。",
-        "翻译": "你好！好久不见。",
-        "例句发音": "你好！好久不见。"
-      }
-    ]
-  }
-];
-
-// =================================================================================
-// ===== 7. 样式 =====
+// ===== 5. 样式与全局动画（保留并增强富文本） =====
 // =================================================================================
 const styles = {
   container: { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif' },
@@ -668,10 +832,10 @@ const styles = {
   sectionContainer: { marginBottom: '24px' },
   sectionHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
   sectionTitleText: { fontSize: '1rem', fontWeight: '700', color: '#0f172a' },
-  playButton: { background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.18s', padding: 0 },
-  playButtonSmall: { background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '50%', width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.18s', padding: 0 },
+  playButton: { background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.18s' },
+  playButtonSmall: { background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '50%', width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.18s' },
   textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e6eef8', fontSize: '1rem', lineHeight: 1.75, color: '#475569' },
-  richTextContainer: { whiteSpace: 'normal', overflowWrap: 'break-word' },
+  richTextContainer: { whiteSpace: 'normal' },
   examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   exampleItem: { background: '#f8fafc', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #e2e8f0' },
   exampleMain: { flex: 1 },
@@ -683,7 +847,6 @@ const styles = {
   navButton: { border: 'none', borderRadius: '30px', padding: '12px 22px', fontSize: '1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', transition: 'all 0.22s' }
 };
 
-// 注入 CSS 动画和样式
 const styleTag = typeof document !== 'undefined' ? (document.getElementById('grammar-player-styles') || document.createElement('style')) : null;
 if (styleTag) {
   styleTag.id = 'grammar-player-styles';
@@ -693,13 +856,13 @@ if (styleTag) {
     .play-button:active { transform: scale(0.94); }
     .playing { animation: pulse-ring 2s infinite; background-color: rgba(37, 99, 235, 0.12) !important; color: #2563eb !important; border-color: #2563eb !important; }
     @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
-    .rich-text-content h1, .rich-text-content h2 { color: #0f172a; margin: 1em 0 0.5em 0; font-weight: 700; font-size: 1.1em; border-bottom: 1px solid #eee; }
-    .rich-text-content p { margin: 0.8em 0; line-height: 1.8; color: #475569; }
-    .rich-text-content strong { color: #0b3d91; background: rgba(37, 99, 235, 0.05); padding: 0 2px; }
-    .rich-text-content table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95em; }
-    .rich-text-content th { background: #f1f5f9; color: #334155; padding: 8px; border: 1px solid #e2e8f0; }
-    .rich-text-content td { padding: 8px; border: 1px solid #e2e8f0; vertical-align: top; }
-    ruby rt { font-size: 0.6em; color: #0b3d91; user-select: none; }
+    .rich-text-content h1, .rich-text-content h2, .rich-text-content h3 { color: #0f172a; margin: 1.2em 0 0.5em 0; padding-bottom: 0.2em; border-bottom: 1px solid #eef2ff; font-weight: 700; }
+    .rich-text-content p { margin: 0.6em 0; color: #475569; line-height: 1.8; }
+    .rich-text-content strong, .rich-text-content b { color: #0b3d91; font-weight: 700; }
+    .rich-text-content ul, .rich-text-content ol { margin: 0.6em 0 0.6em 1.2em; padding-left: 0.6em; }
+    .rich-text-content li { margin: 0.4em 0; color: #475569; }
+    .rich-text-content code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
+    ruby rt { font-size: 0.65em; color: #0b3d91; }
   `;
   if (!document.getElementById('grammar-player-styles')) document.head.appendChild(styleTag);
 }
