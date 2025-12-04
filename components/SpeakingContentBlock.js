@@ -4,9 +4,9 @@ import { createPortal } from 'react-dom';
 import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, Volume2, ArrowLeft } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { pinyin } from 'pinyin-pro'; // 确保安装了 pinyin-pro
+import { pinyin } from 'pinyin-pro'; 
 
-// 导入目录数据 (假设路径不变)
+// 导入目录数据
 import speakingList from '@/data/speaking.json';
 
 // --- 核心组件 ---
@@ -32,19 +32,17 @@ const FullScreenPortal = ({ children }) => {
 // --- 全局音频缓存 (Blob URL) ---
 const audioBlobCache = new Map();
 
-// --- 升级版音频播放 Hook (支持 API Fetch & Abort) ---
+// --- 音频播放 Hook ---
 const useAudioPlayer = () => {
   const [playingId, setPlayingId] = useState(null);
   const audioRef = useRef(null);
-  const abortControllerRef = useRef(null); // 用于取消正在进行的 fetch
+  const abortControllerRef = useRef(null);
 
   const playAudio = useCallback(async (id, text) => {
-    // 1. 停止当前播放
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-    // 2. 取消之前的请求
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -55,11 +53,9 @@ const useAudioPlayer = () => {
       let audioUrl;
       const cacheKey = text;
 
-      // 3. 检查缓存
       if (audioBlobCache.has(cacheKey)) {
         audioUrl = audioBlobCache.get(cacheKey);
       } else {
-        // 4. 发起网络请求
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
@@ -75,7 +71,6 @@ const useAudioPlayer = () => {
         audioBlobCache.set(cacheKey, audioUrl);
       }
 
-      // 5. 播放
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
       
@@ -89,27 +84,21 @@ const useAudioPlayer = () => {
         setPlayingId(null);
       };
 
-      // ⚠️ 捕获 play 的 AbortError (防止快速点击报错)
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch(error => {
-          if (error.name !== 'AbortError') {
-            console.error("Audio play interrupted:", error);
-          }
+          if (error.name !== 'AbortError') console.error("Audio play interrupted:", error);
         });
       }
 
     } catch (err) {
-      if (err.name === 'AbortError') {
-        // 忽略取消的请求
-      } else {
+      if (err.name !== 'AbortError') {
         console.error("TTS Error:", err);
         setPlayingId(null);
       }
     }
   }, []);
 
-  // 组件卸载时清理
   useEffect(() => {
     return () => {
       if (audioRef.current) audioRef.current.pause();
@@ -120,7 +109,7 @@ const useAudioPlayer = () => {
   return { playingId, playAudio };
 };
 
-// --- 辅助：Ruby 文本渲染 (优化版：带缓存) ---
+// --- Ruby 文本渲染 ---
 const RubyText = ({ text }) => {
   const segments = useMemo(() => {
     if (!text) return [];
@@ -171,43 +160,30 @@ const RubyText = ({ text }) => {
   );
 };
 
-// --- 新增：列表式学习组件 (生词/短句专用) ---
+// --- 列表式学习组件 ---
 const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
   const { playingId, playAudio } = useAudioPlayer();
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      {/* CSS 注入：美化滚动条 */}
       <style jsx global>{`
-        .thin-scrollbar::-webkit-scrollbar {
-          width: 4px; /* 变细 */
-        }
-        .thin-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .thin-scrollbar::-webkit-scrollbar-thumb {
-          background-color: #cbd5e1; /* gray-300 */
-          border-radius: 20px;
-        }
-        .thin-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: #94a3b8; /* gray-400 */
-        }
+        .thin-scrollbar::-webkit-scrollbar { width: 4px; }
+        .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        .thin-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
       `}</style>
 
-      {/* 顶部导航 */}
       <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm border-b z-10 flex-shrink-0">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-600 active:scale-90 transition-transform">
           <ArrowLeft size={24} />
         </button>
         <h2 className="font-bold text-lg text-gray-800">{title}</h2>
-        <div className="w-8"></div> {/* 占位平衡 */}
+        <div className="w-8"></div>
       </div>
 
-      {/* 滚动列表区域 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 thin-scrollbar">
         {data?.map((item, index) => {
             const mainText = isSentence ? item.sentence : item.word;
-            // 如果数据源里没有 id，使用 index 作为 fallback id，但在播放时最好有唯一标识
             const itemId = item.id || `item-${index}`;
             const isPlaying = playingId === itemId;
 
@@ -224,33 +200,25 @@ const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
                   ${isPlaying ? 'border-2 border-teal-400 shadow-lg scale-[1.01]' : 'border border-gray-100 shadow-sm active:scale-[0.98]'}
                 `}
               >
-                {/* 播放状态指示 (右上角微标) */}
                 <div className={`absolute top-3 right-3 transition-colors ${isPlaying ? 'text-teal-500' : 'text-gray-200'}`}>
                   {isPlaying ? <Loader2 size={18} className="animate-spin" /> : <Volume2 size={18} />}
                 </div>
 
-                {/* 文字内容区 */}
                 <div className="w-full mb-3 mt-1">
-                   {/* 自动生成拼音并渲染 */}
                    <RubyText text={mainText} />
                 </div>
 
-                {/* 翻译 */}
                 <p className="text-sm text-gray-500 font-medium px-4 py-1 bg-gray-50 rounded-full">
                   {item.translation}
                 </p>
               </motion.div>
             );
         })}
-
-        {(!data || data.length === 0) && (
-          <div className="text-center text-gray-400 py-10">暂无内容</div>
-        )}
+        {(!data || data.length === 0) && <div className="text-center text-gray-400 py-10">暂无内容</div>}
       </div>
     </div>
   );
 };
-
 
 // --- 主组件 ---
 const SpeakingContentBlock = () => {
@@ -260,15 +228,17 @@ const SpeakingContentBlock = () => {
   const [activeModule, setActiveModule] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
 
-  // ==================== 1. 数据加载 ====================
-  const handleCourseClick = async (courseSummary) => {
-    setIsLoading(true);
+  // ==================== 1. 数据加载逻辑 (封装) ====================
+  // 这个函数负责根据 ID 去 fetch 数据，不涉及路由跳转，方便复用
+  const fetchCourseData = useCallback(async (courseSummary) => {
+    if (!courseSummary) return null;
     const lessonId = courseSummary.id;
-    // 内存缓存避免重复请求
+
     const fetchSafe = async (url) => {
         try { const res = await fetch(url); return res.ok ? await res.json() : []; } 
         catch (e) { return []; }
     };
+
     try {
       const [vocabData, grammarData, sentencesData, exercisesData] = await Promise.all([
           fetchSafe(`/data/lessons/${lessonId}/vocabulary.json`),
@@ -276,39 +246,106 @@ const SpeakingContentBlock = () => {
           fetchSafe(`/data/lessons/${lessonId}/sentences.json`),
           fetchSafe(`/data/lessons/${lessonId}/exercises.json`)
       ]);
-      setSelectedCourse({ ...courseSummary, vocabulary: vocabData, grammar: grammarData, sentences: sentencesData, exercises: exercisesData });
-      router.push(router.asPath + '#course-menu', undefined, { shallow: true });
+      return { 
+        ...courseSummary, 
+        vocabulary: vocabData, 
+        grammar: grammarData, 
+        sentences: sentencesData, 
+        exercises: exercisesData 
+      };
     } catch (error) {
       console.error(error);
-      alert("加载课程失败");
-    } finally {
-      setIsLoading(false);
+      return null;
     }
-  };
-
-  // ==================== 2. 状态与路由同步 ====================
-  const handleModuleClick = (type) => {
-    setActiveModule(type);
-    router.push(router.asPath.split('#')[0] + `#course-${type}`, undefined, { shallow: true });
-  };
-  const handleBack = () => router.back();
-
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash.includes('#course-vocab')) setActiveModule('vocab');
-      else if (hash.includes('#course-grammar')) setActiveModule('grammar');
-      else if (hash.includes('#course-sentences')) setActiveModule('sentences');
-      else if (hash.includes('#course-exercises')) setActiveModule('exercises');
-      else if (hash.includes('#course-menu')) setActiveModule(null); 
-      else { setSelectedCourse(null); setActiveModule(null); }
-    };
-    window.addEventListener('popstate', handleHashChange);
-    handleHashChange();
-    return () => window.removeEventListener('popstate', handleHashChange);
   }, []);
 
-  // ==================== 3. 核心数据转换 (支持中文Key & Markdown) ====================
+  // ==================== 2. 用户点击课程 ====================
+  const handleCourseClick = async (courseSummary) => {
+    setIsLoading(true);
+    const data = await fetchCourseData(courseSummary);
+    if (data) {
+        setSelectedCourse(data);
+        // 修改路由：添加 ?cid=xxx 参数，这样分享出去时，别人才能知道是哪一课
+        router.push({
+            pathname: router.pathname,
+            query: { ...router.query, cid: courseSummary.id },
+            hash: 'course-menu'
+        }, undefined, { shallow: true });
+    } else {
+        alert("加载课程失败");
+    }
+    setIsLoading(false);
+  };
+
+  // ==================== 3. 深度链接 (Deep Linking) 支持 ====================
+  // 处理：刷新页面、后退、或别人打开链接时的自动加载
+  useEffect(() => {
+    // 只有当路由准备好后才执行
+    if (!router.isReady) return;
+
+    const { cid } = router.query;
+    const hash = window.location.hash;
+
+    const initLoad = async () => {
+        // 如果 URL 里有 cid，但当前没有数据，说明是刷新或新打开的
+        if (cid && (!selectedCourse || String(selectedCourse.id) !== String(cid))) {
+            const courseSummary = speakingList.find(c => String(c.id) === String(cid));
+            if (courseSummary) {
+                setIsLoading(true);
+                const data = await fetchCourseData(courseSummary);
+                if (data) {
+                    setSelectedCourse(data);
+                    // 数据加载完后，再根据 hash 设置模块
+                    if (hash.includes('#course-vocab')) setActiveModule('vocab');
+                    else if (hash.includes('#course-grammar')) setActiveModule('grammar');
+                    else if (hash.includes('#course-sentences')) setActiveModule('sentences');
+                    else if (hash.includes('#course-exercises')) setActiveModule('exercises');
+                    else setActiveModule(null); // 默认为 menu
+                }
+                setIsLoading(false);
+                return; // 加载完成后终止，避免下面的 hash 逻辑重复执行
+            }
+        }
+
+        // 如果数据已经有了，或者 URL 里没有 cid，只处理纯 hash 切换
+        if (hash.includes('#course-vocab')) setActiveModule('vocab');
+        else if (hash.includes('#course-grammar')) setActiveModule('grammar');
+        else if (hash.includes('#course-sentences')) setActiveModule('sentences');
+        else if (hash.includes('#course-exercises')) setActiveModule('exercises');
+        else if (hash.includes('#course-menu')) setActiveModule(null); 
+        else {
+            // 如果既没有 hash 也没有 cid，回到首页
+            if (!cid) {
+                setSelectedCourse(null); 
+                setActiveModule(null);
+            }
+        }
+    };
+
+    initLoad();
+    
+    // 监听 hash 变化 (用于浏览器前进后退)
+    const handlePopState = () => initLoad();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, router.query.cid, router.asPath]); // 依赖项加入 router.query.cid
+
+  // ==================== 4. 模块点击与返回 ====================
+  const handleModuleClick = (type) => {
+    setActiveModule(type);
+    // 保持 cid 参数，只修改 hash
+    router.push({
+        pathname: router.pathname,
+        query: { ...router.query }, // 保持当前的 query 参数 (cid)
+        hash: `course-${type}`
+    }, undefined, { shallow: true });
+  };
+
+  const handleBack = () => router.back();
+
+  // ==================== 5. 数据转换逻辑 ====================
   const transformGrammarToLesson = (data) => {
     if (!data || data.length === 0) return { blocks: [] };
     return {
@@ -317,30 +354,15 @@ const SpeakingContentBlock = () => {
           type: "grammar_study",
           content: {
             grammarPoints: data.map(g => {
-              // ⚠️ 关键修改：优先读取中文Key，否则读取英文Key
-              // 如果都没有，生成 Markdown 格式的保底文本 (不能是 HTML!)
               let finalExplanation = g['语法详解'] || g.visibleExplanation;
-              
               if (!finalExplanation) {
-                  // Fallback: 拼凑一个简单的 Markdown
                   const title = g['翻译'] || g.translation || '';
                   const exp = g['解释'] || g.explanation || '';
                   finalExplanation = `### ${title}\n\n${exp}`;
               }
-
-              // 追加用法 (如果有)
               const usage = g['适用场景'] || g.usage;
-              if (usage) {
-                  finalExplanation += `\n\n${usage}`;
-              }
-
-              return {
-                id: g.id,
-                // 传递原始数据的所有字段，让子组件自己去挑 (支持中文Key)
-                ...g,
-                // 确保 visibleExplanation 有值，且是 Markdown 格式
-                visibleExplanation: finalExplanation
-              };
+              if (usage) finalExplanation += `\n\n${usage}`;
+              return { id: g.id, ...g, visibleExplanation: finalExplanation };
             })
           }
         },
@@ -354,43 +376,41 @@ const SpeakingContentBlock = () => {
     return { blocks: Array.isArray(data) ? data : (data.blocks || []) };
   };
 
-  // ==================== 4. 渲染逻辑 ====================
-  
-  // 准备数据
+  // ==================== 6. 渲染内容选择 ====================
   let renderContent = null;
   const baseId = selectedCourse ? selectedCourse.id : 'temp';
 
-  if (activeModule === 'grammar') {
-      const lessonData = transformGrammarToLesson(selectedCourse?.grammar);
-      if(lessonData) lessonData.id = `${baseId}_grammar`;
-      renderContent = <InteractiveLesson lesson={lessonData} />;
-  }
-  else if (activeModule === 'exercises') {
-      const lessonData = transformExercisesToLesson(selectedCourse?.exercises);
-      if(lessonData) lessonData.id = `${baseId}_exercises`;
-      renderContent = <InteractiveLesson lesson={lessonData} />;
-  }
-  else if (activeModule === 'vocab') {
-      // ✅ 生词
-      renderContent = (
-        <AudioListLesson 
-            data={selectedCourse?.vocabulary} 
-            title="核心生词" 
-            onBack={handleBack} 
-            isSentence={false}
-        />
-      );
-  }
-  else if (activeModule === 'sentences') {
-      // ✅ 短句
-      renderContent = (
-        <AudioListLesson 
-            data={selectedCourse?.sentences} 
-            title="常用短句" 
-            onBack={handleBack} 
-            isSentence={true}
-        />
-      );
+  if (selectedCourse) { // 确保有数据才渲染
+      if (activeModule === 'grammar') {
+          const lessonData = transformGrammarToLesson(selectedCourse.grammar);
+          if(lessonData) lessonData.id = `${baseId}_grammar`;
+          renderContent = <InteractiveLesson lesson={lessonData} />;
+      }
+      else if (activeModule === 'exercises') {
+          const lessonData = transformExercisesToLesson(selectedCourse.exercises);
+          if(lessonData) lessonData.id = `${baseId}_exercises`;
+          renderContent = <InteractiveLesson lesson={lessonData} />;
+      }
+      else if (activeModule === 'vocab') {
+          renderContent = (
+            <AudioListLesson 
+                data={selectedCourse.vocabulary} 
+                title="核心生词" 
+                onBack={handleBack} 
+                isSentence={false}
+            />
+          );
+      }
+      else if (activeModule === 'sentences') {
+          renderContent = (
+            <AudioListLesson 
+                data={selectedCourse.sentences} 
+                title="常用短句" 
+                onBack={handleBack} 
+                isSentence={true}
+            />
+          );
+      }
   }
   
   return (
@@ -432,7 +452,7 @@ const SpeakingContentBlock = () => {
         )}
       </AnimatePresence>
 
-      {/* ✅ 全屏渲染区域：统一入口 */}
+      {/* 全屏渲染区域 */}
       {activeModule && renderContent && (
          <FullScreenPortal>
              {renderContent}
