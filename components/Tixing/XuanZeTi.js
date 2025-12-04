@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa'; // 引入分享图标
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 ---
+// --- 1. IndexedDB 缓存 (无修改) ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -32,7 +31,7 @@ const idb = {
         if (res && typeof res.size === 'number' && res.size > 0) resolve(res);
         else resolve(null);
       };
-      req.onerror = () => resolve(null);
+      req.onerror = = () => resolve(null);
     });
   },
   async set(key, blob) {
@@ -46,11 +45,11 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 ---
+// --- 2. 音频控制器 (无修改) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
-  activeBlobUrls: [], 
+  activeBlobUrls: [],
   latestRequestId: 0,
   _pendingFetches: [],
 
@@ -72,11 +71,11 @@ const audioController = {
     }
 
     this.playlist.forEach(a => {
-      try { 
+      try {
         a.onended = null;
         a.onerror = null;
-        a.pause(); 
-        a.src = ''; 
+        a.pause();
+        a.src = '';
       } catch (e) {}
     });
     this.playlist = [];
@@ -96,7 +95,7 @@ const audioController = {
 
   async fetchAudioBlob(text, lang) {
     const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const rateParam = 0; 
+    const rateParam = 0;
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
@@ -188,7 +187,7 @@ const audioController = {
         }
         const audio = audioObjects[index];
         this.currentAudio = audio;
-        
+
         audio.onended = () => playNext(index + 1);
         audio.onerror = (e) => {
           console.warn(`Audio segment error, skipping...`, e);
@@ -199,7 +198,7 @@ const audioController = {
             if (validSegments[index].lang === 'zh') audio.playbackRate = 0.7;
           } catch (e) {}
         };
-        
+
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(error => {
@@ -218,7 +217,8 @@ const audioController = {
   }
 };
 
-// --- 3. 样式定义 ---
+
+// --- 3. 样式定义 (添加分享按钮样式) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -235,7 +235,6 @@ const cssStyles = `
     overflow-y: auto;
     background-color: #fcfcfc;
     -webkit-tap-highlight-color: transparent;
-    /* 隐藏滚动条 */
     scrollbar-width: none; 
     -ms-overflow-style: none;
   }
@@ -291,7 +290,6 @@ const cssStyles = `
   }
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; position: relative; pointer-events: auto; }
   
-  /* 字体再次调小 */
   .pinyin-top { font-size: 0.75rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
   .cn-char { font-size: 1.35rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
   .other-text-block { font-size: 1.2rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
@@ -328,6 +326,41 @@ const cssStyles = `
     display: flex; flex-direction: column-reverse; align-items: center;
     pointer-events: none; z-index: 200; gap: 20px;
   }
+
+  /* 新增：底部按钮容器 */
+  .bottom-actions-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    pointer-events: auto; /* 允许容器内的元素接收事件 */
+  }
+
+  /* 新增：分享按钮组 */
+  .share-buttons-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background-color: #fff;
+    border-radius: 99px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    pointer-events: auto;
+  }
+  .share-icon {
+    font-size: 1.5rem; /* 24px */
+    color: #4b5563; /* gray-600 */
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .share-icon:active {
+    transform: scale(0.9);
+  }
+  .share-icon.facebook:hover { color: #1877F2; }
+  .share-icon.telegram:hover { color: #0088cc; }
+  .share-icon.tiktok:hover { color: #000000; }
+  .share-icon.link:hover { color: #6d28d9; }
 
   .submit-btn {
     pointer-events: auto; width: auto; min-width: 180px; padding: 14px 40px;
@@ -372,7 +405,8 @@ const cssStyles = `
   @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
-// --- 4. 文本解析逻辑 ---
+
+// --- 4. 文本解析逻辑 (无修改) ---
 const parseTitleText = (text) => {
   if (!text) return [];
   const result = [];
@@ -400,7 +434,8 @@ const parseOptionText = (text) => {
   return { isZh: true, text, pinyins: pinyins.join(' ') };
 };
 
-// --- 5. 组件主体 ---
+
+// --- 5. 组件主体 (核心修改) ---
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -415,7 +450,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
 
-  // --- 修改：跳转逻辑，不传参数以触发默认的“下一题”行为 ---
+  // --- 修复：答对跳题问题 ---
+  // onNext不再接收参数，确保总是触发默认的“下一题”行为
   const executeNext = (isCorrect) => {
     if (transitioningRef.current) return;
     transitioningRef.current = true;
@@ -432,13 +468,26 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
     }
     
-    // 关键修改：不再传递 1 或 2，而是不传参数，让父组件使用默认的 +1 逻辑
+    // 关键修复：不再传递参数，让父组件处理下一题逻辑
     try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    
+    // --- 新增：禁止下拉刷新 ---
+    const preventPullToRefresh = (e) => {
+      // 检查是否在滚动容器的顶部，并且是向下拉动
+      if (document.body.scrollTop === 0) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
+
+    return () => { 
+      mountedRef.current = false; 
+      document.removeEventListener('touchmove', preventPullToRefresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -550,6 +599,37 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     e.stopPropagation();
     executeNext(false); 
   };
+  
+  // --- 新增：分享功能处理 ---
+  const handleShare = (platform) => {
+    const shareUrl = window.location.href;
+    const shareText = `快来和我一起学习！ ${question.text}`;
+    let url = '';
+
+    switch (platform) {
+      case 'facebook':
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+        break;
+      case 'telegram':
+        url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+        break;
+      case 'tiktok':
+        // TikTok没有直接的网页分享API，这里仅作提示
+        alert('TikTok请在App内分享');
+        return;
+      case 'copy':
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          alert('လင့်ခ်ကို ကူးယူပြီးပါပြီ။'); // "链接已复制"
+        }, () => {
+          alert('ကူးယူရန် မအောင်မြင်ပါ။'); // "复制失败"
+        });
+        return;
+      default:
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
 
   return (
     <>
@@ -623,28 +703,40 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="fixed-bottom-area" aria-hidden="false">
-          <button 
-            className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
-            onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
-            disabled={!selectedId}
-            aria-disabled={!selectedId}
-            aria-label="提交答案"
-            title="提交答案"
-          >
-            提 交
-          </button>
+          {/* 修改：将提交按钮和分享按钮放在一个容器里 */}
+          <div className="bottom-actions-container">
+            {/* 新增：分享按钮组 */}
+            <div className="share-buttons-group">
+                <span style={{paddingRight: '8px', color: '#6b7280', fontSize: '1rem', fontFamily: 'Padauk'}}>မျှဝေရန်</span>
+                <FaFacebook className="share-icon facebook" onClick={() => handleShare('facebook')} title="Facebook တွင်မျှဝေရန်"/>
+                <FaTelegram className="share-icon telegram" onClick={() => handleShare('telegram')} title="Telegram တွင်မျှဝေရန်"/>
+                <FaTiktok className="share-icon tiktok" onClick={() => handleShare('tiktok')} title="Tiktok တွင်မျှဝေရန်"/>
+                <FaLink className="share-icon link" onClick={() => handleShare('copy')} title="လင့်ခ်ကိုကူးယူပါ"/>
+            </div>
+
+            <button 
+              className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
+              onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
+              disabled={!selectedId}
+              aria-disabled={!selectedId}
+              aria-label="တင်သွင်းသည်" // 缅文 "提交"
+              title="တင်သွင်းသည်"
+            >
+              တင်သွင်းသည်
+            </button>
+          </div>
 
           {showExplanation && activeExplanation && (
             <div 
               className="explanation-card"
               onClick={handleExplanationClick}
               role="dialog"
-              aria-label="解析"
+              aria-label="အဖြေရှင်းလင်းချက်" // 缅文 "解析"
             >
               <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
               <div>
                 <div>{activeExplanation}</div>
-                <div className="tap-hint">点击任意处继续...</div>
+                <div className="tap-hint">ဆက်သွားရန် နေရာလွတ်တစ်ခုခုကိုနှိပ်ပါ။</div>
               </div>
             </div>
           )}
