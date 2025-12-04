@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { createPortal } from 'react-dom'; 
 import { ChevronRight, MessageCircle, Book, PenTool, Loader2, Sparkles, Volume2, ArrowLeft } from 'lucide-react';
@@ -89,7 +89,15 @@ const useAudioPlayer = () => {
         setPlayingId(null);
       };
 
-      await audio.play();
+      // ⚠️ 捕获 play 的 AbortError (防止快速点击报错)
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          if (error.name !== 'AbortError') {
+            console.error("Audio play interrupted:", error);
+          }
+        });
+      }
 
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -112,49 +120,48 @@ const useAudioPlayer = () => {
   return { playingId, playAudio };
 };
 
-// --- 辅助：Ruby 文本渲染 (拼音在汉字上方) ---
+// --- 辅助：Ruby 文本渲染 (优化版：带缓存) ---
 const RubyText = ({ text }) => {
-  // 简单的解析逻辑：将文本拆分为汉字和非汉字
-  // 对于汉字，逐字生成拼音；对于非汉字，保持原样
-  const segments = [];
-  const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
-  let match;
+  const segments = useMemo(() => {
+    if (!text) return [];
+    const segs = [];
+    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
+    let match;
 
-  while ((match = regex.exec(text)) !== null) {
-    const zhPart = match[1];
-    const otherPart = match[2];
+    while ((match = regex.exec(text)) !== null) {
+      const zhPart = match[1];
+      const otherPart = match[2];
 
-    if (zhPart) {
-      // 对汉字部分，再次拆分成单字以对齐拼音
-      const chars = zhPart.split('');
-      const pinyins = pinyin(zhPart, { type: 'array', toneType: 'symbol' }); // 获取拼音数组
-      
-      chars.forEach((char, i) => {
-        segments.push({ type: 'zh', char, py: pinyins[i] || '' });
-      });
-    } else if (otherPart) {
-      segments.push({ type: 'other', text: otherPart });
+      if (zhPart) {
+        const chars = zhPart.split('');
+        const pinyins = pinyin(zhPart, { type: 'array', toneType: 'symbol' });
+        chars.forEach((char, i) => {
+          segs.push({ type: 'zh', char, py: pinyins[i] || '' });
+        });
+      } else if (otherPart) {
+        segs.push({ type: 'other', text: otherPart });
+      }
     }
-  }
+    return segs;
+  }, [text]);
 
   return (
     <div className="flex flex-wrap justify-center items-end gap-x-1 leading-normal">
       {segments.map((seg, i) => {
         if (seg.type === 'zh') {
           return (
-            <div key={i} className="flex flex-col items-center mx-[1px]">
-              <span className="text-[10px] sm:text-xs text-gray-500 font-mono mb-[-2px] select-none">
+            <div key={i} className="flex flex-col items-center mx-[1px] min-w-[1.2em]">
+              <span className="text-[10px] sm:text-xs text-gray-500 font-mono mb-[-2px] select-none text-center w-full truncate">
                 {seg.py}
               </span>
-              <span className="text-xl sm:text-2xl font-bold text-gray-800">
+              <span className="text-xl sm:text-2xl font-bold text-gray-800 leading-none">
                 {seg.char}
               </span>
             </div>
           );
         } else {
-          // 非汉字保持基线对齐，字体稍微大一点
           return (
-            <span key={i} className="text-lg sm:text-xl text-gray-800 pb-[2px]">
+            <span key={i} className="text-lg sm:text-xl text-gray-800 pb-[2px] leading-none">
               {seg.text}
             </span>
           );
@@ -257,6 +264,7 @@ const SpeakingContentBlock = () => {
   const handleCourseClick = async (courseSummary) => {
     setIsLoading(true);
     const lessonId = courseSummary.id;
+    // 内存缓存避免重复请求
     const fetchSafe = async (url) => {
         try { const res = await fetch(url); return res.ok ? await res.json() : []; } 
         catch (e) { return []; }
@@ -300,7 +308,7 @@ const SpeakingContentBlock = () => {
     return () => window.removeEventListener('popstate', handleHashChange);
   }, []);
 
-  // ==================== 3. 旧的数据转换 (仅保留给语法和练习使用) ====================
+  // ==================== 3. 核心数据转换 (支持中文Key & Markdown) ====================
   const transformGrammarToLesson = (data) => {
     if (!data || data.length === 0) return { blocks: [] };
     return {
@@ -309,17 +317,29 @@ const SpeakingContentBlock = () => {
           type: "grammar_study",
           content: {
             grammarPoints: data.map(g => {
-              let finalExplanation = g.visibleExplanation || `<div class="font-bold text-blue-600 mb-2">${g.translation || ''}</div><div>${g.explanation || ''}</div>`;
-              if (g.usage) finalExplanation += g.usage;
+              // ⚠️ 关键修改：优先读取中文Key，否则读取英文Key
+              // 如果都没有，生成 Markdown 格式的保底文本 (不能是 HTML!)
+              let finalExplanation = g['语法详解'] || g.visibleExplanation;
+              
+              if (!finalExplanation) {
+                  // Fallback: 拼凑一个简单的 Markdown
+                  const title = g['翻译'] || g.translation || '';
+                  const exp = g['解释'] || g.explanation || '';
+                  finalExplanation = `### ${title}\n\n${exp}`;
+              }
+
+              // 追加用法 (如果有)
+              const usage = g['适用场景'] || g.usage;
+              if (usage) {
+                  finalExplanation += `\n\n${usage}`;
+              }
+
               return {
                 id: g.id,
-                grammarPoint: g.sentence || g.pattern,
-                pattern: g.pattern || g.sentence,
-                visibleExplanation: finalExplanation,
-                narrationScript: g.narrationScript,
-                examples: g.examples || [],
-                usage: g.usage,
-                attention: g.attention
+                // 传递原始数据的所有字段，让子组件自己去挑 (支持中文Key)
+                ...g,
+                // 确保 visibleExplanation 有值，且是 Markdown 格式
+                visibleExplanation: finalExplanation
               };
             })
           }
