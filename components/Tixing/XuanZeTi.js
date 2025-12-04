@@ -29,7 +29,6 @@ const idb = {
       const req = tx.objectStore(STORE_NAME).get(key);
       req.onsuccess = () => {
         const res = req.result;
-        // 如果不是 Blob 或者 size === 0，则视为无缓存
         if (res && typeof res.size === 'number' && res.size > 0) resolve(res);
         else resolve(null);
       };
@@ -53,18 +52,15 @@ const audioController = {
   playlist: [],
   activeBlobUrls: [], 
   latestRequestId: 0,
-  // keep refs for cancellation
   _pendingFetches: [],
 
   stop() {
-    // 1. 取消正在进行的 fetch 请求
     this.latestRequestId++;
     this._pendingFetches.forEach(ctrl => {
       try { ctrl.abort(); } catch (e) {}
     });
     this._pendingFetches = [];
 
-    // 2. 停止当前正在播放的音频，并清除事件回调防止后续触发
     if (this.currentAudio) {
       try {
         this.currentAudio.onended = null;
@@ -75,7 +71,6 @@ const audioController = {
       this.currentAudio = null;
     }
 
-    // 3. 清理播放列表
     this.playlist.forEach(a => {
       try { 
         a.onended = null;
@@ -86,7 +81,6 @@ const audioController = {
     });
     this.playlist = [];
 
-    // 4. 释放 Blob URL
     if (this.activeBlobUrls.length > 0) {
       this.activeBlobUrls.forEach(url => {
         try { URL.revokeObjectURL(url); } catch (e) {}
@@ -100,9 +94,8 @@ const audioController = {
     return 'zh';
   },
 
-  // fetchAudioBlob 增加 AbortController 支持
   async fetchAudioBlob(text, lang) {
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouNeural';
     const rateParam = 0; 
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
@@ -120,13 +113,11 @@ const audioController = {
       await idb.set(cacheKey, blob);
       return blob;
     } finally {
-      // remove this controller from pending list
       this._pendingFetches = this._pendingFetches.filter(c => c !== controller);
     }
   },
 
   async playMixed(text, onStart, onEnd) {
-    // stop any current playback
     this.stop();
     if (!text) {
       if (onEnd) onEnd();
@@ -136,11 +127,10 @@ const audioController = {
     if (onStart) onStart();
 
     const segments = [];
-    // 保持分段正则：汉字与非汉字分段，允许非汉字段中含空格
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
-      const segmentText = match[0].trim(); // 保留段内空格，去掉首尾
+      const segmentText = match[0].trim();
       const isValidContent = /[\u4e00-\u9fa5a-zA-Z0-9\u1000-\u109F]/.test(segmentText);
       if (segmentText && isValidContent) {
         const lang = this.detectLanguage(segmentText);
@@ -199,7 +189,6 @@ const audioController = {
         const audio = audioObjects[index];
         this.currentAudio = audio;
         
-        // 关键：确保 onended 绑定正确
         audio.onended = () => playNext(index + 1);
         audio.onerror = (e) => {
           console.warn(`Audio segment error, skipping...`, e);
@@ -215,7 +204,6 @@ const audioController = {
         if (playPromise !== undefined) {
           playPromise.catch(error => {
             console.error("Playback prevented:", error);
-            // stop all and call onEnd to free UI
             this.stop();
             if (onEnd) onEnd();
           });
@@ -296,10 +284,11 @@ const cssStyles = `
     pointer-events: none;
   }
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; position: relative; pointer-events: auto; }
-  .pinyin-top { font-size: 1rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
-  .cn-char { font-size: 1.85rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
-  .other-text-block { font-size: 1.6rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
-  .title-divider { width: 60px; height: 4px; background-color: #f1f5f9; border-radius: 2px; margin-top: 24px; }
+  
+  /* 字体调小 */
+  .pinyin-top { font-size: 0.8rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
+  .cn-char { font-size: 1.5rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
+  .other-text-block { font-size: 1.3rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
 
   .xzt-options-grid { 
     display: flex; flex-direction: column; gap: 16px; 
@@ -381,7 +370,6 @@ const cssStyles = `
 const parseTitleText = (text) => {
   if (!text) return [];
   const result = [];
-  // 使用 Unicode Script 判断（支持更全）
   const regex = /([\p{Script=Han}]+)|([^\p{Script=Han}]+)/gu;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -407,15 +395,6 @@ const parseOptionText = (text) => {
 };
 
 // --- 5. 组件主体 ---
-/*
- Props:
-  - question: { text, imageUrl, explanation, ... }
-  - options: [{ id, text, imageUrl }]
-  - correctAnswer: array of ids
-  - onCorrect: ()=>void
-  - onIncorrect: (q)=>void
-  - onNext: ()=>void
-*/
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -426,34 +405,29 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
   const activeExplanation = (question.explanation || '').trim();
   
-  // Refs
   const autoNextTimerRef = useRef(null);
   const mountedRef = useRef(true);
-  const transitioningRef = useRef(false); // 关键：防止重复跳转的锁
+  const transitioningRef = useRef(false);
 
-  // --- 核心修复：统一的跳转处理函数 ---
-  // 确保在跳转前，清理所有定时器和音频，并锁定状态防止多次调用
+  // --- 修改：跳转逻辑，改为无论对错都只进入下一题 ---
   const executeNext = (isCorrect) => {
-    // 1. 如果已经在跳转中，直接忽略后续调用
     if (transitioningRef.current) return;
     transitioningRef.current = true;
 
-    // 2. 立即清理所有副作用
     audioController.stop();
     if (autoNextTimerRef.current) {
       clearTimeout(autoNextTimerRef.current);
       autoNextTimerRef.current = null;
     }
 
-    // 3. 执行回调
     if (isCorrect) {
       try { onCorrect && onCorrect(); } catch (e) { console.warn(e); }
     } else {
       try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
     }
     
-    // 4. 调用下一题
-    try { onNext && onNext(); } catch (e) { console.warn(e); }
+    // 这里传入 1，代表只前进一步（即进入下一题），不再跳过
+    try { onNext && onNext(1); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
@@ -462,14 +436,12 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   }, []);
 
   useEffect(() => {
-    // 1. 重置所有状态
     audioController.stop();
     if (autoNextTimerRef.current) {
       clearTimeout(autoNextTimerRef.current);
       autoNextTimerRef.current = null;
     }
     
-    // 2. 解除跳转锁，允许当前题目交互
     transitioningRef.current = false;
 
     setIsPlaying(false);
@@ -484,16 +456,13 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       hasImage: !!opt.imageUrl
     })));
 
-    // 3. 自动朗读一次（如果题干有 text）
     if (question.text) {
       setTimeout(() => {
-        // 只有在没被卸载且没开始跳转时才朗读
         if (!mountedRef.current || transitioningRef.current) return;
         handleTitlePlay(null, true);
       }, 500);
     }
 
-    // 4. 组件卸载时的清理
     return () => {
       audioController.stop();
       if (autoNextTimerRef.current) {
@@ -504,10 +473,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, options]);
 
-  // 点击书本朗读
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
-    if (transitioningRef.current) return; // 跳转中禁止播放
+    if (transitioningRef.current) return;
     if (!isAuto && navigator.vibrate) navigator.vibrate(40);
 
     audioController.playMixed(
@@ -517,19 +485,12 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     );
   };
 
-  // 全局容器点击逻辑
   const handleGlobalClick = (e) => {
-    // 只有已提交且未在跳转中才响应
     if (!isSubmitted || transitioningRef.current) return;
-    
     const isCorrect = correctAnswer.map(String).includes(String(selectedId));
-    
-    // 无论对错，点击屏幕意味着用户想立即继续
-    // 此时调用 executeNext 会自动清除正在跑的定时器
     executeNext(isCorrect);
   };
 
-  // 选项点击
   const handleCardClick = (option, e) => {
     if (isSubmitted || transitioningRef.current) return;
     if (e) e.stopPropagation();
@@ -538,49 +499,36 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     audioController.playMixed(option.text || '');
   };
 
-  // 处理回答正确
   const triggerCorrectAndNext = () => {
-    // 如果已经触发过（锁住了），不再执行
     if (transitioningRef.current) return;
     
-    // 播放奖励/声音
     confetti({ particleCount: 120, spread: 80, origin: { y: 0.7 } });
     new Audio('/sounds/correct.mp3').play().catch(()=>{});
 
-    // 1.5秒后自动跳转
     autoNextTimerRef.current = setTimeout(() => {
-      executeNext(true);
-    }, 1500);
+      executeNext(true); // 答对
+    }, 2000);
   };
 
-  // 处理回答错误
   const triggerIncorrectAndNext = () => {
     if (transitioningRef.current) return;
 
-    // 先播放错误音
     new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
     if (navigator.vibrate) navigator.vibrate([50,50,50]);
 
-    // 如果有解析文本，显示并朗读
     if (activeExplanation) {
       setShowExplanation(true);
       setTimeout(() => {
-        // 如果用户在朗读前就已经点击跳转了，这里就不读了
         if (transitioningRef.current) return;
-        
         audioController.playMixed(activeExplanation, () => {}, () => {});
       }, 400);
     }
 
-    // 5 秒后触发自动跳转
-    // 如果用户在这 5 秒内点击了屏幕，handleGlobalClick 会调用 executeNext
-    // executeNext 会清除这个 timer，避免双重跳转
     autoNextTimerRef.current = setTimeout(() => {
-      executeNext(false);
-    }, 8000);
+      executeNext(false); // 答错
+    }, 10000);
   };
 
-  // 提交逻辑
   const handleSubmit = () => {
     if (!selectedId || isSubmitted || transitioningRef.current) return;
     setIsSubmitted(true);
@@ -592,10 +540,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     }
   };
 
-  // 点击解析卡片
   const handleExplanationClick = (e) => {
     e.stopPropagation();
-    // 视为用户想立即跳过
     executeNext(false); 
   };
 
@@ -631,8 +577,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               }
             })}
           </div>
-
-          <div className="title-divider" />
         </div>
 
         <div className="xzt-options-grid" role="list" aria-label="选项列表">
