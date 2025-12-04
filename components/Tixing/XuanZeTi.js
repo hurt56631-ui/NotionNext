@@ -2,7 +2,7 @@ import confetti from 'canvas-confetti';
 import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa'; // 引入分享图标
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 (无修改) ---
+// --- 1. IndexedDB 缓存 ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -31,7 +31,8 @@ const idb = {
         if (res && typeof res.size === 'number' && res.size > 0) resolve(res);
         else resolve(null);
       };
-      req.onerror = = () => resolve(null);
+      // --- 错误修复：这里移除了一个多余的等号 ---
+      req.onerror = () => resolve(null);
     });
   },
   async set(key, blob) {
@@ -218,7 +219,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (添加分享按钮样式) ---
+// --- 3. 样式定义 (包含分享按钮样式) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -327,17 +328,15 @@ const cssStyles = `
     pointer-events: none; z-index: 200; gap: 20px;
   }
 
-  /* 新增：底部按钮容器 */
   .bottom-actions-container {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 16px;
     width: 100%;
-    pointer-events: auto; /* 允许容器内的元素接收事件 */
+    pointer-events: auto; 
   }
 
-  /* 新增：分享按钮组 */
   .share-buttons-group {
     display: flex;
     align-items: center;
@@ -349,8 +348,8 @@ const cssStyles = `
     pointer-events: auto;
   }
   .share-icon {
-    font-size: 1.5rem; /* 24px */
-    color: #4b5563; /* gray-600 */
+    font-size: 1.5rem; 
+    color: #4b5563; 
     cursor: pointer;
     transition: transform 0.2s;
   }
@@ -435,7 +434,7 @@ const parseOptionText = (text) => {
 };
 
 
-// --- 5. 组件主体 (核心修改) ---
+// --- 5. 组件主体 (包含所有修改和修复) ---
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -450,8 +449,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
 
-  // --- 修复：答对跳题问题 ---
-  // onNext不再接收参数，确保总是触发默认的“下一题”行为
   const executeNext = (isCorrect) => {
     if (transitioningRef.current) return;
     transitioningRef.current = true;
@@ -468,17 +465,14 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
     }
     
-    // 关键修复：不再传递参数，让父组件处理下一题逻辑
     try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
     mountedRef.current = true;
     
-    // --- 新增：禁止下拉刷新 ---
     const preventPullToRefresh = (e) => {
-      // 检查是否在滚动容器的顶部，并且是向下拉动
-      if (document.body.scrollTop === 0) {
+      if (document.body.scrollTop === 0 && e.touches[0].clientY > (window.innerHeight * 0.1) ) {
         e.preventDefault();
       }
     };
@@ -561,7 +555,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     new Audio('/sounds/correct.mp3').play().catch(()=>{});
 
     autoNextTimerRef.current = setTimeout(() => {
-      executeNext(true); // 答对
+      executeNext(true); 
     }, 1500);
   };
 
@@ -580,7 +574,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     }
 
     autoNextTimerRef.current = setTimeout(() => {
-      executeNext(false); // 答错
+      executeNext(false); 
     }, 8000);
   };
 
@@ -600,7 +594,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     executeNext(false); 
   };
   
-  // --- 新增：分享功能处理 ---
   const handleShare = (platform) => {
     const shareUrl = window.location.href;
     const shareText = `快来和我一起学习！ ${question.text}`;
@@ -614,7 +607,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
         break;
       case 'tiktok':
-        // TikTok没有直接的网页分享API，这里仅作提示
         alert('TikTok请在App内分享');
         return;
       case 'copy':
@@ -703,9 +695,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="fixed-bottom-area" aria-hidden="false">
-          {/* 修改：将提交按钮和分享按钮放在一个容器里 */}
           <div className="bottom-actions-container">
-            {/* 新增：分享按钮组 */}
             <div className="share-buttons-group">
                 <span style={{paddingRight: '8px', color: '#6b7280', fontSize: '1rem', fontFamily: 'Padauk'}}>မျှဝေရန်</span>
                 <FaFacebook className="share-icon facebook" onClick={() => handleShare('facebook')} title="Facebook တွင်မျှဝေရန်"/>
@@ -719,7 +709,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
               disabled={!selectedId}
               aria-disabled={!selectedId}
-              aria-label="တင်သွင်းသည်" // 缅文 "提交"
+              aria-label="တင်သွင်းသည်"
               title="တင်သွင်းသည်"
             >
               တင်သွင်းသည်
@@ -731,7 +721,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               className="explanation-card"
               onClick={handleExplanationClick}
               role="dialog"
-              aria-label="အဖြေရှင်းလင်းချက်" // 缅文 "解析"
+              aria-label="အဖြေရှင်းလင်းချက်"
             >
               <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
               <div>
