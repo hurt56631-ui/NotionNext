@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'; 
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronRight, FaFacebook, FaTelegram, FaTiktok, FaLink, FaShareAlt, FaAngleUp, FaAngleDown } from "react-icons/fa";
-import confetti from 'canvas-confetti';
 
-// --- 1. 外部题型组件 (路径已修正：指向 Tixing 文件夹) ---
+// ❌ 移除了顶部的 import confetti，改为在函数内动态引入，解决 SSR 报错
+
+// --- 1. 外部题型组件 (路径指向 Tixing 文件夹) ---
 import XuanZeTi from './Tixing/XuanZeTi';
 import PanDuanTi from './Tixing/PanDuanTi';
 import PaiXuTi from './Tixing/PaiXuTi';
@@ -14,7 +15,7 @@ import DuiHua from './Tixing/DuiHua';
 import TianKongTi from './Tixing/TianKongTi';
 import GrammarPointPlayer from './Tixing/GrammarPointPlayer';
 
-// --- 2. 学习卡片 (假设在当前 components 目录下，如果报错请改为 '../WordCard') ---
+// --- 2. 学习卡片 ---
 import WordCard from './WordCard';   
 import PhraseCard from './PhraseCard'; 
 
@@ -316,6 +317,7 @@ export default function InteractiveLesson({ lesson }) {
   const goNext = useCallback(() => { audioManager?.stop(); if (currentIndex < totalBlocks) setCurrentIndex(prev => Math.min(prev + 1, totalBlocks)); }, [currentIndex, totalBlocks]);
   const goPrev = useCallback(() => { audioManager?.stop(); if (currentIndex > 0) setCurrentIndex(prev => Math.max(prev - 1, 0)); }, [currentIndex]);
   
+  // 修复：在这里使用动态导入，避免顶层导入导致的 SSR document undefined 错误
   const delayedNextStep = useCallback(() => {
     import('canvas-confetti').then(m => m.default({ particleCount: 80, spread: 60, origin: { y: 0.6 } })).catch(()=>{});
     setTimeout(() => setCurrentIndex(prev => Math.min(prev + 1, totalBlocks)), 1200); 
