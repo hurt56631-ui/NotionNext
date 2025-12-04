@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-import { FaVolumeUp, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay } from 'react-icons/fa';
+// 1. 引入 Messenger 图标
+import { FaVolumeUp, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay, FaFacebookMessenger } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果报错 404 请检查此路径
@@ -529,6 +530,11 @@ const DraggableAiBtn = ({ contextText }) => {
 // =================================================================================
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   const [isMounted, setIsMounted] = useState(false);
+
+  // 🔴 必须配置：请填入你的 Facebook App ID 否则电脑端网页无法使用发送功能
+  // 如果没有 App ID，您可以去 developers.facebook.com 申请一个 Consumer 类型的 APP
+  const FACEBOOK_APP_ID = ''; 
+
   useEffect(() => {
     setIsMounted(true);
     const prev = document.body.style.overscrollBehavior;
@@ -570,6 +576,36 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     };
     preloadNextItems(2);
   }, [currentIndex, grammarPoints, preload]);
+
+  // --- 新增：处理 Messenger 发送给朋友/群组 ---
+  const handleMessengerShare = () => {
+    const link = typeof window !== 'undefined' ? window.location.href : '';
+    
+    // 移动端检测
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        // 方案 A: 尝试唤起 Messenger App (体验最好)
+        // 使用 fb-messenger:// 协议
+        window.location.href = `fb-messenger://share/?link=${encodeURIComponent(link)}`;
+        
+        // 方案 B: 如果没有安装 APP，一段时间后 fallback 到网页版 (可选)
+        // 注意：这种 timeout fallback 在某些现代浏览器可能被拦截，但这是标准做法
+        setTimeout(() => {
+            if (FACEBOOK_APP_ID) {
+                 window.open(`https://www.facebook.com/dialog/send?app_id=${FACEBOOK_APP_ID}&link=${encodeURIComponent(link)}&redirect_uri=${encodeURIComponent(link)}`, '_blank');
+            }
+        }, 1500);
+    } else {
+        // 电脑端：必须使用 Facebook Send Dialog API，且必须有 App ID
+        if (!FACEBOOK_APP_ID) {
+            alert("开发人员提示：请在代码中配置 FACEBOOK_APP_ID 以使用网页版发送给朋友功能。");
+            return;
+        }
+        const url = `https://www.facebook.com/dialog/send?app_id=${FACEBOOK_APP_ID}&link=${encodeURIComponent(link)}&redirect_uri=${encodeURIComponent(link)}`;
+        window.open(url, '_blank', 'width=600,height=500');
+    }
+  };
 
   const handleScroll = () => {
     if (!contentRef.current) return;
@@ -668,10 +704,34 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
           <animated.div style={{ ...styles.page, ...style }} key={gp.id || i}>
             <div style={styles.scrollContainer} ref={contentRef} onScroll={handleScroll}>
               <div style={styles.contentWrapper}>
+                
+                {/* --- 修改后的 Header：包含 Messenger 按钮 --- */}
                 <div style={styles.header}>
-                  <h2 style={styles.grammarPointTitle}>{gp.grammarPoint}</h2>
-                  {/* 此处已确保无进度条 (如 1/10) */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                    <h2 style={styles.grammarPointTitle}>{gp.grammarPoint}</h2>
+                    <button 
+                      onClick={handleMessengerShare}
+                      title="发给 Facebook 朋友"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#0084FF', // Messenger 蓝色
+                        cursor: 'pointer',
+                        padding: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '50%',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#eef2ff'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <FaFacebookMessenger size={22} />
+                    </button>
+                  </div>
                 </div>
+                {/* ------------------------------------------ */}
 
                 {gp.pattern && (
                   <div style={styles.patternBox}>
