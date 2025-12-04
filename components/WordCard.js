@@ -1,11 +1,15 @@
-// components/WordCard.js (修复数据映射 & 进度保存版)
+// components/WordCard.js (包含 Facebook 分享 & 多音字修复版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
-import { FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaCheck, FaRedo } from 'react-icons/fa';
+import { 
+    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
+    FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaCheck, FaRedo,
+    FaFacebook // 新增：Facebook 图标
+} from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 import { AdSlot } from '@/components/GoogleAdsense';
@@ -287,7 +291,8 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
 
     const stopRecording = () => { if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop(); };
     const resetRecording = () => { if (userAudioUrl) URL.revokeObjectURL(userAudioUrl); setUserAudioUrl(null); setStatus('idle'); };
-    const playStandard = () => { if (localAudioRef.current?.playing()) localAudioRef.current.stop(); playTTS(word.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); };
+    // 修复：使用 audioText 进行标准发音播放
+    const playStandard = () => { if (localAudioRef.current?.playing()) localAudioRef.current.stop(); playTTS(word.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); };
     const playUser = () => { if (!userAudioUrl) return; if (_howlInstance?.playing()) _howlInstance.stop(); if (typeof window !== 'undefined') window.speechSynthesis.cancel(); if (localAudioRef.current) localAudioRef.current.unload(); localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true }); localAudioRef.current.play(); };
 
     return (
@@ -339,7 +344,6 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const [isMounted, setIsMounted] = useState(false);
     
-    // 初始化样式
     useEffect(() => {
         setIsMounted(true);
         if (typeof document !== 'undefined') {
@@ -355,20 +359,21 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
     const [settings, setSettings] = useCardSettings();
 
-    // --- 核心修复：数据预处理 ---
-    // 增加字段兼容性：如果传入的 words 用的是 word/translation，映射为 chinese/burmese
+    // --- 核心数据预处理 (多音字修复) ---
     const processedCards = useMemo(() => {
         if (!Array.isArray(words)) return [];
         try {
             const mapped = words.map(w => ({
                 id: w.id || Math.random().toString(36).substr(2, 9),
-                // 兼容逻辑：优先使用 chinese，如果没有则尝试 word (常见的数据结构差异)
                 chinese: w.chinese || w.word || '', 
-                // 兼容逻辑：优先使用 burmese，如果没有则尝试 translation 或 meaning
+                // --- 多音字关键修复 ---
+                // audioText 用于 TTS 朗读。如果数据源提供了 audioText/tts_text 则优先使用
+                // 否则回退到 chinese。这样可以在 audioText 里写 "长短" 或 "chang2" 来纠正发音
+                audioText: w.audioText || w.tts_text || (w.chinese || w.word || ''),
                 burmese: w.burmese || w.translation || w.meaning || '', 
                 mnemonic: w.mnemonic || '',
                 example: w.example || '',
-            })).filter(w => w.chinese); // 过滤掉没有中文的无效数据
+            })).filter(w => w.chinese); 
 
             if (settings.order === 'random') {
                 for (let i = mapped.length - 1; i > 0; i--) { 
@@ -383,27 +388,21 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         }
     }, [words, settings.order]);
 
-    // 初始化 activeCards
     const [activeCards, setActiveCards] = useState([]);
     useEffect(() => {
         const initialCards = processedCards.length > 0 
             ? processedCards 
-            : [{ id: 'fallback', chinese: "暂无单词", burmese: "请检查数据源" }];
+            : [{ id: 'fallback', chinese: "暂无单词", burmese: "请检查数据源", audioText: "暂无单词" }];
         setActiveCards(initialCards);
     }, [processedCards]);
 
-    // --- 核心修复：进度保存逻辑 ---
-    // 初始化 currentIndex，根据 progressKey 读取缓存
     const [currentIndex, setCurrentIndex] = useState(0);
 
-    // 当 progressKey 改变或组件首次挂载时，读取进度
     useEffect(() => {
         if (typeof window !== 'undefined' && progressKey) {
             const savedIndex = localStorage.getItem(`word_progress_${progressKey}`);
             const parsed = parseInt(savedIndex, 10);
-            // 确保读取的进度在当前数据范围内
             if (!isNaN(parsed) && parsed >= 0 && processedCards.length > 0) {
-                // 如果保存的进度超过了当前列表长度，重置为 0，否则使用保存的进度
                 setCurrentIndex(parsed < processedCards.length ? parsed : 0);
             } else {
                 setCurrentIndex(0);
@@ -413,22 +412,22 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         }
     }, [progressKey, processedCards.length]);
 
-    // 当 currentIndex 改变时，保存进度
     useEffect(() => {
         if (processedCards.length > 0 && typeof window !== 'undefined' && progressKey) {
             localStorage.setItem(`word_progress_${progressKey}`, currentIndex);
         }
     }, [currentIndex, progressKey, processedCards.length]);
 
-    // 预加载 TTS
+    // 预加载 TTS (使用 audioText)
     useEffect(() => {
         if (!activeCards.length || settings.ttsSource !== 'server') return;
         const preloadCount = 3;
         for (let i = 1; i <= preloadCount; i++) {
             const nextIdx = (currentIndex + i) % activeCards.length;
             const nextCard = activeCards[nextIdx];
-            if (nextCard && nextCard.chinese && nextCard.id !== 'fallback') {
-                playTTS(nextCard.chinese, settings.voiceChinese, settings.speechRateChinese, 'server', null, null, true);
+            if (nextCard && nextCard.audioText && nextCard.id !== 'fallback') {
+                // 修复：预加载时使用 audioText
+                playTTS(nextCard.audioText, settings.voiceChinese, settings.speechRateChinese, 'server', null, null, true);
             }
         }
     }, [currentIndex, activeCards, settings]);
@@ -464,6 +463,24 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (result !== newState) setIsFavoriteCard(result);
     };
 
+    // --- Facebook 分享功能 ---
+    const handleFacebookShare = useCallback((e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        if (!currentCard || currentCard.id === 'fallback') return;
+
+        // 获取当前网址 (确保在客户端环境)
+        const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://www.facebook.com';
+        // 构建分享语
+        const textToShare = `我在学习中文单词：${currentCard.chinese} (${pinyinConverter(currentCard.chinese)}) - ${currentCard.burmese}`;
+        
+        // Facebook 分享链接构建
+        // 注意：Facebook 移动端和某些环境可能忽略 'quote' 参数，但这是目前官方推荐的 URL 分享方式
+        const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(textToShare)}`;
+        
+        // 打开新窗口
+        window.open(facebookUrl, '_blank', 'width=600,height=500,noopener,noreferrer');
+    }, [currentCard]);
+
     const navigate = useCallback((direction) => {
         if (activeCards.length === 0) return;
         lastDirection.current = direction;
@@ -481,8 +498,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 
         const playFullSequence = () => {
+            // 修复：自动播放时使用 audioText
             if (settings.autoPlayChinese && currentCard.chinese && currentCard.id !== 'fallback') {
-                playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, () => {
+                playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, () => {
                     if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                         playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, settings.ttsSource, () => {
                             if (settings.autoPlayExample && currentCard.example && isRevealed) {
@@ -504,8 +522,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (!currentCard || currentCard.id === 'fallback') return;
         if (_howlInstance?.playing()) _howlInstance.stop();
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
-        if (!isRevealed) { playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); } 
-        else { playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, settings.ttsSource, () => { if (currentCard.example) playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); }); }
+        
+        // 修复：侧边栏播放使用 audioText
+        if (!isRevealed) { 
+            playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); 
+        } else { 
+            playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, settings.ttsSource, () => { if (currentCard.example) playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); }); 
+        }
     }, [currentCard, isRevealed, settings]);
 
     const handleOpenRecorder = useCallback((e) => { if (e && e.stopPropagation) e.stopPropagation(); if (_howlInstance?.playing()) _howlInstance.stop(); if (typeof window !== 'undefined') window.speechSynthesis.cancel(); setIsRecordingOpen(true); }, []);
@@ -546,7 +569,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                             <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                                 <div style={styles.cardContainer}>
                                     <div style={{ textAlign: 'center' }}>
-                                        <div style={{ cursor: isFallback ? 'default' : 'pointer' }} onClick={(e) => !isFallback && playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, null, e)}>
+                                        {/* 修复：点击卡片朗读时使用 audioText */}
+                                        <div style={{ cursor: isFallback ? 'default' : 'pointer' }} onClick={(e) => !isFallback && playTTS(cardData.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, null, e)}>
                                             {!isFallback && <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>}
                                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                                         </div>
@@ -577,6 +601,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                         <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="设置" data-no-gesture="true"><FaCog size={18} style={{ pointerEvents: 'none' }} /></button>
                         <button style={styles.rightIconButton} onClick={handleSidePlay} title="播放" data-no-gesture="true"><FaVolumeUp size={18} color="#4a5568" style={{ pointerEvents: 'none' }} /></button>
                         <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="发音对比" data-no-gesture="true"><FaMicrophone size={18} color={'#4a5568'} style={{ pointerEvents: 'none' }} /></button>
+                        
+                        {/* 新增：Facebook 一键分享按钮 */}
+                        <button style={{...styles.rightIconButton, color: '#1877F2'}} onClick={handleFacebookShare} title="分享到 Facebook" data-no-gesture="true">
+                            <FaFacebook size={20} style={{ pointerEvents: 'none' }} />
+                        </button>
+                        
                         {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && (
                             <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺" data-no-gesture="true"><FaPenFancy size={18} style={{ pointerEvents: 'none' }} /></button>
                         )}
