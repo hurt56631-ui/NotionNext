@@ -95,7 +95,7 @@ const audioController = {
   },
 
   async fetchAudioBlob(text, lang) {
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouNeural';
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const rateParam = 0; 
     const cacheKey = `tts-${voice}-${text}-${rateParam}`;
     const cached = await idb.get(cacheKey);
@@ -235,6 +235,12 @@ const cssStyles = `
     overflow-y: auto;
     background-color: #fcfcfc;
     -webkit-tap-highlight-color: transparent;
+    /* 隐藏滚动条 */
+    scrollbar-width: none; 
+    -ms-overflow-style: none;
+  }
+  .xzt-container::-webkit-scrollbar {
+    display: none;
   }
 
   .book-read-btn {
@@ -285,10 +291,10 @@ const cssStyles = `
   }
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; position: relative; pointer-events: auto; }
   
-  /* 字体调小 */
-  .pinyin-top { font-size: 0.8rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
-  .cn-char { font-size: 1.5rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
-  .other-text-block { font-size: 1.3rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
+  /* 字体再次调小 */
+  .pinyin-top { font-size: 0.75rem; color: #64748b; font-family: monospace; font-weight: 500; height: 1.4em; margin-bottom: -2px; }
+  .cn-char { font-size: 1.35rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
+  .other-text-block { font-size: 1.2rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
 
   .xzt-options-grid { 
     display: flex; flex-direction: column; gap: 16px; 
@@ -409,7 +415,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
 
-  // --- 修改：跳转逻辑，改为无论对错都只进入下一题 ---
+  // --- 修改：跳转逻辑，不传参数以触发默认的“下一题”行为 ---
   const executeNext = (isCorrect) => {
     if (transitioningRef.current) return;
     transitioningRef.current = true;
@@ -426,8 +432,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
     }
     
-    // 这里传入 1，代表只前进一步（即进入下一题），不再跳过
-    try { onNext && onNext(1); } catch (e) { console.warn(e); }
+    // 关键修改：不再传递 1 或 2，而是不传参数，让父组件使用默认的 +1 逻辑
+    try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
@@ -507,7 +513,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); // 答对
-    }, 2000);
+    }, 1500);
   };
 
   const triggerIncorrectAndNext = () => {
@@ -526,7 +532,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); // 答错
-    }, 10000);
+    }, 8000);
   };
 
   const handleSubmit = () => {
