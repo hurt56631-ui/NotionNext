@@ -1,8 +1,8 @@
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa'; // 引入分享图标
+import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 ---
+// --- 1. IndexedDB 缓存 (无修改) ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -31,7 +31,6 @@ const idb = {
         if (res && typeof res.size === 'number' && res.size > 0) resolve(res);
         else resolve(null);
       };
-      // --- 错误修复：这里移除了一个多余的等号 ---
       req.onerror = () => resolve(null);
     });
   },
@@ -219,7 +218,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (包含分享按钮样式) ---
+// --- 3. 样式定义 (包含分享按钮样式和下拉刷新修复) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -238,6 +237,9 @@ const cssStyles = `
     -webkit-tap-highlight-color: transparent;
     scrollbar-width: none; 
     -ms-overflow-style: none;
+    
+    /* --- 修复：通过CSS禁止下拉刷新，比JS更高效稳定 --- */
+    overscroll-behavior-y: contain;
   }
   .xzt-container::-webkit-scrollbar {
     display: none;
@@ -468,19 +470,11 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
+  // --- 修复：移除JS下拉刷新控制，仅保留组件挂载状态的跟踪 ---
   useEffect(() => {
     mountedRef.current = true;
-    
-    const preventPullToRefresh = (e) => {
-      if (document.body.scrollTop === 0 && e.touches[0].clientY > (window.innerHeight * 0.1) ) {
-        e.preventDefault();
-      }
-    };
-    document.addEventListener('touchmove', preventPullToRefresh, { passive: false });
-
     return () => { 
       mountedRef.current = false; 
-      document.removeEventListener('touchmove', preventPullToRefresh);
     };
   }, []);
 
