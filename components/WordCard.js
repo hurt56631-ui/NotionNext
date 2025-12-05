@@ -1,4 +1,4 @@
-// components/WordCard.js (浅色主题 + 音频互斥 + 认识移除逻辑 + 全缅文 + 录音重制)
+// components/WordCard.js (修复语音识别报错 + 手动播放 + 多音字支持 + 浅色主题 + 全缅文)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -161,13 +161,94 @@ const playSoundEffect = (type) => {
     if (sounds && sounds[type]) sounds[type].play(); 
 };
 
-// --- 重做的录音对比组件 ---
+// 拼音解析 (支持多音字逻辑)
+const parsePinyin = (pinyinNum) => { 
+    if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; 
+    const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); 
+    let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); 
+    const toneMatch = rawPinyin.match(/[1-5]$/); 
+    const tone = toneMatch ? toneMatch[0] : '0'; 
+    const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }).replace(/·/g, ' '); 
+    const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; 
+    let initial = ''; 
+    let final = pinyinPlain; 
+    for (const init of initials) { 
+        if (pinyinPlain.startsWith(init)) { 
+            initial = init; 
+            final = pinyinPlain.slice(init.length); 
+            break; 
+        } 
+    } 
+    return { initial, final, tone, pinyinMark, rawPinyin }; 
+};
+
+// --- 子组件部分 ---
+
+const useCardSettings = () => { 
+    const [settings, setSettings] = useState(() => { 
+        try { 
+            if (typeof window === 'undefined') return {};
+            const savedSettings = localStorage.getItem('learningWordCardSettings'); 
+            const defaultSettings = { 
+                order: 'sequential', 
+                autoPlayChinese: true, 
+                autoPlayBurmese: true, 
+                autoPlayExample: true, 
+                autoBrowse: false, 
+                autoBrowseDelay: 6000, 
+                voiceChinese: 'zh-CN-XiaoyouNeural', 
+                voiceBurmese: 'my-MM-NilarNeural', 
+                speechRateChinese: -50, 
+                speechRateBurmese: -50, 
+                backgroundImage: '', 
+            }; 
+            return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; 
+        } catch (error) { 
+            return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: -50, speechRateBurmese: -50, backgroundImage: '' }; 
+        } 
+    }); 
+    useEffect(() => { 
+        try { 
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); 
+            }
+        } catch (error) { } 
+    }, [settings]); 
+    return [settings, setSettings]; 
+};
+
+const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => { 
+    const { parts, errors } = analysis; 
+    const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {}; 
+    const finalStyle = !isCorrect && parts.final && errors.final ? styles.wrongPart : {}; 
+    const toneStyle = !isCorrect && parts.tone !== '0' && errors.tone ? styles.wrongPart : {}; 
+    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', ''); 
+    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; } 
+    finalDisplay = finalDisplay.replace(/[1-5]$/, ''); 
+    return ( 
+        <div style={styles.pinyinVisualizerContainer}>
+            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span>
+            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
+            <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
+        </div> 
+    ); 
+});
+
+// ✅ 录音对比组件（修复报错 + 手动播放）
 const PronunciationComparison = ({ correctWord, settings, onClose }) => {
     const [status, setStatus] = useState('idle'); // idle, recording, review
     const [userAudioUrl, setUserAudioUrl] = useState(null);
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
     const localAudioRef = useRef(null);
+
+    // 检测是否支持语音
+    const checkSupport = () => {
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            return false;
+        }
+        return true;
+    };
 
     useEffect(() => {
         return () => {
@@ -180,6 +261,10 @@ const PronunciationComparison = ({ correctWord, settings, onClose }) => {
 
     const startRecording = async () => {
         stopAllAudio();
+        if (!checkSupport()) {
+            alert("သင့်ဘရောက်ဆာသည် အသံဖမ်းစနစ်ကို မထောက်ပံ့ပါ (浏览器不支持录音)");
+            return;
+        }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -196,7 +281,10 @@ const PronunciationComparison = ({ correctWord, settings, onClose }) => {
             mediaRecorderRef.current = recorder;
             recorder.start();
             setStatus('recording');
-        } catch (err) { alert("မိုက်ခရိုဖုန်း ဖွင့်ထားခြင်း ရှိမရှိ စစ်ဆေးပါ (请检查麦克风)"); }
+        } catch (err) { 
+            console.error(err);
+            alert("မိုက်ခရိုဖုန်း ဖွင့်ထားခြင်း ရှိမရှိ စစ်ဆေးပါ (请检查麦克风权限)"); 
+        }
     };
 
     const stopRecording = () => { 
@@ -355,15 +443,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const [settings, setSettings] = useCardSettings();
   
-  const getPinyin = useCallback((text) => {
-      if (!text) return '';
+  // ✅ 拼音处理：支持多音字 (优先读取数据源的 pinyin 字段，否则自动生成)
+  const getPinyin = useCallback((wordObj) => {
+      // 1. 如果数据源里有手动指定的 pinyin，直接用 (解决多音字)
+      if (wordObj.pinyin) return wordObj.pinyin;
+      
+      // 2. 否则自动生成 (替换点)
+      if (!wordObj.chinese) return '';
       try {
-          return pinyinConverter(text, { 
+          return pinyinConverter(wordObj.chinese, { 
               toneType: 'symbol', 
               separator: ' ',
               v: true 
           }).replace(/·/g, ' '); 
-      } catch (e) { return text; }
+      } catch (e) { return wordObj.chinese; }
   }, []);
 
   const processedCards = useMemo(() => {
@@ -371,6 +464,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         const mapped = words.map(w => ({ 
             id: w.id || Math.random().toString(36).substr(2, 9), 
             chinese: w.chinese || w.word, 
+            pinyin: w.pinyin, // ✅ 接收数据源的 pinyin
             burmese: w.burmese || w.meaning, 
             mnemonic: w.mnemonic,
             example: w.example,
@@ -379,7 +473,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             for (let i = mapped.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [mapped[i], mapped[j]] = [mapped[j], mapped[i]]; }
         }
         return mapped;
-    } catch (error) { return []; }
+    } catch (error) { console.error("Data error:", error); return []; }
   }, [words, settings.order]);
 
   const [activeCards, setActiveCards] = useState([]);
@@ -542,7 +636,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                            <div style={styles.pinyin}>{getPinyin(cardData.chinese)}</div>
+                            <div style={styles.pinyin}>{getPinyin(cardData)}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           {isRevealed && (
@@ -552,7 +646,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={styles.exampleBox} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            <div style={styles.examplePinyin}>{getPinyin(cardData.example)}</div>
+                                            <div style={styles.examplePinyin}>{pinyinConverter(cardData.example, { toneType: 'symbol', separator: ' ' }).replace(/·/g, ' ')}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                       </div>
