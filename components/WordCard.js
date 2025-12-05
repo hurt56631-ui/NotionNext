@@ -1,4 +1,4 @@
-// components/WordCard.js (纯净修复版：无广告 + 修复 Messenger 分享 + 修复编译错误)
+// components/WordCard.js (最终纯净修复版：无广告 + 兼容旧数据 + 修复分享404)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -8,67 +8,48 @@ import { Howl } from 'howler';
 import { 
     FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
     FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaCheck, FaRedo,
-    FaFacebookMessenger // Messenger 图标
+    FaFacebookMessenger 
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
 // =================================================================================
-// ===== 数据库配置 =====
+// ===== 数据库配置 (保持不变) =====
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const DB_VERSION = 2;
 const STORE_FAVORITES = 'favoriteWords';
 const STORE_AUDIO = 'audioCache';
 
-// --- 数据库辅助函数 ---
 function openDB() {
     if (typeof window === 'undefined') return Promise.reject("Server side");
-    
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onerror = () => reject('数据库打开失败');
         request.onsuccess = () => resolve(request.result);
         request.onupgradeneeded = (e) => {
             const db = e.target.result;
-            if (!db.objectStoreNames.contains(STORE_FAVORITES)) {
-                db.createObjectStore(STORE_FAVORITES, { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains(STORE_AUDIO)) {
-                db.createObjectStore(STORE_AUDIO);
-            }
+            if (!db.objectStoreNames.contains(STORE_FAVORITES)) db.createObjectStore(STORE_FAVORITES, { keyPath: 'id' });
+            if (!db.objectStoreNames.contains(STORE_AUDIO)) db.createObjectStore(STORE_AUDIO);
         };
     });
 }
 
-// 收藏相关操作
 async function toggleFavorite(word) {
     if (typeof window === 'undefined') return false;
-    if (!word || !word.id) return false;
-    
     try {
         const db = await openDB();
         const tx = db.transaction(STORE_FAVORITES, 'readwrite');
         const store = tx.objectStore(STORE_FAVORITES);
-        
         return new Promise((resolve) => {
             const getReq = store.get(word.id);
             getReq.onsuccess = () => {
-                const existing = getReq.result;
-                if (existing) {
-                    store.delete(word.id);
-                    resolve(false);
-                } else {
-                    const wordToStore = { ...word };
-                    store.put(wordToStore);
-                    resolve(true);
-                }
+                if (getReq.result) { store.delete(word.id); resolve(false); }
+                else { store.put({ ...word }); resolve(true); }
             };
             getReq.onerror = () => resolve(false);
         });
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 }
 
 async function isFavorite(id) {
@@ -82,13 +63,11 @@ async function isFavorite(id) {
             getReq.onsuccess = () => resolve(!!getReq.result);
             getReq.onerror = () => resolve(false);
         });
-    } catch (e) {
-        return false;
-    }
+    } catch (e) { return false; }
 }
 
 // =================================================================================
-// ===== 音频管理与 TTS 逻辑 =====
+// ===== 音频逻辑 =====
 // =================================================================================
 const generateAudioKey = (text, voice, rate) => `${text}_${voice}_${rate}`;
 
@@ -99,7 +78,7 @@ async function cacheAudioData(key, blob) {
         const tx = db.transaction(STORE_AUDIO, 'readwrite');
         const store = tx.objectStore(STORE_AUDIO);
         store.put(blob, key);
-    } catch (e) { console.warn("缓存写入失败", e); }
+    } catch (e) {}
 }
 
 async function getCachedAudio(key) {
@@ -155,10 +134,7 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
 
     if (source === 'browser') {
         if (onlyCache) return; 
-        if (voice && voice.includes('my')) {
-            if (onEndCallback) onEndCallback();
-            return;
-        }
+        if (voice && voice.includes('my')) { if (onEndCallback) onEndCallback(); return; }
         if (_howlInstance?.playing()) _howlInstance.stop();
         playBrowserTTS(text, voice, rate, onEndCallback);
         return;
@@ -186,7 +162,6 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }),
             });
-
             if (!response.ok) {
                 let lang = 'en';
                 if (voice.includes('zh')) lang = 'zh-CN';
@@ -195,11 +170,9 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
                 response = await fetch(backupUrl);
                 if (!response.ok) throw new Error('TTS Failed');
             }
-
             audioBlob = await response.blob();
             await cacheAudioData(cacheKey, audioBlob);
         } catch (error) {
-            console.error('TTS Error:', error);
             if (onEndCallback && !onlyCache) onEndCallback();
             return;
         }
@@ -218,7 +191,6 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
         onloaderror: () => { if (onEndCallback) onEndCallback(); },
         onplayerror: () => { _howlInstance.once('unlock', function() { _howlInstance.play(); }); if (onEndCallback) onEndCallback(); }
     });
-
     _howlInstance.play();
 };
 
@@ -242,13 +214,11 @@ const useCardSettings = () => {
             return { order: 'sequential', ttsSource: 'server', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0, backgroundImage: '' };
         }
     });
-
     useEffect(() => {
         if (typeof window !== 'undefined') {
             try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) {}
         }
     }, [settings]);
-
     return [settings, setSettings];
 };
 
@@ -367,14 +337,18 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
     const [settings, setSettings] = useCardSettings();
 
+    // ✅ 数据处理：兼容旧版数据字段，防止“No words”空白错误
     const processedCards = useMemo(() => {
         if (!Array.isArray(words)) return [];
         try {
             const mapped = words.map(w => ({
                 id: w.id || Math.random().toString(36).substr(2, 9),
-                chinese: w.chinese || w.word || '', 
-                audioText: w.audioText || w.tts_text || (w.chinese || w.word || ''),
-                burmese: w.burmese || w.translation || w.meaning || '', 
+                // 兼容：旧版用 chineseWord, 新版用 chinese
+                chinese: w.chinese || w.chineseWord || w.word || '', 
+                // 兼容：用于朗读的字段
+                audioText: w.audioText || w.tts_text || w.chinese || w.chineseWord || w.word || '',
+                // 兼容：旧版用 burmeseTranslation, 新版用 burmese
+                burmese: w.burmese || w.burmeseTranslation || w.translation || w.meaning || '', 
                 mnemonic: w.mnemonic || '',
                 example: w.example || '',
             })).filter(w => w.chinese); 
@@ -440,6 +414,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const [writerChar, setWriterChar] = useState(null);
     const [isFavoriteCard, setIsFavoriteCard] = useState(false);
     const [isJumping, setIsJumping] = useState(false);
+    const wordCounterRef = useRef(0);
     const autoBrowseTimerRef = useRef(null);
     const lastDirection = useRef(0);
     const currentCard = activeCards.length > 0 ? activeCards[currentIndex] : null;
@@ -463,15 +438,16 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (result !== newState) setIsFavoriteCard(result);
     };
 
-    // --- Messenger 分享逻辑 ---
+    // ✅ 修复分享逻辑：移除Hash，使用纯Query Param链接，防止Messenger 404
     const handleFacebookShare = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         if (!currentCard || currentCard.id === 'fallback') return;
 
-        // 获取绝对链接
-        const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://www.facebook.com';
+        // 获取不带 # 的纯净链接
+        let shareUrl = typeof window !== 'undefined' 
+            ? window.location.origin + window.location.pathname + window.location.search 
+            : 'https://www.facebook.com';
         
-        // 检测移动端
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
         if (isMobile) {
@@ -485,6 +461,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const navigate = useCallback((direction) => {
         if (activeCards.length === 0) return;
         lastDirection.current = direction;
+        wordCounterRef.current += 1;
         setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length);
     }, [activeCards.length]);
 
@@ -625,7 +602,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' }, // 移除多余的padding
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     pinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
@@ -636,7 +613,7 @@ const styles = {
     examplePinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
-    rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
+    rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s', background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
     bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
     bottomCenterCounter: { background: 'rgba(0, 0, 0, 0.3)', color: 'white', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', backdropFilter: 'blur(5px)', cursor: 'pointer', userSelect: 'none' },
     knowButtonsWrapper: { display: 'flex', width: '100%', maxWidth: '400px', gap: '15px' },
