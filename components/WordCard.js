@@ -1,4 +1,4 @@
-// components/WordCard.js (包含 Facebook 分享 & 多音字修复版)
+// components/WordCard.js (包含 Facebook Messenger 分享修复 & 广告布局修复版)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -8,7 +8,7 @@ import { Howl } from 'howler';
 import { 
     FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
     FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaCheck, FaRedo,
-    FaFacebook // 新增：Facebook 图标
+    FaFacebookMessenger // 修改：使用 Messenger 图标
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -291,7 +291,6 @@ const RecordingComparisonModal = ({ word, settings, onClose }) => {
 
     const stopRecording = () => { if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop(); };
     const resetRecording = () => { if (userAudioUrl) URL.revokeObjectURL(userAudioUrl); setUserAudioUrl(null); setStatus('idle'); };
-    // 修复：使用 audioText 进行标准发音播放
     const playStandard = () => { if (localAudioRef.current?.playing()) localAudioRef.current.stop(); playTTS(word.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); };
     const playUser = () => { if (!userAudioUrl) return; if (_howlInstance?.playing()) _howlInstance.stop(); if (typeof window !== 'undefined') window.speechSynthesis.cancel(); if (localAudioRef.current) localAudioRef.current.unload(); localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true }); localAudioRef.current.play(); };
 
@@ -359,16 +358,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
     const [settings, setSettings] = useCardSettings();
 
-    // --- 核心数据预处理 (多音字修复) ---
     const processedCards = useMemo(() => {
         if (!Array.isArray(words)) return [];
         try {
             const mapped = words.map(w => ({
                 id: w.id || Math.random().toString(36).substr(2, 9),
                 chinese: w.chinese || w.word || '', 
-                // --- 多音字关键修复 ---
-                // audioText 用于 TTS 朗读。如果数据源提供了 audioText/tts_text 则优先使用
-                // 否则回退到 chinese。这样可以在 audioText 里写 "长短" 或 "chang2" 来纠正发音
                 audioText: w.audioText || w.tts_text || (w.chinese || w.word || ''),
                 burmese: w.burmese || w.translation || w.meaning || '', 
                 mnemonic: w.mnemonic || '',
@@ -418,7 +413,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         }
     }, [currentIndex, progressKey, processedCards.length]);
 
-    // 预加载 TTS (使用 audioText)
     useEffect(() => {
         if (!activeCards.length || settings.ttsSource !== 'server') return;
         const preloadCount = 3;
@@ -426,7 +420,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             const nextIdx = (currentIndex + i) % activeCards.length;
             const nextCard = activeCards[nextIdx];
             if (nextCard && nextCard.audioText && nextCard.id !== 'fallback') {
-                // 修复：预加载时使用 audioText
                 playTTS(nextCard.audioText, settings.voiceChinese, settings.speechRateChinese, 'server', null, null, true);
             }
         }
@@ -463,22 +456,26 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (result !== newState) setIsFavoriteCard(result);
     };
 
-    // --- Facebook 分享功能 ---
+    // --- Facebook Messenger 分享修复 ---
     const handleFacebookShare = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         if (!currentCard || currentCard.id === 'fallback') return;
 
-        // 获取当前网址 (确保在客户端环境)
+        // 1. 获取当前网址
         const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://www.facebook.com';
-        // 构建分享语
-        const textToShare = `我在学习中文单词：${currentCard.chinese} (${pinyinConverter(currentCard.chinese)}) - ${currentCard.burmese}`;
         
-        // Facebook 分享链接构建
-        // 注意：Facebook 移动端和某些环境可能忽略 'quote' 参数，但这是目前官方推荐的 URL 分享方式
-        const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(textToShare)}`;
-        
-        // 打开新窗口
-        window.open(facebookUrl, '_blank', 'width=600,height=500,noopener,noreferrer');
+        // 2. 检测是否为移动端
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            // ✅ 移动端：直接使用 fb-messenger 协议，解决 404 问题
+            window.location.href = `fb-messenger://share/?link=${encodeURIComponent(shareUrl)}`;
+        } else {
+            // ✅ 电脑端：使用网页版弹窗 (Messenger 在 PC 上通常集成在 FB 网页)
+            // 如果要强制分享对话框，可以使用 sharer.php
+            const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+            window.open(facebookUrl, '_blank', 'width=600,height=500,noopener,noreferrer');
+        }
     }, [currentCard]);
 
     const navigate = useCallback((direction) => {
@@ -498,7 +495,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 
         const playFullSequence = () => {
-            // 修复：自动播放时使用 audioText
             if (settings.autoPlayChinese && currentCard.chinese && currentCard.id !== 'fallback') {
                 playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, () => {
                     if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
@@ -523,7 +519,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (_howlInstance?.playing()) _howlInstance.stop();
         if (typeof window !== 'undefined') window.speechSynthesis.cancel();
         
-        // 修复：侧边栏播放使用 audioText
         if (!isRevealed) { 
             playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource); 
         } else { 
@@ -569,7 +564,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                             <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                                 <div style={styles.cardContainer}>
                                     <div style={{ textAlign: 'center' }}>
-                                        {/* 修复：点击卡片朗读时使用 audioText */}
                                         <div style={{ cursor: isFallback ? 'default' : 'pointer' }} onClick={(e) => !isFallback && playTTS(cardData.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, null, e)}>
                                             {!isFallback && <div style={styles.pinyin}>{pinyinConverter(cardData.chinese, { toneType: 'symbol', separator: ' ' })}</div>}
                                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
@@ -602,9 +596,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                         <button style={styles.rightIconButton} onClick={handleSidePlay} title="播放" data-no-gesture="true"><FaVolumeUp size={18} color="#4a5568" style={{ pointerEvents: 'none' }} /></button>
                         <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="发音对比" data-no-gesture="true"><FaMicrophone size={18} color={'#4a5568'} style={{ pointerEvents: 'none' }} /></button>
                         
-                        {/* 新增：Facebook 一键分享按钮 */}
-                        <button style={{...styles.rightIconButton, color: '#1877F2'}} onClick={handleFacebookShare} title="分享到 Facebook" data-no-gesture="true">
-                            <FaFacebook size={20} style={{ pointerEvents: 'none' }} />
+                        {/* ✅ Messenger 分享按钮 */}
+                        <button style={{...styles.rightIconButton, color: '#0084FF'}} onClick={handleFacebookShare} title="分享到 Messenger" data-no-gesture="true">
+                            <FaFacebookMessenger size={20} style={{ pointerEvents: 'none' }} />
                         </button>
                         
                         {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && (
@@ -629,7 +623,24 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
 // 样式定义
 const styles = {
-    adContainer: { position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 10, backgroundColor: 'rgba(0, 0, 0, 0.2)', backdropFilter: 'blur(5px)', textAlign: 'center', padding: '5px 0', minHeight: '50px' },
+    // ✅ 广告容器修复：限制高度，隐藏溢出
+    adContainer: { 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        width: '100%', 
+        zIndex: 10, 
+        backgroundColor: 'rgba(0, 0, 0, 0.2)', 
+        backdropFilter: 'blur(5px)', 
+        textAlign: 'center', 
+        padding: '0', 
+        minHeight: '50px',
+        maxHeight: '90px', // 限制最大高度
+        overflow: 'hidden', // 防止广告溢出遮挡屏幕
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
