@@ -8,11 +8,11 @@ import {
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// ⚠️ 请确保这个路径下有您的 AI 聊天组件
+// ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果没有可注释掉
 import AiChatAssistant from '../AiChatAssistant';
 
 // =================================================================================
-// ===== 1. IndexedDB 工具函数 (保持不变) =====
+// ===== 1. IndexedDB 工具函数 (缓存音频，减少请求) =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
 const STORE_NAME = 'audio_blobs';
@@ -53,9 +53,8 @@ const idb = {
         if (blob && blob.size > 100) {
           resolve(blob);
         } else {
-          if (blob) {
-            this.del(key).catch(() => {});
-          }
+          // 如果缓存了无效的小文件，清理掉
+          if (blob) { this.del(key).catch(() => {}); }
           resolve(null);
         }
       };
@@ -67,7 +66,6 @@ const idb = {
     try {
       await this.init();
     } catch (e) {
-      console.warn('idb.init failed', e);
       return;
     }
     return new Promise((resolve) => {
@@ -78,11 +76,7 @@ const idb = {
     });
   },
   async del(key) {
-    try {
-      await this.init();
-    } catch (e) {
-      return;
-    }
+    try { await this.init(); } catch (e) { return; }
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readwrite');
       const req = tx.objectStore(STORE_NAME).delete(key);
@@ -95,7 +89,7 @@ const idb = {
 const inFlightRequests = new Map();
 
 // =================================================================================
-// ===== 2. 混合 TTS Hook (核心朗读逻辑 - 已增强容错) =====
+// ===== 2. 混合 TTS Hook (核心修复版) =====
 // =================================================================================
 function useMixedTTS() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -136,13 +130,16 @@ function useMixedTTS() {
       });
       audioQueueRef.current = [];
     }
-    if (window.speechSynthesis && window.speechSynthesis.cancel) {
+    if (window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (e) {}
     }
-    for (const url of createdObjectURLsRef.current) {
-      try { URL.revokeObjectURL(url); } catch (e) {}
-    }
-    createdObjectURLsRef.current.clear();
+    // 稍后清理 URL，避免立即清理导致某些浏览器报错
+    setTimeout(() => {
+        for (const url of createdObjectURLsRef.current) {
+            try { URL.revokeObjectURL(url); } catch (e) {}
+        }
+        createdObjectURLsRef.current.clear();
+    }, 500);
 
     setIsPlaying(false);
     setIsPaused(false);
@@ -163,27 +160,17 @@ function useMixedTTS() {
         setIsPaused(true);
       }
     } else if (window.speechSynthesis && window.speechSynthesis.speaking) {
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-          setIsPaused(false);
-        } else {
-          window.speechSynthesis.pause();
-          setIsPaused(true);
-        }
-      } catch (e) {
-        console.warn('SpeechSynthesis toggle failed', e);
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+        setIsPaused(false);
+      } else {
+        window.speechSynthesis.pause();
+        setIsPaused(true);
       }
     }
   }, []);
 
-  const detectLanguage = (text) => {
-    if (/[\u1000-\u109F]/.test(text)) return 'my'; // 缅文
-    if (/[\u4e00-\u9fff]/.test(text)) return 'zh'; // 中文
-    return 'other';
-  };
-
-  // 降级：使用浏览器自带 TTS
+  // 降级使用浏览器自带 TTS
   const fallbackToNativeTTS = (text, onEnd) => {
     if (!window.speechSynthesis) {
       if (onEnd) onEnd();
@@ -194,12 +181,8 @@ function useMixedTTS() {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'zh-CN';
       utter.rate = 0.9;
-      utter.onend = () => {
-        if (onEnd) onEnd();
-      };
-      utter.onerror = () => {
-        if (onEnd) onEnd();
-      };
+      utter.onend = () => { if (onEnd) onEnd(); };
+      utter.onerror = () => { if (onEnd) onEnd(); };
       window.speechSynthesis.speak(utter);
     } catch (e) {
       console.warn("Native TTS failed:", e);
@@ -210,15 +193,14 @@ function useMixedTTS() {
   const fetchAudioBlob = async (text, lang) => {
     if (!text || !text.trim()) throw new Error('Empty text');
 
+    // 缅甸语使用专用引擎，其他（中文/英文/混合）使用强大的多语言引擎
     const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
     const cacheKey = `tts-blob-${voice}-${text}`;
 
     try {
       const cached = await idb.get(cacheKey);
       if (cached) return cached;
-    } catch (e) {
-      console.warn('Cache read failed', e);
-    }
+    } catch (e) {}
 
     if (inFlightRequests.has(cacheKey)) {
       return inFlightRequests.get(cacheKey);
@@ -228,14 +210,12 @@ function useMixedTTS() {
       try {
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
         const res = await fetch(url);
-        if (!res.ok) {
-          throw new Error(`TTS Fetch Failed: ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`TTS Fetch Failed: ${res.status}`);
+        
         const blob = await res.blob();
-        if (!blob || blob.size < 100) {
-          throw new Error('TTS Response too small or invalid');
-        }
-        idb.set(cacheKey, blob).catch(e => console.warn('Cache write failed', e));
+        if (!blob || blob.size < 100) throw new Error('TTS Response too small');
+        
+        idb.set(cacheKey, blob).catch(() => {});
         return blob;
       } catch (e) {
         try { idb.del(cacheKey).catch(()=>{}); } catch (_) {}
@@ -249,25 +229,25 @@ function useMixedTTS() {
     return promise;
   };
 
-  const play = useCallback(async (text, uniqueId, options = { allowNativeFallback: true }) => {
+  const play = useCallback(async (text, uniqueId) => {
     // 1. 基础检查
-    if (!text) {
-      console.warn("Play called with empty text");
-      return;
-    }
+    if (!text) return;
     
-    // 2. 切换暂停
+    // 2. 暂停/继续逻辑
     if (playingIdRef.current === uniqueId) {
       toggle(uniqueId);
       return;
     }
 
-    stop(); // 停止当前所有播放
+    stop(); 
     setLoadingId(uniqueId);
     const myRequestId = ++latestRequestIdRef.current;
 
-    // 3. 清理文本
-    let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+    // 3. 清理文本 (保留文字本身，去除HTML标签和模板符号)
+    let cleanText = String(text)
+      .replace(/<[^>]+>/g, '') 
+      .replace(/\{\{|\}\}/g, '') 
+      .trim();
     
     if (!cleanText) {
       setLoadingId(null);
@@ -275,36 +255,40 @@ function useMixedTTS() {
     }
 
     try {
-      // 4. 尝试获取云端音频
+      // 4. 智能分段逻辑 (修复版)
       const segments = [];
-      const regex = /([\u4e00-\u9fff]+)|([^\u4e00-\u9fff]+)/g;
-      let match;
-      while ((match = regex.exec(cleanText)) !== null) {
-        const chunk = match[0];
-        if (chunk && chunk.trim()) {
-          const lang = detectLanguage(chunk);
-          segments.push({ text: chunk.trim(), lang });
+      const hasBurmese = /[\u1000-\u109F]/.test(cleanText);
+
+      if (!hasBurmese) {
+        // ✅ 场景 A: 只有中文、英文、拼音、标点 -> **不要切分**
+        // 直接作为一个整体发送，AI 引擎会自动处理语调和停顿，不会读错拼音，也不会因为标点报错
+        segments.push({ text: cleanText, lang: 'zh' });
+      } else {
+        // ✅ 场景 B: 包含缅甸语 -> 必须切分，因为缅甸语需要特定 Voice
+        const regex = /([\u1000-\u109F]+)|([^\u1000-\u109F]+)/g;
+        let match;
+        while ((match = regex.exec(cleanText)) !== null) {
+          const chunk = match[0];
+          if (chunk && chunk.trim()) {
+            const isMy = /[\u1000-\u109F]/.test(chunk);
+            segments.push({ text: chunk.trim(), lang: isMy ? 'my' : 'zh' });
+          }
         }
       }
 
-      if (segments.length === 0) {
-        segments.push({ text: cleanText, lang: detectLanguage(cleanText) === 'other' ? 'zh' : detectLanguage(cleanText) });
-      }
-
-      // 并行获取音频 Blob
-      const blobPromises = segments.map(seg => fetchAudioBlob(seg.text, seg.lang === 'other' ? 'zh' : seg.lang));
+      // 5. 并行请求音频
+      const blobPromises = segments.map(seg => fetchAudioBlob(seg.text, seg.lang));
       const blobs = await Promise.all(blobPromises);
 
       if (myRequestId !== latestRequestIdRef.current) return;
 
-      // 创建 Audio 对象
+      // 6. 准备播放队列
       const audioObjects = blobs.map((blob, idx) => {
         const objectURL = URL.createObjectURL(blob);
         createdObjectURLsRef.current.add(objectURL);
         const audio = new Audio(objectURL);
-        const segLang = segments[idx].lang;
-        audio.playbackRate = segLang === 'zh' ? 0.7 : 1.0;
-        return { audio, objectURL, lang: segLang };
+        audio.playbackRate = 1.0; 
+        return audio;
       });
 
       audioQueueRef.current = audioObjects;
@@ -314,57 +298,55 @@ function useMixedTTS() {
       setIsPlaying(true);
       setIsPaused(false);
 
-      // 递归播放队列
+      // 7. 递归播放
       const playNext = (index) => {
         if (myRequestId !== latestRequestIdRef.current) return;
+        
         if (index >= audioObjects.length) {
-          stop(); // 播放完毕
+          stop();
           return;
         }
 
-        const { audio, objectURL } = audioObjects[index];
+        const audio = audioObjects[index];
         currentAudioRef.current = audio;
 
-        const cleanupAndNext = () => {
-          try { URL.revokeObjectURL(objectURL); } catch (e) {}
-          createdObjectURLsRef.current.delete(objectURL);
-          playNext(index + 1);
-        };
+        // 播放结束或出错时，继续下一段
+        const onFinish = () => playNext(index + 1);
 
-        audio.onended = cleanupAndNext;
+        audio.onended = onFinish;
         audio.onerror = (e) => {
           console.error('Audio play error', e);
-          cleanupAndNext();
+          onFinish();
         };
         
         audio.play().catch((e) => {
-          console.error('Play prevented', e);
-          cleanupAndNext(); // 跳过此段
+          console.warn('Play prevented', e);
+          onFinish();
         });
       };
 
       playNext(0);
 
     } catch (e) {
-      console.warn('云端 TTS 失败，尝试降级到本地 TTS:', e);
+      console.warn('云端 TTS 失败，尝试降级:', e);
       if (myRequestId === latestRequestIdRef.current) {
         setLoadingId(null);
         setPlayingId(uniqueId);
         playingIdRef.current = uniqueId;
         setIsPlaying(true);
-        // 调用原生 TTS
-        fallbackToNativeTTS(cleanText, () => {
-           stop();
-        });
+        // 降级到浏览器原生朗读
+        fallbackToNativeTTS(cleanText, () => stop());
       }
     }
   }, [stop, toggle]);
 
   const preload = useCallback((text) => {
     if (!text) return;
-    let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim();
+    let cleanText = String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').trim();
     if (!cleanText) return;
-    fetchAudioBlob(cleanText, 'zh').catch(()=>{});
+    // 预加载默认为中文引擎，除非明显是缅甸语（简化处理）
+    const lang = /[\u1000-\u109F]/.test(cleanText) ? 'my' : 'zh';
+    fetchAudioBlob(cleanText, lang).catch(()=>{});
   }, []);
 
   return { play, stop, toggle, isPlaying, isPaused, playingId, loadingId, preload };
@@ -374,9 +356,9 @@ function useMixedTTS() {
 // ===== 3. 辅助组件与格式化工具 =====
 // =================================================================================
 
-// 1. Ruby 拼音生成
 const generateRubyHTML = (text) => {
   if (!text) return '';
+  // 排除 {{}}，仅对中文加注音
   return text.replace(/[\u4e00-\u9fff]+/g, word => {
     try {
       const pinyin = pinyinConverter(word, { toneType: 'numeric', type: 'array', multiple: false });
@@ -388,10 +370,10 @@ const generateRubyHTML = (text) => {
   });
 };
 
-// 2. Markdown 转 HTML
 const simpleMarkdownToHtml = (markdown) => {
   if (!markdown) return '';
   let html = markdown;
+  // 简单处理 Markdown 语法
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
@@ -423,15 +405,9 @@ const simpleMarkdownToHtml = (markdown) => {
   return html;
 };
 
-// 3. AI 助手悬浮球
 const DraggableAiBtn = ({ contextText }) => {
   const [isOpen, setIsOpen] = useState(false);
   const constraintsRef = useRef(null);
-
-  const handleOpen = (e) => {
-    e.stopPropagation();
-    setIsOpen(true);
-  };
 
   return (
     <>
@@ -439,7 +415,7 @@ const DraggableAiBtn = ({ contextText }) => {
       <motion.button
         drag dragConstraints={constraintsRef} dragElastic={0.08} dragMomentum={false}
         whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.96 }}
-        onClick={handleOpen}
+        onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
         style={{
           position: 'absolute', bottom: '120px', right: '20px', width: '56px', height: '56px',
           borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
@@ -488,14 +464,12 @@ const DraggableAiBtn = ({ contextText }) => {
 // ===== 4. 主组件: GrammarPointPlayer =====
 // =================================================================================
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
-  const [isMounted, setIsMounted] = useState(false);
   const FACEBOOK_APP_ID = ''; 
 
-  // ✅ 核心修复：数据标准化，确保 narrationScript 永远有值
+  // 数据标准化
   const normalizedPoints = useMemo(() => {
     if (!Array.isArray(grammarPoints)) return [];
     
-    // 辅助函数：去除 HTML 标签获取纯文本
     const stripHtml = (html) => {
       if (!html) return '';
       return html.replace(/<[^>]+>/g, '').replace(/\{\{|}\}/g, '').trim();
@@ -506,7 +480,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       const rawPattern = item['句型结构'] || item.pattern || '';
       const rawExplanation = item['语法详解'] || item.visibleExplanation || '';
       
-      // ✅ 自动生成朗读脚本：如果数据中没有提供脚本，则拼凑：标题 + 句型 + 详解
       const fallbackScript = `${rawTitle}。${rawPattern}。${stripHtml(rawExplanation)}`;
       const narrationScript = item['讲解脚本'] || item.narrationScript || fallbackScript;
 
@@ -517,10 +490,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         visibleExplanation: rawExplanation,
         usage: item['适用场景'] || item.usage,
         attention: item['注意事项'] || item.attention,
-        narrationScript: narrationScript, // 确保这个字段不为空
+        narrationScript: narrationScript,
         examples: (item['例句列表'] || item.examples || []).map(ex => {
           const sentence = ex['句子'] || ex.sentence || '';
-          // ✅ 例句回退：如果没配置例句发音，直接读例句本身
           const exampleScript = ex['例句发音'] || ex.narrationScript || sentence;
           return {
             id: ex.id,
@@ -533,42 +505,25 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     });
   }, [grammarPoints]);
 
-  useEffect(() => {
-    setIsMounted(true);
-    const prev = document.body.style.overscrollBehavior;
-    document.body.style.overscrollBehavior = 'none';
-    return () => {
-      document.body.style.overscrollBehavior = prev || '';
-    };
-  }, []);
-
   const [currentIndex, setCurrentIndex] = useState(0);
   const lastDirection = useRef(0);
   const contentRef = useRef(null);
-  const [canGoNext, setCanGoNext] = useState(false);
-
-  const { play, stop, toggle, playingId, isPaused, loadingId, preload } = useMixedTTS();
+  
+  // 使用修复后的 Hook
+  const { play, stop, playingId, isPaused, loadingId, preload } = useMixedTTS();
 
   useEffect(() => {
     stop();
     if (contentRef.current) contentRef.current.scrollTop = 0;
-    setCanGoNext(true);
   }, [currentIndex, stop]);
 
   useEffect(() => {
-    const preloadNextItems = (count) => {
-      for (let i = 1; i <= count; i++) {
-        const nextIndex = currentIndex + i;
-        if (nextIndex < normalizedPoints.length) {
-          const nextGp = normalizedPoints[nextIndex];
-          if (nextGp.narrationScript) preload(nextGp.narrationScript);
-          if (Array.isArray(nextGp.examples)) {
-            nextGp.examples.forEach(ex => preload(ex.narrationScript));
-          }
-        }
-      }
-    };
-    preloadNextItems(2);
+    // 预加载下一条
+    const nextIndex = currentIndex + 1;
+    if (nextIndex < normalizedPoints.length) {
+       const nextGp = normalizedPoints[nextIndex];
+       if (nextGp.narrationScript) preload(nextGp.narrationScript);
+    }
   }, [currentIndex, normalizedPoints, preload]);
 
   const handleMessengerShare = () => {
@@ -580,12 +535,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
         if (!FACEBOOK_APP_ID) { alert("请配置 FACEBOOK_APP_ID"); return; }
         window.open(`https://www.facebook.com/dialog/send?app_id=${FACEBOOK_APP_ID}&link=${encodeURIComponent(link)}&redirect_uri=${encodeURIComponent(link)}`, '_blank', 'width=600,height=500');
     }
-  };
-
-  const handleScroll = () => {
-    if (!contentRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = contentRef.current;
-    if (scrollTop + clientHeight >= scrollHeight - 40) setCanGoNext(true);
   };
 
   const handleNext = () => {
@@ -622,18 +571,13 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       const partStyle = isPattern
         ? (isChinese ? styles.patternChinese : styles.patternMyanmar)
         : (isChinese ? styles.textChinese : styles.textBurmese);
+      
       if (isChinese) {
         return <span key={pIndex} style={partStyle} dangerouslySetInnerHTML={{ __html: generateRubyHTML(trimmed) }} />;
       } else {
         return <span key={pIndex} style={partStyle}>{trimmed}</span>;
       }
     });
-  };
-
-  const renderRichExplanation = (content) => {
-    if (!content) return null;
-    const htmlContent = simpleMarkdownToHtml(content);
-    return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
   };
 
   const renderPlayButton = (script, id, isSmall = false) => {
@@ -643,7 +587,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     if (isLoading) Icon = FaSpinner;
     else if (isCurrentPlaying) Icon = isPaused ? FaPlay : FaPause;
 
-    // 如果脚本为空，按钮禁用（虽然 normalizedPoints 修复了这个问题，但双重保险更好）
     const isDisabled = !script || script.trim() === '';
 
     return (
@@ -658,7 +601,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
           e.stopPropagation(); 
           if (!isDisabled) play(script, id); 
         }}
-        aria-label="播放朗读" title="播放朗读"
         disabled={isDisabled}
       >
         <Icon className={isLoading ? "spin" : ""} />
@@ -672,7 +614,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
   const currentGp = normalizedPoints[currentIndex];
   const contextText = currentGp ? 
-    `正在学习语法：【${currentGp.grammarPoint}】\n句型：${currentGp.pattern}\n详解：${(currentGp.visibleExplanation || '').slice(0, 100)}...` 
+    `语法：${currentGp.grammarPoint}\n句型：${currentGp.pattern}\n详解：${(currentGp.visibleExplanation || '').slice(0, 100)}...` 
     : '';
 
   return (
@@ -686,7 +628,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
         return (
           <animated.div style={{ ...styles.page, ...style }} key={gp.id || i}>
-            <div style={styles.scrollContainer} ref={contentRef} onScroll={handleScroll}>
+            <div style={styles.scrollContainer} ref={contentRef}>
               <div style={styles.contentWrapper}>
                 
                 <div style={styles.header}>
@@ -711,12 +653,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 <div style={styles.sectionContainer}>
                   <div style={styles.sectionHeader}>
                     <span style={styles.sectionTitleText}>💡 详解</span>
-                    {/* 即使数据里没有 '讲解脚本'，现在也能朗读了 */}
                     {renderPlayButton(gp.narrationScript, narrationId, false)}
                   </div>
-                  <div style={styles.textBlock}>
-                    {renderRichExplanation(gp.visibleExplanation)}
-                  </div>
+                  <div style={styles.textBlock} dangerouslySetInnerHTML={{__html: simpleMarkdownToHtml(gp.visibleExplanation)}} />
                 </div>
 
                 {gp.usage && (
@@ -724,9 +663,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     <div style={styles.sectionHeader}>
                       <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 适用场景</span>
                     </div>
-                    <div style={{ ...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-                      {renderRichExplanation(gp.usage)}
-                    </div>
+                    <div style={{ ...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0' }} dangerouslySetInnerHTML={{__html: simpleMarkdownToHtml(gp.usage)}} />
                   </div>
                 )}
 
@@ -735,9 +672,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     <div style={styles.sectionHeader}>
                       <span style={{ ...styles.sectionTitleText, color: '#ef4444' }}>⚠️ 易错点</span>
                     </div>
-                    <div style={{ ...styles.textBlock, background: '#fff1f2', border: '1px solid #fecaca' }}>
-                      {renderRichExplanation(gp.attention)}
-                    </div>
+                    <div style={{ ...styles.textBlock, background: '#fff1f2', border: '1px solid #fecaca' }} dangerouslySetInnerHTML={{__html: simpleMarkdownToHtml(gp.attention)}} />
                   </div>
                 )}
 
@@ -794,7 +729,7 @@ GrammarPointPlayer.propTypes = {
 };
 
 // =================================================================================
-// ===== 5. 样式与全局动画 =====
+// ===== 5. 样式 =====
 // =================================================================================
 const styles = {
   container: { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", sans-serif' },
@@ -813,8 +748,7 @@ const styles = {
   sectionTitleText: { fontSize: '1rem', fontWeight: '700', color: '#0f172a' },
   playButton: { background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', border: 'none', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.18s' },
   playButtonSmall: { background: 'transparent', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '50%', width: '36px', height: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.18s' },
-  textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e6eef8', fontSize: '1rem', lineHeight: 1.75, color: '#475569' },
-  richTextContainer: { whiteSpace: 'normal' },
+  textBlock: { background: '#ffffff', borderRadius: '12px', padding: '16px', border: '1px solid #e6eef8', fontSize: '1rem', lineHeight: 1.75, color: '#475569', wordWrap: 'break-word' },
   examplesList: { display: 'flex', flexDirection: 'column', gap: '12px' },
   exampleItem: { background: '#f8fafc', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid #e2e8f0' },
   exampleMain: { flex: 1 },
@@ -835,17 +769,11 @@ if (styleTag) {
     .play-button:active { transform: scale(0.94); }
     .playing { animation: pulse-ring 2s infinite; background-color: rgba(37, 99, 235, 0.12) !important; color: #2563eb !important; border-color: #2563eb !important; }
     @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.45); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
-    .rich-text-content h1, .rich-text-content h2, .rich-text-content h3 { color: #0f172a; margin: 1.2em 0 0.5em 0; padding-bottom: 0.2em; border-bottom: 1px solid #eef2ff; font-weight: 700; }
-    .rich-text-content p { margin: 0.6em 0; color: #475569; line-height: 1.8; }
-    .rich-text-content strong, .rich-text-content b { color: #0b3d91; font-weight: 700; }
-    .rich-text-content blockquote { border-left: 4px solid #3b82f6; background: #eff6ff; margin: 1em 0; padding: 0.5em 1em; color: #1e40af; }
-    .rich-text-content table.md-table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
-    .rich-text-content table.md-table td, .rich-text-content table.md-table th { border: 1px solid #e2e8f0; padding: 8px; }
-    .rich-text-content table.md-table tr:nth-child(even) { background-color: #f8fafc; }
-    .rich-text-content ul, .rich-text-content ol { margin: 0.6em 0 0.6em 1.2em; padding-left: 0.6em; }
-    .rich-text-content li { margin: 0.4em 0; color: #475569; }
-    .rich-text-content code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
-    ruby rt { font-size: 0.65em; color: #0b3d91; }
+    .md-table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+    .md-table td, .md-table th { border: 1px solid #e2e8f0; padding: 8px; }
+    .md-table tr:nth-child(even) { background-color: #f8fafc; }
+    blockquote { border-left: 4px solid #3b82f6; background: #eff6ff; margin: 1em 0; padding: 0.5em 1em; color: #1e40af; }
+    ruby rt { font-size: 0.6em; color: #64748b; user-select: none; }
   `;
   if (!document.getElementById('grammar-player-styles')) document.head.appendChild(styleTag);
 }
