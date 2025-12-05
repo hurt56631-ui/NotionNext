@@ -1,4 +1,4 @@
-// components/WordCard.js (稳定版：修复声调偏移 + 修复脸书环境兼容性 + 音频互斥)
+// components/WordCard.js (Facebook 兼容特别版：FB内禁用字体修复以防报错，其他浏览器正常修复)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -85,11 +85,10 @@ const initSounds = () => {
 
 let _howlInstance = null;
 
-// ✅ [核心修复] TTS播放逻辑：强制停止旧音频，防止重叠
+// ✅ TTS 播放逻辑 (带 404 自动降级)
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation(); 
     
-    // 1. 立即停止当前正在播放的所有声音
     if (_howlInstance) {
         _howlInstance.stop();
         _howlInstance.unload(); 
@@ -114,7 +113,6 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
             body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), 
         }); 
         
-        // 如果 API 返回 404 或其他错误，直接抛出，进入 fallback
         if (!response.ok) throw new Error(`API Error: ${response.status}`); 
         
         const audioBlob = await response.blob(); 
@@ -124,21 +122,17 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
             src: [audioUrl], 
             format: ['mpeg'], 
             html5: true, 
-            onend: () => { 
-                URL.revokeObjectURL(audioUrl); 
-                if (onEndCallback) onEndCallback(); 
-            }, 
+            onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
             onloaderror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
             onplayerror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } 
         }); 
         
         _howlInstance.play(); 
     } catch (error) { 
-        // 容错处理：如果脸书浏览器拦截了 API 导致 404，静默切换到本地语音
+        // 自动降级到本地语音
         if (typeof window !== 'undefined' && window.speechSynthesis) {
              const u = new SpeechSynthesisUtterance(text);
              u.lang = voice.includes('my') ? 'my-MM' : 'zh-CN';
-             // 语速转换
              u.rate = rate >= 0 ? 1 + (rate / 100) : 1 + (rate / 200);
              u.onend = () => { if(onEndCallback) onEndCallback(); };
              u.onerror = () => { if(onEndCallback) onEndCallback(); };
@@ -161,7 +155,6 @@ const parsePinyin = (pinyinNum) => {
     let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); 
     const toneMatch = rawPinyin.match(/[1-5]$/); 
     const tone = toneMatch ? toneMatch[0] : '0'; 
-    // 安全地去除点
     const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }).replace(/·/g, ' '); 
     const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; 
     let initial = ''; 
@@ -206,7 +199,7 @@ const useCardSettings = () => {
             if (typeof window !== 'undefined') {
                 localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); 
             }
-        } catch (error) { console.error("Settings Save Error", error); } 
+        } catch (error) { } 
     }, [settings]); 
     return [settings, setSettings]; 
 };
@@ -394,11 +387,22 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
 // =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
+  // 🔥 [关键] 检测是否为 Facebook/Messenger 浏览器
+  const [isFacebookApp, setIsFacebookApp] = useState(false);
+
+  useEffect(() => { 
+      setIsMounted(true); 
+      if (typeof navigator !== 'undefined') {
+          const ua = navigator.userAgent || navigator.vendor || window.opera;
+          // 检测 FB APP (FBAN) 或 Messenger (FB_IAB)
+          const isFb = /FBAN|FBAV|Messenger/i.test(ua);
+          setIsFacebookApp(isFb);
+      }
+  }, []);
 
   const [settings, setSettings] = useCardSettings();
   
-  // ✅ 拼音处理：强制替换 · (点修复)
+  // ✅ 拼音处理
   const getPinyin = useCallback((text) => {
       if (!text) return '';
       try {
@@ -423,7 +427,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             for (let i = mapped.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [mapped[i], mapped[j]] = [mapped[j], mapped[i]]; }
         }
         return mapped;
-    } catch (error) { console.error("Data error:", error); return []; }
+    } catch (error) { return []; }
   }, [words, settings.order]);
 
   const [activeCards, setActiveCards] = useState([]);
@@ -516,7 +520,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (typeof window !== 'undefined') window.speechSynthesis.cancel();
     if (isListening) { recognitionRef.current?.stop(); return; }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("ဆောရီးပါ၊ သင့်ဖုန်းတွင် အသံဖမ်းစနစ် မရနိုင်ပါ"); return; }
+    if (!SpeechRecognition) { alert("Browser not supported"); return; }
     const recognition = new SpeechRecognition();
     recognition.lang = "zh-CN";
     recognition.interimResults = false;
@@ -570,6 +574,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const cardContent = pageTransitions((style, item) => {
     const bgUrl = settings.backgroundImage;
     const backgroundStyle = bgUrl ? { background: `url(${bgUrl}) center/cover no-repeat` } : {};
+    
+    // 🔥 [核心] 动态计算字体：如果在 FB，则禁用 Arial 修复，防止 404；否则使用 Arial
+    const dynamicPinyinStyle = {
+        ...styles.pinyin,
+        fontFamily: isFacebookApp ? 'inherit' : '"Arial", sans-serif'
+    };
+    const dynamicExamplePinyinStyle = {
+        ...styles.examplePinyin,
+        fontFamily: isFacebookApp ? 'inherit' : '"Arial", sans-serif'
+    };
+
     return item && (
       <animated.div style={{ ...styles.fullScreen, ...backgroundStyle, ...style }}>
         <div style={styles.gestureArea} {...bind()} onClick={() => setIsRevealed(prev => !prev)} />
@@ -591,7 +606,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center' }}>
                           <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
-                            <div style={styles.pinyin}>{getPinyin(cardData.chinese)}</div>
+                            <div style={dynamicPinyinStyle}>{getPinyin(cardData.chinese)}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           {isRevealed && (
@@ -601,7 +616,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                   {cardData.example && (
                                       <div style={styles.exampleBox} onClick={(e) => playTTS(cardData.example, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
-                                            <div style={styles.examplePinyin}>{getPinyin(cardData.example)}</div>
+                                            <div style={dynamicExamplePinyinStyle}>{getPinyin(cardData.example)}</div>
                                             <div style={styles.exampleText}>{cardData.example}</div>
                                           </div>
                                       </div>
@@ -654,15 +669,15 @@ const styles = {
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
-    // ✅ [声调修复核心]：仅使用 Arial，去掉引号，兼容性最强
-    pinyin: { fontFamily: 'Arial, sans-serif', fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
+    // 注意：这里的 fontFamily 会被组件内的 dynamicPinyinStyle 覆盖（在非 FB 环境）
+    pinyin: { fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' }, 
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }, 
     revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' },
     textWordBurmese: { fontSize: '2.0rem', color: '#fce38a', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
     mnemonicBox: { color: '#fff', display: 'inline-block', textAlign: 'center', fontSize: '1.2rem', textShadow: '0 1px 4px rgba(0,0,0,0.5)', backgroundColor: 'rgba(252, 211, 77, 0.2)', padding: '8px 16px', borderRadius: '12px', maxWidth: '100%' },
     exampleBox: { color: '#fff', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: '0 1px 4px rgba(0,0,0,0.5)', cursor: 'pointer' },
-    // ✅ [例句声调修复]
-    examplePinyin: { fontFamily: 'Arial, sans-serif', fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
+    // 同上，会被动态样式覆盖
+    examplePinyin: { fontSize: '1.1rem', color: '#fcd34d', marginBottom: '0.5rem', opacity: 0.9, letterSpacing: '0.05em' },
     exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
     rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
     rightIconButton: { background: 'rgba(255,255,255,0.85)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 3px 10px rgba(0,0,0,0.15)', transition: 'transform 0.2s, background 0.2s', color: '#4a5568', backdropFilter: 'blur(4px)' },
