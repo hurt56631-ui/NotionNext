@@ -1,4 +1,4 @@
-// components/WordCard.js (完全恢复版：恢复接口 + 恢复例句朗读 + 修复Bug)
+// components/WordCard.js (稳定版：无录音 + 浅色系 + 修复报错 + 认识移除)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -6,9 +6,8 @@ import { useTransition, animated } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { 
-    FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
-    FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaCheck, FaRedo,
-    FaFacebookMessenger, FaImage 
+    FaPenFancy, FaCog, FaTimes, FaSortAmountDown, FaRandom,
+    FaHeart, FaRegHeart, FaVolumeUp, FaFacebookMessenger, FaImage 
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -69,14 +68,14 @@ async function isFavorite(id) {
 // =================================================================================
 // ===== 2. 拼音工具 (完美支持第一声) =====
 // =================================================================================
-const PinyinDisplay = ({ text, size = '1.5rem', color = '#fcd34d' }) => {
+const PinyinDisplay = ({ text, size = '1.5rem', color = '#64748b' }) => {
     if (!text) return null;
     const pinyinStr = pinyinConverter(text, { toneType: 'symbol', separator: ' ' });
     return <div style={{ fontSize: size, color, marginBottom: '0.5rem', fontFamily: 'Arial, sans-serif', fontWeight: 500 }}>{pinyinStr}</div>;
 };
 
 // =================================================================================
-// ===== 3. 音频逻辑 (恢复您的接口) =====
+// ===== 3. 音频逻辑 (Google TTS + 本地兜底) =====
 // =================================================================================
 const TTS_VOICES = [
     { value: 'zh-CN-XiaoxiaoNeural', label: 'တရုတ် (အမျိုးသမီး)' },
@@ -86,15 +85,29 @@ const TTS_VOICES = [
 ];
 
 let _howlInstance = null;
+let sounds = null;
 
-// 强制打断功能
-const stopAllAudio = () => {
-    if (_howlInstance && _howlInstance.playing()) {
-        _howlInstance.stop();
+const initSounds = () => {
+    if (!sounds && typeof window !== 'undefined') {
+        try {
+            sounds = {
+                switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
+                correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
+            };
+        } catch(e) {}
     }
+};
+
+const playSoundEffect = (type) => {
     if (typeof window !== 'undefined') {
-        window.speechSynthesis.cancel();
+        initSounds();
+        if (sounds && sounds[type]) sounds[type].play();
     }
+};
+
+const stopAllAudio = () => {
+    if (_howlInstance?.playing()) _howlInstance.stop();
+    if (typeof window !== 'undefined') window.speechSynthesis.cancel();
 };
 
 const generateAudioKey = (text, voice, rate) => `${text}_${voice}_${rate}`;
@@ -125,16 +138,13 @@ async function getCachedAudio(key) {
 
 const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    
-    // 如果不是预加载，先打断之前的
-    if (!onlyCache) stopAllAudio();
-    
+    if (!onlyCache) stopAllAudio(); 
     if (!text) { if (onEndCallback && !onlyCache) onEndCallback(); return; }
 
     const playNative = () => {
         const u = new SpeechSynthesisUtterance(text);
         u.lang = voice?.includes('my') ? 'my-MM' : 'zh-CN';
-        u.rate = rate >= 0 ? 1 + (rate / 100) : 0.6;
+        u.rate = rate >= 0 ? 1 + (rate / 100) : 0.8;
         u.onend = onEndCallback;
         u.onerror = onEndCallback;
         window.speechSynthesis.speak(u);
@@ -149,17 +159,16 @@ const playTTS = async (text, voice, rate, source, onEndCallback, e, onlyCache = 
 
     if (!audioBlob) {
         try {
-            // ✅ 恢复使用您的 t.leftsite.cn 接口
+            // 使用您的 t.leftsite.cn 接口
             const rateValue = Math.round(rate / 2);
             const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
             
-            // 使用 Fetch 获取 Blob 以便缓存
             const res = await fetch(ttsUrl);
             if (!res.ok) throw new Error('API failed');
             audioBlob = await res.blob();
             await cacheAudioData(cacheKey, audioBlob);
         } catch (error) {
-            console.error('[TTS] API Error', error);
+            console.error('[TTS] API Error, fallback to native', error);
             if (!onlyCache) playNative(); 
             return;
         }
@@ -186,14 +195,11 @@ const useCardSettings = () => {
         const defaults = { 
             order: 'sequential', 
             ttsSource: 'server', 
-            autoPlayChinese: true, 
-            autoPlayBurmese: true, 
-            autoPlayExample: true, // ✅ 恢复
-            autoBrowse: false, 
-            autoBrowseDelay: 6000, 
+            autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, 
+            autoBrowse: false, autoBrowseDelay: 6000, 
             voiceChinese: 'zh-CN-XiaoyouNeural', 
             voiceBurmese: 'my-MM-NilarNeural', 
-            speechRateChinese: -40, // ✅ 默认 -40
+            speechRateChinese: -40, 
             speechRateBurmese: 0, 
             backgroundImage: '' 
         };
@@ -210,90 +216,8 @@ const useCardSettings = () => {
 };
 
 // =================================================================================
-// ===== 5. 子组件 (录音修复、设置、跳转) =====
+// ===== 5. 子组件 (设置、跳转) =====
 // =================================================================================
-
-// 录音组件：改回 SpeechRecognition (解决 404 问题，因为不需要后端)
-const PronunciationComparison = ({ correctWord, onClose }) => {
-    const [status, setStatus] = useState('idle'); 
-    const [userText, setUserText] = useState('');
-    const [score, setScore] = useState(0);
-
-    const startListening = () => {
-        stopAllAudio(); // 录音前停止播放
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            alert("Browser does not support speech recognition");
-            return;
-        }
-        
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'zh-CN';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-
-        recognition.onstart = () => setStatus('listening');
-        
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            setUserText(transcript);
-            
-            const cleanCorrect = correctWord.replace(/[^\u4e00-\u9fa5]/g, '');
-            const cleanUser = transcript.replace(/[^\u4e00-\u9fa5]/g, '');
-            
-            if (cleanCorrect === cleanUser) setScore(100);
-            else if (cleanUser.includes(cleanCorrect)) setScore(80);
-            else setScore(40);
-            
-            setStatus('result');
-        };
-
-        recognition.onerror = (e) => {
-            console.error(e);
-            alert("Recognition failed, try again");
-            setStatus('idle');
-        };
-
-        recognition.start();
-    };
-
-    return (
-        <div style={styles.comparisonOverlay} onClick={onClose}>
-            <div style={styles.comparisonPanel} onClick={e => e.stopPropagation()}>
-                <div style={styles.recordHeader}><h3>အသံထွက် လေ့ကျင့်မည်</h3><FaTimes onClick={onClose} /></div>
-                <div style={styles.recordContent}>
-                    <div style={{marginBottom: 20}}>
-                        <div style={styles.textWordChinese}>{correctWord}</div>
-                    </div>
-                    
-                    {status === 'result' ? (
-                        <div style={{textAlign: 'center'}}>
-                            <div style={{fontSize: '3rem', color: score >= 80 ? '#10b981' : '#f59e0b'}}>{score}</div>
-                            <div style={{color: '#666', marginBottom:10}}>သင်ပြောသည်: {userText}</div>
-                            <button style={styles.btnPrimary} onClick={() => setStatus('idle')}>နောက်တစ်ခါ (重试)</button>
-                        </div>
-                    ) : (
-                        <div style={{textAlign: 'center'}}>
-                            <button 
-                                onClick={startListening}
-                                style={{
-                                    ...styles.bigRecordBtn,
-                                    background: status === 'listening' ? '#ef4444' : '#3b82f6',
-                                    animation: status === 'listening' ? 'pulse 1.5s infinite' : 'none'
-                                }}
-                            >
-                                {status === 'listening' ? <FaStop size={32}/> : <FaMicrophone size={32} />}
-                            </button>
-                            <p style={{marginTop: 15, color: '#666'}}>
-                                {status === 'listening' ? 'ပြောပါ (请说话)...' : 'နှိပ်၍ အသံသွင်းပါ (点击录音)'}
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
 
 const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
     const handleSettingChange = (key, value) => { setSettings(prev => ({ ...prev, [key]: value })); };
@@ -311,7 +235,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
             <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
                     <h3 style={{margin:0}}>အပြင်အဆင် (设置)</h3>
-                    <FaTimes onClick={onClose} size={20} color="#999" />
+                    <FaTimes onClick={onClose} size={20} color="#999" style={{cursor:'pointer'}} />
                 </div>
                 
                 <div style={styles.settingGroup}>
@@ -340,7 +264,6 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
                     <div style={{display:'flex', gap:15, flexWrap:'wrap'}}>
                         <label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> တရုတ်</label>
                         <label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> မြန်မာ</label>
-                        {/* ✅ 恢复例句选项 */}
                         <label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> ဥပမာ (例句)</label>
                     </div>
                 </div>
@@ -427,7 +350,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
     const [isRevealed, setIsRevealed] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isRecordingOpen, setIsRecordingOpen] = useState(false);
     const [writerChar, setWriterChar] = useState(null);
     const [isFavoriteCard, setIsFavoriteCard] = useState(false);
     const [isJumping, setIsJumping] = useState(false);
@@ -483,7 +405,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (currentIndex >= newCards.length) setCurrentIndex(0);
     };
 
-    // ✅ 修复：自动播放序列 (中文 -> 缅文 -> 例句 -> 下一个)
+    const handleDontKnow = () => {
+        if (isRevealed) {
+            lastDirection.current = 1;
+            setCurrentIndex(p => (p + 1) % activeCards.length);
+            setIsRevealed(false);
+        } else {
+            setIsRevealed(true);
+        }
+    };
+    
+    // 自动播放序列
     useEffect(() => {
         if (!isOpen || !currentCard) return;
         clearTimeout(autoBrowseTimerRef.current);
@@ -493,12 +425,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, () => {
                 if (settings.autoPlayBurmese && isRevealed) {
                     playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, settings.ttsSource, () => {
-                        // 播放例句
                         if (settings.autoPlayExample && currentCard.example && isRevealed) {
                             playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource, startTimer);
-                        } else {
-                            startTimer();
-                        }
+                        } else startTimer();
                     });
                 } else startTimer();
             });
@@ -520,7 +449,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         from: { opacity: 0, transform: `translateY(${lastDirection.current * 100}%)` },
         enter: { opacity: 1, transform: 'translateY(0%)' },
         leave: { opacity: 0, transform: `translateY(${-lastDirection.current * 100}%)`, position: 'absolute' },
-        config: { tension: 280, friction: 30 }
+        config: { tension: 280, friction: 30 },
+        onStart: () => playSoundEffect('switch')
     });
 
     const pageTransition = useTransition(isOpen, {
@@ -529,15 +459,15 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         leave: { opacity: 0, transform: 'translateY(100%)' },
     });
 
-    // 划屏手势 (修复)
+    // 划屏手势
     const bind = useDrag(({ down, movement: [mx, my], velocity: [vx, vy], direction: [xDir, yDir], event }) => {
         if (event.target.closest('[data-no-gesture]')) return;
         if (down) return;
         event.stopPropagation();
         
-        // 垂直下滑 -> 关闭
+        // 下滑关闭
         if (my > 100 && vy > 0.5) onClose();
-        // 水平滑动 -> 切词
+        // 水平滑动切词
         else if (Math.abs(mx) > 50 && Math.abs(mx) > Math.abs(my)) navigate(xDir < 0 ? 1 : -1);
     }, { filterTaps: true });
 
@@ -549,7 +479,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             {/* 弹窗层 */}
             {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
             {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
-            {isRecordingOpen && <RecordingComparisonModal word={currentCard} settings={settings} onClose={() => setIsRecordingOpen(false)} />}
             {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={(i)=>{setCurrentIndex(i);setIsJumping(false)}} onClose={()=>setIsJumping(false)} />}
 
             {/* 卡片主体 */}
@@ -592,12 +521,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 </div>
             )}
 
-            {/* 右侧工具栏 */}
+            {/* 右侧工具栏 (无录音按钮) */}
             {activeCards.length > 0 && (
                 <div style={styles.rightBar} data-no-gesture="true">
                     <button style={styles.iconBtn} onClick={(e)=>{e.stopPropagation(); setIsSettingsOpen(true)}}><FaCog /></button>
                     <button style={styles.iconBtn} onClick={(e)=>{e.stopPropagation(); playTTS(currentCard.audioText, settings.voiceChinese, settings.speechRateChinese, settings.ttsSource)}}><FaVolumeUp /></button>
-                    <button style={styles.iconBtn} onClick={(e)=>{e.stopPropagation(); setIsRecordingOpen(true)}}><FaMicrophone /></button>
                     <button style={{...styles.iconBtn, color: '#0084FF'}} onClick={handleShare}><FaFacebookMessenger /></button>
                     {currentCard?.chinese.length <= 4 && (
                         <button style={styles.iconBtn} onClick={(e)=>{e.stopPropagation(); setWriterChar(currentCard.chinese)}}><FaPenFancy /></button>
@@ -663,18 +591,6 @@ const styles = {
     bottomBar: { position: 'fixed', bottom: 30, left: 20, right: 20, zIndex: 10, display: 'flex', justifyContent: 'center', pointerEvents: 'none' },
     buttons: { display: 'flex', gap: 20, width: '100%', maxWidth: 400, pointerEvents: 'auto' },
     btn: { flex: 1, padding: 18, border: 'none', borderRadius: 16, color: 'white', fontSize: '1.1rem', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-
-    // 弹窗通用
-    comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    comparisonPanel: { width: '90%', maxWidth: 350, background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
-    recordHeader: { padding: '15px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight:'bold', color:'#333' },
-    recordContent: { padding: 25, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 },
-    textWordChinese: { fontSize: '2.5rem', fontWeight: 'bold', color: '#333' },
-    
-    bigRecordBtn: { width: 80, height: 80, borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)' },
-    circleBtnBlue: { width: 60, height: 60, borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    circleBtnGreen: { width: 60, height: 60, borderRadius: '50%', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    retryLink: { background: 'none', border: 'none', color: '#6b7280', textDecoration: 'underline', marginTop: 10, display:'flex', alignItems:'center', gap:5 },
 
     // 设置弹窗
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' },
