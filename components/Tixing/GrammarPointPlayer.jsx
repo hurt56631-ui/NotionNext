@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
-// 1. 引入 Messenger 图标
-import { FaVolumeUp, FaSpinner, FaChevronLeft, FaChevronRight, FaRobot, FaTimes, FaPause, FaPlay, FaFacebookMessenger } from 'react-icons/fa';
+import { 
+  FaVolumeUp, FaSpinner, FaChevronLeft, FaChevronRight, 
+  FaRobot, FaTimes, FaPause, FaPlay, FaFacebookMessenger 
+} from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ⚠️ 请确保这个路径下有您的 AI 聊天组件，如果报错 404 请检查此路径
 import AiChatAssistant from '../AiChatAssistant';
 
 // =================================================================================
-// ===== 1. IndexedDB 工具函数（增强版：防坏死缓存 & in-flight 去重） =====
+// ===== 1. IndexedDB 工具函数 (保持不变) =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
 const STORE_NAME = 'audio_blobs';
@@ -93,7 +95,7 @@ const idb = {
 const inFlightRequests = new Map();
 
 // =================================================================================
-// ===== 2. 混合 TTS Hook（支持可选原生降级、缓存、播放队列、资源回收） =====
+// ===== 2. 混合 TTS Hook (保持不变) =====
 // =================================================================================
 function useMixedTTS() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -200,6 +202,7 @@ function useMixedTTS() {
 
     const promise = (async () => {
       try {
+        // 使用您的 TTS API
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`;
         const res = await fetch(url);
         if (!res.ok) {
@@ -347,6 +350,7 @@ function useMixedTTS() {
       console.error('网络 TTS 失败：', e);
       setLoadingId(null);
 
+      // 降级处理
       if (options.allowNativeFallback && window.speechSynthesis) {
         try {
           const utter = new SpeechSynthesisUtterance(String(text).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').replace(/\n+/g, ' ').trim());
@@ -403,8 +407,10 @@ function useMixedTTS() {
 }
 
 // =================================================================================
-// ===== 3. 辅助函数与组件 =====
+// ===== 3. 辅助组件与格式化工具 =====
 // =================================================================================
+
+// 1. Ruby 拼音生成
 const generateRubyHTML = (text) => {
   if (!text) return '';
   return text.replace(/[\u4e00-\u9fff]+/g, word => {
@@ -418,6 +424,64 @@ const generateRubyHTML = (text) => {
   });
 };
 
+// 2. 简单的 Markdown 转 HTML 解析器（用于处理数据中的表格、粗体和标题）
+const simpleMarkdownToHtml = (markdown) => {
+  if (!markdown) return '';
+  let html = markdown;
+
+  // 1. 处理标题 (###)
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  
+  // 2. 处理粗体 (**text**)
+  html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+  
+  // 3. 处理引用 (> text)
+  html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+  
+  // 4. 处理简单的表格 (非常基础的转换)
+  if (html.includes('|')) {
+    const lines = html.split('\n');
+    let inTable = false;
+    let tableHtml = '';
+    let resultLines = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('|')) {
+            if (!inTable) {
+                inTable = true;
+                tableHtml = '<table class="md-table">';
+            }
+            // 忽略分隔行 |---|
+            if (line.includes('---')) continue; 
+            
+            const cells = line.split('|').filter(c => c.length > 0);
+            tableHtml += '<tr>';
+            cells.forEach(cell => {
+                tableHtml += `<td>${cell.trim()}</td>`;
+            });
+            tableHtml += '</tr>';
+        } else {
+            if (inTable) {
+                tableHtml += '</table>';
+                resultLines.push(tableHtml);
+                inTable = false;
+            }
+            resultLines.push(line);
+        }
+    }
+    if (inTable) resultLines.push(tableHtml + '</table>');
+    html = resultLines.join('\n');
+  }
+
+  // 5. 处理换行 (\n)
+  html = html.replace(/\n/g, '<br/>');
+  
+  return html;
+};
+
+// 3. AI 助手悬浮球
 const DraggableAiBtn = ({ contextText }) => {
   const [isOpen, setIsOpen] = useState(false);
   const constraintsRef = useRef(null);
@@ -444,23 +508,11 @@ const DraggableAiBtn = ({ contextText }) => {
         aria-label="打开 AI 语法助手"
         title="打开 AI 语法助手"
         style={{
-          position: 'absolute',
-          bottom: '120px',
-          right: '20px',
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-          boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)',
-          color: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-          cursor: 'pointer',
-          border: 'none',
-          touchAction: 'none',
-          outline: 'none'
+          position: 'absolute', bottom: '120px', right: '20px', width: '56px', height: '56px',
+          borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+          boxShadow: '0 4px 15px rgba(37, 99, 235, 0.4)', color: 'white', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 100, cursor: 'pointer',
+          border: 'none', touchAction: 'none', outline: 'none'
         }}
       >
         <FaRobot size={26} />
@@ -479,19 +531,10 @@ const DraggableAiBtn = ({ contextText }) => {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
               style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '72vh',
-                background: 'white',
-                borderTopLeftRadius: '20px',
-                borderTopRightRadius: '20px',
-                boxShadow: '0 -4px 30px rgba(0,0,0,0.12)',
-                zIndex: 1002,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden'
+                position: 'fixed', bottom: 0, left: 0, right: 0, height: '72vh',
+                background: 'white', borderTopLeftRadius: '20px', borderTopRightRadius: '20px',
+                boxShadow: '0 -4px 30px rgba(0,0,0,0.12)', zIndex: 1002, display: 'flex',
+                flexDirection: 'column', overflow: 'hidden'
               }}
             >
               <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
@@ -506,13 +549,12 @@ const DraggableAiBtn = ({ contextText }) => {
                 </div>
                 <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} style={{ padding: '8px', background: '#f8fafc', borderRadius: '50%', border: 'none', color: '#64748b', cursor: 'pointer', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="关闭"><FaTimes size={14} /></button>
               </div>
-
               <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#fbfdff' }}>
                 {AiChatAssistant ? <AiChatAssistant context={contextText} /> : (
                   <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', padding: 20 }}>
                     <div style={{ textAlign: 'center' }}>
                       <FaRobot size={44} className="opacity-40" />
-                      <div style={{ marginTop: 12 }}>未检测到 AI 组件，请检查路径：../AiChatAssistant</div>
+                      <div style={{ marginTop: 12 }}>未检测到 AI 组件</div>
                     </div>
                   </div>
                 )}
@@ -530,10 +572,30 @@ const DraggableAiBtn = ({ contextText }) => {
 // =================================================================================
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   const [isMounted, setIsMounted] = useState(false);
-
-  // 🔴 必须配置：请填入你的 Facebook App ID 否则电脑端网页无法使用发送功能
-  // 如果没有 App ID，您可以去 developers.facebook.com 申请一个 Consumer 类型的 APP
+  
+  // 配置 Facebook App ID (电脑端分享需要，移动端可直接唤起 App)
   const FACEBOOK_APP_ID = ''; 
+
+  // ✅ 核心修复 1：数据格式化
+  // 将中文 Key 映射为组件使用的英文 Key
+  const normalizedPoints = useMemo(() => {
+    if (!Array.isArray(grammarPoints)) return [];
+    return grammarPoints.map(item => ({
+      id: item.id,
+      grammarPoint: item.语法标题 || item.grammarPoint,
+      pattern: item.句型结构 || item.pattern,
+      visibleExplanation: item.语法详解 || item.visibleExplanation,
+      usage: item.适用场景 || item.usage,
+      attention: item.注意事项 || item.attention,
+      narrationScript: item.讲解脚本 || item.narrationScript,
+      examples: (item.例句列表 || item.examples || []).map(ex => ({
+        id: ex.id,
+        sentence: ex.句子 || ex.sentence,
+        translation: ex.翻译 || ex.translation,
+        narrationScript: ex.例句发音 || ex.narrationScript
+      }))
+    }));
+  }, [grammarPoints]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -543,10 +605,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       document.body.style.overscrollBehavior = prev || '';
     };
   }, []);
-
-  if (!grammarPoints || !Array.isArray(grammarPoints) || grammarPoints.length === 0) {
-    return <div className="flex h-full items-center justify-center text-gray-400">暂无语法数据</div>;
-  }
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const lastDirection = useRef(0);
@@ -565,8 +623,8 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     const preloadNextItems = (count) => {
       for (let i = 1; i <= count; i++) {
         const nextIndex = currentIndex + i;
-        if (nextIndex < grammarPoints.length) {
-          const nextGp = grammarPoints[nextIndex];
+        if (nextIndex < normalizedPoints.length) {
+          const nextGp = normalizedPoints[nextIndex];
           if (nextGp.narrationScript) preload(nextGp.narrationScript);
           if (Array.isArray(nextGp.examples)) {
             nextGp.examples.forEach(ex => preload(ex.narrationScript || ex.sentence));
@@ -575,31 +633,22 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       }
     };
     preloadNextItems(2);
-  }, [currentIndex, grammarPoints, preload]);
+  }, [currentIndex, normalizedPoints, preload]);
 
-  // --- 新增：处理 Messenger 发送给朋友/群组 ---
   const handleMessengerShare = () => {
     const link = typeof window !== 'undefined' ? window.location.href : '';
-    
-    // 移动端检测
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
     if (isMobile) {
-        // 方案 A: 尝试唤起 Messenger App (体验最好)
-        // 使用 fb-messenger:// 协议
         window.location.href = `fb-messenger://share/?link=${encodeURIComponent(link)}`;
-        
-        // 方案 B: 如果没有安装 APP，一段时间后 fallback 到网页版 (可选)
-        // 注意：这种 timeout fallback 在某些现代浏览器可能被拦截，但这是标准做法
         setTimeout(() => {
             if (FACEBOOK_APP_ID) {
                  window.open(`https://www.facebook.com/dialog/send?app_id=${FACEBOOK_APP_ID}&link=${encodeURIComponent(link)}&redirect_uri=${encodeURIComponent(link)}`, '_blank');
             }
         }, 1500);
     } else {
-        // 电脑端：必须使用 Facebook Send Dialog API，且必须有 App ID
         if (!FACEBOOK_APP_ID) {
-            alert("开发人员提示：请在代码中配置 FACEBOOK_APP_ID 以使用网页版发送给朋友功能。");
+            alert("请在代码中配置 FACEBOOK_APP_ID 以使用网页版分享。");
             return;
         }
         const url = `https://www.facebook.com/dialog/send?app_id=${FACEBOOK_APP_ID}&link=${encodeURIComponent(link)}&redirect_uri=${encodeURIComponent(link)}`;
@@ -615,7 +664,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   };
 
   const handleNext = () => {
-    if (currentIndex < grammarPoints.length - 1) {
+    if (currentIndex < normalizedPoints.length - 1) {
       lastDirection.current = 1;
       setCurrentIndex(prev => prev + 1);
     } else {
@@ -631,7 +680,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   };
 
   const transitions = useTransition(currentIndex, {
-    key: grammarPoints[currentIndex]?.id || currentIndex,
+    key: normalizedPoints[currentIndex]?.id || currentIndex,
     from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` },
     enter: { opacity: 1, transform: 'translateX(0%)' },
     leave: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
@@ -659,8 +708,10 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
     });
   };
 
-  const renderRichExplanation = (htmlContent) => {
-    if (!htmlContent) return null;
+  // ✅ 核心修复 2：使用 Markdown 解析器渲染内容
+  const renderRichExplanation = (content) => {
+    if (!content) return null;
+    const htmlContent = simpleMarkdownToHtml(content);
     return <div className="rich-text-content" style={styles.richTextContainer} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
   };
 
@@ -676,19 +727,19 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       <button
         className={`play-button ${isCurrentPlaying && !isPaused ? 'playing' : ''}`}
         style={isSmall ? styles.playButtonSmall : styles.playButton}
-        onClick={(e) => {
-          e.stopPropagation();
-          play(script, id, opts);
-        }}
-        aria-label="播放朗读"
-        title="播放朗读"
+        onClick={(e) => { e.stopPropagation(); play(script, id, opts); }}
+        aria-label="播放朗读" title="播放朗读"
       >
         <Icon className={isLoading ? "spin" : ""} />
       </button>
     );
   };
 
-  const currentGp = grammarPoints[currentIndex];
+  if (!normalizedPoints || normalizedPoints.length === 0) {
+    return <div className="flex h-full items-center justify-center text-gray-400">暂无语法数据</div>;
+  }
+
+  const currentGp = normalizedPoints[currentIndex];
   const contextText = currentGp ? `我在学习语法点：【${currentGp.grammarPoint}】。\n结构是：${currentGp.pattern || '无'}。\n解释：${(currentGp.visibleExplanation || '').replace(/<[^>]+>/g, '')}` : '';
 
   return (
@@ -696,7 +747,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
       <DraggableAiBtn contextText={contextText} />
 
       {transitions((style, i) => {
-        const gp = grammarPoints[i];
+        const gp = normalizedPoints[i];
         if (!gp) return null;
         const narrationId = `narration_${gp.id}`;
 
@@ -705,7 +756,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
             <div style={styles.scrollContainer} ref={contentRef} onScroll={handleScroll}>
               <div style={styles.contentWrapper}>
                 
-                {/* --- 修改后的 Header：包含 Messenger 按钮 --- */}
+                {/* 标题栏 & Messenger 按钮 */}
                 <div style={styles.header}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                     <h2 style={styles.grammarPointTitle}>{gp.grammarPoint}</h2>
@@ -713,16 +764,9 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                       onClick={handleMessengerShare}
                       title="发给 Facebook 朋友"
                       style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#0084FF', // Messenger 蓝色
-                        cursor: 'pointer',
-                        padding: '6px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '50%',
-                        transition: 'background 0.2s'
+                        background: 'transparent', border: 'none', color: '#0084FF',
+                        cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', borderRadius: '50%', transition: 'background 0.2s'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.background = '#eef2ff'}
                       onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -731,7 +775,6 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                     </button>
                   </div>
                 </div>
-                {/* ------------------------------------------ */}
 
                 {gp.pattern && (
                   <div style={styles.patternBox}>
@@ -753,7 +796,7 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
                 {gp.usage && (
                   <div style={styles.sectionContainer}>
                     <div style={styles.sectionHeader}>
-                      <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 使用场景</span>
+                      <span style={{ ...styles.sectionTitleText, color: '#059669' }}>📌 适用场景</span>
                     </div>
                     <div style={{ ...styles.textBlock, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
                       {renderRichExplanation(gp.usage)}
@@ -800,29 +843,16 @@ const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
 
             <div style={styles.bottomBar}>
               <button
-                style={{
-                  ...styles.navButton,
-                  visibility: i === 0 ? 'hidden' : 'visible',
-                  background: '#f1f5f9',
-                  color: '#64748b'
-                }}
-                onClick={handlePrev}
-                aria-label="上一条"
+                style={{ ...styles.navButton, visibility: i === 0 ? 'hidden' : 'visible', background: '#f1f5f9', color: '#64748b' }}
+                onClick={handlePrev} aria-label="上一条"
               >
                 <FaChevronLeft /> 上一条
               </button>
-              {/* 中间无任何进度显示文本 */}
               <button
-                style={{
-                  ...styles.navButton,
-                  background: '#2563eb',
-                  color: 'white',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-                }}
-                onClick={handleNext}
-                aria-label="下一条"
+                style={{ ...styles.navButton, background: '#2563eb', color: 'white', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)' }}
+                onClick={handleNext} aria-label="下一条"
               >
-                {i === grammarPoints.length - 1 ? '完成学习' : '下一条'} <FaChevronRight />
+                {i === normalizedPoints.length - 1 ? '完成学习' : '下一条'} <FaChevronRight />
               </button>
             </div>
           </animated.div>
@@ -882,6 +912,10 @@ if (styleTag) {
     .rich-text-content h1, .rich-text-content h2, .rich-text-content h3 { color: #0f172a; margin: 1.2em 0 0.5em 0; padding-bottom: 0.2em; border-bottom: 1px solid #eef2ff; font-weight: 700; }
     .rich-text-content p { margin: 0.6em 0; color: #475569; line-height: 1.8; }
     .rich-text-content strong, .rich-text-content b { color: #0b3d91; font-weight: 700; }
+    .rich-text-content blockquote { border-left: 4px solid #3b82f6; background: #eff6ff; margin: 1em 0; padding: 0.5em 1em; color: #1e40af; }
+    .rich-text-content table.md-table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+    .rich-text-content table.md-table td, .rich-text-content table.md-table th { border: 1px solid #e2e8f0; padding: 8px; }
+    .rich-text-content table.md-table tr:nth-child(even) { background-color: #f8fafc; }
     .rich-text-content ul, .rich-text-content ol { margin: 0.6em 0 0.6em 1.2em; padding-left: 0.6em; }
     .rich-text-content li { margin: 0.4em 0; color: #475569; }
     .rich-text-content code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace; }
