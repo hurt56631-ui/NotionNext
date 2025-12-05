@@ -1,4 +1,4 @@
-// components/WordCard.js (浅色主题 + 音频互斥 + 认识移除逻辑 + 全缅文 + 默认慢速)
+// components/WordCard.js (浅色主题 + 音频互斥 + 认识移除逻辑 + 全缅文 + 录音重制)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,7 +7,7 @@ import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { 
     FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
-    FaArrowRight, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp 
+    FaArrowRight, FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaRedo 
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -73,21 +73,18 @@ const TTS_VOICES = [
 ];
 
 let sounds = null;
-let _howlInstance = null; // 全局音频实例
+let _howlInstance = null; 
 
-// ✅ 全局停止音频函数 (确保只有一个声音在播放)
+// ✅ 全局停止音频函数
 const stopAllAudio = () => {
-    // 停止 Howler 音频
     if (_howlInstance) {
         _howlInstance.stop();
         _howlInstance.unload();
         _howlInstance = null;
     }
-    // 停止音效
     if (sounds) {
         Object.values(sounds).forEach(s => s.stop());
     }
-    // 停止浏览器自带语音
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
     }
@@ -103,11 +100,11 @@ const initSounds = () => {
     }
 };
 
-// ✅ TTS 播放逻辑
+// ✅ TTS 播放逻辑 (带降级)
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation(); 
     
-    stopAllAudio(); // 播放前强制打断其他声音
+    stopAllAudio(); 
 
     if (!text || !voice) { 
         if (onEndCallback) onEndCallback(); 
@@ -160,170 +157,118 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
 const playSoundEffect = (type) => { 
     if (typeof window === 'undefined') return;
     initSounds();
-    stopAllAudio(); // 音效也打断其他声音
+    stopAllAudio();
     if (sounds && sounds[type]) sounds[type].play(); 
 };
 
-const parsePinyin = (pinyinNum) => { 
-    if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' }; 
-    const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, ''); 
-    let pinyinPlain = rawPinyin.replace(/[1-5]$/, ''); 
-    const toneMatch = rawPinyin.match(/[1-5]$/); 
-    const tone = toneMatch ? toneMatch[0] : '0'; 
-    const pinyinMark = pinyinConverter(rawPinyin, { toneType: 'symbol' }).replace(/·/g, ' '); 
-    const initials = ['zh', 'ch', 'sh', 'b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 'j', 'q', 'x', 'r', 'z', 'c', 's', 'y', 'w']; 
-    let initial = ''; 
-    let final = pinyinPlain; 
-    for (const init of initials) { 
-        if (pinyinPlain.startsWith(init)) { 
-            initial = init; 
-            final = pinyinPlain.slice(init.length); 
-            break; 
-        } 
-    } 
-    return { initial, final, tone, pinyinMark, rawPinyin }; 
-};
+// --- 重做的录音对比组件 ---
+const PronunciationComparison = ({ correctWord, settings, onClose }) => {
+    const [status, setStatus] = useState('idle'); // idle, recording, review
+    const [userAudioUrl, setUserAudioUrl] = useState(null);
+    const mediaRecorderRef = useRef(null);
+    const streamRef = useRef(null);
+    const localAudioRef = useRef(null);
 
-// --- 子组件部分 ---
+    useEffect(() => {
+        return () => {
+            if (userAudioUrl) URL.revokeObjectURL(userAudioUrl);
+            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+            if (localAudioRef.current) localAudioRef.current.unload();
+            stopAllAudio();
+        };
+    }, [userAudioUrl]);
 
-const useCardSettings = () => { 
-    const [settings, setSettings] = useState(() => { 
-        try { 
-            if (typeof window === 'undefined') return {};
-            const savedSettings = localStorage.getItem('learningWordCardSettings'); 
-            // ✅ 默认语速设为 -50
-            const defaultSettings = { 
-                order: 'sequential', 
-                autoPlayChinese: true, 
-                autoPlayBurmese: true, 
-                autoPlayExample: true, 
-                autoBrowse: false, 
-                autoBrowseDelay: 6000, 
-                voiceChinese: 'zh-CN-XiaoyouNeural', 
-                voiceBurmese: 'my-MM-NilarNeural', 
-                speechRateChinese: -50, 
-                speechRateBurmese: -50, 
-                backgroundImage: '', 
-            }; 
-            return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; 
-        } catch (error) { 
-            return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: -50, speechRateBurmese: -50, backgroundImage: '' }; 
-        } 
-    }); 
-    useEffect(() => { 
-        try { 
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); 
-            }
-        } catch (error) { } 
-    }, [settings]); 
-    return [settings, setSettings]; 
-};
+    const startRecording = async () => {
+        stopAllAudio();
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            streamRef.current = stream;
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const url = URL.createObjectURL(blob);
+                setUserAudioUrl(url);
+                setStatus('review');
+                stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorderRef.current = recorder;
+            recorder.start();
+            setStatus('recording');
+        } catch (err) { alert("မိုက်ခရိုဖုန်း ဖွင့်ထားခြင်း ရှိမရှိ စစ်ဆေးပါ (请检查麦克风)"); }
+    };
 
-const PinyinVisualizer = React.memo(({ analysis, isCorrect }) => { 
-    const { parts, errors } = analysis; 
-    const initialStyle = !isCorrect && parts.initial && errors.initial ? styles.wrongPart : {}; 
-    const finalStyle = !isCorrect && parts.final && errors.final ? styles.wrongPart : {}; 
-    const toneStyle = !isCorrect && parts.tone !== '0' && errors.tone ? styles.wrongPart : {}; 
-    let finalDisplay = parts.pinyinMark.replace(parts.initial, '').replace(' ', ''); 
-    if (!finalDisplay || parts.pinyinMark === parts.rawPinyin) { finalDisplay = parts.final; } 
-    finalDisplay = finalDisplay.replace(/[1-5]$/, ''); 
-    return ( 
-        <div style={styles.pinyinVisualizerContainer}>
-            <span style={{...styles.pinyinPart, ...initialStyle}}>{parts.initial || ''}</span>
-            <span style={{...styles.pinyinPart, ...finalStyle}}>{finalDisplay}</span>
-            <span style={{...styles.pinyinPart, ...styles.toneNumber, ...toneStyle}}>{parts.tone}</span>
-        </div> 
-    ); 
-});
+    const stopRecording = () => { 
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop(); 
+        }
+    };
 
-const PronunciationComparison = ({ correctWord, userText, settings, onContinue, onClose }) => { 
-    const analysis = useMemo(() => { 
-        if (!userText) { return { isCorrect: false, error: 'NO_PINYIN', message: 'အသံဖမ်းယူမှု မအောင်မြင်ပါ' }; } 
-        const correctPinyin = pinyinConverter(correctWord, { toneType: 'num', type: 'array', removeNonHan: true }); 
-        const userPinyin = pinyinConverter(userText, { toneType: 'num', type: 'array', removeNonHan: true }); 
-        if (correctPinyin.length === 0 || userPinyin.length === 0) return { isCorrect: false, error: 'NO_PINYIN', message: 'အသံဖမ်းယူမှု မအောင်မြင်ပါ' }; 
-        if (correctPinyin.length !== userPinyin.length) return { isCorrect: false, error: 'LENGTH_MISMATCH', message: `စာလုံးရေ မကိုက်ညီပါ: ${correctPinyin.length} လုံး ရှိရမည့်အစား ${userPinyin.length} လုံး ဖြစ်နေသည်` }; 
-        const results = correctPinyin.map((correctPy, index) => { 
-            const userPy = userPinyin[index]; 
-            const correctParts = parsePinyin(correctPy); 
-            const userParts = parsePinyin(userPy); 
-            const errors = { initial: (correctParts.initial || userParts.initial) && (correctParts.initial !== userParts.initial), final: correctParts.final !== userParts.final, tone: correctParts.tone !== userParts.tone }; 
-            const pinyinMatch = !errors.initial && !errors.final && !errors.tone; 
-            return { char: correctWord[index], pinyinMatch, correct: { parts: correctParts }, user: { parts: userParts, errors } }; 
-        }); 
-        const isCorrect = results.every(r => r.pinyinMatch); 
-        const accuracy = (results.filter(r => r.pinyinMatch).length / results.length * 100).toFixed(0); 
-        return { isCorrect, results, accuracy }; 
-    }, [correctWord, userText]); 
-    
-    const [isRecording, setIsRecording] = useState(false); 
-    const [userRecordingUrl, setUserRecordingUrl] = useState(null); 
-    const mediaRecorderRef = useRef(null); 
-    const streamRef = useRef(null); 
-    useEffect(() => { if (analysis && analysis.results) playSoundEffect(analysis.isCorrect ? 'correct' : 'incorrect'); }, [analysis]); 
-    const handleRecord = useCallback(async () => { 
-        if (isRecording) { mediaRecorderRef.current?.stop(); return; } 
-        try { 
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); 
-            streamRef.current = stream; 
-            const recorder = new MediaRecorder(stream); 
-            mediaRecorderRef.current = recorder; 
-            const chunks = []; 
-            recorder.ondataavailable = e => chunks.push(e.data); 
-            recorder.onstop = () => { 
-                const blob = new Blob(chunks, { type: 'audio/webm' }); 
-                const url = URL.createObjectURL(blob); 
-                setUserRecordingUrl(url); 
-                streamRef.current?.getTracks().forEach(track => track.stop()); 
-                setIsRecording(false); 
-            }; 
-            recorder.start(); 
-            setIsRecording(true); 
-        } catch (err) { alert("မိုက်ခရိုဖုန်း ဖွင့်ထားခြင်း ရှိမရှိ စစ်ဆေးပါ"); } 
-    }, [isRecording]); 
-    const playUserAudio = useCallback(() => { 
-        if (userRecordingUrl) { 
-            stopAllAudio(); 
-            const sound = new Howl({ src: [userRecordingUrl], html5: true }); 
-            sound.play(); 
-        } 
-    }, [userRecordingUrl]); 
-    const playCorrectTTS = useCallback(() => { playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); }, [correctWord, settings]); 
-    useEffect(() => { return () => { if (userRecordingUrl) { URL.revokeObjectURL(userRecordingUrl); } }; }, [userRecordingUrl]); 
-    if (!analysis) return null; 
-    return ( 
-        <div style={styles.comparisonOverlay}> 
-            <div style={styles.comparisonPanel}> 
-                <div style={{...styles.resultHeader, background: analysis.isCorrect ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)'}}> 
-                    <div style={{ fontSize: '2.5rem' }}>{analysis.isCorrect ? '🎉' : '💪'}</div> 
-                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analysis.isCorrect ? 'အသံထွက် မှန်ကန်သည်' : `မှန်ကန်မှု: ${analysis.accuracy}%`}</div> 
-                    <div style={{ fontSize: '1rem', marginTop: '8px' }}>{analysis.isCorrect ? 'အလွန်တော်သည်' : 'ထပ်မံ ကြိုးစားပါ'}</div> 
-                </div> 
-                <div style={styles.errorDetailsContainer}>
-                    {analysis.error ? (<div style={styles.lengthError}><h3>{analysis.message}</h3></div>) : (
-                        <div style={styles.comparisonGrid}>
-                            {analysis.results.map((result, index) => (
-                                <div key={index} style={styles.comparisonCell}>
-                                    <div style={styles.comparisonChar}>{result.char}</div>
-                                    <div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>အမှန်</div><PinyinVisualizer analysis={result.correct} isCorrect={true} /></div>
-                                    <div style={styles.comparisonPinyinGroup}><div style={styles.pinyinLabel}>သင်၏အသံ</div><PinyinVisualizer analysis={result.user} isCorrect={result.pinyinMatch} /></div>
+    const resetRecording = () => { 
+        if (userAudioUrl) URL.revokeObjectURL(userAudioUrl); 
+        setUserAudioUrl(null); 
+        setStatus('idle'); 
+    };
+
+    const playStandard = () => { 
+        if (localAudioRef.current) localAudioRef.current.stop();
+        playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); 
+    };
+
+    const playUser = () => { 
+        if (!userAudioUrl) return; 
+        stopAllAudio();
+        if (localAudioRef.current) localAudioRef.current.unload(); 
+        localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true }); 
+        localAudioRef.current.play(); 
+    };
+
+    return (
+        <div style={styles.comparisonOverlay} onClick={onClose}>
+            <div style={styles.comparisonPanel} onClick={e => e.stopPropagation()}>
+                <div style={styles.recordHeader}>
+                    <h3>အသံထွက် လေ့ကျင့်ရန်</h3> {/* 语音练习 */}
+                    <button style={styles.closeButtonSimple} onClick={onClose}><FaTimes /></button>
+                </div>
+                <div style={styles.recordContent}>
+                    <div style={styles.recordWordDisplay}>
+                        <div style={styles.textWordChinese}>{correctWord}</div>
+                    </div>
+                    
+                    <div style={styles.actionArea}>
+                        {status === 'idle' && (
+                            <div style={styles.idleStateContainer}>
+                                <button style={styles.bigRecordBtn} onClick={startRecording}><FaMicrophone size={32} /></button>
+                                <div style={styles.instructionText}>နှိပ်၍ အသံသွင်းပါ</div> {/* 点击开始录音 */}
+                            </div>
+                        )}
+                        {status === 'recording' && (
+                            <div style={styles.idleStateContainer}>
+                                <button style={{...styles.bigRecordBtn, ...styles.recordingPulse, background: '#ef4444'}} onClick={stopRecording}><FaStop size={32} /></button>
+                                <div style={{...styles.instructionText, color: '#ef4444'}}>အသံသွင်းနေသည်... ရပ်ရန် နှိပ်ပါ</div> {/* 录音中... 点击停止 */}
+                            </div>
+                        )}
+                        {status === 'review' && (
+                            <div style={styles.reviewContainer}>
+                                <div style={styles.reviewRow}>
+                                    <div style={styles.reviewItem}>
+                                        <div style={styles.reviewLabel}>အမှန်</div> {/* 标准 */}
+                                        <button style={styles.circleBtnBlue} onClick={playStandard}><FaVolumeUp size={24} /></button>
+                                    </div>
+                                    <div style={styles.reviewItem}>
+                                        <div style={styles.reviewLabel}>သင်၏အသံ</div> {/* 你的 */}
+                                        <button style={styles.circleBtnGreen} onClick={playUser}><FaPlayCircle size={24} /></button>
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div> 
-                <div style={styles.audioComparisonSection}> 
-                    <button style={styles.audioPlayerButton} onClick={playCorrectTTS}><FaPlayCircle size={18} /> ပုံမှန်အသံ</button> 
-                    <button style={{...styles.audioPlayerButton, ...(isRecording ? {color: '#dc2626'} : {})}} onClick={handleRecord}> {isRecording ? <FaStop size={18} /> : <FaMicrophone size={18} />} {isRecording ? 'ရပ်တန့်ရန်' : 'အသံသွင်းရန်'} </button> 
-                    {userRecordingUrl && <button style={styles.audioPlayerButton} onClick={playUserAudio}><FaPlayCircle size={18} /> ပြန်နားထောင်ရန်</button>} 
-                </div> 
-                <div style={styles.comparisonActions}> 
-                    {analysis.isCorrect ? (<button style={{...styles.actionButton, ...styles.continueButton}} onClick={onContinue}>နောက်တစ်ခု <FaArrowRight /></button>) : (<button style={{...styles.actionButton, ...styles.retryButton}} onClick={onClose}>ထပ်ကြိုးစားမည်</button>)} 
-                </div> 
-            </div> 
-        </div> 
-    ); 
+                                <button style={styles.retryLink} onClick={resetRecording}><FaRedo size={14} /> ပြန်အသံသွင်းမယ်</button> {/* 重录 */}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // --- 设置面板 (全缅文) ---
@@ -334,13 +279,13 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
         <div style={styles.settingsModal} onClick={onClose}>
             <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
                 <button style={styles.closeButton} onClick={onClose}><FaTimes /></button>
-                <h2 style={{marginTop: 0}}>အထွေထွေ ဆက်တင်များ</h2> {/* General Settings */}
+                <h2 style={{marginTop: 0, color: '#374151'}}>အထွေထွေ ဆက်တင်များ</h2> {/* General Settings */}
                 
                 <div style={styles.settingGroup}>
                     <label style={styles.settingLabel}>လေ့လာမည့် အစီအစဉ်</label> {/* Learning Order */}
                     <div style={styles.settingControl}>
-                        <button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'sequential' ? 'white' : '#4a5568' }}><FaSortAmountDown/> အစဉ်လိုက်</button> {/* Sequential */}
-                        <button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : 'rgba(0,0,0,0.1)', color: settings.order === 'random' ? 'white' : '#4a5568' }}><FaRandom/> ကျပန်း</button> {/* Random */}
+                        <button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : '#f3f4f6', color: settings.order === 'sequential' ? 'white' : '#4b5563' }}><FaSortAmountDown/> အစဉ်လိုက်</button> {/* Sequential */}
+                        <button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : '#f3f4f6', color: settings.order === 'random' ? 'white' : '#4b5563' }}><FaRandom/> ကျပန်း</button> {/* Random */}
                     </div>
                 </div>
 
@@ -352,7 +297,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
                     <div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoBrowse} onChange={(e) => handleSettingChange('autoBrowse', e.target.checked)} /> {settings.autoBrowseDelay/1000}စက္ကန့်အကြာ နောက်တစ်ခုသွားရန်</label></div>
                 </div>
 
-                <h2 style={{marginTop: '30px'}}>အသွင်အပြင်</h2> {/* Appearance */}
+                <h2 style={{marginTop: '30px', color: '#374151'}}>အသွင်အပြင်</h2> {/* Appearance */}
                 <div style={styles.settingGroup}>
                     <label style={styles.settingLabel}>နောက်ခံပုံ</label> {/* Background */}
                     <div style={styles.settingControl}>
@@ -362,7 +307,7 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
                     </div>
                 </div>
 
-                <h2 style={{marginTop: '30px'}}>အသံထွက် ဆက်တင်များ</h2> {/* Voice Settings */}
+                <h2 style={{marginTop: '30px', color: '#374151'}}>အသံထွက် ဆက်တင်များ</h2> {/* Voice Settings */}
                 <div style={styles.settingGroup}>
                     <label style={styles.settingLabel}>တရုတ် အသံ</label>
                     <select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select>
@@ -434,7 +379,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             for (let i = mapped.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [mapped[i], mapped[j]] = [mapped[j], mapped[i]]; }
         }
         return mapped;
-    } catch (error) { console.error("Data error:", error); return []; }
+    } catch (error) { return []; }
   }, [words, settings.order]);
 
   const [activeCards, setActiveCards] = useState([]);
@@ -460,14 +405,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
   const [isRevealed, setIsRevealed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [recognizedText, setRecognizedText] = useState('');
-  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [isRecordingOpen, setIsRecordingOpen] = useState(false);
   const [writerChar, setWriterChar] = useState(null);
   const [isFavoriteCard, setIsFavoriteCard] = useState(false);
   const [isJumping, setIsJumping] = useState(false);
   
-  const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
   const currentCard = activeCards.length > 0 ? activeCards[currentIndex] : null;
@@ -499,7 +441,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   useEffect(() => {
     if (!isOpen || !currentCard) return;
     clearTimeout(autoBrowseTimerRef.current);
-    stopAllAudio(); // 切换卡片停止旧声音
+    stopAllAudio(); 
 
     const playFullSequence = () => {
         if (settings.autoPlayChinese && currentCard.chinese) {
@@ -520,47 +462,28 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
   
-  const handleListen = useCallback((e) => {
+  const handleOpenRecorder = useCallback((e) => {
     e.stopPropagation();
     stopAllAudio();
-    if (isListening) { recognitionRef.current?.stop(); return; }
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { alert("ဆောရီးပါ၊ သင့်ဖုန်းတွင် အသံဖမ်းစနစ် မရနိုင်ပါ"); return; }
-    const recognition = new SpeechRecognition();
-    recognition.lang = "zh-CN";
-    recognition.interimResults = false;
-    recognition.onstart = () => { setIsListening(true); setRecognizedText(""); };
-    recognition.onresult = (event) => { const result = event.results[event.results.length - 1][0].transcript; setRecognizedText(result.trim().replace(/[.,。，]/g, '')); };
-    recognition.onerror = (event) => { if (event.error !== 'aborted' && event.error !== 'no-speech') { alert(`Error: ${event.error}`); } };
-    recognition.onend = () => { setIsListening(false); recognitionRef.current = null; setIsComparisonOpen(true); };
-    recognitionRef.current = recognition;
-    recognition.start();
-  }, [isListening]);
+    setIsRecordingOpen(true);
+  }, []);
 
-  const handleCloseComparison = useCallback(() => { setIsComparisonOpen(false); setRecognizedText(''); }, []);
-  const handleNavigateToNext = useCallback(() => { handleCloseComparison(); setTimeout(() => navigate(1), 100); }, [handleCloseComparison, navigate]);
-  useEffect(() => { return () => { if (recognitionRef.current) { recognitionRef.current.stop(); } }; }, []);
-  
   // ✅ 认识 (Know)：把单词踢出列表
   const handleKnow = () => {
     stopAllAudio();
     if (!currentCard) return;
 
-    // 移除当前单词
     const newActiveCards = activeCards.filter(card => card.id !== currentCard.id);
     
     if (newActiveCards.length === 0) {
-        setActiveCards([]); // 列表空了
+        setActiveCards([]); 
         return;
     }
     
     setActiveCards(newActiveCards);
-
-    // 调整索引
     if (currentIndex >= newActiveCards.length) {
-        setCurrentIndex(0); // 如果是最后一个，回到第一个
+        setCurrentIndex(0); 
     }
-    // 否则索引不变，自动指向下一个替补上来的词
   };
 
   // ✅ 不认识 (Dont Know)：保留单词，显示下一个
@@ -604,8 +527,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         
-        {isComparisonOpen && currentCard && (
-            <PronunciationComparison correctWord={currentCard.chinese} userText={recognizedText} settings={settings} onContinue={handleNavigateToNext} onClose={handleCloseComparison} />
+        {isRecordingOpen && currentCard && (
+            <PronunciationComparison correctWord={currentCard.chinese} settings={settings} onClose={() => setIsRecordingOpen(false)} />
         )}
         
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
@@ -652,7 +575,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
-                <button style={styles.rightIconButton} onClick={handleListen} title="အသံထွက်လေ့ကျင့်ရန်">{isListening ? <FaStop size={18} color={'#dc2626'}/> : <FaMicrophone size={18} color={'#4a5568'} />}</button>
+                <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်"><FaMicrophone size={18} color={'#4b5563'} /></button>
                 {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း"><FaPenFancy size={18} /></button>)}
                 <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "ပယ်ဖျက်" : "သိမ်းဆည်း"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>
             </div>
@@ -707,38 +630,37 @@ const styles = {
     
     knowButtonsWrapper: { display: 'flex', width: '100%', maxWidth: '400px', gap: '15px' },
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
-    dontKnowButton: { background: '#f59e0b', color: 'white' }, // Orange
-    knowButton: { background: '#10b981', color: 'white' }, // Green
+    dontKnowButton: { background: '#f59e0b', color: 'white' }, 
+    knowButton: { background: '#10b981', color: 'white' },
     
     completionContainer: { textAlign: 'center', color: '#374151', textShadow: 'none', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
     
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
-    comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
-    resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
-    errorDetailsContainer: { padding: '20px', overflowY: 'auto', flex: 1 },
-    lengthError: { textAlign: 'center', color: '#b91c1c', padding: '10px 0' },
-    comparisonGrid: { display: 'flex', flexWrap: 'wrap', gap: '15px', justifyContent: 'center' },
-    comparisonCell: { flex: '1 1 120px', padding: '12px', borderRadius: '12px', background: '#f8f9fa', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)' },
-    comparisonChar: { fontSize: '2rem', fontWeight: 'bold', color: '#1f2937' },
-    comparisonPinyinGroup: { display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' },
-    pinyinVisualizerContainer: { display: 'flex', alignItems: 'baseline', fontSize: '1.5rem', height: '1.8rem', color: '#333', fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif' },
-    pinyinPart: { transition: 'color 0.3s', fontWeight: 500 },
-    toneNumber: { fontSize: '1.1rem', fontWeight: 'bold', marginLeft: '2px' },
-    wrongPart: { color: '#dc2626', fontWeight: 'bold' },
-    pinyinLabel: { fontSize: '0.75rem', color: '#6b7280', marginBottom: '4px' },
-    audioComparisonSection: { display: 'flex', gap: '10px', justifyContent: 'center', padding: '10px 20px', borderTop: '1px solid #e2e8f0', background: '#f8f9fa', flexWrap: 'wrap' },
-    audioPlayerButton: { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: 'white', cursor: 'pointer', fontSize: '0.9rem', color: '#374151', fontWeight: 600 },
-    comparisonActions: { padding: '20px' },
-    actionButton: { width: '100%', padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' },
-    continueButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
-    retryButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
+    comparisonPanel: { width: '100%', maxWidth: '350px', background: 'white', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' },
+    recordHeader: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' },
+    closeButtonSimple: { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1.2rem' },
+    recordContent: { padding: '25px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px', minHeight: '250px' },
+    recordWordDisplay: { textAlign: 'center', marginBottom: '10px' },
+    actionArea: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 },
+    idleStateContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
+    bigRecordBtn: { width: '80px', height: '80px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: '4px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)', transition: 'transform 0.1s' },
+    instructionText: { color: '#6b7280', fontSize: '1rem', fontWeight: 500 },
+    recordingPulse: { animation: 'pulse 1.5s infinite', border: '4px solid #fee2e2', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)' },
+    reviewContainer: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
+    reviewRow: { display: 'flex', justifyContent: 'space-around', width: '100%', gap: '10px' },
+    reviewItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
+    reviewLabel: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 'bold' },
+    retryLink: { background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', cursor: 'pointer', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'underline' },
+    circleBtnBlue: { width: '60px', height: '60px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)' },
+    circleBtnGreen: { width: '60px', height: '60px', borderRadius: '50%', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' },
+    
     settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
     settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
     closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
     settingGroup: { marginBottom: '20px' },
     settingLabel: { display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#333' },
     settingControl: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' },
-    settingButton: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', flex: 1, justifyContent: 'center', minWidth: '100px' },
+    settingButton: { background: '#f3f4f6', color: '#4b5563', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', flex: 1, justifyContent: 'center', minWidth: '100px' },
     settingSelect: { width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #ccc' },
     settingSlider: { flex: 1 },
     jumpModalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002 },
