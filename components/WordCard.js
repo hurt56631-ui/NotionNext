@@ -1,4 +1,4 @@
-// components/WordCard.js (纯净版：无广告 + 修复 Messenger 分享)
+// components/WordCard.js (纯净修复版：无广告 + 修复 Messenger 分享 + 修复编译错误)
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,7 +13,9 @@ import {
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// --- 数据库配置 ---
+// =================================================================================
+// ===== 数据库配置 =====
+// =================================================================================
 const DB_NAME = 'ChineseLearningDB';
 const DB_VERSION = 2;
 const STORE_FAVORITES = 'favoriteWords';
@@ -85,7 +87,9 @@ async function isFavorite(id) {
     }
 }
 
-// --- 音频管理与 TTS 逻辑 ---
+// =================================================================================
+// ===== 音频管理与 TTS 逻辑 =====
+// =================================================================================
 const generateAudioKey = (text, voice, rate) => `${text}_${voice}_${rate}`;
 
 async function cacheAudioData(key, blob) {
@@ -248,6 +252,10 @@ const useCardSettings = () => {
     return [settings, setSettings];
 };
 
+// =================================================================================
+// ===== 子组件 =====
+// =================================================================================
+
 const RecordingComparisonModal = ({ word, settings, onClose }) => {
     const [status, setStatus] = useState('idle'); 
     const [userAudioUrl, setUserAudioUrl] = useState(null);
@@ -338,6 +346,9 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
     return (<div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>跳转到卡片</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} min="1" max={max} /><button style={styles.jumpModalButton} onClick={handleJump}>跳转</button></div></div>);
 };
 
+// =================================================================================
+// ===== 主组件 WordCard =====
+// =================================================================================
 const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const [isMounted, setIsMounted] = useState(false);
     
@@ -429,7 +440,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const [writerChar, setWriterChar] = useState(null);
     const [isFavoriteCard, setIsFavoriteCard] = useState(false);
     const [isJumping, setIsJumping] = useState(false);
-    const wordCounterRef = useRef(0);
     const autoBrowseTimerRef = useRef(null);
     const lastDirection = useRef(0);
     const currentCard = activeCards.length > 0 ? activeCards[currentIndex] : null;
@@ -453,12 +463,15 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         if (result !== newState) setIsFavoriteCard(result);
     };
 
-    // ✅ Messenger 分享逻辑
+    // --- Messenger 分享逻辑 ---
     const handleFacebookShare = useCallback((e) => {
         if (e && e.stopPropagation) e.stopPropagation();
         if (!currentCard || currentCard.id === 'fallback') return;
 
+        // 获取绝对链接
         const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://www.facebook.com';
+        
+        // 检测移动端
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
         if (isMobile) {
@@ -472,7 +485,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     const navigate = useCallback((direction) => {
         if (activeCards.length === 0) return;
         lastDirection.current = direction;
-        wordCounterRef.current += 1;
         setCurrentIndex(prev => (prev + direction + activeCards.length) % activeCards.length);
     }, [activeCards.length]);
 
@@ -537,7 +549,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         const backgroundStyle = bgUrl ? { background: `url(${bgUrl}) center/cover no-repeat` } : {};
         return item && (
             <animated.div style={{ ...styles.fullScreen, ...backgroundStyle, ...style }}>
-                
                 <div style={styles.gestureArea} {...bind()} onClick={() => setIsRevealed(prev => !prev)} />
                 {writerChar && <HanziModal word={writerChar} onClose={() => setWriterChar(null)} />}
                 {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
@@ -612,10 +623,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 
 // 样式定义
 const styles = {
-    // 布局
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' }, // 移除多余的padding
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     pinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.5rem', color: '#fcd34d', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
     textWordChinese: { fontSize: '3.2rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
@@ -634,4 +644,39 @@ const styles = {
     dontKnowButton: { background: 'linear-gradient(135deg, #f59e0b, #d97706)' },
     knowButton: { background: 'linear-gradient(135deg, #22c55e, #16a34a)' },
     completionContainer: { textAlign: 'center', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' },
-    comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', ba
+    comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '10px' },
+    comparisonPanel: { width: '100%', maxWidth: '350px', background: 'white', borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fadeIn 0.2s ease-out', boxShadow: '0 10px 25px rgba(0,0,0,0.3)' },
+    recordHeader: { padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' },
+    closeButtonSimple: { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1.2rem' },
+    recordContent: { padding: '25px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px', minHeight: '250px' },
+    recordWordDisplay: { textAlign: 'center', marginBottom: '10px' },
+    actionArea: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1 },
+    idleStateContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
+    bigRecordBtn: { width: '80px', height: '80px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: '4px solid #dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)', transition: 'transform 0.1s' },
+    instructionText: { color: '#6b7280', fontSize: '1rem', fontWeight: 500 },
+    recordingPulse: { animation: 'pulse 1.5s infinite', border: '4px solid #fee2e2', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)' },
+    reviewContainer: { width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' },
+    reviewRow: { display: 'flex', justifyContent: 'space-around', width: '100%', gap: '10px' },
+    reviewItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
+    reviewLabel: { fontSize: '0.85rem', color: '#6b7280', fontWeight: 'bold' },
+    retryLink: { background: 'none', border: 'none', color: '#6b7280', fontSize: '0.9rem', cursor: 'pointer', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'underline' },
+    circleBtnBlue: { width: '60px', height: '60px', borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.3)' },
+    circleBtnGreen: { width: '60px', height: '60px', borderRadius: '50%', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' },
+    recordDoneBtn: { width: '100%', padding: '15px', background: '#111827', color: 'white', border: 'none', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+    settingsModal: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001, backdropFilter: 'blur(5px)', padding: '15px' },
+    settingsContent: { background: 'white', padding: '25px', borderRadius: '15px', width: '100%', maxWidth: '450px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', maxHeight: '80vh', overflowY: 'auto', position: 'relative' },
+    closeButton: { position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#aaa', lineHeight: 1 },
+    settingGroup: { marginBottom: '20px' },
+    settingLabel: { display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#333' },
+    settingControl: { display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' },
+    settingButton: { background: 'rgba(0,0,0,0.1)', color: '#4a5568', border: 'none', padding: '10px 14px', borderRadius: 14, cursor: 'pointer', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', flex: 1, justifyContent: 'center', minWidth: '100px' },
+    settingSelect: { width: '100%', padding: '8px', borderRadius: '5px', border: '1px solid #ccc' },
+    settingSlider: { flex: 1 },
+    jumpModalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10002 },
+    jumpModalContent: { background: 'white', padding: '25px', borderRadius: '15px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' },
+    jumpModalTitle: { marginTop: 0, marginBottom: '15px', color: '#333' },
+    jumpModalInput: { width: '100px', padding: '10px', fontSize: '1.2rem', textAlign: 'center', border: '2px solid #ccc', borderRadius: '8px', marginBottom: '15px' },
+    jumpModalButton: { width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#4299e1', color: 'white', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer' },
+};
+
+export default WordCard;
