@@ -1,3 +1,5 @@
+// /components/WordCard.js
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTransition, animated } from '@react-spring/web';
@@ -8,20 +10,20 @@ import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal'; // 确保您项目中存在此汉字笔顺组件
 
 // =================================================================================
-// ===== IndexedDB 收藏管理模块 (已修改为 Words 存储) ================================
+// ===== IndexedDB 收藏管理模块 (兼容修复版) =========================================
 // =================================================================================
 const DB_NAME = 'ChineseLearningDB';
-const STORE_NAME = 'favoriteWords'; // 更改为 Words 专用存储
+const STORE_NAME = 'favoriteWords'; 
 
 function openDB() {
+  if (typeof window === 'undefined') return Promise.resolve(null);
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2); // 保持版本号为 2 以兼容之前的新代码
     request.onerror = () => reject('数据库打开失败');
     request.onsuccess = () => resolve(request.result);
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
-        // 创建新的存储空间
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
     };
@@ -29,43 +31,56 @@ function openDB() {
 }
 
 async function toggleFavorite(word) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  const existing = await new Promise((resolve) => {
-    const getReq = store.get(word.id);
-    getReq.onsuccess = () => resolve(getReq.result);
-    getReq.onerror = () => resolve(null);
-  });
-  if (existing) {
-    store.delete(word.id);
-    return false; // 已取消收藏
-  } else {
-    const wordToStore = {
-      id: word.id,
-      chinese: word.chinese,
-      burmese: word.burmese,
-      pinyin: word.pinyin,
-      imageUrl: word.imageUrl,
-    };
-    store.put(wordToStore);
-    return true; // 收藏成功
+  if (typeof window === 'undefined') return false;
+  try {
+    const db = await openDB();
+    if (!db) return false;
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const existing = await new Promise((resolve) => {
+      const getReq = store.get(word.id);
+      getReq.onsuccess = () => resolve(getReq.result);
+      getReq.onerror = () => resolve(null);
+    });
+    if (existing) {
+      store.delete(word.id);
+      return false; // 已取消收藏
+    } else {
+      const wordToStore = {
+        id: word.id,
+        chinese: word.chinese,
+        burmese: word.burmese,
+        pinyin: word.pinyin,
+        imageUrl: word.imageUrl,
+      };
+      store.put(wordToStore);
+      return true; // 收藏成功
+    }
+  } catch (e) {
+    console.error("收藏失败", e);
+    return false;
   }
 }
 
 async function isFavorite(id) {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readonly');
-  const store = tx.objectStore(STORE_NAME);
-  return new Promise((resolve) => {
-    const getReq = store.get(id);
-    getReq.onsuccess = () => resolve(!!getReq.result);
-    getReq.onerror = () => resolve(false);
-  });
+  if (typeof window === 'undefined') return false;
+  try {
+    const db = await openDB();
+    if (!db) return false;
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return new Promise((resolve) => {
+      const getReq = store.get(id);
+      getReq.onsuccess = () => resolve(!!getReq.result);
+      getReq.onerror = () => resolve(false);
+    });
+  } catch (e) {
+    return false;
+  }
 }
 
 // =================================================================================
-// ===== 辅助工具 & 常量 (与原组件相同) =============================================
+// ===== 辅助工具 & 常量 ============================================================
 // =================================================================================
 
 const TTS_VOICES = [
@@ -74,26 +89,56 @@ const TTS_VOICES = [
     { value: 'my-MM-NilarNeural', label: '缅甸语女声' },
     { value: 'my-MM-ThihaNeural', label: '缅甸语男声' },
 ];
-const sounds = {
-  switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
-  correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
-  incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
-};
+
+let sounds = null;
+if (typeof window !== 'undefined') {
+    sounds = {
+        switch: new Howl({ src: ['/sounds/switch-card.mp3'], volume: 0.5 }),
+        correct: new Howl({ src: ['/sounds/correct.mp3'], volume: 0.8 }),
+        incorrect: new Howl({ src: ['/sounds/incorrect.mp3'], volume: 0.8 }),
+    };
+}
+
 let _howlInstance = null;
 
 const playTTS = (text, voice, rate, onEndCallback, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !voice) { if (onEndCallback) onEndCallback(); return; }
     if (_howlInstance?.playing()) _howlInstance.stop();
+    
+    // 简单的浏览器 TTS 回退，防止 API 挂了导致没声音
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = voice.includes('my') ? 'my-MM' : 'zh-CN';
+        u.onend = onEndCallback;
+        window.speechSynthesis.speak(u);
+        return;
+    }
+
     const rateValue = Math.round(rate / 2);
     const ttsUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rateValue}`;
-    _howlInstance = new Howl({ src: [ttsUrl], html5: true, onend: onEndCallback });
+    _howlInstance = new Howl({ 
+        src: [ttsUrl], 
+        html5: true, 
+        onend: onEndCallback,
+        onloaderror: () => {
+             // 如果加载失败，尝试浏览器原生朗读
+             console.warn("API TTS failed, falling back to browser");
+             const u = new SpeechSynthesisUtterance(text);
+             u.lang = voice.includes('my') ? 'my-MM' : 'zh-CN';
+             u.onend = onEndCallback;
+             window.speechSynthesis.speak(u);
+        }
+    });
     _howlInstance.play();
 };
+
 const playSoundEffect = (type) => {
     if (_howlInstance?.playing()) _howlInstance.stop();
-    if (sounds[type]) sounds[type].play();
+    if (sounds && sounds[type]) sounds[type].play();
 };
+
 const parsePinyin = (pinyinNum) => {
     if (!pinyinNum) return { initial: '', final: '', tone: '0', pinyinMark: '', rawPinyin: '' };
     const rawPinyin = pinyinNum.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -114,15 +159,14 @@ const parsePinyin = (pinyinNum) => {
     return { initial, final, tone, pinyinMark, rawPinyin };
 };
 
-
 // =================================================================================
-// ===== 自定义 Hook & 子组件 (与原组件相同) =========================================
+// ===== 自定义 Hook & 子组件 =======================================================
 // =================================================================================
 
 const useCardSettings = () => {
   const [settings, setSettings] = useState(() => {
+    if (typeof window === 'undefined') return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0 };
     try {
-      // 更改设置的存储键，以防与句子组件混淆
       const savedSettings = localStorage.getItem('learningWordCardSettings'); 
       const defaultSettings = {
         order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000,
@@ -130,11 +174,16 @@ const useCardSettings = () => {
       };
       return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings;
     } catch (error) {
-        console.error("加载设置失败", error);
         return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: false, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: 0, speechRateBurmese: 0 };
     }
   });
-  useEffect(() => { try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { console.error("保存设置失败", error); } }, [settings]);
+  
+  useEffect(() => { 
+      if (typeof window !== 'undefined') {
+          try { localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) {} 
+      }
+  }, [settings]);
+  
   return [settings, setSettings];
 };
 
@@ -225,26 +274,29 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
 
 
 // =================================================================================
-// ===== 主组件: WordCard (已修改) ===================================================
+// ===== 主组件: WordCard (修复版) ===================================================
 // =================================================================================
-const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => { // 接收 words 属性
+const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
 
   const [settings, setSettings] = useCardSettings();
   
-  // 更改进度存储键
   const storageKey = `wordCardProgress_${progressKey}`;
 
+  // ✅ 关键修复：兼容多种数据格式，确保文字能显示
   const processedCards = useMemo(() => {
     try {
         const mapped = words.map(w => ({
-            id: w.id,
-            chinese: w.chineseWord, // 假设您的数据源中中文词语字段为 chineseWord
-            burmese: w.burmeseTranslation, // 假设您的数据源中缅语翻译字段为 burmeseTranslation
+            id: w.id || Math.random().toString(36).substr(2, 9),
+            // 兼容旧数据的 chineseWord 和新数据的 chinese
+            chinese: w.chinese || w.chineseWord || w.word || '?', 
+            // 兼容旧数据的 burmeseTranslation 和新数据的 burmese
+            burmese: w.burmese || w.burmeseTranslation || w.translation || '...', 
             pinyin: w.pinyin,
             imageUrl: w.imageUrl,
-        }));
+        })).filter(w => w.chinese !== '?'); // 过滤掉无效数据
+
         if (settings.order === 'random') {
             for (let i = mapped.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -252,20 +304,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             }
         }
         return mapped;
-    } catch (error) { console.error("处理卡片数据出错:", error, words); return []; }
+    } catch (error) { console.error("处理卡片数据出错:", error); return []; }
   }, [words, settings.order]);
 
-  const cards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", pinyin: "zàn wú dān cí", burmese: "..." }]; // 更改 fallback 文本
+  const cards = processedCards.length > 0 ? processedCards : [{ id: 'fallback', chinese: "暂无单词", pinyin: "zàn wú dān cí", burmese: "..." }];
   
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (typeof window !== 'undefined') {
         try {
             const savedIndex = localStorage.getItem(storageKey);
             return savedIndex ? parseInt(savedIndex, 10) : 0;
-        } catch (error) {
-            console.error("读取进度失败", error);
-            return 0;
-        }
+        } catch (error) { return 0; }
     }
     return 0;
   });
@@ -279,7 +328,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const recognitionRef = useRef(null);
   const autoBrowseTimerRef = useRef(null);
   const lastDirection = useRef(0);
-  const currentCard = cards[currentIndex];
+  const currentCard = cards.length > 0 ? cards[currentIndex] : null;
 
   useEffect(() => {
     if (currentIndex >= cards.length && cards.length > 0) {
@@ -289,12 +338,16 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     } else {
         localStorage.setItem(storageKey, currentIndex);
     }
-  }, [currentIndex, cards, storageKey]);
+  }, [currentIndex, cards.length, storageKey]);
 
   useEffect(() => {
+    let active = true;
     if (currentCard?.id && currentCard.id !== 'fallback') {
-      isFavorite(currentCard.id).then(setIsFavoriteCard);
+      isFavorite(currentCard.id).then(res => {
+          if(active) setIsFavoriteCard(res);
+      });
     }
+    return () => { active = false; };
   }, [currentCard]);
   
   const handleToggleFavorite = async () => {
@@ -376,32 +429,19 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       onStart: () => playSoundEffect('switch'),
   });
   
-  // 手势逻辑 (与原组件相同)
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
       if (event.target.closest('[data-no-gesture]')) return;
-      
       if (down) return;
-
       event.stopPropagation(); 
-
       const isHorizontal = Math.abs(mx) > Math.abs(my);
-
       if (isHorizontal) {
           const isSignificant = Math.abs(mx) > 80 || (vel > 0.5 && Math.abs(mx) > 40);
-          if (isSignificant) {
-              onClose(); 
-          }
+          if (isSignificant) onClose(); 
       } else {
           const isSignificant = Math.abs(my) > 60 || (vel > 0.4 && Math.abs(my) > 30);
-          if (isSignificant) {
-              navigate(yDir < 0 ? 1 : -1);
-          }
+          if (isSignificant) navigate(yDir < 0 ? 1 : -1);
       }
-  }, {
-      filterTaps: true,
-      preventDefault: true, 
-      threshold: 10,
-  });
+  }, { filterTaps: true, preventDefault: true, threshold: 10 });
 
   const cardContent = pageTransitions((style, item) =>
     item && (
@@ -432,24 +472,21 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                           onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}
                       >
                           <div style={styles.pinyin}>{cardData.pinyin || pinyinConverter(cardData.chinese, { toneType: 'mark', separator: ' ' })}</div>
-                          {/* 更改为 Word 专属样式 (更大字体) */}
                           <div style={styles.textWordChinese}>{cardData.chinese}</div> 
                       </div>
                       <div
                           style={{ cursor: 'pointer', marginTop: '2.5rem' }}
                           onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}
                       >
-                          {/* 更改为 Word 专属样式 (更大字体) */}
                           <div style={styles.textWordBurmese}>{cardData.burmese}</div>
                       </div>
                       
-                      {/* 可选：在此处添加 Pinyin 细节显示 (因为是单字/词) */}
-                      {cardData.chinese && cardData.chinese.length === 1 && cardData.pinyin && (
+                      {/* 如果是单字，显示拼音细节 */}
+                      {cardData.chinese && cardData.chinese.length === 1 && (
                           <div style={{marginTop: '30px'}}>
-                              <PinyinVisualizer analysis={{ parts: parsePinyin(cardData.pinyin.split(' ')[0]), errors: {} }} />
+                              <PinyinVisualizer analysis={{ parts: parsePinyin(pinyinConverter(cardData.chinese, {toneType: 'num'})), errors: {} }} />
                           </div>
                       )}
-                      
                   </div>
               </div>
             </animated.div>
@@ -462,8 +499,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                 <button style={styles.rightIconButton} onClick={handleListen} title="发音练习">
                     <FaMicrophone size={20} color={isListening ? '#dc2626' : '#4a5568'} />
                 </button>
-                {/* 仅在单字时显示笔顺按钮 */}
-                {currentCard.chinese && currentCard.chinese.length <= 2 && (
+                {currentCard.chinese && currentCard.chinese.length <= 4 && (
                     <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="笔顺">
                         <FaPenFancy size={20} />
                     </button>
@@ -480,35 +516,33 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     )
   );
 
-  if (isMounted) {
-      return createPortal(cardContent, document.body);
-  }
+  if (isMounted) return createPortal(cardContent, document.body);
   return null;
 };
 
 // =================================================================================
-// ===== 样式表 (已更新为单词专用样式) ===============================================
+// ===== 样式表 =====================================================================
 // =================================================================================
 const styles = {
-    // --- 核心布局 (与原组件相同) ---
-    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', background: 'url(/background.jpg) center/cover no-repeat', backgroundAttachment: 'fixed' },
+    // 布局
+    fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#30505E' },
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
     animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '20px' },
     cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflow: 'hidden' },
     
-    // --- 卡片内容 (为 WORDS 优化了字体大小) ---
+    // 文字
     pinyin: { fontSize: '1.5rem', color: '#f1f5f9', textShadow: '0 1px 4px rgba(0,0,0,0.5)', marginBottom: '1.2rem', letterSpacing: '0.05em' },
     textWordChinese: { fontSize: '4.5rem', fontWeight: 'bold', color: '#ffffff', lineHeight: 1.2, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.6)' },
     textWordBurmese: { fontSize: '3.5rem', color: '#fcd34d', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: '0 2px 8px rgba(0,0,0,0.5)' },
 
-    // --- 控件 (与原组件相同) ---
+    // 控件
     exitButton: { position: 'fixed', top: '25px', left: '20px', zIndex: 101, background: 'rgba(0, 0, 0, 0.4)', border: 'none', color: 'white', width: '44px', height: '44px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.2s' },
     headerControls: { position: 'fixed', top: '25px', left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', justifyContent: 'center', alignItems: 'center' },
     counter: { background: 'rgba(0, 0, 0, 0.5)', color: 'white', padding: '5px 15px', borderRadius: '15px', fontSize: '1rem', fontWeight: 'bold' },
     rightControls: { position: 'fixed', bottom: '20%', right: '15px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center' },
     rightIconButton: { background: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'transform 0.2s', color: '#4a5568' },
 
-    // --- 发音对比面板/设置面板 (与原组件相同) ---
+    // 弹窗与对比
     comparisonOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '15px' },
     comparisonPanel: { width: '100%', maxWidth: '500px', maxHeight: '90vh', background: 'white', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' },
     resultHeader: { color: 'white', padding: '24px', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', textAlign: 'center' },
