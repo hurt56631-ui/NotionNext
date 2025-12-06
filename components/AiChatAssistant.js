@@ -1,4 +1,4 @@
-// AIChatDrawer.js (完整版 - 已集成缅甸语教学Prompt与互动题逻辑)
+// AIChatDrawer.js (完整版 - 集成选择题与排序题)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
@@ -7,12 +7,14 @@ import { pinyin } from 'pinyin-pro';
 import { v4 as uuidv4 } from 'uuid'; 
 import AiTtsButton from './AiTtsButton';
 
-// 1. 导入你的题型组件
+// 1. 导入你的题型组件 (新增 XuanZeTi)
 import PaiXuTi from './Tixing/PaiXuTi';
+import XuanZeTi from './Tixing/XuanZeTi'; // <--- 假设你的选择题组件在这里
 
-// 2. 组件映射表
+// 2. 组件映射表 (新增 XuanZeTi)
 const componentMap = {
-  PaiXuTi: PaiXuTi
+  PaiXuTi: PaiXuTi,
+  XuanZeTi: XuanZeTi // <--- 注册组件
 };
 
 // --- [核心工具类] 增强版音频播放队列 ---
@@ -59,8 +61,11 @@ const fetchEdgeTTS = async (text, voice, rate, pitch) => {
 
 // --- 数据清洗与工具函数 ---
 const sanitizeQuizData = (props) => {
-    if (!props || !props.items || !props.correctOrder) return props;
-    let items = [...props.items];
+    // 如果不是排序题 (没有 correctOrder)，直接返回原 props (针对选择题)
+    if (!props || !props.correctOrder) return props;
+    
+    // 下面是针对排序题 (PaiXuTi) 的清洗逻辑
+    let items = [...(props.items || [])];
     const correctOrder = [...props.correctOrder];
     const punctuationRegex = /^[。，、？！；：“”‘’（）《》〈〉【】 .,!?;:"'()\[\]{}]+$/;
     const orphanPunctuationItems = items.filter(item => {
@@ -95,13 +100,13 @@ const CHAT_MODELS_LIST = [
     { id: 'model-5', name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro-latest', maxContextTokens: 1048576 },
 ];
 
-// --- [关键修改] 针对缅甸语教学和互动题的 Prompt ---
+// --- [Prompt 更新] 增加了选择题的指令 ---
 const DEFAULT_PROMPTS = [
     { 
         id: 'mm-cn-teacher-default', 
         name: '中文老师 (缅甸语教学)', 
-        description: '用缅甸语解释中文，会自动出排序题。', 
-        // 这里的 Prompt 是核心：它规定了 AI 怎么说话（Markdown）以及怎么出题（JSON）
+        description: '用缅甸语解释中文，会自动出排序题或选择题。', 
+        // 核心修改：增加了 Choice Question (XuanZeTi) 的模版说明
         content: `你是一位专业的中文老师，专门教缅甸学生学习中文。
 
 **1. 聊天与教学规则：**
@@ -113,9 +118,25 @@ const DEFAULT_PROMPTS = [
 - **拼音：** 只要提到中文生词，**必须**标注拼音。
 
 **2. 互动出题规则（非常重要）：**
-当用户说“练习”、“做题”、“测试”或你认为需要考核用户时，**不要**直接输出文本题目。
-请**务必**输出以下 JSON 格式的数据（不要包裹在markdown代码块中，直接输出JSON字符串）：
+当用户说“练习”、“做题”、“测试”时，你可以随机选择出**排序题 (PaiXuTi)** 或 **选择题 (XuanZeTi)**。
+**不要**直接输出文本题目，**务必**输出以下 JSON 格式（不要包裹markdown代码块）：
 
+**格式 A：选择题 (XuanZeTi) 模版**
+{
+  "component": "XuanZeTi",
+  "props": {
+    "question": "ပုံမှန် သူငယ်ချင်းချင်း တွေ့တဲ့အခါ ဘယ်လို နှုတ်ဆက်လေ့ရှိလဲ။",
+    "choices": [
+      { "id": "A", "text": "你好" },
+      { "id": "B", "text": "您好" },
+      { "id": "C", "text": "谢谢" }
+    ],
+    "correctId": "A",
+    "explanation": "သူငယ်ချင်းချင်းဆိုရင် ပေါ့ပေါ့ပါးပါး “你好”  လို့ပဲ သုံးပါတယ်။"
+  }
+}
+
+**格式 B：排序题 (PaiXuTi) 模版**
 {
   "component": "PaiXuTi",
   "props": {
@@ -128,9 +149,7 @@ const DEFAULT_PROMPTS = [
     "correctOrder": ["w1", "w2", "w3"],
     "explanation": "中文的主谓宾结构：我(Subject) + 爱(Verb) + 中国(Object)。"
   }
-}
-
-注意：JSON中的 items id 必须唯一，correctOrder 必须是正确顺序的 id 列表。`, 
+}`, 
         openingLine: 'မင်္ဂလာပါ! (你好！) 我是你的中文老师。我们可以练习对话，或者你可以对我说 "做个练习" 来测试一下。', 
         model: 'gemini-2.5-flash', 
         ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', 
