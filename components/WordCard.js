@@ -81,6 +81,7 @@ const WHOLE_SYLLABLES = [
 let sounds = null;
 let _howlInstance = null; 
 
+// ✅ 全局停止音频函数
 const stopAllAudio = () => {
     if (_howlInstance) {
         _howlInstance.stop();
@@ -105,10 +106,15 @@ const initSounds = () => {
     }
 };
 
+// ✅ TTS 播放逻辑
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation(); 
     stopAllAudio(); 
-    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } 
+
+    if (!text || !voice) { 
+        if (onEndCallback) onEndCallback(); 
+        return; 
+    } 
 
     const apiUrl = 'https://libretts.is-an.org/api/tts'; 
     const rateValue = Math.round(rate / 2); 
@@ -119,15 +125,24 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), 
         }); 
+        
         if (!response.ok) throw new Error(`API Error: ${response.status}`); 
+        
         const audioBlob = await response.blob(); 
         const audioUrl = URL.createObjectURL(audioBlob); 
+        
         _howlInstance = new Howl({ 
-            src: [audioUrl], format: ['mpeg'], html5: true, 
-            onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
+            src: [audioUrl], 
+            format: ['mpeg'], 
+            html5: true, 
+            onend: () => { 
+                URL.revokeObjectURL(audioUrl); 
+                if (onEndCallback) onEndCallback(); 
+            }, 
             onloaderror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
             onplayerror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } 
         }); 
+        
         _howlInstance.play(); 
     } catch (error) { 
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -137,7 +152,9 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
              u.onend = () => { if(onEndCallback) onEndCallback(); };
              u.onerror = () => { if(onEndCallback) onEndCallback(); };
              window.speechSynthesis.speak(u);
-        } else { if (onEndCallback) onEndCallback(); }
+        } else {
+             if (onEndCallback) onEndCallback();
+        }
     } 
 };
 
@@ -155,6 +172,7 @@ const playSoundEffect = (type) => {
     if (sounds && sounds[type]) sounds[type].play(); 
 };
 
+// --- 设置Hook ---
 const useCardSettings = () => { 
     const [settings, setSettings] = useState(() => { 
         try { 
@@ -171,10 +189,10 @@ const useCardSettings = () => {
 };
 
 // =================================================================================
-// 🔥 核心拼读组件：完美适配你的文件名规则
+// 🔥 核心拼读组件：适配你的 263 个音频文件 (Symbol Mode)
 // =================================================================================
 const SpellingModal = ({ word, onClose }) => {
-    const [status, setStatus] = useState(''); // '0-initial', '0-final', '0-full'
+    const [status, setStatus] = useState(''); 
     const isStoppingRef = useRef(false);
 
     // 播放本地音频文件
@@ -183,38 +201,14 @@ const SpellingModal = ({ word, onClose }) => {
             if (isStoppingRef.current) { resolve(); return; }
             const cleanFilename = filename.trim();
             const audio = new Audio(`/pinyin-assets/${cleanFilename}`);
+            
             audio.onended = resolve;
             audio.onerror = () => { 
-                console.warn(`❌ 缺文件: ${cleanFilename}`); 
+                console.warn(`❌ 缺文件: /pinyin-assets/${cleanFilename}`); 
                 resolve(); 
             };
             audio.play().catch(resolve);
         });
-    };
-
-    // 🟢 文件名转换核心逻辑 (适配你的 ve, vn, v)
-    const getFinalFilename = (pData) => {
-        let name = pData.final; // 默认韵母
-        const initial = pData.initial;
-
-        // 1. ü -> v (截图 v4.mp3)
-        if (name === 'ü' || name === 'u:') name = 'v';
-
-        // 2. j/q/x/y + u 其实是 ü -> v
-        if (['j', 'q', 'x', 'y'].includes(initial) && name === 'u') name = 'v';
-
-        // 3. üe / yue -> ve (截图 ve4.mp3)
-        if (name === 'ue' || name === 'üe') name = 've';
-
-        // 4. ün / yun -> vn (截图 vn3.mp3)
-        if (name === 'un' && ['j', 'q', 'x', 'y'].includes(initial)) name = 'vn';
-        // 注意：普通的 un (如 kun) 还是 un，不需要变
-
-        // 5. yu -> v (因为 yu 是整体认读，但如果是分解模式下)
-        // 实际上整体认读走另一条路，这里主要处理拼读
-
-        const tone = (pData.num === 5 || !pData.num) ? 0 : pData.num;
-        return `${name}${tone}.mp3`;
     };
 
     const startSpelling = async () => {
@@ -224,74 +218,78 @@ const SpellingModal = ({ word, onClose }) => {
         
         const chars = word.split('');
         
+        // 循环每一个汉字
         for (let i = 0; i < chars.length; i++) {
             if (isStoppingRef.current) break;
             const char = chars[i];
             
-            const pData = pinyinConverter(char, { type: 'all', toneType: 'num', multiple: false })[0];
-            // pData: { initial: 'd', final: 'a', num: 4, pinyin: 'da4' }
+            // 获取带声调符号的拼音：如 dà (type: 'all', toneType: 'symbol')
+            // pData 结构: { initial: 'd', final: 'à', num: 4, pinyin: 'dà' }
+            const pData = pinyinConverter(char, { type: 'all', toneType: 'symbol', multiple: false })[0];
             
-            const pinyinNoTone = pData.pinyin.replace(/\d/g, '');
+            // 获取无声调拼音用于判断整体认读
+            const pinyinNoTone = pinyinConverter(char, { type: 'all', toneType: 'none', multiple: false })[0].pinyin;
             const isWhole = WHOLE_SYLLABLES.includes(pinyinNoTone);
 
             // ==========================================
-            // 分支 A: 整体认读音节 (zhi, chi, shi, wu, yi, yu...)
-            // 它们不能拆声韵母，直接读整个文件 + 汉字
+            // 分支 A: 整体认读音节 (直接读 base file -> TTS)
+            // 比如：zhi -> 读 zhi.mp3
             // ==========================================
             if (isWhole) {
-                setStatus(`${i}-full`); // 整体高亮
+                setStatus(`${i}-full`); // 全字高亮
                 
-                // 计算文件名: yu -> v, yue -> ve, yun -> vn
-                let wholeName = pinyinNoTone;
-                if (wholeName === 'yu') wholeName = 'v';
-                if (wholeName === 'yue') wholeName = 've';
-                if (wholeName === 'yun') wholeName = 'vn';
-                // wu, yi, zhi 保持原样
-                
-                const tone = (pData.num === 5 || !pData.num) ? 0 : pData.num;
-                
-                // 1. 播放整体音 (例如 wu2.mp3)
-                await playLocal(`${wholeName}${tone}.mp3`);
+                // 1. 播放基础音频 (如 zhi.mp3, yi.mp3)
+                // 你的列表中有这些文件
+                await playLocal(`${pinyinNoTone}.mp3`);
                 await new Promise(r => setTimeout(r, 100));
 
-                // 2. 播放汉字 TTS (例如 "五")
+                // 2. 播放汉字 TTS (带准确声调)
                 await playTTSWrapper(char);
                 await new Promise(r => setTimeout(r, 400));
             } 
             // ==========================================
-            // 分支 B: 正常拼读 (d-a-da)
+            // 分支 B: 正常拼读 (声母 -> 韵母 -> 汉字)
             // ==========================================
             else if (pData.initial) {
-                // 1. 声母 (d.mp3)
+                // 1. 读声母 (Initial) -> 如 d.mp3
                 setStatus(`${i}-initial`);
                 await playLocal(`${pData.initial}.mp3`);
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, 150));
 
-                // 2. 韵母带调 (ang4.mp3 / ve4.mp3)
+                // 2. 读韵母带调 (Final) -> 如 à.mp3
+                // pData.final 已经包含了声调符号 (因为用了 toneType: 'symbol')
                 setStatus(`${i}-final`);
-                const finalFile = getFinalFilename(pData);
-                await playLocal(finalFile);
-                await new Promise(r => setTimeout(r, 100));
+                
+                let finalFilename = pData.final; // 比如 'à'
+                
+                // 特殊处理 j,q,x,y + ü -> 你的文件名里可能有 ü.mp3, üe.mp3, ün.mp3
+                // pinyin-pro symbol模式下：
+                // 绿 -> lǜ (l + ǜ) -> 你的库有 ǜ.mp3
+                // 聚 -> jù (j + ù) -> 你的库有 ù.mp3
+                
+                // 唯一需要注意的是，如果你缺了某个带调韵母，可以降级去读不带调的
+                // 这里我们优先尝试带调的
+                await playLocal(`${finalFilename}.mp3`);
+                await new Promise(r => setTimeout(r, 150));
 
-                // 3. 汉字 TTS (大)
+                // 3. 读整字 TTS (Full) -> 如 "大"
                 setStatus(`${i}-full`);
                 await playTTSWrapper(char);
-                await new Promise(r => setTimeout(r, 400));
+                await new Promise(r => setTimeout(r, 500));
             }
             // ==========================================
-            // 分支 C: 零声母 (an, e, ou)
-            // 直接当作整体读
+            // 分支 C: 零声母 (如 an, ou, e)
             // ==========================================
             else {
                 setStatus(`${i}-full`);
-                const finalFile = getFinalFilename(pData);
-                await playLocal(finalFile);
+                // 直接播放带调韵母 -> àn.mp3
+                await playLocal(`${pData.final}.mp3`);
                 await playTTSWrapper(char);
                 await new Promise(r => setTimeout(r, 400));
             }
         }
 
-        // 4. 最后：整词连读 (大家)
+        // 4. 整词连读 (单词)
         if (!isStoppingRef.current) {
             setStatus('all-full');
             await playTTSWrapper(word);
@@ -318,10 +316,11 @@ const SpellingModal = ({ word, onClose }) => {
                 <div style={{...styles.recordContent, justifyContent: 'center'}}>
                     <div style={{display: 'flex', flexWrap: 'wrap', gap: '20px', justifyContent: 'center'}}>
                         {word.split('').map((char, index) => {
-                            const pData = pinyinConverter(char, { type: 'all', toneType: 'num' })[0];
+                            // 拼音显示逻辑：使用符号模式 (dà)
+                            const pData = pinyinConverter(char, { type: 'all', toneType: 'symbol', multiple: false })[0];
                             const initial = pData.initial;
-                            const fullPinyin = pData.pinyin; 
-                            // 视觉上把韵母切出来显示
+                            const fullPinyin = pData.pinyin; // dà
+                            // 视觉切分：把 initial 去掉剩下的就是带调韵母
                             const finalPart = initial ? fullPinyin.replace(initial, '') : fullPinyin;
 
                             const isInitialActive = status === `${index}-initial`;
@@ -329,14 +328,13 @@ const SpellingModal = ({ word, onClose }) => {
                             const isFullActive = status === `${index}-full`;
                             const isAllActive = status === 'all-full';
 
-                            // 颜色逻辑
                             const initialColor = (isInitialActive || isFullActive || isAllActive) ? '#ef4444' : '#9ca3af';
                             const finalColor = (isFinalActive || isFullActive || isAllActive) ? '#ef4444' : '#9ca3af';
                             const fontWeight = (isInitialActive || isFinalActive || isFullActive || isAllActive) ? 'bold' : 'normal';
 
                             return (
                                 <div key={index} style={{textAlign: 'center', transition: 'all 0.3s'}}>
-                                    {/* 拼音显示 */}
+                                    {/* 拼音显示: dà */}
                                     <div style={{fontSize: '1.4rem', marginBottom: '8px', height: '30px', fontFamily: 'Roboto, Arial'}}>
                                         {initial && (
                                             <span style={{color: initialColor, fontWeight: fontWeight, transition: 'color 0.2s'}}>
@@ -347,6 +345,7 @@ const SpellingModal = ({ word, onClose }) => {
                                             {finalPart}
                                         </span>
                                     </div>
+                                    
                                     {/* 汉字 */}
                                     <div style={{
                                         fontSize: '3rem', 
@@ -608,7 +607,10 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         {isRecordingOpen && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} settings={settings} onClose={() => setIsRecordingOpen(false)} />)}
         
-        {isSpellingOpen && currentCard && (<SpellingModal word={currentCard.chinese} onClose={() => setIsSpellingOpen(false)} />)}
+        {/* ✅ 拼读弹窗 */}
+        {isSpellingOpen && currentCard && (
+            <SpellingModal word={currentCard.chinese} onClose={() => setIsSpellingOpen(false)} />
+        )}
         
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
         
