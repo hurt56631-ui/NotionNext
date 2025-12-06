@@ -12,7 +12,7 @@ import {
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
 
-// ... (DB Helper functions 保持不变) ...
+// --- 数据库和辅助函数 (保持不变) ---
 const DB_NAME = 'ChineseLearningDB';
 const STORE_NAME = 'favoriteWords';
 
@@ -81,7 +81,6 @@ const WHOLE_SYLLABLES = [
 let sounds = null;
 let _howlInstance = null; 
 
-// ✅ 全局停止音频函数
 const stopAllAudio = () => {
     if (_howlInstance) {
         _howlInstance.stop();
@@ -106,15 +105,10 @@ const initSounds = () => {
     }
 };
 
-// ✅ TTS 播放逻辑
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
     if (e && e.stopPropagation) e.stopPropagation(); 
     stopAllAudio(); 
-
-    if (!text || !voice) { 
-        if (onEndCallback) onEndCallback(); 
-        return; 
-    } 
+    if (!text || !voice) { if (onEndCallback) onEndCallback(); return; } 
 
     const apiUrl = 'https://libretts.is-an.org/api/tts'; 
     const rateValue = Math.round(rate / 2); 
@@ -125,24 +119,15 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ text, voice, rate: rateValue, pitch: 0 }), 
         }); 
-        
         if (!response.ok) throw new Error(`API Error: ${response.status}`); 
-        
         const audioBlob = await response.blob(); 
         const audioUrl = URL.createObjectURL(audioBlob); 
-        
         _howlInstance = new Howl({ 
-            src: [audioUrl], 
-            format: ['mpeg'], 
-            html5: true, 
-            onend: () => { 
-                URL.revokeObjectURL(audioUrl); 
-                if (onEndCallback) onEndCallback(); 
-            }, 
+            src: [audioUrl], format: ['mpeg'], html5: true, 
+            onend: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
             onloaderror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); }, 
             onplayerror: () => { URL.revokeObjectURL(audioUrl); if (onEndCallback) onEndCallback(); } 
         }); 
-        
         _howlInstance.play(); 
     } catch (error) { 
         if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -152,12 +137,11 @@ const playTTS = async (text, voice, rate, onEndCallback, e) => {
              u.onend = () => { if(onEndCallback) onEndCallback(); };
              u.onerror = () => { if(onEndCallback) onEndCallback(); };
              window.speechSynthesis.speak(u);
-        } else {
-             if (onEndCallback) onEndCallback();
-        }
+        } else { if (onEndCallback) onEndCallback(); }
     } 
 };
 
+// 简单的 TTS 包装器
 const playTTSWrapper = (text, voice = 'zh-CN-XiaoxiaoNeural') => {
     return new Promise((resolve) => {
         playTTS(text, voice, -20, resolve);
@@ -171,35 +155,26 @@ const playSoundEffect = (type) => {
     if (sounds && sounds[type]) sounds[type].play(); 
 };
 
-// ... (useCardSettings 保持不变) ...
 const useCardSettings = () => { 
     const [settings, setSettings] = useState(() => { 
         try { 
             if (typeof window === 'undefined') return {};
             const savedSettings = localStorage.getItem('learningWordCardSettings'); 
-            const defaultSettings = { 
-                order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: -50, speechRateBurmese: -50, backgroundImage: '', 
-            }; 
+            const defaultSettings = { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: -50, speechRateBurmese: -50, backgroundImage: '' }; 
             return savedSettings ? { ...defaultSettings, ...JSON.parse(savedSettings) } : defaultSettings; 
         } catch (error) { 
             return { order: 'sequential', autoPlayChinese: true, autoPlayBurmese: true, autoPlayExample: true, autoBrowse: false, autoBrowseDelay: 6000, voiceChinese: 'zh-CN-XiaoyouNeural', voiceBurmese: 'my-MM-NilarNeural', speechRateChinese: -50, speechRateBurmese: -50, backgroundImage: '' }; 
         } 
     }); 
-    useEffect(() => { 
-        try { 
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); 
-            }
-        } catch (error) { } 
-    }, [settings]); 
+    useEffect(() => { try { if (typeof window !== 'undefined') localStorage.setItem('learningWordCardSettings', JSON.stringify(settings)); } catch (error) { } }, [settings]); 
     return [settings, setSettings]; 
 };
 
 // =================================================================================
-// 🔥 核心修复: SpellingModal - 解决文件名匹配问题 (v, ue, un)
+// 🔥 核心拼读组件：完美适配你的文件名规则
 // =================================================================================
 const SpellingModal = ({ word, onClose }) => {
-    const [status, setStatus] = useState(''); 
+    const [status, setStatus] = useState(''); // '0-initial', '0-final', '0-full'
     const isStoppingRef = useRef(false);
 
     // 播放本地音频文件
@@ -208,46 +183,37 @@ const SpellingModal = ({ word, onClose }) => {
             if (isStoppingRef.current) { resolve(); return; }
             const cleanFilename = filename.trim();
             const audio = new Audio(`/pinyin-assets/${cleanFilename}`);
-            
-            // console.log("尝试播放:", cleanFilename); // 调试用
-
             audio.onended = resolve;
             audio.onerror = () => { 
-                console.error(`❌ 找不到音频: /pinyin-assets/${cleanFilename}`); 
+                console.warn(`❌ 缺文件: ${cleanFilename}`); 
                 resolve(); 
             };
-            audio.play().catch((e) => {
-                console.warn("Play prevented", e);
-                resolve();
-            });
+            audio.play().catch(resolve);
         });
     };
 
-    // 🔥 关键函数：把 pinyin-pro 的韵母转成你的文件名格式
-    const getFinalFileName = (initial, final, tone) => {
-        let name = final;
+    // 🟢 文件名转换核心逻辑 (适配你的 ve, vn, v)
+    const getFinalFilename = (pData) => {
+        let name = pData.final; // 默认韵母
+        const initial = pData.initial;
 
-        // 1. 处理 ü -> v (你的截图 ve2.mp3 说明了这一点)
-        if (name === 'ü') name = 'v';
-        if (name === 'u:') name = 'v';
+        // 1. ü -> v (截图 v4.mp3)
+        if (name === 'ü' || name === 'u:') name = 'v';
 
-        // 2. j, q, x, y 后面跟 u 其实是 ü -> v
-        if (['j', 'q', 'x', 'y'].includes(initial) && name === 'u') {
-            name = 'v'; 
-        }
+        // 2. j/q/x/y + u 其实是 ü -> v
+        if (['j', 'q', 'x', 'y'].includes(initial) && name === 'u') name = 'v';
 
-        // 3. 你的截图 ve2.mp3 (yue/ue -> ve)
+        // 3. üe / yue -> ve (截图 ve4.mp3)
         if (name === 'ue' || name === 'üe') name = 've';
-        // 你的截图 vn3.mp3 (yun/un -> vn)
-        if (['j', 'q', 'x', 'y'].includes(initial) && name === 'un') {
-            name = 'vn'; 
-        }
-        
-        // 4. 处理 iou -> iu, uei -> ui, uen -> un (pinyin-pro 默认输出完整的，但文件名通常是简写)
-        if (name === 'iou') name = 'iu';
-        if (name === 'uei') name = 'ui';
-        if (name === 'uen') name = 'un';
 
+        // 4. ün / yun -> vn (截图 vn3.mp3)
+        if (name === 'un' && ['j', 'q', 'x', 'y'].includes(initial)) name = 'vn';
+        // 注意：普通的 un (如 kun) 还是 un，不需要变
+
+        // 5. yu -> v (因为 yu 是整体认读，但如果是分解模式下)
+        // 实际上整体认读走另一条路，这里主要处理拼读
+
+        const tone = (pData.num === 5 || !pData.num) ? 0 : pData.num;
         return `${name}${tone}.mp3`;
     };
 
@@ -263,71 +229,76 @@ const SpellingModal = ({ word, onClose }) => {
             const char = chars[i];
             
             const pData = pinyinConverter(char, { type: 'all', toneType: 'num', multiple: false })[0];
+            // pData: { initial: 'd', final: 'a', num: 4, pinyin: 'da4' }
+            
             const pinyinNoTone = pData.pinyin.replace(/\d/g, '');
             const isWhole = WHOLE_SYLLABLES.includes(pinyinNoTone);
-            
-            // 处理声调 (轻声为0)
-            const tone = (pData.num === 5 || !pData.num) ? 0 : pData.num;
 
             // ==========================================
-            // 情况 A: 整体认读音节 (chi, shi, wu, yi...)
+            // 分支 A: 整体认读音节 (zhi, chi, shi, wu, yi, yu...)
+            // 它们不能拆声韵母，直接读整个文件 + 汉字
             // ==========================================
             if (isWhole) {
-                // 你的要求：整体认读也要读文件！
-                setStatus(`${i}-full`); // 直接全红
-                // 播放例如: wu2.mp3, shi4.mp3
-                // 注意：整体认读音节直接用 pinyinNoTone + tone
+                setStatus(`${i}-full`); // 整体高亮
+                
+                // 计算文件名: yu -> v, yue -> ve, yun -> vn
                 let wholeName = pinyinNoTone;
-                // 特殊处理：yue -> ve (如果你的文件名是 ve4.mp3)
+                if (wholeName === 'yu') wholeName = 'v';
                 if (wholeName === 'yue') wholeName = 've';
                 if (wholeName === 'yun') wholeName = 'vn';
-                if (wholeName === 'yuan') wholeName = 'yuan'; // yuan通常不变
-
+                // wu, yi, zhi 保持原样
+                
+                const tone = (pData.num === 5 || !pData.num) ? 0 : pData.num;
+                
+                // 1. 播放整体音 (例如 wu2.mp3)
                 await playLocal(`${wholeName}${tone}.mp3`);
-                await new Promise(r => setTimeout(r, 300));
+                await new Promise(r => setTimeout(r, 100));
+
+                // 2. 播放汉字 TTS (例如 "五")
+                await playTTSWrapper(char);
+                await new Promise(r => setTimeout(r, 400));
             } 
-            
             // ==========================================
-            // 情况 B: 拼读 (声母 -> 韵母 -> 汉字)
+            // 分支 B: 正常拼读 (d-a-da)
             // ==========================================
             else if (pData.initial) {
-                // 1. 读声母 (Initial) - 高亮声母
-                setStatus(`${i}-initial`); 
-                await playLocal(`${pData.initial}.mp3`); // d.mp3
-                await new Promise(r => setTimeout(r, 100));
-                
-                // 2. 读韵母 (Final) - 高亮韵母
-                setStatus(`${i}-final`);
-                const finalFile = getFinalFileName(pData.initial, pData.final, tone);
-                await playLocal(finalFile); // ang4.mp3 / ve2.mp3
+                // 1. 声母 (d.mp3)
+                setStatus(`${i}-initial`);
+                await playLocal(`${pData.initial}.mp3`);
                 await new Promise(r => setTimeout(r, 100));
 
-                // 3. 读整字 (Full)
-                setStatus(`${i}-full`); 
-                await playTTSWrapper(char); // 读汉字
+                // 2. 韵母带调 (ang4.mp3 / ve4.mp3)
+                setStatus(`${i}-final`);
+                const finalFile = getFinalFilename(pData);
+                await playLocal(finalFile);
+                await new Promise(r => setTimeout(r, 100));
+
+                // 3. 汉字 TTS (大)
+                setStatus(`${i}-full`);
+                await playTTSWrapper(char);
                 await new Promise(r => setTimeout(r, 400));
             }
-            
             // ==========================================
-            // 情况 C: 零声母 (如: 安 an1, 鹅 e2)
+            // 分支 C: 零声母 (an, e, ou)
+            // 直接当作整体读
             // ==========================================
             else {
                 setStatus(`${i}-full`);
-                // 直接播放韵母文件作为整字，或者用TTS
-                const finalFile = getFinalFileName('', pData.final, tone);
+                const finalFile = getFinalFilename(pData);
                 await playLocal(finalFile);
+                await playTTSWrapper(char);
                 await new Promise(r => setTimeout(r, 400));
             }
         }
 
-        // 4. 整词连读
+        // 4. 最后：整词连读 (大家)
         if (!isStoppingRef.current) {
             setStatus('all-full');
             await playTTSWrapper(word);
         }
 
         if (!isStoppingRef.current) {
-            setTimeout(onClose, 1200);
+            setTimeout(onClose, 1500);
         }
     };
 
@@ -350,31 +321,33 @@ const SpellingModal = ({ word, onClose }) => {
                             const pData = pinyinConverter(char, { type: 'all', toneType: 'num' })[0];
                             const initial = pData.initial;
                             const fullPinyin = pData.pinyin; 
-                            const finalPart = initial ? fullPinyin.slice(initial.length) : fullPinyin;
+                            // 视觉上把韵母切出来显示
+                            const finalPart = initial ? fullPinyin.replace(initial, '') : fullPinyin;
 
                             const isInitialActive = status === `${index}-initial`;
                             const isFinalActive = status === `${index}-final`;
-                            const isFullActive = status === `${index}-full`; // 全字阶段
-                            const isAllActive = status === 'all-full'; // 整词阶段
+                            const isFullActive = status === `${index}-full`;
+                            const isAllActive = status === 'all-full';
 
-                            // 颜色控制:
-                            // 1. 声母红: 读声母时 OR 读全字时 OR 读整词时
+                            // 颜色逻辑
                             const initialColor = (isInitialActive || isFullActive || isAllActive) ? '#ef4444' : '#9ca3af';
-                            // 2. 韵母红: 读韵母时 OR 读全字时 OR 读整词时
                             const finalColor = (isFinalActive || isFullActive || isAllActive) ? '#ef4444' : '#9ca3af';
-                            
                             const fontWeight = (isInitialActive || isFinalActive || isFullActive || isAllActive) ? 'bold' : 'normal';
 
                             return (
                                 <div key={index} style={{textAlign: 'center', transition: 'all 0.3s'}}>
+                                    {/* 拼音显示 */}
                                     <div style={{fontSize: '1.4rem', marginBottom: '8px', height: '30px', fontFamily: 'Roboto, Arial'}}>
-                                        <span style={{color: initialColor, fontWeight: fontWeight, transition: 'color 0.2s'}}>
-                                            {initial}
-                                        </span>
+                                        {initial && (
+                                            <span style={{color: initialColor, fontWeight: fontWeight, transition: 'color 0.2s'}}>
+                                                {initial}
+                                            </span>
+                                        )}
                                         <span style={{color: finalColor, fontWeight: fontWeight, transition: 'color 0.2s'}}>
                                             {finalPart}
                                         </span>
                                     </div>
+                                    {/* 汉字 */}
                                     <div style={{
                                         fontSize: '3rem', 
                                         fontWeight: 'bold', 
@@ -396,7 +369,7 @@ const SpellingModal = ({ word, onClose }) => {
     );
 };
 
-// ... (PronunciationComparison, SettingsPanel, JumpModal 保持不变) ...
+// ... (PronunciationComparison 保持不变) ...
 const PronunciationComparison = ({ correctWord, settings, onClose }) => {
     const [status, setStatus] = useState('idle'); 
     const [userAudioUrl, setUserAudioUrl] = useState(null);
@@ -405,9 +378,7 @@ const PronunciationComparison = ({ correctWord, settings, onClose }) => {
     const localAudioRef = useRef(null);
 
     const checkSupport = () => {
-        if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            return false;
-        }
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
         return true;
     };
 
@@ -422,10 +393,7 @@ const PronunciationComparison = ({ correctWord, settings, onClose }) => {
 
     const startRecording = async () => {
         stopAllAudio();
-        if (!checkSupport()) {
-            alert("Not supported");
-            return;
-        }
+        if (!checkSupport()) { alert("不支持录音"); return; }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -442,77 +410,24 @@ const PronunciationComparison = ({ correctWord, settings, onClose }) => {
             mediaRecorderRef.current = recorder;
             recorder.start();
             setStatus('recording');
-        } catch (err) { 
-            console.error(err);
-            alert("Microphone error"); 
-        }
+        } catch (err) { alert("请检查麦克风权限"); }
     };
 
-    const stopRecording = () => { 
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-            mediaRecorderRef.current.stop(); 
-        }
-    };
-
-    const resetRecording = () => { 
-        if (userAudioUrl) URL.revokeObjectURL(userAudioUrl); 
-        setUserAudioUrl(null); 
-        setStatus('idle'); 
-    };
-
-    const playStandard = () => { 
-        if (localAudioRef.current) localAudioRef.current.stop();
-        playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); 
-    };
-
-    const playUser = () => { 
-        if (!userAudioUrl) return; 
-        stopAllAudio();
-        if (localAudioRef.current) localAudioRef.current.unload(); 
-        localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true }); 
-        localAudioRef.current.play(); 
-    };
+    const stopRecording = () => { if (mediaRecorderRef.current) mediaRecorderRef.current.stop(); };
+    const resetRecording = () => { if (userAudioUrl) URL.revokeObjectURL(userAudioUrl); setUserAudioUrl(null); setStatus('idle'); };
+    const playStandard = () => { if (localAudioRef.current) localAudioRef.current.stop(); playTTS(correctWord, settings.voiceChinese, settings.speechRateChinese); };
+    const playUser = () => { if (!userAudioUrl) return; stopAllAudio(); if (localAudioRef.current) localAudioRef.current.unload(); localAudioRef.current = new Howl({ src: [userAudioUrl], format: ['webm'], html5: true }); localAudioRef.current.play(); };
 
     return (
         <div style={styles.comparisonOverlay} onClick={onClose}>
             <div style={styles.comparisonPanel} onClick={e => e.stopPropagation()}>
-                <div style={styles.recordHeader}>
-                    <h3>အသံထွက် လေ့ကျင့်ရန်</h3> 
-                    <button style={styles.closeButtonSimple} onClick={onClose}><FaTimes /></button>
-                </div>
+                <div style={styles.recordHeader}><h3>အသံထွက် လေ့ကျင့်ရန်</h3><button style={styles.closeButtonSimple} onClick={onClose}><FaTimes /></button></div>
                 <div style={styles.recordContent}>
-                    <div style={styles.recordWordDisplay}>
-                        <div style={styles.textWordChinese}>{correctWord}</div>
-                    </div>
-                    
+                    <div style={styles.recordWordDisplay}><div style={styles.textWordChinese}>{correctWord}</div></div>
                     <div style={styles.actionArea}>
-                        {status === 'idle' && (
-                            <div style={styles.idleStateContainer}>
-                                <button style={styles.bigRecordBtn} onClick={startRecording}><FaMicrophone size={32} /></button>
-                                <div style={styles.instructionText}>နှိပ်၍ အသံသွင်းပါ</div>
-                            </div>
-                        )}
-                        {status === 'recording' && (
-                            <div style={styles.idleStateContainer}>
-                                <button style={{...styles.bigRecordBtn, ...styles.recordingPulse, background: '#ef4444'}} onClick={stopRecording}><FaStop size={32} /></button>
-                                <div style={{...styles.instructionText, color: '#ef4444'}}>အသံသွင်းနေသည်...</div>
-                            </div>
-                        )}
-                        {status === 'review' && (
-                            <div style={styles.reviewContainer}>
-                                <div style={styles.reviewRow}>
-                                    <div style={styles.reviewItem}>
-                                        <div style={styles.reviewLabel}>အမှန်</div>
-                                        <button style={styles.circleBtnBlue} onClick={playStandard}><FaVolumeUp size={24} /></button>
-                                    </div>
-                                    <div style={styles.reviewItem}>
-                                        <div style={styles.reviewLabel}>သင်၏အသံ</div>
-                                        <button style={styles.circleBtnGreen} onClick={playUser}><FaPlayCircle size={24} /></button>
-                                    </div>
-                                </div>
-                                <button style={styles.retryLink} onClick={resetRecording}><FaRedo size={14} /> ပြန်အသံသွင်းမယ်</button>
-                            </div>
-                        )}
+                        {status === 'idle' && (<div style={styles.idleStateContainer}><button style={styles.bigRecordBtn} onClick={startRecording}><FaMicrophone size={32} /></button><div style={styles.instructionText}>နှိပ်၍ အသံသွင်းပါ</div></div>)}
+                        {status === 'recording' && (<div style={styles.idleStateContainer}><button style={{...styles.bigRecordBtn, ...styles.recordingPulse, background: '#ef4444'}} onClick={stopRecording}><FaStop size={32} /></button><div style={{...styles.instructionText, color: '#ef4444'}}>အသံသွင်းနေသည်...</div></div>)}
+                        {status === 'review' && (<div style={styles.reviewContainer}><div style={styles.reviewRow}><div style={styles.reviewItem}><div style={styles.reviewLabel}>အမှန်</div><button style={styles.circleBtnBlue} onClick={playStandard}><FaVolumeUp size={24} /></button></div><div style={styles.reviewItem}><div style={styles.reviewLabel}>သင်၏အသံ</div><button style={styles.circleBtnGreen} onClick={playUser}><FaPlayCircle size={24} /></button></div></div><button style={styles.retryLink} onClick={resetRecording}><FaRedo size={14} /> ပြန်အသံသွင်းမယ်</button></div>)}
                     </div>
                 </div>
             </div>
@@ -528,26 +443,10 @@ const SettingsPanel = React.memo(({ settings, setSettings, onClose }) => {
             <div style={styles.settingsContent} onClick={(e) => e.stopPropagation()}>
                 <button style={styles.closeButton} onClick={onClose}><FaTimes /></button>
                 <h2 style={{marginTop: 0, color: '#374151'}}>Settings</h2>
-                <div style={styles.settingGroup}>
-                    <label style={styles.settingLabel}>Order</label>
-                    <div style={styles.settingControl}>
-                        <button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : '#f3f4f6', color: settings.order === 'sequential' ? 'white' : '#4b5563' }}><FaSortAmountDown/> Sequential</button>
-                        <button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : '#f3f4f6', color: settings.order === 'random' ? 'white' : '#4b5563' }}><FaRandom/> Random</button>
-                    </div>
-                </div>
-                {/* ... other settings ... */}
-                <div style={styles.settingGroup}>
-                    <label style={styles.settingLabel}>Background</label>
-                    <div style={styles.settingControl}>
-                        <input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} />
-                        <button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>Upload</button>
-                        <button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>Reset</button>
-                    </div>
-                </div>
-                <div style={styles.settingGroup}>
-                    <label style={styles.settingLabel}>Chinese Voice</label>
-                    <select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select>
-                </div>
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>Order</label><div style={styles.settingControl}><button onClick={() => handleSettingChange('order', 'sequential')} style={{...styles.settingButton, background: settings.order === 'sequential' ? '#4299e1' : '#f3f4f6', color: settings.order === 'sequential' ? 'white' : '#4b5563' }}><FaSortAmountDown/> Sequential</button><button onClick={() => handleSettingChange('order', 'random')} style={{...styles.settingButton, background: settings.order === 'random' ? '#4299e1' : '#f3f4f6', color: settings.order === 'random' ? 'white' : '#4b5563' }}><FaRandom/> Random</button></div></div>
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>Auto Play</label><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayChinese} onChange={(e) => handleSettingChange('autoPlayChinese', e.target.checked)} /> Chinese</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayBurmese} onChange={(e) => handleSettingChange('autoPlayBurmese', e.target.checked)} /> Burmese</label></div><div style={styles.settingControl}><label><input type="checkbox" checked={settings.autoPlayExample} onChange={(e) => handleSettingChange('autoPlayExample', e.target.checked)} /> Example</label></div></div>
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>Background</label><div style={styles.settingControl}><input type="file" accept="image/*" id="bg-upload" style={{ display: 'none' }} onChange={handleImageUpload} /><button style={styles.settingButton} onClick={() => document.getElementById('bg-upload').click()}>Upload</button><button style={{...styles.settingButton, flex: '0 1 auto'}} onClick={() => handleSettingChange('backgroundImage', '')}>Reset</button></div></div>
+                <div style={styles.settingGroup}><label style={styles.settingLabel}>Chinese Voice</label><select style={styles.settingSelect} value={settings.voiceChinese} onChange={(e) => handleSettingChange('voiceChinese', e.target.value)}>{TTS_VOICES.filter(v => v.value.startsWith('zh')).map(v => <option key={v.value} value={v.value}>{v.label}</option>)}</select></div>
             </div>
         </div>
     ); 
@@ -559,15 +458,7 @@ const JumpModal = ({ max, current, onJump, onClose }) => {
     useEffect(() => { setTimeout(() => inputRef.current?.focus(), 100); }, []); 
     const handleJump = () => { const num = parseInt(inputValue, 10); if (num >= 1 && num <= max) { onJump(num - 1); } }; 
     const handleKeyDown = (e) => { if (e.key === 'Enter') handleJump(); }; 
-    return ( 
-        <div style={styles.jumpModalOverlay} onClick={onClose}>
-            <div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}>
-                <h3 style={styles.jumpModalTitle}>Go to</h3>
-                <input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} />
-                <button style={styles.jumpModalButton} onClick={handleJump}>Go</button>
-            </div>
-        </div> 
-    ); 
+    return ( <div style={styles.jumpModalOverlay} onClick={onClose}><div style={styles.jumpModalContent} onClick={e => e.stopPropagation()}><h3 style={styles.jumpModalTitle}>Go to</h3><input ref={inputRef} type="number" style={styles.jumpModalInput} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyDown={handleKeyDown} /><button style={styles.jumpModalButton} onClick={handleJump}>Go</button></div></div> ); 
 };
 
 // =================================================================================
@@ -582,11 +473,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const getPinyin = useCallback((wordObj) => {
       if (wordObj.pinyin) return wordObj.pinyin;
       if (!wordObj.chinese) return '';
-      try {
-          return pinyinConverter(wordObj.chinese, { 
-              toneType: 'symbol', separator: ' ', v: true 
-          }).replace(/·/g, ' '); 
-      } catch (e) { return wordObj.chinese; }
+      try { return pinyinConverter(wordObj.chinese, { toneType: 'symbol', separator: ' ', v: true }).replace(/·/g, ' '); } catch (e) { return wordObj.chinese; }
   }, []);
 
   const processedCards = useMemo(() => {
@@ -615,9 +502,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (typeof window !== 'undefined' && progressKey && processedCards.length > 0) {
         const savedIndex = localStorage.getItem(`word_progress_${progressKey}`);
         const parsed = parseInt(savedIndex, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed < processedCards.length) {
-            setCurrentIndex(parsed);
-        } else { setCurrentIndex(0); }
+        if (!isNaN(parsed) && parsed >= 0 && parsed < processedCards.length) { setCurrentIndex(parsed); } else { setCurrentIndex(0); }
     } else { setCurrentIndex(0); }
   }, [processedCards, progressKey]);
 
@@ -687,17 +572,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
   
-  const handleOpenRecorder = useCallback((e) => {
-    e.stopPropagation();
-    stopAllAudio();
-    setIsRecordingOpen(true);
-  }, []);
-
-  const handleOpenSpelling = useCallback((e) => {
-      e.stopPropagation();
-      stopAllAudio();
-      setIsSpellingOpen(true);
-  }, []);
+  const handleOpenRecorder = useCallback((e) => { e.stopPropagation(); stopAllAudio(); setIsRecordingOpen(true); }, []);
+  const handleOpenSpelling = useCallback((e) => { e.stopPropagation(); stopAllAudio(); setIsSpellingOpen(true); }, []);
 
   const handleKnow = () => {
     stopAllAudio();
@@ -708,23 +584,10 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     if (currentIndex >= newActiveCards.length) { setCurrentIndex(0); }
   };
 
-  const handleDontKnow = () => {
-    stopAllAudio();
-    if (isRevealed) { navigate(1); } else { setIsRevealed(true); }
-  };
+  const handleDontKnow = () => { stopAllAudio(); if (isRevealed) { navigate(1); } else { setIsRevealed(true); } };
 
-  const pageTransitions = useTransition(isOpen, {
-    from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 },
-  });
-
-  const cardTransitions = useTransition(currentIndex, {
-      key: currentCard ? currentCard.id : currentIndex,
-      from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, 
-      enter: { opacity: 1, transform: 'translateY(0%)' }, 
-      leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, 
-      config: { mass: 1, tension: 280, friction: 30 }, 
-      onStart: () => { if(currentCard) playSoundEffect('switch'); },
-  });
+  const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 }, });
+  const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) playSoundEffect('switch'); }, });
   
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
       if (event.target.closest('[data-no-gesture]')) return;
@@ -745,10 +608,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         {isRecordingOpen && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} settings={settings} onClose={() => setIsRecordingOpen(false)} />)}
         
-        {/* ✅ 拼读弹窗 */}
-        {isSpellingOpen && currentCard && (
-            <SpellingModal word={currentCard.chinese} onClose={() => setIsSpellingOpen(false)} />
-        )}
+        {isSpellingOpen && currentCard && (<SpellingModal word={currentCard.chinese} onClose={() => setIsSpellingOpen(false)} />)}
         
         {isJumping && <JumpModal max={activeCards.length} current={currentIndex} onJump={handleJumpToCard} onClose={() => setIsJumping(false)} />}
         
@@ -784,22 +644,13 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               );
             })
         ) : (
-            <div style={styles.completionContainer}>
-                <h2>🎉 ဂုဏ်ယူပါတယ်!</h2> 
-                <p>သင် ဒီသင်ခန်းစာကို လေ့လာပြီးသွားပါပြီ။</p>
-                <button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>ပိတ်မည်</button>
-            </div>
+            <div style={styles.completionContainer}><h2>🎉 ဂုဏ်ယူပါတယ်!</h2><p>သင် ဒီသင်ခန်းစာကို လေ့လာပြီးသွားပါပြီ။</p><button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>ပိတ်မည်</button></div>
         )}
 
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
-                
-                {/* ✅ 修改：拼读按钮 (圆形 + 文字 '拼') */}
-                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="ပေါင်း၍ဖတ်ခြင်း (拼读)">
-                    <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span>
-                </button>
-                
+                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span></button>
                 <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်"><FaMicrophone size={18} color={'#4b5563'} /></button>
                 {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း"><FaPenFancy size={18} /></button>)}
                 <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "ပယ်ဖျက်" : "သိမ်းဆည်း"}>{isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}</button>
@@ -822,9 +673,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   return null;
 };
 
-// =================================================================================
-// ===== 样式表 ====================================================================
-// =================================================================================
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#f0f4f8' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
