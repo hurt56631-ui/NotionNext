@@ -1,10 +1,10 @@
-// AIChatDrawer.js (最终修正版 - 已修复编译报错和逻辑隐患)
+// AIChatDrawer.js (完整版 - 已集成缅甸语教学Prompt与互动题逻辑)
 
 import { Transition } from '@headlessui/react'
 import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import imageCompression from 'browser-image-compression';
-import { pinyin } from 'pinyin-pro'; // 需安装: npm install pinyin-pro
-import { v4 as uuidv4 } from 'uuid'; // 建议安装 uuid 库，或者使用下方内置的简单生成器
+import { pinyin } from 'pinyin-pro'; 
+import { v4 as uuidv4 } from 'uuid'; 
 import AiTtsButton from './AiTtsButton';
 
 // 1. 导入你的题型组件
@@ -34,7 +34,7 @@ class AudioQueue {
     }
     clear() {
         if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio.src = ''; this.currentAudio = null; }
-        this.queue.forEach(url => URL.revokeObjectURL(url)); // 清理所有未播放的 blob url
+        this.queue.forEach(url => URL.revokeObjectURL(url)); 
         this.queue = [];
         this.isPlaying = false;
     }
@@ -94,11 +94,70 @@ const CHAT_MODELS_LIST = [
     { id: 'model-4', name: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash-latest', maxContextTokens: 1048576 },
     { id: 'model-5', name: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro-latest', maxContextTokens: 1048576 },
 ];
+
+// --- [关键修改] 针对缅甸语教学和互动题的 Prompt ---
 const DEFAULT_PROMPTS = [
-    { id: 'default-grammar-correction', name: '纠正中文语法', description: '纠正语法、优化用词。', content: '你是一位专业的中文老师。请纠正用户发送的中文句子中的语法错误。\n\n**重要要求**：\n1. 请务必使用 **Markdown** 格式。\n2. 错误的地方请用 `代码块` 或 **加粗** 标记。\n3. 使用列表展示修改建议。', openingLine: '你好，请发送你需要我纠正的中文句子。', model: 'gemini-2.5-flash', ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', avatarUrl: '' },
-    { id: 'explain-word', name: '解释中文词语', description: '解释词语并造句。', content: '你是一位中文老师。请解释用户发送的中文词语。\n\n**格式要求**：\n- 使用 ### 标题 分隔含义和例句。\n- 关键解释请 **加粗**。', openingLine: '你好，想了解哪个词？', model: 'gemini-1.5-pro-latest', ttsVoice: 'zh-CN-YunxiNeural', avatarUrl: '' },
-    { id: 'translate-myanmar', name: '中缅互译', description: '中缅互译助手。', content: '你是一位翻译助手。请将用户发送的内容在中文和缅甸语之间互译。请直接输出翻译结果。', openingLine: '你好！请发送内容进行翻译。', model: 'gemini-2.5-flash', ttsVoice: 'my-MM-NilarNeural', avatarUrl: '' }
+    { 
+        id: 'mm-cn-teacher-default', 
+        name: '中文老师 (缅甸语教学)', 
+        description: '用缅甸语解释中文，会自动出排序题。', 
+        // 这里的 Prompt 是核心：它规定了 AI 怎么说话（Markdown）以及怎么出题（JSON）
+        content: `你是一位专业的中文老师，专门教缅甸学生学习中文。
+
+**1. 聊天与教学规则：**
+- **语言：** 请主要使用**缅甸语**来解释中文概念，但中文例句保持中文。
+- **格式（富文本）：** 
+  - 解释重点词汇时，请使用 **加粗** (Bold)。
+  - 列举要点时，请使用列表 (List)。
+  - 展示例句时，请使用 > 引用块。
+- **拼音：** 只要提到中文生词，**必须**标注拼音。
+
+**2. 互动出题规则（非常重要）：**
+当用户说“练习”、“做题”、“测试”或你认为需要考核用户时，**不要**直接输出文本题目。
+请**务必**输出以下 JSON 格式的数据（不要包裹在markdown代码块中，直接输出JSON字符串）：
+
+{
+  "component": "PaiXuTi",
+  "props": {
+    "question": "请将下面的词语连成一句话 (Sentense Ordering)：",
+    "items": [
+      { "id": "w1", "content": "我" },
+      { "id": "w2", "content": "爱" },
+      { "id": "w3", "content": "中国" }
+    ],
+    "correctOrder": ["w1", "w2", "w3"],
+    "explanation": "中文的主谓宾结构：我(Subject) + 爱(Verb) + 中国(Object)。"
+  }
+}
+
+注意：JSON中的 items id 必须唯一，correctOrder 必须是正确顺序的 id 列表。`, 
+        openingLine: 'မင်္ဂလာပါ! (你好！) 我是你的中文老师。我们可以练习对话，或者你可以对我说 "做个练习" 来测试一下。', 
+        model: 'gemini-2.5-flash', 
+        ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', 
+        avatarUrl: '' 
+    },
+    { 
+        id: 'translate-myanmar', 
+        name: '中缅互译助手', 
+        description: '精确的中缅互译。', 
+        content: '你是一位翻译助手。请将用户发送的内容在中文和缅甸语之间互译。请直接输出翻译结果，不需要过多解释。', 
+        openingLine: '你好！请发送内容，我来翻译。', 
+        model: 'gemini-2.5-flash', 
+        ttsVoice: 'my-MM-NilarNeural', 
+        avatarUrl: '' 
+    },
+    { 
+        id: 'grammar-check', 
+        name: '语法纠正', 
+        description: '纠正中文语法错误。', 
+        content: '你是一位严厉的中文老师。请纠正用户发送的中文句子中的语法错误。\n\n**要求**：\n- 使用 **Markdown** 格式。\n- 错误的地方用 `代码块` 标记。\n- 使用缅甸语解释错误原因。', 
+        openingLine: '请发送你的中文句子，我来帮你检查语法。', 
+        model: 'gemini-2.5-flash', 
+        ttsVoice: 'zh-CN-XiaoxiaoMultilingualNeural', 
+        avatarUrl: '' 
+    }
 ];
+
 const DEFAULT_SETTINGS = {
     apiKey: '', apiKeys: [], activeApiKeyId: '', chatModels: CHAT_MODELS_LIST, selectedModel: 'gemini-2.5-flash',
     temperature: 0.8, maxOutputTokens: 8192, disableThinkingMode: true, startWithNewChat: false, prompts: DEFAULT_PROMPTS,
@@ -205,7 +264,6 @@ const RichMarkdown = ({ text }) => {
             {parts.map((part, i) => {
                 if (part.startsWith('```') && part.endsWith('```')) {
                     const content = part.replace(/^```\w*\n?/, '').replace(/```$/, '');
-                    // --- [修正点] 语法修复：正确访问数组索引 ---
                     const lang = part.match(/^```(\w+)/)?.[1] || 'Code';
                     return (
                         <div key={i} className="my-3 rounded-xl overflow-hidden border border-gray-700 bg-[#1e1e1e] shadow-xl">
@@ -259,7 +317,6 @@ const TextActionMenu = ({ containerRef }) => {
         if (text && text.length > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
-            // 修复：使用 window.scrollY/scrollX 确保滚动后位置正确
             setMenuStyle({ 
                 display: 'flex', 
                 top: `${window.scrollY + rect.top - 60}px`, 
@@ -273,7 +330,6 @@ const TextActionMenu = ({ containerRef }) => {
     }, []);
 
     useEffect(() => {
-        // 修复：在 document 层面监听，确保全局可用
         document.addEventListener('mouseup', handleSelection);
         return () => document.removeEventListener('mouseup', handleSelection);
     }, [handleSelection]);
@@ -308,11 +364,14 @@ const MessageBubble = ({ msg, settings, isLastAiMessage, onRegenerate, onTypingC
             {!isUser && <img src={convertGitHubUrl(avatarToShow)} alt="AI" className="w-9 h-9 rounded-full shadow-sm bg-white object-cover border border-gray-100" />}
             <div className={`p-4 text-left flex flex-col transition-all duration-300 ${isUser ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm shadow-lg' : 'bg-white dark:bg-gray-700 rounded-2xl rounded-tl-sm border border-gray-100 dark:border-gray-600 shadow-md'}`} style={{ maxWidth: '88%' }}>
                 {msg.images && msg.images.length > 0 && <div className="flex flex-wrap gap-2 mb-3">{msg.images.map((img, i) => <img key={i} src={img.src || img.previewUrl} className="w-32 h-32 object-cover rounded-lg border-2 border-white/20" />)}</div>}
+                
+                {/* 如果 AI 输出被识别为组件，则渲染组件；否则渲染富文本 */}
                 {msg.isComponent ? React.createElement(componentMap[msg.componentName], { ...msg.props, onCorrectionRequest }) : (
                     <div className={`text-[15px] ${isUser ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
                         {isLastAiMessage && msg.isTyping ? <TypingEffect text={msg.content || ''} settings={settings} onComplete={onTypingComplete} onUpdate={onTypingUpdate} /> : <RichMarkdown text={msg.content || ''} />}
                     </div>
                 )}
+                
                 {!isUser && !msg.isTyping && msg.content && (
                     <div className="flex items-center gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-gray-600/50 text-gray-400">
                         {!settings.isFacebookApp && <AiTtsButton text={msg.content} ttsSettings={settings} />}
@@ -643,8 +702,27 @@ const AiChatAssistant = ({ onClose }) => {
             let aiResponseContent;
             if (activeKey.provider === 'gemini') { aiResponseContent = data.candidates?.[0]?.content?.parts?.[0]?.text; } else { aiResponseContent = data.choices?.[0]?.message?.content; }
             if (!aiResponseContent) throw new Error('AI未能返回有效内容。');
+            
             let aiMessage;
-            try { const jsonMatch = aiResponseContent.match(/\{[\s\S]*\}/); let parsed = null; if (jsonMatch) { try { parsed = JSON.parse(jsonMatch[0]); } catch (e) {} } if (parsed && parsed.component && parsed.props && componentMap[parsed.component]) { const sanitizedProps = sanitizeQuizData(parsed.props); aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: sanitizedProps, isTyping: false }; } else { throw new Error("Not a component JSON"); } } catch(e) { aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true }; }
+            try { 
+                // 1. 尝试匹配 JSON 对象
+                const jsonMatch = aiResponseContent.match(/\{[\s\S]*\}/); 
+                let parsed = null; 
+                if (jsonMatch) { 
+                    try { parsed = JSON.parse(jsonMatch[0]); } catch (e) {} 
+                } 
+                // 2. 如果成功解析出 JSON，且包含 component 字段，则判定为组件消息
+                if (parsed && parsed.component && parsed.props && componentMap[parsed.component]) { 
+                    const sanitizedProps = sanitizeQuizData(parsed.props); 
+                    aiMessage = { role: 'ai', content: null, timestamp: Date.now(), isComponent: true, componentName: parsed.component, props: sanitizedProps, isTyping: false }; 
+                } else { 
+                    throw new Error("Not a component JSON"); 
+                } 
+            } catch(e) { 
+                // 3. 否则判定为普通文本消息
+                aiMessage = { role: 'ai', content: aiResponseContent, timestamp: Date.now(), isTyping: true }; 
+            }
+            
             const finalMessages = [...messagesForApi, aiMessage];
             setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: finalMessages } : c));
         } catch (err) {
