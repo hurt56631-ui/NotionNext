@@ -108,7 +108,9 @@ const initSounds = () => {
 
 // ✅ TTS 播放逻辑
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
+    // 防止事件冒泡
     if (e && e.stopPropagation) e.stopPropagation(); 
+    
     stopAllAudio(); 
 
     if (!text || !voice) { 
@@ -515,9 +517,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   
   // ✅ 收藏点击逻辑 - 彻底修复点击问题
   const handleToggleFavorite = async (e) => { 
-      // 这里的阻止冒泡非常重要，同时阻止默认事件
-      if (e) {
-        e.preventDefault();
+      // 这里的阻止冒泡非常重要
+      if (e && e.stopPropagation) {
         e.stopPropagation();
       }
       
@@ -581,8 +582,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     return () => { clearTimeout(initialPlayTimer); clearTimeout(autoBrowseTimerRef.current); };
   }, [currentIndex, currentCard, settings, isOpen, navigate, isRevealed]);
   
-  const handleOpenRecorder = useCallback((e) => { e.stopPropagation(); stopAllAudio(); setIsRecordingOpen(true); }, []);
-  const handleOpenSpelling = useCallback((e) => { e.stopPropagation(); stopAllAudio(); setIsSpellingOpen(true); }, []);
+  const handleOpenRecorder = useCallback((e) => { if(e && e.stopPropagation) e.stopPropagation(); stopAllAudio(); setIsRecordingOpen(true); }, []);
+  const handleOpenSpelling = useCallback((e) => { if(e && e.stopPropagation) e.stopPropagation(); stopAllAudio(); setIsSpellingOpen(true); }, []);
 
   const handleKnow = () => {
     stopAllAudio();
@@ -599,7 +600,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) playSoundEffect('switch'); }, });
   
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
-      // ✅ 关键修复：如果触摸的是控制按钮（带有 data-no-gesture 属性或其子元素），直接忽略手势
+      // ✅ 核心修复：参考参考代码，如果目标元素有 data-no-gesture 属性，直接返回，不触发拖拽
       if (event.target.closest('[data-no-gesture]')) return;
       
       if (down) return;
@@ -690,19 +691,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             <div 
                 style={styles.rightControls} 
                 data-no-gesture="true" 
-                // ✅ 关键：强制捕获点击和触摸，防止被底层 useDrag 干扰
+                // 保留 PointerDown 阻止以防万一
                 onPointerDown={(e) => e.stopPropagation()}
             >
-                <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
-                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span></button>
-                <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်"><FaMicrophone size={18} color={'#4b5563'} /></button>
-                {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း"><FaPenFancy size={18} /></button>)}
+                <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ" data-no-gesture="true"><FaCog size={18} style={{ pointerEvents: 'none' }} /></button>
+                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读" data-no-gesture="true"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif', pointerEvents: 'none' }}>拼</span></button>
+                <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်" data-no-gesture="true"><FaMicrophone size={18} color={'#4b5563'} style={{ pointerEvents: 'none' }} /></button>
+                {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း" data-no-gesture="true"><FaPenFancy size={18} style={{ pointerEvents: 'none' }}/></button>)}
                 <button 
                     style={styles.rightIconButton} 
                     onClick={handleToggleFavorite} 
                     title={isFavoriteCard ? "ပယ်ဖျက်" : "သိမ်းဆည်း"}
+                    data-no-gesture="true" // ✅ 核心：添加该属性
                 >
-                    {isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}
+                    {isFavoriteCard ? <FaHeart size={18} color="#f87171" style={{ pointerEvents: 'none' }} /> : <FaRegHeart size={18} style={{ pointerEvents: 'none' }} />}
                 </button>
             </div>
         )}
@@ -710,8 +712,8 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         <div style={styles.bottomControlsContainer} data-no-gesture="true" onPointerDown={(e) => e.stopPropagation()}>
             {activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}
             <div style={styles.knowButtonsWrapper}>
-                <button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow}>မသိဘူး</button>
-                <button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow}>သိတယ်</button>
+                <button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow} data-no-gesture="true">မသိဘူး</button>
+                <button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow} data-no-gesture="true">သိတယ်</button>
             </div>
         </div>
 
