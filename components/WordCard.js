@@ -108,9 +108,7 @@ const initSounds = () => {
 
 // ✅ TTS 播放逻辑
 const playTTS = async (text, voice, rate, onEndCallback, e) => { 
-    // 防止事件冒泡
     if (e && e.stopPropagation) e.stopPropagation(); 
-    
     stopAllAudio(); 
 
     if (!text || !voice) { 
@@ -461,13 +459,17 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         const mapped = words.map(w => ({ 
             id: w.id || Math.random().toString(36).substr(2, 9), 
             chinese: w.chinese || w.word, 
-            audioText: w.audioText, // ✅ 确保保留 audioText
+            // ✅ 新增：映射 audioText 用于多音字，如果不存在则回退到 chinese
+            audioText: w.audioText || w.chinese || w.word, 
             pinyin: w.pinyin,
-            burmese: w.burmese || w.meaning || w.definition, 
+            // ✅ 修改：确保 burmese (释义) 被正确映射
+            burmese: w.burmese || w.meaning, 
             mnemonic: w.mnemonic,
             example: w.example,
-            example2: w.example2 || w.sentence2, // ✅ 映射第二个例句
+            // ✅ 新增：映射 example2 用于第二个例句
+            example2: w.example2, 
         })).filter(w => w.chinese);
+
         if (settings.order === 'random') {
             for (let i = mapped.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [mapped[i], mapped[j]] = [mapped[j], mapped[i]]; }
         }
@@ -515,22 +517,14 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       return () => { isActive = false; };
   }, [currentCard]);
   
-  // ✅ 收藏点击逻辑 - 彻底修复点击问题
   const handleToggleFavorite = async (e) => { 
-      // 这里的阻止冒泡非常重要
-      if (e && e.stopPropagation) {
-        e.stopPropagation();
-      }
+      if (e && e.stopPropagation) e.stopPropagation();
+      if (!currentCard || currentCard.id === 'fallback') return;
       
-      if (!currentCard || currentCard.id === 'fallback') return; 
-      
-      // 乐观UI更新
       const newStatus = !isFavoriteCard;
       setIsFavoriteCard(newStatus); 
       
-      // 执行数据库操作
       const success = await toggleFavorite(currentCard);
-      // 如果数据库操作结果与乐观更新不符，回滚
       if (success !== newStatus) {
          setIsFavoriteCard(success);
       }
@@ -549,32 +543,34 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     clearTimeout(autoBrowseTimerRef.current);
     stopAllAudio(); 
 
-    // ✅ 自动播放逻辑：支持 audioText，支持 example2
+    // ✅ 修改：重写自动播放逻辑，支持 audioText 和 example2
     const playFullSequence = () => {
-        // 判定：如果有 audioText (如'常')，则读它；否则读 chinese
-        const chineseTextToRead = (currentCard.audioText && currentCard.audioText.trim()) 
-                                   ? currentCard.audioText 
-                                   : currentCard.chinese;
+        const chineseTextToRead = currentCard.audioText || currentCard.chinese;
 
         if (settings.autoPlayChinese && chineseTextToRead) {
             playTTS(chineseTextToRead, settings.voiceChinese, settings.speechRateChinese, () => {
                 if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                     playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
-                        // 播放例句 1
                         if (settings.autoPlayExample && currentCard.example && isRevealed) {
-                           playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, () => {
-                                // 播放例句 2 (新增)
-                                if (currentCard.example2) {
+                            playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, () => {
+                                // 在例句1播放完后，检查并播放例句2
+                                if (settings.autoPlayExample && currentCard.example2 && isRevealed) {
                                     playTTS(currentCard.example2, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
                                 } else {
                                     startAutoBrowseTimer();
                                 }
-                           });
-                        } else { startAutoBrowseTimer(); }
+                            });
+                        } else {
+                            startAutoBrowseTimer();
+                        }
                     });
-                } else { startAutoBrowseTimer(); }
+                } else {
+                    startAutoBrowseTimer();
+                }
             });
-        } else { startAutoBrowseTimer(); }
+        } else {
+            startAutoBrowseTimer();
+        }
     };
     
     const startAutoBrowseTimer = () => { if (settings.autoBrowse) { autoBrowseTimerRef.current = setTimeout(() => { navigate(1); }, settings.autoBrowseDelay); } };
@@ -599,9 +595,11 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const pageTransitions = useTransition(isOpen, { from: { opacity: 0, transform: 'translateY(100%)' }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: 'translateY(100%)' }, config: { tension: 220, friction: 25 }, });
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) playSoundEffect('switch'); }, });
   
+  // ✅ 核心修复：采用 data-no-gesture 机制解决点击冲突
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
-      // ✅ 核心修复：参考参考代码，如果目标元素有 data-no-gesture 属性，直接返回，不触发拖拽
-      if (event.target.closest('[data-no-gesture]')) return;
+      if (event.target.closest('[data-no-gesture]')) {
+          return;
+      }
       
       if (down) return;
       event.stopPropagation(); 
@@ -620,7 +618,6 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {isSettingsOpen && <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setIsSettingsOpen(false)} />}
         {isRecordingOpen && currentCard && (<PronunciationComparison correctWord={currentCard.chinese} settings={settings} onClose={() => setIsRecordingOpen(false)} />)}
         
-        {/* 拼读弹窗 */}
         {isSpellingOpen && currentCard && (
             <SpellingModal word={currentCard.chinese} onClose={() => setIsSpellingOpen(false)} />
         )}
@@ -632,26 +629,28 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
               const cardData = activeCards[i];
               if (!cardData) return null;
               
-              // 决定点击卡片中文时读什么（多音字修正）
-              const chineseAudioText = cardData.audioText || cardData.chinese;
+              // ✅ 修改：确保播放时使用 audioText
+              const chineseTextToRead = cardData.audioText || cardData.chinese;
 
               return (
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center', width: '100%' }}>
-                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(chineseAudioText, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(chineseTextToRead, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                             <div style={styles.pinyin}>{getPinyin(cardData)}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           
-                          {/* ✅ 背面内容区 */}
+                          {/* ✅ 修改：重新组织背面内容，确保释义和所有例句都显示 */}
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   
                                   {/* 单词释义 */}
-                                  <div style={styles.definitionBox} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
-                                      <div style={styles.textWordBurmese}>{cardData.burmese}</div>
-                                  </div>
+                                  {cardData.burmese && 
+                                    <div style={styles.definitionBox} onClick={(e) => playTTS(cardData.burmese, settings.voiceBurmese, settings.speechRateBurmese, null, e)}>
+                                        <div style={styles.textWordBurmese}>{cardData.burmese}</div>
+                                    </div>
+                                  }
 
                                   {/* 助记 */}
                                   {cardData.mnemonic && <div style={styles.mnemonicBox}>{cardData.mnemonic}</div>}
@@ -666,7 +665,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
                                       </div>
                                   )}
 
-                                  {/* ✅ 例句 2 (新增) */}
+                                  {/* 例句 2 */}
                                   {cardData.example2 && (
                                       <div style={styles.exampleBox} onClick={(e) => playTTS(cardData.example2, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                                           <div style={{ flex: 1, textAlign: 'center' }}>
@@ -687,33 +686,25 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             <div style={styles.completionContainer}><h2>🎉 ဂုဏ်ယူပါတယ်!</h2><p>သင် ဒီသင်ခန်းစာကို လေ့လာပြီးသွားပါပြီ။</p><button style={{...styles.knowButton, ...styles.knowButtonBase}} onClick={onClose}>ပိတ်မည်</button></div>
         )}
 
+        {/* ✅ 核心修复：为整个控件容器添加 data-no-gesture */}
         {currentCard && (
-            <div 
-                style={styles.rightControls} 
-                data-no-gesture="true" 
-                // 保留 PointerDown 阻止以防万一
-                onPointerDown={(e) => e.stopPropagation()}
-            >
-                <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ" data-no-gesture="true"><FaCog size={18} style={{ pointerEvents: 'none' }} /></button>
-                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读" data-no-gesture="true"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif', pointerEvents: 'none' }}>拼</span></button>
-                <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်" data-no-gesture="true"><FaMicrophone size={18} color={'#4b5563'} style={{ pointerEvents: 'none' }} /></button>
-                {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း" data-no-gesture="true"><FaPenFancy size={18} style={{ pointerEvents: 'none' }}/></button>)}
-                <button 
-                    style={styles.rightIconButton} 
-                    onClick={handleToggleFavorite} 
-                    title={isFavoriteCard ? "ပယ်ဖျက်" : "သိမ်းဆည်း"}
-                    data-no-gesture="true" // ✅ 核心：添加该属性
-                >
-                    {isFavoriteCard ? <FaHeart size={18} color="#f87171" style={{ pointerEvents: 'none' }} /> : <FaRegHeart size={18} style={{ pointerEvents: 'none' }} />}
+            <div style={styles.rightControls} data-no-gesture="true">
+                <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
+                <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span></button>
+                <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်"><FaMicrophone size={18} color={'#4b5563'} /></button>
+                {currentCard.chinese && currentCard.chinese.length > 0 && currentCard.chinese.length <= 5 && !currentCard.chinese.includes(' ') && ( <button style={styles.rightIconButton} onClick={() => setWriterChar(currentCard.chinese)} title="ရေးနည်း"><FaPenFancy size={18} /></button>)}
+                <button style={styles.rightIconButton} onClick={handleToggleFavorite} title={isFavoriteCard ? "ပယ်ဖျက်" : "သိမ်းဆည်း"}>
+                    {isFavoriteCard ? <FaHeart size={18} color="#f87171" /> : <FaRegHeart size={18} />}
                 </button>
             </div>
         )}
         
-        <div style={styles.bottomControlsContainer} data-no-gesture="true" onPointerDown={(e) => e.stopPropagation()}>
+        {/* ✅ 核心修复：为整个控件容器添加 data-no-gesture */}
+        <div style={styles.bottomControlsContainer} data-no-gesture="true">
             {activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}
             <div style={styles.knowButtonsWrapper}>
-                <button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow} data-no-gesture="true">မသိဘူး</button>
-                <button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow} data-no-gesture="true">သိတယ်</button>
+                <button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow}>မသိဘူး</button>
+                <button style={{...styles.knowButtonBase, ...styles.knowButton}} onClick={handleKnow}>သိတယ်</button>
             </div>
         </div>
 
@@ -728,21 +719,21 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
 const styles = {
     fullScreen: { position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none', backgroundColor: '#f0f4f8' }, 
     gestureArea: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1 },
-    // 增加 overflow-y: auto 允许内容过多时滚动
-    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px', pointerEvents: 'none' },
-    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflowY: 'auto', pointerEvents: 'auto' },
+    animatedCardShell: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '80px 20px 150px 20px' },
+    cardContainer: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: 'transparent', borderRadius: '24px', overflowY: 'auto', overflowX: 'hidden' },
     pinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.5rem', color: '#d97706', textShadow: 'none', marginBottom: '1.2rem', letterSpacing: '0.05em', fontWeight: 'bold' }, 
     textWordChinese: { fontSize: '3.5rem', fontWeight: 'bold', color: '#1f2937', lineHeight: 1.2, wordBreak: 'break-word', textShadow: 'none' }, 
-    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' },
-    definitionBox: { marginTop: '1rem', cursor: 'pointer' },
-    textWordBurmese: { fontSize: '2.0rem', color: '#4b5563', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.5, wordBreak: 'break-word', textShadow: 'none', textAlign: 'center' },
+    revealedContent: { marginTop: '1rem', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.2rem' },
+    // ✅ 新增：为释义添加独立的样式容器
+    definitionBox: { cursor: 'pointer' },
+    textWordBurmese: { fontSize: '2.0rem', color: '#4b5563', fontFamily: '"Padauk", "Myanmar Text", sans-serif', lineHeight: 1.8, wordBreak: 'break-word', textShadow: 'none' },
     mnemonicBox: { color: '#374151', display: 'inline-block', textAlign: 'center', fontSize: '1.2rem', textShadow: 'none', backgroundColor: 'rgba(0, 0, 0, 0.05)', padding: '10px 18px', borderRadius: '12px', maxWidth: '100%', border: '1px solid rgba(0,0,0,0.1)' },
-    exampleBox: { color: '#374151', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: 'none', cursor: 'pointer', background: 'white', padding: '15px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '1px solid #f3f4f6' },
+    exampleBox: { color: '#374151', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: 'none', cursor: 'pointer', background: 'white', padding: '15px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
     examplePinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.1rem', color: '#d97706', marginBottom: '0.5rem', opacity: 1, letterSpacing: '0.05em', fontWeight: 500 },
-    exampleText: { fontSize: '1.3rem', lineHeight: 1.4 },
-    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 2000, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)', pointerEvents: 'auto' },
-    rightIconButton: { background: 'white', border: '1px solid #e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', transition: 'transform 0.2s', color: '#4b5563', padding: 0 },
-    bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 2000, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', pointerEvents: 'auto' },
+    exampleText: { fontSize: '1.4rem', lineHeight: 1.5 },
+    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)' },
+    rightIconButton: { background: 'white', border: '1px solid #e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', transition: 'transform 0.2s', color: '#4b5563' },
+    bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
     bottomCenterCounter: { background: 'rgba(0, 0, 0, 0.1)', color: '#374151', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none' },
     knowButtonsWrapper: { display: 'flex', width: '100%', maxWidth: '400px', gap: '15px' },
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
