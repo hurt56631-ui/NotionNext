@@ -234,7 +234,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (已移除分享和解释卡片的样式) ---
+// --- 3. 样式定义 ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -487,12 +487,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     );
   };
 
-  const handleGlobalClick = (e) => {
-    if (!isSubmitted || transitioningRef.current) return;
-    const isCorrect = correctAnswer.map(String).includes(String(selectedId));
-    executeNext(isCorrect);
-  };
-
   const handleCardClick = (option, e) => {
     if (isSubmitted || transitioningRef.current) return;
     if (e) e.stopPropagation();
@@ -527,7 +521,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 去掉了显示解释的逻辑，直接等待 2秒 后跳转
+    // 统一 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); 
     }, 2000);
@@ -548,7 +542,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
 
-      <div className="xzt-container" onClick={handleGlobalClick} role="region" aria-label="选择题区域">
+      {/* 移除了 onClick={handleGlobalClick}，防止误触导致跳题 */}
+      <div className="xzt-container" role="region" aria-label="选择题区域">
         <div 
           className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
           onClick={(e) => handleTitlePlay(e, false)}
@@ -617,8 +612,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
         <div className="fixed-bottom-area" aria-hidden="false">
           <div className="bottom-actions-container">
-            {/* 分享按钮已移除 */}
-            
             <button 
               className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
               onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
@@ -630,8 +623,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               တင်သွင်းသည်
             </button>
           </div>
-
-          {/* 解释显示卡片已移除 */}
         </div>
       </div>
     </>
