@@ -459,6 +459,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         const mapped = words.map(w => ({ 
             id: w.id || Math.random().toString(36).substr(2, 9), 
             chinese: w.chinese || w.word, 
+            audioText: w.audioText, // ✅ 确保保留 audioText
             pinyin: w.pinyin,
             burmese: w.burmese || w.meaning || w.definition, 
             mnemonic: w.mnemonic,
@@ -512,9 +513,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       return () => { isActive = false; };
   }, [currentCard]);
   
-  // ✅ 收藏点击逻辑
+  // ✅ 收藏点击逻辑 - 彻底修复点击问题
   const handleToggleFavorite = async (e) => { 
-      // 这里的阻止冒泡非常重要
+      // 这里的阻止冒泡非常重要，同时阻止默认事件
       if (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -528,8 +529,10 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
       
       // 执行数据库操作
       const success = await toggleFavorite(currentCard);
-      // 如果数据库操作结果与乐观更新不符，可以回滚（此处简化处理）
-      setIsFavoriteCard(success ? newStatus : !newStatus);
+      // 如果数据库操作结果与乐观更新不符，回滚
+      if (success !== newStatus) {
+         setIsFavoriteCard(success);
+      }
   };
   
   const navigate = useCallback((direction) => { 
@@ -545,13 +548,27 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
     clearTimeout(autoBrowseTimerRef.current);
     stopAllAudio(); 
 
+    // ✅ 自动播放逻辑：支持 audioText，支持 example2
     const playFullSequence = () => {
-        if (settings.autoPlayChinese && currentCard.chinese) {
-            playTTS(currentCard.chinese, settings.voiceChinese, settings.speechRateChinese, () => {
+        // 判定：如果有 audioText (如'常')，则读它；否则读 chinese
+        const chineseTextToRead = (currentCard.audioText && currentCard.audioText.trim()) 
+                                   ? currentCard.audioText 
+                                   : currentCard.chinese;
+
+        if (settings.autoPlayChinese && chineseTextToRead) {
+            playTTS(chineseTextToRead, settings.voiceChinese, settings.speechRateChinese, () => {
                 if (settings.autoPlayBurmese && currentCard.burmese && isRevealed) {
                     playTTS(currentCard.burmese, settings.voiceBurmese, settings.speechRateBurmese, () => {
+                        // 播放例句 1
                         if (settings.autoPlayExample && currentCard.example && isRevealed) {
-                           playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
+                           playTTS(currentCard.example, settings.voiceChinese, settings.speechRateChinese, () => {
+                                // 播放例句 2 (新增)
+                                if (currentCard.example2) {
+                                    playTTS(currentCard.example2, settings.voiceChinese, settings.speechRateChinese, startAutoBrowseTimer);
+                                } else {
+                                    startAutoBrowseTimer();
+                                }
+                           });
                         } else { startAutoBrowseTimer(); }
                     });
                 } else { startAutoBrowseTimer(); }
@@ -582,8 +599,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
   const cardTransitions = useTransition(currentIndex, { key: currentCard ? currentCard.id : currentIndex, from: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '100%' : '-100%'})` }, enter: { opacity: 1, transform: 'translateY(0%)' }, leave: { opacity: 0, transform: `translateY(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' }, config: { mass: 1, tension: 280, friction: 30 }, onStart: () => { if(currentCard) playSoundEffect('switch'); }, });
   
   const bind = useDrag(({ down, movement: [mx, my], velocity: { magnitude: vel }, direction: [xDir, yDir], event }) => {
-      // 确保手势不会在控制按钮区域触发
+      // ✅ 关键修复：如果触摸的是控制按钮（带有 data-no-gesture 属性或其子元素），直接忽略手势
       if (event.target.closest('[data-no-gesture]')) return;
+      
       if (down) return;
       event.stopPropagation(); 
       const isHorizontal = Math.abs(mx) > Math.abs(my);
@@ -612,16 +630,20 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             cardTransitions((cardStyle, i) => {
               const cardData = activeCards[i];
               if (!cardData) return null;
+              
+              // 决定点击卡片中文时读什么（多音字修正）
+              const chineseAudioText = cardData.audioText || cardData.chinese;
+
               return (
                 <animated.div key={cardData.id} style={{ ...styles.animatedCardShell, ...cardStyle }}>
                   <div style={styles.cardContainer}>
                       <div style={{ textAlign: 'center', width: '100%' }}>
-                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(cardData.chinese, settings.voiceChinese, settings.speechRateChinese, null, e)}>
+                          <div style={{ cursor: 'pointer' }} onClick={(e) => playTTS(chineseAudioText, settings.voiceChinese, settings.speechRateChinese, null, e)}>
                             <div style={styles.pinyin}>{getPinyin(cardData)}</div>
                             <div style={styles.textWordChinese}>{cardData.chinese}</div>
                           </div>
                           
-                          {/* ✅ 背面内容区：释义 + 两个例句 */}
+                          {/* ✅ 背面内容区 */}
                           {isRevealed && (
                               <animated.div style={styles.revealedContent}>
                                   
@@ -667,10 +689,9 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
         {currentCard && (
             <div 
                 style={styles.rightControls} 
-                data-no-gesture="true"
-                // ✅ 关键：阻止鼠标和触摸事件冒泡，防止被底层的拖拽手势捕获
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
+                data-no-gesture="true" 
+                // ✅ 关键：强制捕获点击和触摸，防止被底层 useDrag 干扰
+                onPointerDown={(e) => e.stopPropagation()}
             >
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
                 <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span></button>
@@ -686,7 +707,7 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default' }) => {
             </div>
         )}
         
-        <div style={styles.bottomControlsContainer} data-no-gesture="true">
+        <div style={styles.bottomControlsContainer} data-no-gesture="true" onPointerDown={(e) => e.stopPropagation()}>
             {activeCards.length > 0 && (<div style={styles.bottomCenterCounter} onClick={() => setIsJumping(true)}>{currentIndex + 1} / {activeCards.length}</div>)}
             <div style={styles.knowButtonsWrapper}>
                 <button style={{...styles.knowButtonBase, ...styles.dontKnowButton}} onClick={handleDontKnow}>မသိဘူး</button>
@@ -717,9 +738,9 @@ const styles = {
     exampleBox: { color: '#374151', width: '100%', maxWidth: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textShadow: 'none', cursor: 'pointer', background: 'white', padding: '15px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', border: '1px solid #f3f4f6' },
     examplePinyin: { fontFamily: 'Roboto, "Segoe UI", Arial, sans-serif', fontSize: '1.1rem', color: '#d97706', marginBottom: '0.5rem', opacity: 1, letterSpacing: '0.05em', fontWeight: 500 },
     exampleText: { fontSize: '1.3rem', lineHeight: 1.4 },
-    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)', pointerEvents: 'auto' },
+    rightControls: { position: 'fixed', bottom: '40%', right: '10px', zIndex: 2000, display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', transform: 'translateY(50%)', pointerEvents: 'auto' },
     rightIconButton: { background: 'white', border: '1px solid #e5e7eb', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', transition: 'transform 0.2s', color: '#4b5563', padding: 0 },
-    bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' },
+    bottomControlsContainer: { position: 'fixed', bottom: 0, left: 0, right: 0, padding: '15px', zIndex: 2000, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', pointerEvents: 'auto' },
     bottomCenterCounter: { background: 'rgba(0, 0, 0, 0.1)', color: '#374151', padding: '8px 18px', borderRadius: '20px', fontSize: '1rem', fontWeight: 'bold', cursor: 'pointer', userSelect: 'none' },
     knowButtonsWrapper: { display: 'flex', width: '100%', maxWidth: '400px', gap: '15px' },
     knowButtonBase: { flex: 1, padding: '16px', borderRadius: '16px', border: 'none', fontSize: '1.2rem', fontWeight: 'bold', color: 'white', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
