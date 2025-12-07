@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaLightbulb, FaBookOpen, FaFacebook, FaTelegram, FaTiktok, FaLink } from 'react-icons/fa';
+import { FaCheckCircle, FaTimesCircle, FaBookOpen } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
 // --- 1. IndexedDB 缓存 (SSR 安全处理) ---
@@ -234,7 +234,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (包含分享按钮样式和 CSS 禁止下拉刷新) ---
+// --- 3. 样式定义 (已移除分享和解释卡片的样式) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&family=Ma+Shan+Zheng&display=swap');
 
@@ -253,8 +253,6 @@ const cssStyles = `
     -webkit-tap-highlight-color: transparent;
     scrollbar-width: none; 
     -ms-overflow-style: none;
-    
-    /* --- 修复：通过CSS禁止下拉刷新，比JS更高效且SSR安全 --- */
     overscroll-behavior-y: contain;
   }
   .xzt-container::-webkit-scrollbar {
@@ -355,30 +353,6 @@ const cssStyles = `
     pointer-events: auto; 
   }
 
-  .share-buttons-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background-color: #fff;
-    border-radius: 99px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    pointer-events: auto;
-  }
-  .share-icon {
-    font-size: 1.5rem; 
-    color: #4b5563; 
-    cursor: pointer;
-    transition: transform 0.2s;
-  }
-  .share-icon:active {
-    transform: scale(0.9);
-  }
-  .share-icon.facebook:hover { color: #1877F2; }
-  .share-icon.telegram:hover { color: #0088cc; }
-  .share-icon.tiktok:hover { color: #000000; }
-  .share-icon.link:hover { color: #6d28d9; }
-
   .submit-btn {
     pointer-events: auto; width: auto; min-width: 180px; padding: 14px 40px;
     border-radius: 99px; font-size: 1.1rem; font-weight: 700; color: white; border: none;
@@ -392,34 +366,8 @@ const cssStyles = `
   .submit-btn:disabled { background: #e2e8f0; color: #94a3b8; box-shadow: none; opacity: 0.8; }
   .submit-btn.hidden-btn { opacity: 0; pointer-events: none; }
 
-  .explanation-card {
-    pointer-events: auto;
-    background: #fff1f2; color: #be123c;
-    border: 1px solid #fecaca;
-    padding: 16px 20px; 
-    border-radius: 16px;
-    width: 88%; max-width: 450px;
-    font-size: 1.05rem;
-    line-height: 1.5;
-    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
-    animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    display: flex; gap: 12px; align-items: flex-start;
-    cursor: pointer;
-    position: fixed;
-    bottom: calc(12vh + 96px);
-    z-index: 300; 
-    left: 50%;
-    transform: translateX(-50%);
-  }
-  .explanation-card > * { pointer-events: none; }
-
-  .tap-hint {
-    font-size: 0.8rem; color: #f87171; opacity: 0.7; margin-top: 8px; font-weight: 400;
-  }
-
   @keyframes bounce { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
   @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
 `;
 
 
@@ -456,12 +404,9 @@ const parseOptionText = (text) => {
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [showExplanation, setShowExplanation] = useState(false);
   const [titleSegments, setTitleSegments] = useState([]);
   const [orderedOptions, setOrderedOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  const activeExplanation = (question.explanation || '').trim();
   
   const autoNextTimerRef = useRef(null);
   const mountedRef = useRef(true);
@@ -505,7 +450,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     setIsPlaying(false);
     setSelectedId(null);
     setIsSubmitted(false);
-    setShowExplanation(false);
 
     setTitleSegments(parseTitleText(question.text || ''));
     setOrderedOptions((options || []).map(opt => ({
@@ -567,9 +511,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
+    // 统一 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); 
-    }, 1500);
+    }, 2000);
   };
 
   const triggerIncorrectAndNext = () => {
@@ -582,17 +527,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    if (activeExplanation) {
-      setShowExplanation(true);
-      setTimeout(() => {
-        if (transitioningRef.current) return;
-        audioController.playMixed(activeExplanation, () => {}, () => {});
-      }, 400);
-    }
-
+    // 去掉了显示解释的逻辑，直接等待 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); 
-    }, 8000);
+    }, 2000);
   };
 
   const handleSubmit = () => {
@@ -605,41 +543,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       triggerIncorrectAndNext();
     }
   };
-
-  const handleExplanationClick = (e) => {
-    e.stopPropagation();
-    executeNext(false); 
-  };
-  
-  const handleShare = (platform) => {
-    if (typeof window === 'undefined') return;
-    const shareUrl = window.location.href;
-    const shareText = `快来和我一起学习！ ${question.text || ''}`;
-    let url = '';
-
-    switch (platform) {
-      case 'facebook':
-        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-        break;
-      case 'telegram':
-        url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
-        break;
-      case 'tiktok':
-        alert('TikTok请在App内分享');
-        return;
-      case 'copy':
-        navigator.clipboard.writeText(shareUrl).then(() => {
-          alert('လင့်ခ်ကို ကူးယူပြီးပါပြီ။'); // "链接已复制"
-        }, () => {
-          alert('ကူးယူရန် မအောင်မြင်ပါ။'); // "复制失败"
-        });
-        return;
-      default:
-        return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
 
   return (
     <>
@@ -714,14 +617,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
         <div className="fixed-bottom-area" aria-hidden="false">
           <div className="bottom-actions-container">
-            <div className="share-buttons-group">
-                <span style={{paddingRight: '8px', color: '#6b7280', fontSize: '1rem', fontFamily: 'Padauk'}}>မျှဝေရန်</span>
-                <FaFacebook className="share-icon facebook" onClick={() => handleShare('facebook')} title="Facebook တွင်မျှဝေရန်"/>
-                <FaTelegram className="share-icon telegram" onClick={() => handleShare('telegram')} title="Telegram တွင်မျှဝေရန်"/>
-                <FaTiktok className="share-icon tiktok" onClick={() => handleShare('tiktok')} title="Tiktok တွင်မျှဝေရန်"/>
-                <FaLink className="share-icon link" onClick={() => handleShare('copy')} title="လင့်ခ်ကိုကူးယူပါ"/>
-            </div>
-
+            {/* 分享按钮已移除 */}
+            
             <button 
               className={`submit-btn ${isSubmitted ? 'hidden-btn' : ''}`} 
               onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
@@ -734,20 +631,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
             </button>
           </div>
 
-          {showExplanation && activeExplanation && (
-            <div 
-              className="explanation-card"
-              onClick={handleExplanationClick}
-              role="dialog"
-              aria-label="အဖြေရှင်းလင်းချက်"
-            >
-              <FaLightbulb className="flex-shrink-0 mt-1 text-red-500 text-xl" />
-              <div>
-                <div>{activeExplanation}</div>
-                <div className="tap-hint">ဆက်သွားရန် နေရာလွတ်တစ်ခုခုကိုနှိပ်ပါ။</div>
-              </div>
-            </div>
-          )}
+          {/* 解释显示卡片已移除 */}
         </div>
       </div>
     </>
