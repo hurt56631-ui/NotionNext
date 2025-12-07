@@ -412,6 +412,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
 
+  // --- 核心修复：完全遵循方案 A ---
+  // executeNext 绝对不调用 onNext，只调用 onCorrect 或 onIncorrect
+  // 避免和父组件的跳转逻辑冲突，防止跳两题
   const executeNext = (isCorrect) => {
     if (transitioningRef.current) return;
     transitioningRef.current = true;
@@ -422,29 +425,20 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       autoNextTimerRef.current = null;
     }
 
-    // 核心修改：只调用 onCorrect 或 onIncorrect，不再调用 onNext
-    // 防止父组件同时响应两个回调导致跳过两道题
     if (isCorrect) {
+      // 答对了，通知父组件。父组件如果想跳题，请在 onCorrect 内部处理
       try { 
-        if (onCorrect) {
-          onCorrect();
-        } else if (onNext) {
-          // 只有在没有提供 onCorrect 回调时，才尝试调用 onNext 作为备选
-          onNext();
-        }
+        if (onCorrect) onCorrect(); 
       } catch (e) { console.warn(e); }
     } else {
+      // 答错了，通知父组件。父组件如果想跳题，请在 onIncorrect 内部处理
       try { 
-        if (onIncorrect) {
-          onIncorrect(question);
-        } else if (onNext) {
-          // 同上，只有在没有 onIncorrect 时才调用 onNext
-          onNext();
-        }
+        if (onIncorrect) onIncorrect(question);
       } catch (e) { console.warn(e); }
     }
     
-    // 已移除: try { onNext && onNext(); } catch (e) { console.warn(e); }
+    // 【关键】：这里绝对不再调用 onNext && onNext();
+    // 所有的跳转权利全部移交给父组件，确保只跳一次。
   };
 
   useEffect(() => {
@@ -521,7 +515,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 答对：统一等待 2秒 后跳转
+    // 答对：统一等待 2秒 后触发回调
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); 
     }, 2000);
@@ -537,7 +531,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 答错：统一等待 2秒 后跳转
+    // 答错：统一等待 2秒 后触发回调
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); 
     }, 2000);
@@ -558,7 +552,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
 
-      {/* 移除了 onClick={handleGlobalClick}，确保只有倒计时结束后自动跳转 */}
+      {/* 确保移除了全局点击跳转，防止误触 */}
       <div className="xzt-container" role="region" aria-label="选择题区域">
         <div 
           className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
