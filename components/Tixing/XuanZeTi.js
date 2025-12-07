@@ -313,7 +313,7 @@ const cssStyles = `
 
   .xzt-options-grid { 
     display: flex; flex-direction: column; gap: 16px; 
-    width: 90%; max-width: 380px; /* 修改：限制宽度，使其变短 */
+    width: 90%; max-width: 380px; 
     padding-bottom: 20px;
     z-index: 15; 
     pointer-events: auto;
@@ -412,8 +412,9 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
   const autoNextTimerRef = useRef(null);
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
-  const hasAutoPlayedRef = useRef(false); // 修改：新增Ref控制自动朗读只执行一次
+  const hasAutoPlayedRef = useRef(false);
 
+  // --- 核心修复：不对称跳转逻辑 ---
   const executeNext = (isCorrect) => {
     if (transitioningRef.current) return;
     transitioningRef.current = true;
@@ -424,17 +425,27 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       autoNextTimerRef.current = null;
     }
 
-    // 1. 先触发做对/做错的回调 (用于统计、积分、记录错题本等)
     if (isCorrect) {
-      try { if (onCorrect) onCorrect(); } catch (e) { console.warn(e); }
+      // 【情况1：答对】
+      // 你的父组件在 onCorrect 里会自动跳转，所以我们这里 **只** 调用 onCorrect
+      // 如果调用了 onNext，就会导致跳两题
+      try { 
+        if (onCorrect) {
+          onCorrect(); 
+        } else {
+          // 如果没有传递 onCorrect，保底调用 onNext
+          if (onNext) onNext();
+        }
+      } catch (e) { console.warn(e); }
     } else {
-      try { if (onIncorrect) onIncorrect(question); } catch (e) { console.warn(e); }
+      // 【情况2：答错】
+      // 你的父组件在 onIncorrect 里 **不会** 自动跳转（通常只是记录错误）
+      // 所以我们这里 **必须** 显式调用 onNext，否则就不会跳题
+      try { 
+        if (onIncorrect) onIncorrect(question);
+        if (onNext) onNext();
+      } catch (e) { console.warn(e); }
     }
-    
-    // 2. 修复做错不跳转问题：
-    // 无论对错，最后都统一调用 onNext 来强制进入下一题。
-    // 注意：如果您的 onCorrect 里也包含了跳转逻辑，请移除父组件 onCorrect 里的跳转，否则“做对”会跳两次。
-    try { if (onNext) onNext(); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
@@ -469,7 +480,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     if (question.text) {
       setTimeout(() => {
-        // 修改：使用 ref 判断是否已经自动播放过，防止重复播放
         if (!mountedRef.current || transitioningRef.current || hasAutoPlayedRef.current) return;
         handleTitlePlay(null, true);
         hasAutoPlayedRef.current = true;
@@ -484,7 +494,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question, options]); // 依赖项保留
+  }, [question, options]);
 
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
