@@ -422,13 +422,29 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       autoNextTimerRef.current = null;
     }
 
+    // 核心修改：只调用 onCorrect 或 onIncorrect，不再调用 onNext
+    // 防止父组件同时响应两个回调导致跳过两道题
     if (isCorrect) {
-      try { onCorrect && onCorrect(); } catch (e) { console.warn(e); }
+      try { 
+        if (onCorrect) {
+          onCorrect();
+        } else if (onNext) {
+          // 只有在没有提供 onCorrect 回调时，才尝试调用 onNext 作为备选
+          onNext();
+        }
+      } catch (e) { console.warn(e); }
     } else {
-      try { onIncorrect && onIncorrect(question); } catch (e) { console.warn(e); }
+      try { 
+        if (onIncorrect) {
+          onIncorrect(question);
+        } else if (onNext) {
+          // 同上，只有在没有 onIncorrect 时才调用 onNext
+          onNext();
+        }
+      } catch (e) { console.warn(e); }
     }
     
-    try { onNext && onNext(); } catch (e) { console.warn(e); }
+    // 已移除: try { onNext && onNext(); } catch (e) { console.warn(e); }
   };
 
   useEffect(() => {
@@ -505,7 +521,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 统一 2秒 后跳转
+    // 答对：统一等待 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); 
     }, 2000);
@@ -521,7 +537,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 统一 2秒 后跳转
+    // 答错：统一等待 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); 
     }, 2000);
@@ -542,7 +558,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     <>
       <style>{cssStyles}</style>
 
-      {/* 移除了 onClick={handleGlobalClick}，防止误触导致跳题 */}
+      {/* 移除了 onClick={handleGlobalClick}，确保只有倒计时结束后自动跳转 */}
       <div className="xzt-container" role="region" aria-label="选择题区域">
         <div 
           className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
