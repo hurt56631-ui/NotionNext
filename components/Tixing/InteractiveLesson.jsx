@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/router'; 
+import { useRouter } from 'next/router';
 import { HiSpeakerWave } from "react-icons/hi2";
 import { FaChevronLeft, FaChevronRight, FaArrowRight } from "react-icons/fa";
 
-// --- 1. 外部题型组件 ---
+// --- 外部题型组件 ---
 import XuanZeTi from './XuanZeTi';
 import PanDuanTi from './PanDuanTi';
 import PaiXuTi from './PaiXuTi';
@@ -13,11 +13,11 @@ import DuiHua from './DuiHua';
 import TianKongTi from './TianKongTi';
 import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 2. 新引入的学习卡片 ---
-import WordCard from '../WordCard';   
-import PhraseCard from '../PhraseCard'; 
+// --- 学习卡片 ---
+import WordCard from '../WordCard';
+import PhraseCard from '../PhraseCard';
 
-// ---------------- Audio Manager ----------------
+// --- Audio Manager (无需改动) ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 const audioManager = (() => {
   if (typeof window === 'undefined') return null;
@@ -38,22 +38,20 @@ const audioManager = (() => {
   };
 })();
 
-// ---------------- 3. 列表容器适配器 ----------------
+
+// --- 列表容器适配器 (无需改动) ---
 const CardListRenderer = ({ data, type, onComplete }) => {
   const isPhrase = type === 'phrase_study' || type === 'sentences';
-  const list = data.words || [];
+  const list = data.words || data.sentences || data.vocabulary || []; // 更健壮的数据源
 
   return (
     <div className="w-full h-full flex flex-col relative bg-slate-50">
-      {/* 标题 */}
       <div className="flex-none pt-6 pb-4 px-4 text-center z-10 bg-slate-50">
         <h2 className="text-2xl font-black text-slate-800">
           {data.title || (isPhrase ? "常用短句" : "核心生词")}
         </h2>
         <p className="text-slate-400 text-xs mt-1">共 {list.length} 个 • 点击卡片跟读</p>
       </div>
-
-      {/* 列表区 */}
       <div className="flex-1 w-full overflow-y-auto px-4 pb-32" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className={`grid gap-4 ${isPhrase ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {list.map((item, i) => (
@@ -75,8 +73,6 @@ const CardListRenderer = ({ data, type, onComplete }) => {
           ))}
         </div>
       </div>
-      
-      {/* 底部大按钮 (替代全局导航) */}
       <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-20">
         <button 
           onClick={onComplete} 
@@ -89,13 +85,23 @@ const CardListRenderer = ({ data, type, onComplete }) => {
   );
 };
 
-// ... CompletionBlock & UnknownBlockHandler ...
+// --- 其他组件 (无需改动) ---
 const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS("恭喜完成", 'zh'); setTimeout(() => router.back(), 2500); }, [router]); return <div className="flex flex-col items-center justify-center h-full animate-bounce-in"><div className="text-8xl mb-6">🎉</div><h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2></div>; };
 const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
 
 
-// ---------------- 4. 主组件 ----------------
+// ✨ REFACTOR: 提取 Fisher-Yates 洗牌算法为一个独立的辅助函数
+const shuffleArray = (array) => {
+  const newArray = [...array]; // 创建副本，避免修改原数组
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // ES6 解构赋值交换元素
+  }
+  return newArray;
+};
 
+
+// ---------------- 主组件 ----------------
 export default function InteractiveLesson({ lesson }) {
   const router = useRouter();
   const [hasMounted, setHasMounted] = useState(false);
@@ -109,26 +115,31 @@ export default function InteractiveLesson({ lesson }) {
 
   useEffect(() => { setHasMounted(true); }, []);
   
-  // ✅ 修复逻辑：如果读取的进度已经是最后一页（已完成），则重置为0，允许重新开始
+  // 读取进度的逻辑，已经很完善，无需改动
   useEffect(() => { 
     if (lesson?.id && hasMounted) { 
       const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); 
       if (saved) {
-        const savedIndex = parseInt(saved);
-        // 只有当进度小于总页数时才恢复进度，否则重置为0
+        const savedIndex = parseInt(saved, 10);
         if (savedIndex < totalBlocks) {
           setCurrentIndex(savedIndex); 
         } else {
-          setCurrentIndex(0); // 重置进度
+          setCurrentIndex(0);
           localStorage.removeItem(`lesson-progress-${lesson.id}`);
         }
       }
     } 
   }, [lesson, hasMounted, totalBlocks]);
 
-  useEffect(() => { if (hasMounted && lesson?.id && currentIndex > 0) localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString()); audioManager?.stop(); }, [currentIndex, lesson?.id, hasMounted]);
+  // ✅ FIX: 修复进度保存逻辑，移除 currentIndex > 0 的限制
+  useEffect(() => { 
+    if (hasMounted && lesson?.id) {
+        localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
+    }
+    audioManager?.stop(); 
+  }, [currentIndex, lesson?.id, hasMounted]);
 
-  // 自动跳过 Teaching
+  // 自动跳过 Teaching (无需改动)
   useEffect(() => {
     if (currentBlock && currentBlock.type === 'teaching') {
       const timer = setTimeout(() => {
@@ -152,15 +163,16 @@ export default function InteractiveLesson({ lesson }) {
     if (!currentBlock) return <div className="text-slate-400 mt-20">Loading...</div>;
     const type = (currentBlock.type || '').toLowerCase();
     
-    const props = { 
+    // ✨ REFACTOR: 统一 props 结构，让子组件接口更清晰
+    const commonProps = { 
+      key: `${lesson.id}-${currentIndex}`, // 添加 key 确保组件在切换时状态重置
       data: currentBlock.content, 
       onCorrect: delayedNextStep, 
       onComplete: goNext, 
-      onNext: goNext, 
+      onNext: goNext, // 保留 onNext 作为 onComplete 的别名
       settings: { playTTS: audioManager?.playTTS } 
     };
     
-    // 容器策略
     const CommonWrapper = ({ children }) => <div className="w-full h-full flex flex-col items-center justify-center pt-4">{children}</div>;
     const FullHeightWrapper = ({ children }) => <div className="w-full h-full flex flex-col">{children}</div>;
 
@@ -168,68 +180,68 @@ export default function InteractiveLesson({ lesson }) {
       switch (type) {
         case 'teaching': return null; 
 
-        // 单词/短句/语法：全高显示
         case 'word_study': 
-          return <FullHeightWrapper><CardListRenderer data={props.data} type="word_study" onComplete={props.onComplete} /></FullHeightWrapper>;
-        
         case 'phrase_study': 
         case 'sentences':
-          return <FullHeightWrapper><CardListRenderer data={props.data} type="phrase_study" onComplete={props.onComplete} /></FullHeightWrapper>;
+          return <FullHeightWrapper><CardListRenderer {...commonProps} type={type} /></FullHeightWrapper>;
 
         case 'grammar_study': 
-          if (!props.data.grammarPoints?.length) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={goNext} />;
+          if (!commonProps.data.grammarPoints?.length) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={goNext} />;
           return (
              <div className="w-full h-full relative">
-                <GrammarPointPlayer 
-                    grammarPoints={props.data.grammarPoints} 
-                    onComplete={props.onComplete} 
-                />
+                <GrammarPointPlayer grammarPoints={commonProps.data.grammarPoints} onComplete={commonProps.onComplete} />
              </div>
           );
 
-        // 题型：居中显示
-        case 'choice': return <CommonWrapper><XuanZeTi {...props} question={{text: props.data.prompt, ...props.data}} options={props.data.choices||[]} correctAnswer={props.data.correctId?[props.data.correctId]:[]} /></CommonWrapper>;
-        case 'panduan': return <CommonWrapper><PanDuanTi {...props} /></CommonWrapper>;
-        case 'lianxian': const pairsMap = props.data.pairs?.reduce((acc,p)=>{acc[p.id]=`${p.id}_b`;return acc},{})||{}; return <CommonWrapper><LianXianTi title={props.data.prompt} columnA={props.data.pairs?.map(p=>({id:p.id,content:p.left}))} columnB={props.data.pairs?.map(p=>({id:`${p.id}_b`,content:p.right})).sort(()=>Math.random()-0.5)} pairs={pairsMap} onCorrect={props.onCorrect} /></CommonWrapper>;
-        case 'paixu': return <CommonWrapper><PaiXuTi title={props.data.prompt} items={props.data.items} correctOrder={[...props.data.items].sort((a,b)=>a.order-b.order).map(i=>i.id)} onCorrect={props.onCorrect} /></CommonWrapper>;
-        case 'gaicuo': return <CommonWrapper><GaiCuoTi {...props} /></CommonWrapper>;
-        case 'image_match_blanks': return <CommonWrapper><TianKongTi {...props.data} onCorrect={props.onNext} /></CommonWrapper>;
-        case 'dialogue_cinematic': return <DuiHua {...props} />;
-
-        case 'complete': case 'end': return <CompletionBlock data={props.data} router={router} />;
+        // --- 题型渲染 ---
+        case 'choice': {
+            // ✅ FIX: 修复 correctAnswer 逻辑，使其更健壮
+            const { correctId } = commonProps.data;
+            const correctAnswer = Array.isArray(correctId) ? correctId : (correctId != null ? [correctId] : []);
+            return <CommonWrapper><XuanZeTi {...commonProps} data={{...commonProps.data, correctAnswer}} /></CommonWrapper>;
+        }
+        case 'lianxian': {
+            // ✅ FIX: 使用可靠的 Fisher-Yates 算法打乱数组
+            const columnA = commonProps.data.pairs?.map(p => ({ id: p.id, content: p.left })) || [];
+            const columnB = commonProps.data.pairs?.map(p => ({ id: `${p.id}_b`, content: p.right })) || [];
+            const shuffledColumnB = shuffleArray(columnB);
+            const pairsMap = commonProps.data.pairs?.reduce((acc, p) => { acc[p.id] = `${p.id}_b`; return acc }, {}) || {};
+            
+            return <CommonWrapper><LianXianTi {...commonProps} data={{...commonProps.data, columnA, columnB: shuffledColumnB, pairs: pairsMap}} /></CommonWrapper>;
+        }
+        case 'paixu': {
+            const correctOrder = [...(commonProps.data.items || [])].sort((a,b) => a.order - b.order).map(i => i.id);
+            return <CommonWrapper><PaiXuTi {...commonProps} data={{...commonProps.data, correctOrder}} /></CommonWrapper>;
+        }
+        
+        // ✨ REFACTOR: 统一其他组件的 props 传递方式
+        case 'panduan': return <CommonWrapper><PanDuanTi {...commonProps} /></CommonWrapper>;
+        case 'gaicuo': return <CommonWrapper><GaiCuoTi {...commonProps} /></CommonWrapper>;
+        case 'image_match_blanks': return <CommonWrapper><TianKongTi {...commonProps} /></CommonWrapper>;
+        case 'dialogue_cinematic': return <DuiHua {...commonProps} />;
+        
+        case 'complete': case 'end': return <CompletionBlock data={commonProps.data} router={router} />;
         default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
       }
-    } catch (e) { return <UnknownBlockHandler type={`${type} Error`} onSkip={goNext} />; }
+    } catch (e) { 
+        console.error("Error rendering block:", type, e);
+        return <UnknownBlockHandler type={`${type} Error`} onSkip={goNext} />; 
+    }
   };
 
   if (!hasMounted) return null;
 
   const type = currentBlock?.type?.toLowerCase();
 
-  // 1. 不需要底部导航的类型
+  // 条件渲染逻辑 (无需改动)
   const hideBottomNav = ['word_study', 'phrase_study', 'sentences', 'grammar_study', 'teaching', 'complete', 'end'].includes(type);
-
-  // 2. 不需要顶部进度条的类型 (语法 + 练习题 + 完成页)
-  const hideTopProgressBar = [
-    'grammar_study', 
-    'choice', 
-    'panduan', 
-    'lianxian', 
-    'paixu', 
-    'gaicuo', 
-    'image_match_blanks', 
-    'dialogue_cinematic', 
-    'complete', 
-    'end'
-  ].includes(type);
+  const hideTopProgressBar = ['grammar_study', 'choice', 'panduan', 'lianxian', 'paixu', 'gaicuo', 'image_match_blanks', 'dialogue_cinematic', 'complete', 'end'].includes(type);
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans select-none" style={{ touchAction: 'none' }}>
       <style>{`::-webkit-scrollbar { display: none; } * { -webkit-tap-highlight-color: transparent; }`}</style>
       
-      {/* 顶部进度条 */}
       <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top)] px-4 py-3 z-30 pointer-events-none">
-        {/* 修改：增加了 !hideTopProgressBar 判断 */}
         {!hideTopProgressBar && currentIndex < totalBlocks && (
           <div className="h-1.5 bg-slate-200/50 rounded-full overflow-hidden mx-4 backdrop-blur-sm">
             <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / totalBlocks) * 100}%` }} />
@@ -237,27 +249,20 @@ export default function InteractiveLesson({ lesson }) {
         )}
       </div>
 
-      {/* 主内容区 */}
       <main className="relative w-full h-full flex flex-col z-10 overflow-hidden">
         {currentIndex >= totalBlocks ? <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} /> : renderBlock()}
       </main>
 
-      {/* ✅ 底部导航 (条件渲染) */}
-      {/* 只有当当前题型 不在 隐藏列表里时，才显示左右翻页键 */}
       {!hideBottomNav && currentIndex < totalBlocks && (
         <div className="absolute bottom-0 left-0 right-0 pb-[env(safe-area-inset-bottom)] px-8 py-4 z-30 flex justify-between items-center pointer-events-none">
             <button onClick={goPrev} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/80 shadow-sm text-slate-400 flex items-center justify-center backdrop-blur-md ${currentIndex === 0 ? 'opacity-0' : 'opacity-100'}`}><FaChevronLeft /></button>
-            
-            {/* 点击中间页码可以跳转 */}
             <button onClick={() => setIsJumping(true)} className="pointer-events-auto px-4 py-2 rounded-xl active:bg-black/5 transition-colors">
               <span className="text-xs font-bold text-slate-400">{currentIndex + 1} / {totalBlocks}</span>
             </button>
-
             <button onClick={goNext} className={`pointer-events-auto w-12 h-12 rounded-full bg-white/80 shadow-sm text-slate-400 flex items-center justify-center backdrop-blur-md ${currentIndex >= totalBlocks ? 'opacity-0' : 'opacity-100'}`}><FaChevronRight /></button>
         </div>
       )}
       
-      {/* 跳转弹窗 */}
       {isJumping && <div className="absolute inset-0 z-50 bg-black/20 backdrop-blur-sm flex items-center justify-center" onClick={() => setIsJumping(false)}><div onClick={e => e.stopPropagation()} className="bg-white p-6 rounded-2xl shadow-2xl w-72"><form onSubmit={handleJump}><input type="number" autoFocus value={jumpValue} onChange={e => setJumpValue(e.target.value)} className="w-full text-center text-2xl font-bold border-b-2 border-slate-200 outline-none py-2" /><button className="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl font-bold">GO</button></form></div></div>}
     </div>
   );
