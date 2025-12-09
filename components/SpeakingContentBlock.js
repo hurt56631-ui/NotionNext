@@ -172,13 +172,33 @@ const AudioListLesson = ({ data, title, onBack, isSentence = false }) => {
         .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
         .thin-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
       `}</style>
-
+      
+      {/* ✅ FIX 2: 修改此处的顶部导航栏 */}
       <div className="bg-white px-4 py-3 flex items-center justify-between shadow-sm border-b z-10 flex-shrink-0">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-600 active:scale-90 transition-transform">
-          <ArrowLeft size={24} />
-        </button>
-        <h2 className="font-bold text-lg text-gray-800">{title}</h2>
-        <div className="w-8"></div>
+        {isSentence ? (
+          // 当是“短句”页面时，显示新的导航栏
+          <div className="flex-1 flex justify-center relative items-center">
+            <div className="w-8"></div> {/* 左侧占位符 */}
+            <a 
+              href="https://886.best" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="font-bold text-lg text-gray-800 hover:text-teal-600 transition-colors"
+            >
+              主页
+            </a>
+            <div className="w-8"></div> {/* 右侧占位符，确保居中 */}
+          </div>
+        ) : (
+          // 其他页面保持原样
+          <>
+            <button onClick={onBack} className="p-2 -ml-2 text-gray-600 active:scale-90 transition-transform">
+              <ArrowLeft size={24} />
+            </button>
+            <h2 className="font-bold text-lg text-gray-800">{title}</h2>
+            <div className="w-8"></div>
+          </>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 thin-scrollbar">
@@ -227,18 +247,17 @@ const SpeakingContentBlock = () => {
   const [selectedCourse, setSelectedCourse] = useState(null); 
   const [activeModule, setActiveModule] = useState(null); 
   const [isLoading, setIsLoading] = useState(false);
+  // ✅ FIX 1, Step 1: 添加一个新的 state 用于强制刷新组件
+  const [lessonKey, setLessonKey] = useState(null);
 
   // ==================== 1. 数据加载逻辑 (封装) ====================
-  // 这个函数负责根据 ID 去 fetch 数据，不涉及路由跳转，方便复用
   const fetchCourseData = useCallback(async (courseSummary) => {
     if (!courseSummary) return null;
     const lessonId = courseSummary.id;
-
     const fetchSafe = async (url) => {
         try { const res = await fetch(url); return res.ok ? await res.json() : []; } 
         catch (e) { return []; }
     };
-
     try {
       const [vocabData, grammarData, sentencesData, exercisesData] = await Promise.all([
           fetchSafe(`/data/lessons/${lessonId}/vocabulary.json`),
@@ -246,13 +265,7 @@ const SpeakingContentBlock = () => {
           fetchSafe(`/data/lessons/${lessonId}/sentences.json`),
           fetchSafe(`/data/lessons/${lessonId}/exercises.json`)
       ]);
-      return { 
-        ...courseSummary, 
-        vocabulary: vocabData, 
-        grammar: grammarData, 
-        sentences: sentencesData, 
-        exercises: exercisesData 
-      };
+      return { ...courseSummary, vocabulary: vocabData, grammar: grammarData, sentences: sentencesData, exercises: exercisesData };
     } catch (error) {
       console.error(error);
       return null;
@@ -265,7 +278,6 @@ const SpeakingContentBlock = () => {
     const data = await fetchCourseData(courseSummary);
     if (data) {
         setSelectedCourse(data);
-        // 修改路由：添加 ?cid=xxx 参数，这样分享出去时，别人才能知道是哪一课
         router.push({
             pathname: router.pathname,
             query: { ...router.query, cid: courseSummary.id },
@@ -278,16 +290,11 @@ const SpeakingContentBlock = () => {
   };
 
   // ==================== 3. 深度链接 (Deep Linking) 支持 ====================
-  // 处理：刷新页面、后退、或别人打开链接时的自动加载
   useEffect(() => {
-    // 只有当路由准备好后才执行
     if (!router.isReady) return;
-
     const { cid } = router.query;
     const hash = window.location.hash;
-
     const initLoad = async () => {
-        // 如果 URL 里有 cid，但当前没有数据，说明是刷新或新打开的
         if (cid && (!selectedCourse || String(selectedCourse.id) !== String(cid))) {
             const courseSummary = speakingList.find(c => String(c.id) === String(cid));
             if (courseSummary) {
@@ -295,50 +302,45 @@ const SpeakingContentBlock = () => {
                 const data = await fetchCourseData(courseSummary);
                 if (data) {
                     setSelectedCourse(data);
-                    // 数据加载完后，再根据 hash 设置模块
                     if (hash.includes('#course-vocab')) setActiveModule('vocab');
                     else if (hash.includes('#course-grammar')) setActiveModule('grammar');
                     else if (hash.includes('#course-sentences')) setActiveModule('sentences');
                     else if (hash.includes('#course-exercises')) setActiveModule('exercises');
-                    else setActiveModule(null); // 默认为 menu
+                    else setActiveModule(null);
                 }
                 setIsLoading(false);
-                return; // 加载完成后终止，避免下面的 hash 逻辑重复执行
+                return;
             }
         }
-
-        // 如果数据已经有了，或者 URL 里没有 cid，只处理纯 hash 切换
         if (hash.includes('#course-vocab')) setActiveModule('vocab');
         else if (hash.includes('#course-grammar')) setActiveModule('grammar');
         else if (hash.includes('#course-sentences')) setActiveModule('sentences');
         else if (hash.includes('#course-exercises')) setActiveModule('exercises');
         else if (hash.includes('#course-menu')) setActiveModule(null); 
         else {
-            // 如果既没有 hash 也没有 cid，回到首页
             if (!cid) {
                 setSelectedCourse(null); 
                 setActiveModule(null);
             }
         }
     };
-
     initLoad();
-    
-    // 监听 hash 变化 (用于浏览器前进后退)
     const handlePopState = () => initLoad();
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.isReady, router.query.cid, router.asPath]); // 依赖项加入 router.query.cid
+  }, [router.isReady, router.query.cid, router.asPath]);
 
   // ==================== 4. 模块点击与返回 ====================
   const handleModuleClick = (type) => {
+    // ✅ FIX 1, Step 2: 每次点击都生成一个唯一的 key
+    if (selectedCourse) {
+      setLessonKey(`${selectedCourse.id}_${type}_${Date.now()}`);
+    }
     setActiveModule(type);
-    // 保持 cid 参数，只修改 hash
     router.push({
         pathname: router.pathname,
-        query: { ...router.query }, // 保持当前的 query 参数 (cid)
+        query: { ...router.query },
         hash: `course-${type}`
     }, undefined, { shallow: true });
   };
@@ -380,16 +382,18 @@ const SpeakingContentBlock = () => {
   let renderContent = null;
   const baseId = selectedCourse ? selectedCourse.id : 'temp';
 
-  if (selectedCourse) { // 确保有数据才渲染
+  if (selectedCourse) {
       if (activeModule === 'grammar') {
           const lessonData = transformGrammarToLesson(selectedCourse.grammar);
           if(lessonData) lessonData.id = `${baseId}_grammar`;
-          renderContent = <InteractiveLesson lesson={lessonData} />;
+          // ✅ FIX 1, Step 3: 将唯一的 key 传递给 InteractiveLesson
+          renderContent = <InteractiveLesson key={lessonKey} lesson={lessonData} />;
       }
       else if (activeModule === 'exercises') {
           const lessonData = transformExercisesToLesson(selectedCourse.exercises);
           if(lessonData) lessonData.id = `${baseId}_exercises`;
-          renderContent = <InteractiveLesson lesson={lessonData} />;
+          // ✅ FIX 1, Step 3: 将唯一的 key 传递给 InteractiveLesson
+          renderContent = <InteractiveLesson key={lessonKey} lesson={lessonData} />;
       }
       else if (activeModule === 'vocab') {
           renderContent = (
