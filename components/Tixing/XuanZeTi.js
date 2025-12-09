@@ -311,9 +311,13 @@ const cssStyles = `
   .cn-char { font-size: 1.35rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; text-shadow: 1px 1px 0 rgba(0,0,0,0.02); }
   .other-text-block { font-size: 1.2rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; pointer-events: auto; }
 
+  /* ✅ FIX 1: 将选项列表从 flex 垂直布局改为 2x2 网格布局 */
   .xzt-options-grid { 
-    display: flex; flex-direction: column; gap: 16px; 
-    width: 90%; max-width: 380px; 
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 两列等宽 */
+    gap: 16px; 
+    width: 100%; /* 宽度占满，让卡片自己分配空间 */
+    max-width: 420px; /* 稍微增加最大宽度以适应网格 */
     padding-bottom: 20px;
     z-index: 15; 
     pointer-events: auto;
@@ -325,7 +329,8 @@ const cssStyles = `
     box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 6px 0 #cbd5e1; 
     cursor: pointer; transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex; align-items: center; justify-content: center;
-    padding: 16px 20px; min-height: 72px;
+    padding: 16px 12px; /* 稍微减少水平内边距以适应网格 */
+    min-height: 72px;
     transform: translateY(0);
     user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
     pointer-events: auto;
@@ -336,8 +341,8 @@ const cssStyles = `
   .xzt-option-card.incorrect { border-color: #f87171; background: #fef2f2; box-shadow: 0 6px 0 #fecaca; animation: shake 0.4s; }
 
   .opt-content { flex: 1; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
-  .opt-txt { font-size: 1.25rem; font-weight: 600; color: #334155; }
+  .opt-py { font-size: 0.8rem; color: #94a3b8; line-height: 1; margin-bottom: 4px; font-family: monospace; }
+  .opt-txt { font-size: 1.15rem; font-weight: 600; color: #334155; }
   
   .fixed-bottom-area {
     position: fixed; bottom: 12vh; left: 0; right: 0;
@@ -405,14 +410,15 @@ const parseOptionText = (text) => {
 const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [titleSegments, setTitleSegments] = useState([]);
-  const [orderedOptions, setOrderedOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   
   const autoNextTimerRef = useRef(null);
   const mountedRef = useRef(true);
   const transitioningRef = useRef(false);
-  const hasAutoPlayedRef = useRef(false);
+  
+  // ✅ FIX 2: 移除了 hasAutoPlayedRef，因为它会导致无法重复播放。
+  // 现在，每次题目变化，useEffect 都会自动播放一次，
+  // 并且用户点击播放按钮时，不再有任何逻辑阻拦。
 
   // --- 核心修复：不对称跳转逻辑 ---
   const executeNext = (isCorrect) => {
@@ -428,25 +434,33 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (isCorrect) {
       // 【情况1：答对】
       // 你的父组件在 onCorrect 里会自动跳转，所以我们这里 **只** 调用 onCorrect
-      // 如果调用了 onNext，就会导致跳两题
       try { 
         if (onCorrect) {
           onCorrect(); 
-        } else {
-          // 如果没有传递 onCorrect，保底调用 onNext
-          if (onNext) onNext();
+        } else if (onNext) {
+          onNext(); // 保底调用 onNext
         }
       } catch (e) { console.warn(e); }
     } else {
       // 【情况2：答错】
-      // 你的父组件在 onIncorrect 里 **不会** 自动跳转（通常只是记录错误）
-      // 所以我们这里 **必须** 显式调用 onNext，否则就不会跳题
+      // 你的父组件在 onIncorrect 里 **不会** 自动跳转
+      // 所以我们这里 **必须** 显式调用 onNext
       try { 
         if (onIncorrect) onIncorrect(question);
         if (onNext) onNext();
       } catch (e) { console.warn(e); }
     }
   };
+  
+  // 使用 useMemo 优化，避免不必要的重渲染
+  const titleSegments = useMemo(() => parseTitleText(question.text || ''), [question.text]);
+  const orderedOptions = useMemo(() => {
+    return (options || []).map(opt => ({
+      ...opt,
+      parsed: parseOptionText(opt.text),
+      hasImage: !!opt.imageUrl
+    }));
+  }, [options]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -463,27 +477,19 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     }
     
     transitioningRef.current = false;
-
     setIsPlaying(false);
     setSelectedId(null);
     setIsSubmitted(false);
-    
-    // 重置自动播放标记，确保新题目会播放一次
-    hasAutoPlayedRef.current = false;
 
-    setTitleSegments(parseTitleText(question.text || ''));
-    setOrderedOptions((options || []).map(opt => ({
-      ...opt,
-      parsed: parseOptionText(opt.text),
-      hasImage: !!opt.imageUrl
-    })));
-
+    // 自动播放逻辑
     if (question.text) {
-      setTimeout(() => {
-        if (!mountedRef.current || transitioningRef.current || hasAutoPlayedRef.current) return;
-        handleTitlePlay(null, true);
-        hasAutoPlayedRef.current = true;
+      const autoPlayTimer = setTimeout(() => {
+        // ✅ FIX 2: 移除了 hasAutoPlayedRef 的判断
+        if (!mountedRef.current || transitioningRef.current) return;
+        handleTitlePlay(null, true); 
       }, 500);
+      
+      return () => clearTimeout(autoPlayTimer);
     }
 
     return () => {
@@ -494,7 +500,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question, options]);
+  }, [question, options]); // 依赖项保持不变，确保题目切换时重置
 
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
@@ -526,7 +532,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 统一等待 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(true); 
     }, 2000);
@@ -542,7 +547,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         }
     } catch(e) {}
 
-    // 统一等待 2秒 后跳转
     autoNextTimerRef.current = setTimeout(() => {
       executeNext(false); 
     }, 2000);
