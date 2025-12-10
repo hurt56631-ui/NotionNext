@@ -7,7 +7,8 @@ import { useDrag } from '@use-gesture/react';
 import { Howl } from 'howler';
 import { 
     FaMicrophone, FaPenFancy, FaCog, FaTimes, FaRandom, FaSortAmountDown, 
-    FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaRedo 
+    FaHeart, FaRegHeart, FaPlayCircle, FaStop, FaVolumeUp, FaRedo,
+    FaHome // 🔥 1. 新增 Home 图标引入
 } from 'react-icons/fa';
 import { pinyin as pinyinConverter } from 'pinyin-pro';
 import HanziModal from '@/components/HanziModal';
@@ -467,6 +468,12 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default', level 
          setIsFavoriteCard(success);
       }
   };
+
+  // 🔥 2. 跳转主页逻辑
+  const handleGoHome = (e) => {
+      e.stopPropagation(); // 防止触发卡片翻转
+      window.location.href = 'https://886.best';
+  };
   
   const navigate = useCallback((direction) => { 
     if (activeCards.length === 0) return;
@@ -630,6 +637,16 @@ const WordCard = ({ words = [], isOpen, onClose, progressKey = 'default', level 
 
         {currentCard && (
             <div style={styles.rightControls} data-no-gesture="true">
+                {/* 🔥 3. 添加主页按钮 */}
+                <button 
+                    style={styles.rightIconButton} 
+                    onPointerDown={(e) => e.stopPropagation()} // 防止触发拖拽
+                    onClick={handleGoHome} 
+                    title="Home Page"
+                >
+                    <FaHome size={18} color={'#4b5563'} />
+                </button>
+
                 <button style={styles.rightIconButton} onClick={() => setIsSettingsOpen(true)} title="ဆက်တင်များ"><FaCog size={18} /></button>
                 <button style={styles.rightIconButton} onClick={handleOpenSpelling} title="拼读"><span style={{ fontSize: '16px', fontWeight: 'bold', color: '#d97706', fontFamily: 'serif' }}>拼</span></button>
                 <button style={styles.rightIconButton} onClick={handleOpenRecorder} title="အသံထွက်လေ့ကျင့်ရန်"><FaMicrophone size={18} color={'#4b5563'} /></button>
