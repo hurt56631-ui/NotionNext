@@ -16,9 +16,9 @@ const PinyinChartClient = dynamic(
 const BASE_AUDIO_URL = 'https://audio.886.best/chinese-vocab-audio/拼音音频';
 
 // --- 1. 定义谐音映射表 (完整版) ---
-// 这里涵盖了声母(bo, po, mo...)、韵母(a, o, e...)以及整体认读音节
+// 只要这里有定义，卡片上就会显示缅文
 const burmeseMap = {
-  // === 声母 (Initials) - 对应：玻坡摸佛... ===
+  // === 声母 (Initials) ===
   'b': 'ဗ (ဘ)', // bo
   'p': 'ပ (ဖ)', // po
   'm': 'မ',      // mo (摸)
@@ -43,15 +43,15 @@ const burmeseMap = {
   'y': 'ယ',      // yi
   'w': 'ဝ',      // wu
 
-  // === 单韵母 (Simple Finals) ===
-  'a': 'အာ',    // a
-  'o': 'အော',   // o
-  'e': 'အ',     // e (鹅)
-  'i': 'အီ',    // i
-  'u': 'အူ',    // u
-  'ü': 'ယူ',    // ü
+  // === 单韵母 ===
+  'a': 'အာ',
+  'o': 'အော',
+  'e': 'အ',      // (鹅)
+  'i': 'အီ',
+  'u': 'အူ',
+  'ü': 'ယူ',
 
-  // === 复韵母 (Compound Finals) ===
+  // === 复韵母 ===
   'ai': 'အိုင်',
   'ei': 'အေ',
   'ui': 'ဝေ',
@@ -62,21 +62,20 @@ const burmeseMap = {
   'üe': 'ရွဲ့',
   'er': 'အာရ်',
 
-  // === 前鼻韵母 (Nasal Finals - Front) ===
+  // === 前鼻韵母 ===
   'an': 'အန်',
   'en': 'အန်(en)',
   'in': 'အင်',
   'un': 'ဝန်း',
   'ün': 'ရွန်း',
 
-  // === 后鼻韵母 (Nasal Finals - Back) ===
+  // === 后鼻韵母 ===
   'ang': 'အောင်',
   'eng': 'အိုင်(eng)',
   'ing': 'အိုင်',
   'ong': 'အုန်',
 
-  // === 整体认读音节 (Whole Syllables) ===
-  // 这些音节虽然有声母韵母组成，但作为整体发音，需要单独映射
+  // === 整体认读音节 (必须单独定义) ===
   'zhi': 'ကျ(zh)',
   'chi': 'ချ(ch)',
   'shi': 'ရှ(sh)',
@@ -97,84 +96,116 @@ const burmeseMap = {
 
 // --- 最终版拼音数据中心 ---
 const pinyinData = {
+  // 1. 声母页
   initials: { 
-    title: '声母表', 
+    title: '声母表 (Initials)', 
+    // 声母是一个简单的列表，没有分类
     items: ['b','p','m','f','d','t','n','l','g','k','h','j','q','x','zh','ch','sh','r','z','c','s','y','w'].map(l => ({ 
       letter: l, 
       audio: `${BASE_AUDIO_URL}/声母/${l}.mp3`,
-      // 直接匹配声母映射
       burmese: burmeseMap[l] || '' 
     })) 
   },
+
+  // 2. 韵母页 (结构修改为 Categories，确保竖向展示)
   finals: { 
-    title: '韵母表',
-    // 这里将所有韵母分类放在同一页展示
+    title: '韵母表 (Finals)',
     categories: [
-      { name: '单韵母', rows: [['a','o','e','i'],['u','ü']] },
-      { name: '复韵母', rows: [['ai','ei','ui','ao'],['ou','iu','ie','üe'],['er']] },
-      { name: '前鼻韵母', rows: [['an','en','in','un'],['ün']] },
+      { name: '单韵母', rows: [['a','o','e','i','u','ü']] },
+      { name: '复韵母', rows: [['ai','ei','ui','ao','ou','iu','ie','üe','er']] },
+      { name: '前鼻韵母', rows: [['an','en','in','un','ün']] },
       { name: '后鼻韵母', rows: [['ang','eng','ing','ong']] }
     ].map(category => ({
       ...category,
       rows: category.rows.map(row => row.map(letter => ({
         letter,
+        // R2 路径：拼音音频/韵母/ang.mp3
         audio: `${BASE_AUDIO_URL}/韵母/${letter}.mp3`,
-        // 直接匹配韵母映射
         burmese: burmeseMap[letter] || '' 
       })))
     }))
   },
+
+  // 3. 整体认读页 (新增！对应 /pinyin/whole)
+  whole: {
+    title: '整体认读 (Whole Syllables)',
+    // 整体认读也用 Categories 结构，这样样式会和韵母表一致，竖着排列
+    categories: [
+      {
+        name: '翘舌音与平舌音',
+        rows: [['zhi','chi','shi','ri'], ['zi','ci','si']]
+      },
+      {
+        name: 'i u ü 开头',
+        rows: [['yi','wu','yu'], ['ye','yue','yuan'], ['yin','yun','ying']]
+      }
+    ].map(category => ({
+      ...category,
+      rows: category.rows.map(row => row.map(letter => ({
+        letter,
+        // R2 路径：拼音音频/整体读音/zhi.mp3
+        audio: `${BASE_AUDIO_URL}/整体读音/${letter}.mp3`,
+        burmese: burmeseMap[letter] || ''
+      })))
+    }))
+  },
+
+  // 4. 声调表页
   tones: { 
-    title: '声调表',
+    title: '声调表 (Tones)',
     categories: [
       {
         name: '单韵母',
-        folder: '单韵母', // R2: 声调表/单韵母
+        folder: '单韵母',
         rows: [
           ['ā','á','ǎ','à'], ['ō','ó','ǒ','ò'], ['ē','é','ě','è'], ['ī','í','ǐ','ì'], ['ū','ú','ǔ','ù'], ['ǖ','ǘ','ǚ','ǜ']
         ]
       },
       {
         name: '复韵母',
-        folder: '复韵母', // R2: 声调表/复韵母
+        folder: '复韵母',
         rows: [
           ['āi','ái','ǎi','ài'], ['ēi','éi','ěi','èi'], ['uī','uí','uǐ','uì'], ['āo','áo','ǎo','ào'], ['ōu','óu','ǒu','òu'], ['iū','iú','iǔ','iù'], ['iē','ié','iě','iè'], ['üē','üé','üě','üè'], ['ēr','ér','ěr','èr']
         ]
       },
       {
         name: '前鼻韵母',
-        folder: '鼻韵母', // R2: 声调表/鼻韵母
+        folder: '鼻韵母',
         rows: [
           ['ān','án','ǎn','àn'], ['ēn','én','ěn','èn'], ['īn','ín','ǐn','ìn'], ['ūn','ún','ǔn','ùn'], ['ǖn','ǘn','ǚn','ǜn']
         ]
       },
       {
         name: '后鼻韵母',
-        folder: '鼻韵母', // R2: 声调表/鼻韵母
+        folder: '鼻韵母',
         rows: [
           ['āng','áng','ǎng','àng'], ['ēng','éng','ěng','èng'], ['īng','íng','ǐng','ìng'], ['ōng','óng','ǒng','òng']
         ]
       },
       {
-        name: '整体认读',
-        folder: '整体读音', // R2: 声调表/整体读音
+        name: '整体认读 (带声调)',
+        folder: '整体读音',
         rows: [
-          ['zhī','zhí','zhǐ','zhì'], ['chī','chí','chǐ','chì'], ['shī','shí','shǐ','shì'], ['rī','rí','rǐ','rì'], ['zī','zí','zǐ','zì'], ['cī','cí','cǐ','cì'], ['sī','sí','sǐ','sì'], ['yī','yí','yǐ','yì'], ['wū','wú','wǔ','ù'], ['yū','yú','yǔ','yù'], ['yē','yé','yě','yè'], ['yuē','yué','yuě','yuè'], ['yuān','yuán','yuǎn','yuàn'], ['yīn','yín','yǐ','yìn'], ['yūn','yún','yǔn','yùn'], ['yīng','yíng','ǐng','yìng']
+          ['zhī','zhí','zhǐ','zhì'], ['chī','chí','chǐ','chì'], ['shī','shí','shǐ','shì'], ['rī','rí','rǐ','rì'], 
+          ['zī','zí','zǐ','zì'], ['cī','cí','cǐ','cì'], ['sī','sí','sǐ','sì'], 
+          ['yī','yí','yǐ','yì'], ['wū','wú','wǔ','ù'], ['yū','yú','yǔ','yù'], 
+          ['yē','yé','yě','yè'], ['yuē','yué','yuě','yuè'], ['yuān','yuán','yuǎn','yuàn'], 
+          ['yīn','yín','yǐ','yìn'], ['yūn','yún','yǔn','yùn'], ['yīng','yíng','ǐng','yìng']
         ]
       }
     ].map(category => ({
       ...category,
       rows: category.rows.map(row => row.map(letter => {
-        // 关键逻辑：去除声调，还原成基础字母 (例如 ā -> a, zhī -> zhi)
+        // 去声调逻辑，确保带声调的字母也能匹配到上面的 burmeseMap
         const cleanLetter = letter
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // 去声调
-            .replace('g', 'g') // 兼容性处理
-            .toLowerCase(); // 转小写
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+            .replace('g', 'g') 
+            .toLowerCase();
 
         return {
           letter,
+          // R2 路径：拼音音频/声调表/单韵母/ā.mp3
           audio: `${BASE_AUDIO_URL}/声调表/${category.folder}/${letter}.mp3`,
-          // 逻辑：优先找 letter 本身（万一你有 ā 的映射），找不到就找 cleanLetter（基础谐音）
           burmese: burmeseMap[letter] || burmeseMap[cleanLetter] || '' 
         };
       }))
@@ -190,7 +221,7 @@ export default function PinyinChartPage() {
     return <div className="text-center pt-20 text-white/80">正在加载页面数据...</div>;
   }
 
-  // 默认为 initials，防止 chartType 为空报错
+  // 这里的 chartType 会对应上面 pinyinData 的 keys (initials, finals, tones, whole)
   const chartData = pinyinData[chartType] || pinyinData['initials']; 
   
   return (
