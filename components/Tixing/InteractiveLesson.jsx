@@ -42,7 +42,7 @@ const audioManager = (() => {
 // --- 列表容器适配器 (无需改动) ---
 const CardListRenderer = ({ data, type, onComplete }) => {
   const isPhrase = type === 'phrase_study' || type === 'sentences';
-  const list = data.words || data.sentences || data.vocabulary || []; // 更健壮的数据源
+  const list = data.words || data.sentences || data.vocabulary || []; 
 
   return (
     <div className="w-full h-full flex flex-col relative bg-slate-50">
@@ -85,17 +85,28 @@ const CardListRenderer = ({ data, type, onComplete }) => {
   );
 };
 
-// --- 其他组件 (无需改动) ---
-const CompletionBlock = ({ data, router }) => { useEffect(() => { audioManager?.playTTS("恭喜完成", 'zh'); setTimeout(() => router.back(), 2500); }, [router]); return <div className="flex flex-col items-center justify-center h-full animate-bounce-in"><div className="text-8xl mb-6">🎉</div><h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2></div>; };
+// --- 其他组件 ---
+const CompletionBlock = ({ data, router }) => { 
+  useEffect(() => { 
+    audioManager?.playTTS("恭喜完成", 'zh'); 
+    setTimeout(() => router.back(), 2500); 
+  }, [router]); 
+  return (
+    <div className="flex flex-col items-center justify-center h-full animate-bounce-in">
+      <div className="text-8xl mb-6">🎉</div>
+      <h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2>
+    </div>
+  ); 
+};
 const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
 
 
-// ✨ REFACTOR: 提取 Fisher-Yates 洗牌算法为一个独立的辅助函数
+// 辅助函数
 const shuffleArray = (array) => {
-  const newArray = [...array]; // 创建副本，避免修改原数组
+  const newArray = [...array]; 
   for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; // ES6 解构赋值交换元素
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; 
   }
   return newArray;
 };
@@ -115,12 +126,13 @@ export default function InteractiveLesson({ lesson }) {
 
   useEffect(() => { setHasMounted(true); }, []);
   
-  // 读取进度的逻辑，已经很完善，无需改动
+  // 1. 读取进度的逻辑
   useEffect(() => { 
     if (lesson?.id && hasMounted) { 
       const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); 
       if (saved) {
         const savedIndex = parseInt(saved, 10);
+        // 读取时多加一层判断：如果保存的进度已经是最后一页或超出范围，则重置为0
         if (savedIndex < totalBlocks) {
           setCurrentIndex(savedIndex); 
         } else {
@@ -131,15 +143,26 @@ export default function InteractiveLesson({ lesson }) {
     } 
   }, [lesson, hasMounted, totalBlocks]);
 
-  // ✅ FIX: 修复进度保存逻辑，移除 currentIndex > 0 的限制
+  // ✅ 2. FIX: 修复进度保存逻辑
+  // 这里的改动是核心：如果当前已经是完成状态，则清除进度，而不是保存进度
   useEffect(() => { 
     if (hasMounted && lesson?.id) {
-        localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
+        // 判断是否是完成状态（索引超出，或者当前块类型是 complete/end）
+        const isFinished = currentIndex >= totalBlocks || 
+                           ['complete', 'end'].includes(blocks[currentIndex]?.type);
+
+        if (isFinished) {
+            // 如果完成了，清除进度！这样下次进来就是从 0 开始
+            localStorage.removeItem(`lesson-progress-${lesson.id}`);
+        } else {
+            // 只有未完成时，才保存当前进度
+            localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
+        }
     }
     audioManager?.stop(); 
-  }, [currentIndex, lesson?.id, hasMounted]);
+  }, [currentIndex, lesson?.id, hasMounted, totalBlocks, blocks]);
 
-  // 自动跳过 Teaching (无需改动)
+  // 自动跳过 Teaching
   useEffect(() => {
     if (currentBlock && currentBlock.type === 'teaching') {
       const timer = setTimeout(() => {
@@ -163,13 +186,12 @@ export default function InteractiveLesson({ lesson }) {
     if (!currentBlock) return <div className="text-slate-400 mt-20">Loading...</div>;
     const type = (currentBlock.type || '').toLowerCase();
     
-    // ✨ REFACTOR: 统一 props 结构，让子组件接口更清晰
     const commonProps = { 
-      key: `${lesson.id}-${currentIndex}`, // 添加 key 确保组件在切换时状态重置
+      key: `${lesson.id}-${currentIndex}`, 
       data: currentBlock.content, 
       onCorrect: delayedNextStep, 
       onComplete: goNext, 
-      onNext: goNext, // 保留 onNext 作为 onComplete 的别名
+      onNext: goNext, 
       settings: { playTTS: audioManager?.playTTS } 
     };
     
@@ -193,15 +215,12 @@ export default function InteractiveLesson({ lesson }) {
              </div>
           );
 
-        // --- 题型渲染 ---
         case 'choice': {
-            // ✅ FIX: 修复 correctAnswer 逻辑，使其更健壮
             const { correctId } = commonProps.data;
             const correctAnswer = Array.isArray(correctId) ? correctId : (correctId != null ? [correctId] : []);
             return <CommonWrapper><XuanZeTi {...commonProps} data={{...commonProps.data, correctAnswer}} /></CommonWrapper>;
         }
         case 'lianxian': {
-            // ✅ FIX: 使用可靠的 Fisher-Yates 算法打乱数组
             const columnA = commonProps.data.pairs?.map(p => ({ id: p.id, content: p.left })) || [];
             const columnB = commonProps.data.pairs?.map(p => ({ id: `${p.id}_b`, content: p.right })) || [];
             const shuffledColumnB = shuffleArray(columnB);
@@ -214,7 +233,6 @@ export default function InteractiveLesson({ lesson }) {
             return <CommonWrapper><PaiXuTi {...commonProps} data={{...commonProps.data, correctOrder}} /></CommonWrapper>;
         }
         
-        // ✨ REFACTOR: 统一其他组件的 props 传递方式
         case 'panduan': return <CommonWrapper><PanDuanTi {...commonProps} /></CommonWrapper>;
         case 'gaicuo': return <CommonWrapper><GaiCuoTi {...commonProps} /></CommonWrapper>;
         case 'image_match_blanks': return <CommonWrapper><TianKongTi {...commonProps} /></CommonWrapper>;
@@ -233,7 +251,6 @@ export default function InteractiveLesson({ lesson }) {
 
   const type = currentBlock?.type?.toLowerCase();
 
-  // 条件渲染逻辑 (无需改动)
   const hideBottomNav = ['word_study', 'phrase_study', 'sentences', 'grammar_study', 'teaching', 'complete', 'end'].includes(type);
   const hideTopProgressBar = ['grammar_study', 'choice', 'panduan', 'lianxian', 'paixu', 'gaicuo', 'image_match_blanks', 'dialogue_cinematic', 'complete', 'end'].includes(type);
 
