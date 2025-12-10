@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Mic2, Music4, BookText, Info, Keyboard } from 'lucide-react'; // 补充了一些图标
+import { Mic2, Music4, BookText, Info, Keyboard, Layers } from 'lucide-react'; // 引入了 Layers 图标
 import { motion } from 'framer-motion';
 
 // 拼音模块数据
@@ -32,6 +32,15 @@ const pinyinModules = [
     bg: 'bg-yellow-50 dark:bg-yellow-900/20',
     borderColor: 'border-yellow-200 dark:border-yellow-800' 
   },
+  { 
+    title: '整体认读 (Whole Syllables)', 
+    description: '不需拼读，直接作为一个整体朗读的音节',
+    href: '/pinyin/whole',  // 这里对应 [chartType] 为 'whole'
+    icon: Layers, 
+    color: 'text-purple-500', 
+    bg: 'bg-purple-50 dark:bg-purple-900/20',
+    borderColor: 'border-purple-200 dark:border-purple-800' 
+  },
 ];
 
 const PinyinContentBlock = () => {
@@ -50,7 +59,7 @@ const PinyinContentBlock = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto pb-20">
+    <div className="w-full max-w-6xl mx-auto pb-20">
       {/* 头部介绍 */}
       <div className="text-center mb-8 pt-4">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
@@ -61,12 +70,12 @@ const PinyinContentBlock = () => {
         </p>
       </div>
 
-      {/* 核心功能卡片网格 */}
+      {/* 核心功能卡片网格 - 修改布局以适应4个卡片 (2x2 或 1x4) */}
       <motion.div 
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
       >
         {pinyinModules.map((module) => (
           <Link key={module.title} href={module.href} passHref legacyBehavior>
@@ -83,7 +92,7 @@ const PinyinContentBlock = () => {
                 <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100 mb-1">
                   {module.title}
                 </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 px-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400 px-2 leading-relaxed">
                   {module.description}
                 </p>
               </div>
@@ -92,7 +101,7 @@ const PinyinContentBlock = () => {
         ))}
       </motion.div>
 
-      {/* 底部补充信息区域 (让页面看起来更丰富) */}
+      {/* 底部补充信息区域 */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
