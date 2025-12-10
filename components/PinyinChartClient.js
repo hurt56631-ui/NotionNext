@@ -54,7 +54,6 @@ const AudioCacheManager = {
                 if (request.result) {
                     // 命中缓存：将 Blob 转为本地 URL
                     const blobUrl = URL.createObjectURL(request.result);
-                    // console.log('📦 Loaded from Cache:', url);
                     resolve(blobUrl);
                 } else {
                     resolve(null);
@@ -104,8 +103,9 @@ const SiriWaveform = ({ isActive }) => {
     );
 };
 
-// 单个拼音按钮 (Memoized)
+// 单个拼音按钮 (Memoized) - 🔥 已修改：正方形卡片 + 缅文显示 + 右上角播放图标
 const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
+    // 根据拼音长度动态调整字体大小
     const fontSizeClass = useMemo(() => {
         const len = item.letter.length;
         if (len > 4) return 'text-xl sm:text-2xl';
@@ -118,7 +118,8 @@ const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
             onClick={() => onClick(item)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.92 }}
-            className={`group relative w-full aspect-[4/3] sm:aspect-square flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl transition-all duration-300 select-none overflow-hidden touch-manipulation
+            // 🔥 aspect-square 强制正方形
+            className={`group relative w-full aspect-square flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl transition-all duration-300 select-none overflow-hidden touch-manipulation
             ${isActive 
                 ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 shadow-xl shadow-fuchsia-500/40 ring-2 ring-white/50' 
                 : isSelected
@@ -127,25 +128,35 @@ const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
             }`}
         >
             {isActive && (
-                <div className="absolute top-0 right-0 w-12 h-12 bg-white/20 blur-xl rounded-full translate-x-1/2 -translate-y-1/2" />
+                <div className="absolute top-0 right-0 w-full h-full bg-white/10 blur-xl rounded-full scale-150" />
             )}
 
-            <span className={`pinyin-letter font-black tracking-tight leading-none z-10 transition-colors duration-200
+            {/* 🔥 右上角音频图标 */}
+            <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10">
+                {item.audio ? (
+                    <motion.div animate={isActive ? { scale: [1, 1.2, 1], opacity: 1 } : { scale: 1, opacity: 0.3 }}>
+                        <Volume2 size={16} className={isActive ? 'text-white/90' : 'text-slate-300'} />
+                    </motion.div>
+                ) : null}
+            </div>
+
+            {/* 拼音字母 */}
+            <span className={`pinyin-letter font-black tracking-tight leading-none z-10 transition-colors duration-200 mb-1
                 ${fontSizeClass}
                 ${isActive ? 'text-white drop-shadow-md' : 'text-slate-800 group-hover:text-violet-600'}
             `}>
                 {item.letter}
             </span>
             
-            <div className="absolute bottom-1.5 sm:bottom-3 h-4 flex items-center justify-center z-10">
-                {item.audio ? (
-                    <motion.div animate={isActive ? { scale: [1, 1.2, 1], opacity: 1 } : { scale: 1, opacity: 0.4 }}>
-                        <Volume2 size={16} className={isActive ? 'text-white/90' : 'text-slate-300'} />
-                    </motion.div>
-                ) : (
-                    <span className="text-[10px] text-slate-300 font-bold">无音频</span>
-                )}
-            </div>
+            {/* 🔥 缅文显示 (新增) */}
+            {item.burmese && (
+                <span className={`text-xs sm:text-sm font-medium font-myanmar z-10 truncate max-w-[90%]
+                    ${isActive ? 'text-white/80' : 'text-slate-400 group-hover:text-slate-500'}
+                `}>
+                    {item.burmese}
+                </span>
+            )}
+            
         </motion.button>
     );
 }, (prev, next) => {
@@ -177,7 +188,7 @@ export default function PinyinChartClient({ initialData }) {
 
     // 录音状态
     const [isRecording, setIsRecording] = useState(false);
-    const [isMicLoading, setIsMicLoading] = useState(false); // 新增：麦克风初始化状态
+    const [isMicLoading, setIsMicLoading] = useState(false);
     const [userAudioUrl, setUserAudioUrl] = useState(null);
     const [isPlayingUserAudio, setIsPlayingUserAudio] = useState(false);
 
@@ -216,7 +227,6 @@ export default function PinyinChartClient({ initialData }) {
             let srcToPlay = await AudioCacheManager.getAudioUrl(item.audio);
 
             if (!srcToPlay) {
-                // console.log('⬇️ Fetching from network:', item.audio);
                 const response = await fetch(item.audio);
                 const blob = await response.blob();
                 await AudioCacheManager.cacheAudio(item.audio, blob);
@@ -312,7 +322,6 @@ export default function PinyinChartClient({ initialData }) {
     const startRecording = async () => {
         if (typeof window === "undefined") return;
         
-        // 立即给予 UI 反馈，避免用户觉得卡顿
         setIsMicLoading(true);
 
         try {
@@ -329,27 +338,20 @@ export default function PinyinChartClient({ initialData }) {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 const url = URL.createObjectURL(audioBlob);
                 setUserAudioUrl(url);
-                
-                // 彻底释放流
                 stream.getTracks().forEach(track => track.stop());
             };
 
-            // timeslice 设置为 100ms，防止非常短的点击导致数据为空
             mediaRecorderRef.current.start(100);
-            
-            // 只有成功开始录音后才切换状态
             setIsRecording(true);
         } catch (error) {
             console.error("Microphone error:", error);
             alert("请允许麦克风权限以使用对比功能。");
         } finally {
-            // 无论成功失败，都停止加载动画
             setIsMicLoading(false);
         }
     };
 
     const stopRecording = () => {
-        // 增加安全检查，防止未初始化完成就点击停止
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
             mediaRecorderRef.current.stop();
             setIsRecording(false);
@@ -393,7 +395,7 @@ export default function PinyinChartClient({ initialData }) {
         exit: (direction) => ({ zIndex: 0, x: direction < 0 ? 50 : -50, opacity: 0, scale: 0.95 }),
     };
 
-    // 响应式 Grid
+    // 响应式 Grid - 🔥 4列 (手机) / 5列 (电脑)
     const [gridCols, setGridCols] = useState(4);
     useEffect(() => {
         const handleResize = () => {
@@ -505,7 +507,7 @@ export default function PinyinChartClient({ initialData }) {
                     <audio ref={audioRef} onEnded={handleAudioEnd} preload="none" />
                     <audio ref={userAudioRef} />
                     
-                    {/* Header (移除了返回箭头，文字和图标两端对齐) */}
+                    {/* Header */}
                     <header className="flex items-center justify-between mb-6 pt-2">
                         <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight drop-shadow-sm flex items-center gap-2">
                             {initialData.title}
