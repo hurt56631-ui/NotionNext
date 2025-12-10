@@ -119,7 +119,7 @@ const SiriWaveform = ({ isActive }) => {
     );
 };
 
-// 单个拼音按钮
+// 单个拼音按钮 (Memoized)
 const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
     const fontSizeClass = useMemo(() => {
         const len = item.letter.length;
@@ -133,7 +133,8 @@ const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
             onClick={() => onClick(item)}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.92 }}
-            className={`group relative w-full aspect-square flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl transition-all duration-300 select-none overflow-hidden touch-manipulation
+            // 🔥 修改1：添加 p-1 内边距，确保内容不贴边被切
+            className={`group relative w-full aspect-square flex flex-col items-center justify-center rounded-2xl sm:rounded-3xl transition-all duration-300 select-none overflow-hidden touch-manipulation p-1
             ${isActive 
                 ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 shadow-xl shadow-fuchsia-500/40 ring-2 ring-white/50' 
                 : isSelected
@@ -155,7 +156,8 @@ const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
             </div>
 
             {/* 拼音字母 */}
-            <span className={`font-sans font-black tracking-tight leading-none z-10 transition-colors duration-200 mb-1
+            {/* 🔥 修改2：减小 margin-bottom (mb-0.5)，给下方缅文腾出空间 */}
+            <span className={`font-sans font-black tracking-tight leading-none z-10 transition-colors duration-200 mb-0.5
                 ${fontSizeClass}
                 ${isActive ? 'text-white drop-shadow-md' : 'text-slate-800 group-hover:text-violet-600'}
             `}>
@@ -163,8 +165,14 @@ const LetterButton = React.memo(({ item, isActive, isSelected, onClick }) => {
             </span>
             
             {/* 缅文显示 */}
+            {/* 🔥 修改3：
+                - 去除 truncate (避免切断)
+                - 添加 leading-relaxed (增加行高，容纳上下标)
+                - 添加 py-0.5 (垂直方向缓冲)
+                - 字体稍微调小一点点 (text-[11px] sm:text-xs) 保证能显示完整
+            */}
             {item.burmese && (
-                <span className={`text-xs sm:text-sm font-medium z-10 truncate max-w-[90%]
+                <span className={`text-[11px] sm:text-xs font-medium z-10 text-center leading-relaxed break-words py-0.5 w-full px-1
                     ${isActive ? 'text-white/80' : 'text-slate-400 group-hover:text-slate-500'}
                 `}>
                     {item.burmese}
@@ -279,7 +287,7 @@ export default function PinyinChartClient({ initialData }) {
         } finally {
             setIsLoadingAudio(false);
         }
-    }, [isAutoPlaying, playbackRate, selectedItem, currentIndex]); // 添加 currentIndex 依赖
+    }, [isAutoPlaying, playbackRate, selectedItem, currentIndex]); 
 
     const handleAudioEnd = useCallback(() => {
         setIsPlayingLetter(null);
