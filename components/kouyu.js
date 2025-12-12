@@ -1,223 +1,229 @@
-import { useState, Fragment } from 'react';
-import { ChevronDown, Volume2, X } from 'lucide-react';
-import { Dialog, Transition } from '@headlessui/react';
+import { useState, useMemo, useEffect } from 'react';
+import { pinyin } from 'pinyin-pro';
+import { ChevronDown, Search, SlidersHorizontal, Languages, Mic, Loader2 } from 'lucide-react';
+import { speakingCategories } from '@/data/speaking-structure'; // 导入主结构文件
 
-// 模拟的口语数据结构
-// 您可以将这里的 hardcoded 数据替换为从 API 获取的数据
-const speakingData = [
-  {
-    category: '日常问候与寒暄',
-    icon: '🤝',
-    subcategories: [
-      '初次见面', '日常问候', '介绍他人', '道别'
-    ],
-    phrases: [
-      { id: 1, chinese: '你好！', pinyin: 'Nǐ hǎo!', burmese: 'မင်္ဂလာပါ!', audio: '/sounds/nihao.mp3', tags: ['日常问候', '初次见面'] },
-      { id: 2, chinese: '很高兴认识你。', pinyin: 'Hěn gāoxìng rènshi nǐ.', burmese: 'တွေ့ရတာဝမ်းသာပါတယ်။', audio: '/sounds/hen-gaoxing.mp3', tags: ['初次见面'] },
-      { id: 3, chinese: '你叫什么名字？', pinyin: 'Nǐ jiào shénme míngzi?', burmese: 'နာမည်ဘယ်လိုခေါ်လဲ?', audio: '/sounds/ni-jiao.mp3', tags: ['初次见面'] },
-      { id: 4, chinese: '早上好。', pinyin: 'Zǎoshang hǎo.', burmese: 'မင်္ဂလာနံနက်ခင်းပါ', audio: '/sounds/zaoshang.mp3', tags: ['日常问候'] },
-      { id: 5, chinese: '再见。', pinyin: 'Zàijiàn.', burmese: 'နောက်မှတွေ့မယ်။', audio: '/sounds/zaijian.mp3', tags: ['道别'] },
-      { id: 6, chinese: '这是我的朋友，李华。', pinyin: 'Zhè shì wǒ de péngyǒu, Lǐ Huà.', burmese: 'ဒါက ကျွန်တော့်သူငယ်ချင်း လီဟွာပါ။', audio: '/sounds/zhe-shi.mp3', tags: ['介绍他人'] }
-    ]
-  },
-  {
-    category: '餐厅与点餐',
-    icon: '🍜',
-    subcategories: [
-      '预订座位', '点餐', '结账', '特殊要求'
-    ],
-    phrases: [
-        { id: 7, chinese: '服务员，点餐。', pinyin: 'Fúwùyuán, diǎn cài.', burmese: 'စားပွဲထိုး၊ အော်ဒါမှာမယ်။', audio: '/sounds/diancan.mp3', tags: ['点餐'] },
-        { id: 8, chinese: '这个菜辣吗？', pinyin: 'Zhège cài là ma?', burmese: 'ဒီဟင်းက စပ်သလား?', audio: '/sounds/zhege-cai.mp3', tags: ['特殊要求'] },
-        { id: 9, chinese: '买单，谢谢。', pinyin: 'Mǎidān, xièxiè.', burmese: 'ဘေလ်ရှင်းမယ်နော်၊ ကျေးဇူးပါ။', audio: '/sounds/maidan.mp3', tags: ['结账'] }
-    ]
-  },
-  {
-    category: '交通与问路',
-    icon: '🗺️',
-    subcategories: [
-        '打车', '乘坐公交', '问路'
-    ],
-    phrases: [
-        { id: 10, chinese: '请问，去这个地址怎么走？', pinyin: 'Qǐngwèn, qù zhège dìzhǐ zěnme zǒu?', burmese: 'ကျေးဇူးပြုပြီး ဒီလိပ်စာကို ဘယ်လိုသွားရမလဲ။', audio: '/sounds/qu-zhege.mp3', tags: ['问路'] },
-        { id: 11, chinese: '师傅，请带我去机场。', pinyin: 'Shīfù, qǐng dài wǒ qù jīchǎng.', burmese: 'ဆရာ၊ လေဆိပ်ကို ပို့ပေးပါ။', audio: '/sounds/qu-jichang.mp3', tags: ['打车'] }
-    ]
-  }
-];
-
-// 单个短句卡片组件
-const PhraseCard = ({ phrase, onCardClick }) => {
-  const playAudio = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡，防止点击喇叭时触发卡片点击
-    console.log('Playing audio:', phrase.audio);
-    // 在这里添加您的音频播放逻辑
-    const audio = new Audio(phrase.audio);
-    audio.play().catch(error => console.error("Audio playback failed:", error));
-  };
-
-  return (
-    <div 
-        onClick={() => onCardClick(phrase)}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-3 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{phrase.chinese}</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{phrase.pinyin}</p>
-          <p className="text-md text-blue-600 dark:text-blue-400 mt-2 font-semibold">{phrase.burmese}</p>
-        </div>
-        <button onClick={playAudio} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-          <Volume2 size={22} />
-        </button>
-      </div>
-    </div>
-  );
+// --- TTS 模块 ---
+const ttsCache = new Map();
+const getTTSAudio = async (text, voice, rate = 0) => {
+    const cacheKey = `${text}|${voice}|${rate}`;
+    if (ttsCache.has(cacheKey)) return ttsCache.get(cacheKey);
+    try {
+        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`TTS API Error: ${response.statusText}`);
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        ttsCache.set(cacheKey, audio);
+        return audio;
+    } catch (e) { console.error(`获取TTS失败: "${text}"`, e); return null; }
 };
 
-// 单个手风琴分类组件
-const CategoryAccordion = ({ category, icon, subcategories, phrases, isOpen, onToggle, activeTag, onTagClick, onCardClick }) => {
-  const filteredPhrases = activeTag === '全部' ? phrases : phrases.filter(p => p.tags.includes(activeTag));
-
-  return (
-    <div className="mb-4 bg-white dark:bg-gray-800/50 rounded-2xl shadow-sm overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex justify-between items-center p-5 text-left font-bold text-lg text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800"
-      >
-        <span>{icon} {category}</span>
-        <ChevronDown
-          className={`transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
-          size={24}
-        />
-      </button>
-      {isOpen && (
-        <div className="px-5 pb-5 pt-2 bg-gray-50 dark:bg-gray-800/50">
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              onClick={() => onTagClick('全部')}
-              className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === '全部' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
-            >
-              全部
-            </button>
-            {subcategories.map(tag => (
-              <button
-                key={tag}
-                onClick={() => onTagClick(tag)}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === tag ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-          <div>
-            {filteredPhrases.length > 0 ? (
-                filteredPhrases.map(phrase => (
-                    <PhraseCard key={phrase.id} phrase={phrase} onCardClick={onCardClick} />
-                ))
-            ) : (
-                <p className="text-center text-gray-500 py-4">该分类下暂无内容。</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 沉浸式学习弹窗组件
-const LearningModal = ({ phrase, isOpen, onClose }) => {
-    if (!phrase) return null;
-
-    const playAudio = () => {
-        console.log('Playing audio:', phrase.audio);
-        const audio = new Audio(phrase.audio);
-        audio.play().catch(error => console.error("Audio playback failed:", error));
+// --- UI 组件 ---
+const PhraseCard = ({ phrase, onPlayAudio }) => {
+    const [isLoadingChinese, setIsLoadingChinese] = useState(false);
+    const [isLoadingBurmese, setIsLoadingBurmese] = useState(false);
+    const handlePlay = async (lang) => {
+        const stateSetter = lang === 'zh' ? setIsLoadingChinese : setIsLoadingBurmese;
+        stateSetter(true);
+        await onPlayAudio(phrase.chinese, phrase.burmese, lang);
+        stateSetter(false);
     };
+    return (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-3">
+            <div className="flex justify-between items-start">
+                <div className="flex-1 pr-2">
+                    <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{phrase.chinese}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{phrase.pinyin}</p>
+                    <p className="text-md text-blue-600 dark:text-blue-400 mt-2 font-semibold">{phrase.burmese}</p>
+                    {phrase.xieyin && <p className="text-sm text-teal-600 dark:text-teal-400 mt-2 font-light italic">谐音: {phrase.xieyin}</p>}
+                </div>
+                <div className="flex flex-col gap-2">
+                    <button onClick={() => handlePlay('zh')} disabled={isLoadingChinese} className="flex items-center justify-center w-9 h-9 rounded-full text-blue-500 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 dark:hover:bg-blue-900 transition-all disabled:opacity-50" aria-label="播放中文">
+                        {isLoadingChinese ? <Loader2 size={18} className="animate-spin" /> : <Languages size={18} />}
+                    </button>
+                    <button onClick={() => handlePlay('my')} disabled={isLoadingBurmese} className="flex items-center justify-center w-9 h-9 rounded-full text-green-500 bg-green-50 dark:bg-green-900/50 hover:bg-green-100 dark:hover:bg-green-900 transition-all disabled:opacity-50" aria-label="播放缅甸语">
+                        {isLoadingBurmese ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SpeedController = ({ title, value, onChange, colorClass }) => (
+    <div className="w-full">
+        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{title}: {Math.round(value * 100)}%</label>
+        <input type="range" min="-0.5" max="0.5" step="0.05" value={value} onChange={(e) => onChange(parseFloat(e.target.value))}
+            className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${colorClass}`} />
+    </div>
+);
+
+const CategoryAccordion = ({ category, phrases, isLoading, isOpen, onToggle, onPlayAudio }) => {
+    const [activeTag, setActiveTag] = useState('全部');
+    const filteredPhrases = activeTag === '全部' ? phrases : phrases.filter(p => p.tags && p.tags.includes(activeTag));
+
+    useEffect(() => {
+        if (isOpen) {
+            setActiveTag('全部');
+        }
+    }, [isOpen]);
 
     return (
-        <Transition show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={onClose}>
-                <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0">
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-                </Transition.Child>
-
-                <div className="fixed inset-0 overflow-y-auto">
-                    <div className="flex min-h-full items-center justify-center p-4 text-center">
-                        <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100" leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95">
-                            <Dialog.Panel className="w-full max-w-lg transform overflow-hidden rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-8 text-left align-middle shadow-xl transition-all text-white flex flex-col items-center justify-center aspect-square">
-                                <button onClick={onClose} className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors">
-                                    <X size={28} />
-                                </button>
-                                
-                                <div className='text-center'>
-                                    <h1 className="text-4xl md:text-5xl font-bold" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.2)' }}>
-                                        {phrase.chinese}
-                                    </h1>
-                                    <p className="mt-3 text-xl text-white/80">{phrase.pinyin}</p>
-                                    <p className="mt-6 text-2xl text-cyan-200 font-semibold">{phrase.burmese}</p>
-                                </div>
-
-                                <div className="mt-8">
-                                    <button 
-                                        onClick={playAudio}
-                                        className="bg-white/20 hover:bg-white/30 text-white rounded-full p-5 transition-all transform hover:scale-110 active:scale-95 shadow-lg">
-                                        <Volume2 size={40} />
-                                    </button>
-                                </div>
-                            </Dialog.Panel>
-                        </Transition.Child>
-                    </div>
+        <div className="mb-4 bg-white dark:bg-gray-800/50 rounded-2xl shadow-sm overflow-hidden transition-all duration-500">
+            <button onClick={onToggle} className="w-full flex justify-between items-center p-5 text-left font-bold text-lg text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800">
+                <span>{category.icon} {category.category}</span>
+                <ChevronDown className={`transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} size={24} />
+            </button>
+            <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isOpen ? 'max-h-[5000px]' : 'max-h-0'}`}>
+                <div className="px-5 pb-5 pt-2 bg-gray-50 dark:bg-gray-800/50">
+                    {isLoading ? (
+                         <div className="flex justify-center items-center py-10"> <Loader2 className="animate-spin text-blue-500" size={32} /> </div>
+                    ) : (
+                        <>
+                            <div className="flex flex-wrap gap-2 mb-4">
+                                <button onClick={() => setActiveTag('全部')} className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === '全部' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>全部</button>
+                                {category.subcategories.map(tag => (
+                                    <button key={tag.name} onClick={() => setActiveTag(tag.name)} className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === tag.name ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>{tag.name}</button>
+                                ))}
+                            </div>
+                            <div> {filteredPhrases.map(phrase => <PhraseCard key={phrase.id} phrase={phrase} onPlayAudio={onPlayAudio} />)} </div>
+                        </>
+                    )}
                 </div>
-            </Dialog>
-        </Transition>
+            </div>
+        </div>
     );
 };
 
 
-// 主组件
-export default function SpeakingContentBlock() {
-  const [openAccordion, setOpenAccordion] = useState(speakingData[0]?.category || null);
-  const [activeTags, setActiveTags] = useState({});
-  
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedPhrase, setSelectedPhrase] = useState(null);
+// --- 主组件 ---
+export default function KouyuPage() {
+    const [searchTerm, setSearchTerm] = useState('');
+    const [openAccordion, setOpenAccordion] = useState(speakingCategories[0]?.category || null);
+    const [categoryPhrases, setCategoryPhrases] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    
+    const [allPhrasesForSearch, setAllPhrasesForSearch] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
 
-  const handleToggleAccordion = (category) => {
-    setOpenAccordion(openAccordion === category ? null : category);
-  };
+    const [chineseRate, setChineseRate] = useState(0);
+    const [burmeseRate, setBurmeseRate] = useState(-0.3);
 
-  const handleTagClick = (category, tag) => {
-    setActiveTags(prev => ({ ...prev, [category]: tag }));
-  };
-  
-  const handleCardClick = (phrase) => {
-    setSelectedPhrase(phrase);
-    setIsModalOpen(true);
-  };
+    // 动态加载展开分类的数据
+    useEffect(() => {
+        const loadCategoryData = async () => {
+            if (!openAccordion) {
+                setCategoryPhrases([]);
+                return;
+            }
+            setIsLoading(true);
+            const categoryData = speakingCategories.find(c => c.category === openAccordion);
+            if (!categoryData) {
+                setIsLoading(false);
+                return;
+            }
+            const phrasePromises = categoryData.subcategories.map(sub =>
+                import(`@/data/speaking/${sub.file}.js`)
+                    .then(module => module.default.map(phrase => ({ ...phrase, tags: [sub.name] })))
+                    .catch(() => []) // 如果文件不存在，返回空数组
+            );
+            const phraseArrays = await Promise.all(phrasePromises);
+            const allPhrases = phraseArrays.flat().map(p => ({...p, pinyin: p.pinyin || pinyin(p.chinese, { toneType: 'num' })}));
+            setCategoryPhrases(allPhrases);
+            setIsLoading(false);
+        };
+        loadCategoryData();
+    }, [openAccordion]);
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
+    // 动态加载所有数据用于搜索
+    useEffect(() => {
+        const loadAllDataForSearch = async () => {
+            if (searchTerm && allPhrasesForSearch.length === 0) {
+                setIsSearching(true);
+                const allPromises = speakingCategories.flatMap(cat =>
+                    cat.subcategories.map(sub =>
+                        import(`@/data/speaking/${sub.file}.js`)
+                        .then(module => module.default.map(phrase => ({ ...phrase, tags: [sub.name] })))
+                        .catch(() => [])
+                    )
+                );
+                const allLoadedPhrases = (await Promise.all(allPromises)).flat().map(p => ({...p, pinyin: p.pinyin || pinyin(p.chinese, { toneType: 'num' })}));
+                setAllPhrasesForSearch(allLoadedPhrases);
+                setIsSearching(false);
+            }
+        };
+        loadAllDataForSearch();
+    }, [searchTerm, allPhrasesForSearch]);
 
-  return (
-    <div className="w-full max-w-4xl mx-auto py-4">
-        <div className='text-center mb-8'>
-            <h2 className='text-3xl font-extrabold text-gray-800 dark:text-white'>口语练习</h2>
-            <p className='mt-2 text-gray-500 dark:text-gray-400'>选择一个场景，开始你的口语练习之旅。</p>
+    const searchResults = useMemo(() => {
+        if (!searchTerm) return [];
+        const lowerCaseTerm = searchTerm.toLowerCase();
+        return allPhrasesForSearch.filter(phrase =>
+            phrase.chinese.toLowerCase().includes(lowerCaseTerm) ||
+            phrase.pinyin.toLowerCase().includes(lowerCaseTerm) ||
+            phrase.burmese.toLowerCase().includes(lowerCaseTerm)
+        );
+    }, [searchTerm, allPhrasesForSearch]);
+
+    const handlePlayAudio = async (chineseText, burmeseText, lang) => {
+        const text = lang === 'zh' ? chineseText : burmeseText;
+        const voice = lang === 'zh' ? 'zh-CN-XiaoyanNeural' : 'my-MM-ThihaNeural';
+        const rate = lang === 'zh' ? chineseRate : burmeseRate;
+        const audio = await getTTSAudio(text, voice, rate);
+        if (audio) audio.play().catch(e => console.error("音频播放失败", e));
+    };
+
+    return (
+        <div className="w-full max-w-4xl mx-auto py-4 animate-fade-in">
+            <div className='text-center mb-6'>
+                <h1 className='text-3xl font-extrabold text-gray-800 dark:text-white'>口语练习中心</h1>
+                <p className='mt-2 text-gray-500 dark:text-gray-400'>选择场景或搜索关键词开始学习</p>
+            </div>
+
+            <div className="sticky top-0 z-20 p-4 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-lg rounded-xl mb-6 shadow-sm">
+                <div className="relative mb-4">
+                    <input type="text" placeholder="搜索中文、拼音或缅文..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2"><Search size={20} className="text-gray-400" /></div>
+                </div>
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 mb-2">
+                    <SlidersHorizontal size={16} /><h3 className="font-semibold text-sm">发音语速设置</h3>
+                </div>
+                <div className="flex flex-col md:flex-row gap-4">
+                    <SpeedController title="中文" value={chineseRate} onChange={setChineseRate} colorClass="bg-blue-200 dark:bg-blue-800" />
+                    <SpeedController title="缅甸语" value={burmeseRate} onChange={setBurmeseRate} colorClass="bg-green-200 dark:bg-green-800" />
+                </div>
+            </div>
+
+            {searchTerm ? (
+                <div>
+                    <h3 className="font-bold text-lg mb-4 px-4">搜索结果 ({isSearching ? '...' : searchResults.length})</h3>
+                    <div className="px-4">
+                        {isSearching ? <div className="flex justify-center items-center py-10"><Loader2 className="animate-spin text-blue-500" size={32} /></div>
+                            : searchResults.length > 0 ? (
+                                searchResults.map(phrase => <PhraseCard key={phrase.id} phrase={phrase} onPlayAudio={handlePlayAudio} />)
+                            ) : <p className="text-center text-gray-500 py-8">未找到相关短句。</p>
+                        }
+                    </div>
+                </div>
+            ) : (
+                <div>
+                    {speakingCategories.map(item => (
+                        <CategoryAccordion
+                            key={item.category}
+                            category={item}
+                            phrases={openAccordion === item.category ? categoryPhrases : []}
+                            isLoading={openAccordion === item.category && isLoading}
+                            isOpen={openAccordion === item.category}
+                            onToggle={() => setOpenAccordion(openAccordion === item.category ? null : item.category)}
+                            onPlayAudio={handlePlayAudio}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
-
-      {speakingData.map(item => (
-        <CategoryAccordion
-          key={item.category}
-          {...item}
-          isOpen={openAccordion === item.category}
-          onToggle={() => handleToggleAccordion(item.category)}
-          activeTag={activeTags[item.category] || '全部'}
-          onTagClick={(tag) => handleTagClick(item.category, tag)}
-          onCardClick={handleCardClick}
-        />
-      ))}
-
-      <LearningModal phrase={selectedPhrase} isOpen={isModalOpen} onClose={closeModal} />
-    </div>
-  );
+    );
 }
