@@ -57,7 +57,8 @@ import dynamic from 'next/dynamic'
 
 // 导入内容块组件
 import HskContentBlock from '@/components/HskPageClient'
-import SpeakingContentBlock from '@/components/SpeakingContentBlock'
+// 更新：从 kouyu.js 导入新的口语页面组件
+import KouyuPage from '@/components/kouyu'
 import PracticeContentBlock from '@/components/PracticeContentBlock'
 import BooksContentBlock from '@/components/BooksContentBlock'
 import WordsContentBlock from '@/components/WordsContentBlock'
@@ -174,7 +175,7 @@ const CustomScrollbarStyle = () => (
 
 const BottomNavBar = ({ onOpenAiDrawer }) => {
     const router = useRouter();
-    const mainLearnTabs = ['pinyin', 'words'];
+    const mainLearnTabs = ['pinyin', 'words']; // "学习"按钮只在拼音和单词页高亮
 
     const navItems = [
         { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: mainLearnTabs },
@@ -185,8 +186,8 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
     ];
 
     const isActive = (item) => {
-        if (item.type === 'button') return false;
-        const currentTab = router.query.tab || 'pinyin';
+        if (item.type === 'button') return false; 
+        const currentTab = router.query.tab || 'pinyin'; 
 
         if (item.href.startsWith('/?tab=')) {
             const tab = item.href.split('=')[1];
@@ -201,16 +202,17 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
     return (
         <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
             {navItems.map(item => {
+                const itemWidth = 'w-1/5'; // 5个按钮，每个占1/5宽度
                 if (item.type === 'button') {
                     return (
-                        <button key={item.label} onClick={onOpenAiDrawer} className='flex flex-col items-center justify-center w-1/5 text-gray-500 dark:text-gray-400'>
+                        <button key={item.label} onClick={onOpenAiDrawer} className={`flex flex-col items-center justify-center ${itemWidth} text-gray-500 dark:text-gray-400`}>
                             <i className={`${item.icon} text-xl`}></i>
                             <span className='text-xs mt-1'>{item.label}</span>
                         </button>
                     );
                 }
                 return (
-                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center w-1/5 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
+                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center ${itemWidth} ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
                         <i className={`${item.icon} text-xl`}></i>
                         <span className={`text-xs mt-1`}>{item.label}</span>
                     </SmartLink>
@@ -530,7 +532,6 @@ const LayoutIndex = props => {
     <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTabKey === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
-        {/* 🔥 修复点：这里原来是 activeTab，已改为 activeTabKey */}
         <div className={`w-6 h-0.5 mt-1 rounded-full transition-all duration-300 ${activeTabKey === tab.key ? 'bg-blue-500' : 'bg-transparent'}`}></div>
     </button>
   ));
@@ -591,7 +592,8 @@ const LayoutIndex = props => {
                         <div className='p-4'>
                             {activeTabKey === 'pinyin' && <PinyinContentBlock />}
                             {activeTabKey === 'words' && <WordsContentBlock />}
-                            {activeTabKey === 'speaking' && <SpeakingContentBlock />}
+                            {/* 更新：调用新的口语页面组件 */}
+                            {activeTabKey === 'speaking' && <KouyuPage />}
                             {activeTabKey === 'practice' && <PracticeContentBlock />}
                             {activeTabKey === 'books' && <BooksContentBlock notionBooks={books} />}
                         </div>
