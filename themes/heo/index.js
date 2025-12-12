@@ -174,18 +174,19 @@ const CustomScrollbarStyle = () => (
 
 const BottomNavBar = ({ onOpenAiDrawer }) => {
     const router = useRouter();
-    const mainLearnTabs = ['pinyin', 'words', 'speaking']; 
+    const mainLearnTabs = ['pinyin', 'words'];
 
     const navItems = [
         { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: mainLearnTabs },
+        { type: 'link', href: '/?tab=speaking', label: '口语', icon: 'fas fa-microphone' },
         { type: 'button', label: 'AI助手', icon: 'fas fa-robot' },
         { type: 'link', href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check' },
         { type: 'link', href: '/?tab=books', label: '书籍', icon: 'fas fa-book-open' },
     ];
 
     const isActive = (item) => {
-        if (item.type === 'button') return false; 
-        const currentTab = router.query.tab || 'pinyin'; 
+        if (item.type === 'button') return false;
+        const currentTab = router.query.tab || 'pinyin';
 
         if (item.href.startsWith('/?tab=')) {
             const tab = item.href.split('=')[1];
@@ -202,14 +203,14 @@ const BottomNavBar = ({ onOpenAiDrawer }) => {
             {navItems.map(item => {
                 if (item.type === 'button') {
                     return (
-                        <button key={item.label} onClick={onOpenAiDrawer} className='flex flex-col items-center justify-center w-1/4 text-gray-500 dark:text-gray-400'>
+                        <button key={item.label} onClick={onOpenAiDrawer} className='flex flex-col items-center justify-center w-1/5 text-gray-500 dark:text-gray-400'>
                             <i className={`${item.icon} text-xl`}></i>
                             <span className='text-xs mt-1'>{item.label}</span>
                         </button>
                     );
                 }
                 return (
-                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center w-1/4 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
+                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center w-1/5 ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
                         <i className={`${item.icon} text-xl`}></i>
                         <span className={`text-xs mt-1`}>{item.label}</span>
                     </SmartLink>
@@ -559,7 +560,7 @@ const LayoutIndex = props => {
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
                         <a href="https://www.tiktok.com/@mmzh.onlione?_r=1&_t=ZS-91OzyDddPu8" target="_blank" rel="noopener noreferrer" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/tiktok.jpg')" }}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
                         <a href="https://www.facebook.com/share/1ErXyBbrZ1" target="_blank" rel="noopener noreferrer" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/facebook.jpg')" }}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
-                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe title="YouTube" width="100%" height="100%" src="https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&loop=1&playlist=jfKfPfyJRdk" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
+                        <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe title="YouTube" width="100%" height="100%" src=" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
                     </div>
                 </div>
             </div>
