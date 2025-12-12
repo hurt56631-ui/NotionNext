@@ -1,9 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
-import { pinyin } from 'pinyin-pro';
-import { ChevronDown, Search, SlidersHorizontal, Languages, Mic, Loader2 } from 'lucide-react';
-import { speakingCategories } from '@/data/speaking-structure'; // 导入主结构文件
+// components/kouyu.js
 
-// --- TTS 模块 ---
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import Link from 'next/link';
+import { pinyin } from 'pinyin-pro';
+import { ChevronLeft, Search, SlidersHorizontal, Languages, Mic, Loader2, Volume2 } from 'lucide-react';
+import { speakingCategories } from '@/data/speaking-structure';
+
+// --- TTS 模块 (保持不变) ---
 const ttsCache = new Map();
 const getTTSAudio = async (text, voice, rate = 0) => {
     const cacheKey = `${text}|${voice}|${rate}`;
@@ -11,133 +15,172 @@ const getTTSAudio = async (text, voice, rate = 0) => {
     try {
         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
         const response = await fetch(url);
-        if (!response.ok) throw new Error(`TTS API Error: ${response.statusText}`);
+        if (!response.ok) throw new Error(`TTS API Error`);
         const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        const audio = new Audio(audioUrl);
+        const audio = new Audio(URL.createObjectURL(blob));
         ttsCache.set(cacheKey, audio);
         return audio;
     } catch (e) { console.error(`获取TTS失败: "${text}"`, e); return null; }
 };
 
-// --- UI 组件 ---
-const PhraseCard = ({ phrase, onPlayAudio }) => {
-    const [isLoadingChinese, setIsLoadingChinese] = useState(false);
-    const [isLoadingBurmese, setIsLoadingBurmese] = useState(false);
-    const handlePlay = async (lang) => {
-        const stateSetter = lang === 'zh' ? setIsLoadingChinese : setIsLoadingBurmese;
-        stateSetter(true);
-        await onPlayAudio(phrase.chinese, phrase.burmese, lang);
-        stateSetter(false);
-    };
-    return (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-3">
-            <div className="flex justify-between items-start">
-                <div className="flex-1 pr-2">
-                    <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{phrase.chinese}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{phrase.pinyin}</p>
-                    <p className="text-md text-blue-600 dark:text-blue-400 mt-2 font-semibold">{phrase.burmese}</p>
-                    {phrase.xieyin && <p className="text-sm text-teal-600 dark:text-teal-400 mt-2 font-light italic">谐音: {phrase.xieyin}</p>}
-                </div>
-                <div className="flex flex-col gap-2">
-                    <button onClick={() => handlePlay('zh')} disabled={isLoadingChinese} className="flex items-center justify-center w-9 h-9 rounded-full text-blue-500 bg-blue-50 dark:bg-blue-900/50 hover:bg-blue-100 dark:hover:bg-blue-900 transition-all disabled:opacity-50" aria-label="播放中文">
-                        {isLoadingChinese ? <Loader2 size={18} className="animate-spin" /> : <Languages size={18} />}
-                    </button>
-                    <button onClick={() => handlePlay('my')} disabled={isLoadingBurmese} className="flex items-center justify-center w-9 h-9 rounded-full text-green-500 bg-green-50 dark:bg-green-900/50 hover:bg-green-100 dark:hover:bg-green-900 transition-all disabled:opacity-50" aria-label="播放缅甸语">
-                        {isLoadingBurmese ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
 
-const SpeedController = ({ title, value, onChange, colorClass }) => (
-    <div className="w-full">
-        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{title}: {Math.round(value * 100)}%</label>
-        <input type="range" min="-0.5" max="0.5" step="0.05" value={value} onChange={(e) => onChange(parseFloat(e.target.value))}
-            className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${colorClass}`} />
-    </div>
-);
+// --- 短句列表页面组件 (新) ---
+// 这个组件现在只在用户点击子分类后动态渲染
+const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
+    const [isReadingChinese, setIsReadingChinese] = useState(true);
+    const [isReadingBurmese, setIsReadingBurmese] = useState(true);
+    const [chineseRate, setChineseRate] = useState(0);
+    const [burmeseRate, setBurmeseRate] = useState(-0.3);
+    const [nowPlaying, setNowPlaying] = useState(null);
 
-const CategoryAccordion = ({ category, phrases, isLoading, isOpen, onToggle, onPlayAudio }) => {
-    const [activeTag, setActiveTag] = useState('全部');
-    const filteredPhrases = activeTag === '全部' ? phrases : phrases.filter(p => p.tags && p.tags.includes(activeTag));
+    const processedPhrases = useMemo(() => phrases.map(phrase => ({
+        ...phrase,
+        // 修复拼音：使用更健壮的配置
+        pinyin: pinyin(phrase.chinese, { toneType: 'num', v: true, nonZh: 'consecutive' }),
+    })), [phrases]);
 
-    useEffect(() => {
-        if (isOpen) {
-            setActiveTag('全部');
+    const handleCardClick = async (phrase) => {
+        if (nowPlaying) return;
+        setNowPlaying(phrase.id);
+        try {
+            if (isReadingChinese) {
+                const audioZh = await getTTSAudio(phrase.chinese, 'zh-CN-XiaoyanNeural', chineseRate);
+                if (audioZh) {
+                    await new Promise(resolve => { audioZh.onended = resolve; audioZh.play(); });
+                }
+            }
+            if (isReadingBurmese) {
+                const audioMy = await getTTSAudio(phrase.burmese, 'my-MM-ThihaNeural', burmeseRate);
+                if (audioMy) {
+                    await new Promise(resolve => { audioMy.onended = resolve; audioMy.play(); });
+                }
+            }
+        } finally {
+            setNowPlaying(null);
         }
-    }, [isOpen]);
+    };
 
     return (
-        <div className="mb-4 bg-white dark:bg-gray-800/50 rounded-2xl shadow-sm overflow-hidden transition-all duration-500">
-            <button onClick={onToggle} className="w-full flex justify-between items-center p-5 text-left font-bold text-lg text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800">
-                <span>{category.icon} {category.category}</span>
-                <ChevronDown className={`transform transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} size={24} />
-            </button>
-            <div className={`transition-all duration-500 ease-in-out overflow-hidden ${isOpen ? 'max-h-[5000px]' : 'max-h-0'}`}>
-                <div className="px-5 pb-5 pt-2 bg-gray-50 dark:bg-gray-800/50">
-                    {isLoading ? (
-                         <div className="flex justify-center items-center py-10"> <Loader2 className="animate-spin text-blue-500" size={32} /> </div>
-                    ) : (
-                        <>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                <button onClick={() => setActiveTag('全部')} className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === '全部' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>全部</button>
-                                {category.subcategories.map(tag => (
-                                    <button key={tag.name} onClick={() => setActiveTag(tag.name)} className={`px-3 py-1 text-sm rounded-full transition-colors ${activeTag === tag.name ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}>{tag.name}</button>
-                                ))}
-                            </div>
-                            <div> {filteredPhrases.map(phrase => <PhraseCard key={phrase.id} phrase={phrase} onPlayAudio={onPlayAudio} />)} </div>
-                        </>
-                    )}
+        <div className="animate-fade-in">
+            {/* 顶部导航 */}
+            <div className="sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg z-20 p-4 flex items-center justify-between shadow-sm">
+                <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <ChevronLeft size={24} />
+                </button>
+                <div className="text-center">
+                    <h1 className="text-xl font-bold">{subcategory.name}</h1>
+                    <p className="text-sm text-gray-500">{category.category}</p>
                 </div>
+                <div className="w-8"></div>
+            </div>
+
+             {/* 控制器 */}
+            <div className="p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50 mb-4">
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setIsReadingChinese(!isReadingChinese)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isReadingChinese ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                        <Languages size={16} /> 中文
+                    </button>
+                    <button onClick={() => setIsReadingBurmese(!isReadingBurmese)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isReadingBurmese ? 'bg-green-500 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                        <Mic size={16} /> 缅甸语
+                    </button>
+                </div>
+                 <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">中文语速</label>
+                        <input type="range" min="-0.5" max="0.5" step="0.05" value={chineseRate} onChange={e => setChineseRate(parseFloat(e.target.value))} className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-blue-200 dark:bg-blue-800" />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">缅甸语语速</label>
+                        <input type="range" min="-0.5" max="0.5" step="0.05" value={burmeseRate} onChange={e => setBurmeseRate(parseFloat(e.target.value))} className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-green-200 dark:bg-green-800" />
+                    </div>
+                 </div>
+            </div>
+
+            {/* 短句列表 */}
+            <div className="px-4">
+                {processedPhrases.map(phrase => (
+                    <div key={phrase.id} className="relative">
+                        <div onClick={() => handleCardClick(phrase)} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-5 mb-4 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]">
+                            <p className="text-xl font-bold text-gray-900 dark:text-white">{phrase.chinese}</p>
+                            <p className="text-md text-gray-500 dark:text-gray-400 mt-1">{phrase.pinyin}</p>
+                            <p className="text-lg text-blue-600 dark:text-blue-400 mt-3 font-semibold">{phrase.burmese}</p>
+                            {phrase.xieyin && <p className="text-md text-teal-600 dark:text-teal-400 mt-2 font-light italic">谐音: {phrase.xieyin}</p>}
+                        </div>
+                        {nowPlaying === phrase.id && <div className="absolute inset-0 bg-black/20 rounded-xl flex justify-center items-center pointer-events-none"><Volume2 className="text-white animate-pulse" size={48} /></div>}
+                    </div>
+                ))}
             </div>
         </div>
     );
 };
 
 
-// --- 主组件 ---
+// --- 主页/分类列表视图 ---
+const MainView = ({ onSubcategoryClick }) => {
+    return (
+        <div>
+            {speakingCategories.map(category => (
+                <div key={category.category} className="mb-8 p-4 bg-white dark:bg-gray-800/50 rounded-2xl shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                        <span className="text-3xl">{category.icon}</span>
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{category.category}</h2>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {category.subcategories.map(subcategory => (
+                            <div key={subcategory.name} onClick={() => onSubcategoryClick(category, subcategory)}
+                                className="p-4 text-center bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition-all">
+                                <p className="font-semibold">{subcategory.name}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+
+// --- 根组件 KouyuPage ---
 export default function KouyuPage() {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [openAccordion, setOpenAccordion] = useState(speakingCategories[0]?.category || null);
-    const [categoryPhrases, setCategoryPhrases] = useState([]);
+    // 页面状态管理
+    const [view, setView] = useState('main'); // 'main', 'phrases', 'search'
+    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+    const [phrases, setPhrases] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    
+
+    // 搜索功能状态
+    const [searchTerm, setSearchTerm] = useState('');
     const [allPhrasesForSearch, setAllPhrasesForSearch] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
 
-    const [chineseRate, setChineseRate] = useState(0);
-    const [burmeseRate, setBurmeseRate] = useState(-0.3);
-
-    // 动态加载展开分类的数据
-    useEffect(() => {
-        const loadCategoryData = async () => {
-            if (!openAccordion) {
-                setCategoryPhrases([]);
-                return;
-            }
-            setIsLoading(true);
-            const categoryData = speakingCategories.find(c => c.category === openAccordion);
-            if (!categoryData) {
-                setIsLoading(false);
-                return;
-            }
-            const phrasePromises = categoryData.subcategories.map(sub =>
-                import(`@/data/speaking/${sub.file}.js`)
-                    .then(module => module.default.map(phrase => ({ ...phrase, tags: [sub.name] })))
-                    .catch(() => []) // 如果文件不存在，返回空数组
-            );
-            const phraseArrays = await Promise.all(phrasePromises);
-            const allPhrases = phraseArrays.flat().map(p => ({...p, pinyin: p.pinyin || pinyin(p.chinese, { toneType: 'num' })}));
-            setCategoryPhrases(allPhrases);
+    // 点击子分类的处理逻辑
+    const handleSubcategoryClick = async (category, subcategory) => {
+        setIsLoading(true);
+        setView('phrases');
+        setSelectedCategory(category);
+        setSelectedSubcategory(subcategory);
+        try {
+            // 动态导入对应的短句文件
+            const module = await import(`@/data/speaking/${subcategory.file}.js`);
+            setPhrases(module.default);
+        } catch (e) {
+            console.error("加载短句文件失败:", e);
+            setPhrases([]); // 加载失败则显示空列表
+        } finally {
             setIsLoading(false);
-        };
-        loadCategoryData();
-    }, [openAccordion]);
+        }
+    };
 
-    // 动态加载所有数据用于搜索
+    // 返回主列表
+    const handleBackToMain = () => {
+        setView('main');
+        setSelectedCategory(null);
+        setSelectedSubcategory(null);
+        setPhrases([]);
+    };
+
+    // 搜索逻辑
     useEffect(() => {
         const loadAllDataForSearch = async () => {
             if (searchTerm && allPhrasesForSearch.length === 0) {
@@ -145,11 +188,11 @@ export default function KouyuPage() {
                 const allPromises = speakingCategories.flatMap(cat =>
                     cat.subcategories.map(sub =>
                         import(`@/data/speaking/${sub.file}.js`)
-                        .then(module => module.default.map(phrase => ({ ...phrase, tags: [sub.name] })))
+                        .then(module => module.default)
                         .catch(() => [])
                     )
                 );
-                const allLoadedPhrases = (await Promise.all(allPromises)).flat().map(p => ({...p, pinyin: p.pinyin || pinyin(p.chinese, { toneType: 'num' })}));
+                const allLoadedPhrases = (await Promise.all(allPromises)).flat();
                 setAllPhrasesForSearch(allLoadedPhrases);
                 setIsSearching(false);
             }
@@ -160,70 +203,56 @@ export default function KouyuPage() {
     const searchResults = useMemo(() => {
         if (!searchTerm) return [];
         const lowerCaseTerm = searchTerm.toLowerCase();
+        const pinyinTerm = pinyin(lowerCaseTerm, { toneType: 'num', v: true, nonZh: 'consecutive' });
         return allPhrasesForSearch.filter(phrase =>
             phrase.chinese.toLowerCase().includes(lowerCaseTerm) ||
-            phrase.pinyin.toLowerCase().includes(lowerCaseTerm) ||
+            pinyin(phrase.chinese, { toneType: 'num', v: true, nonZh: 'consecutive' }).includes(pinyinTerm) ||
             phrase.burmese.toLowerCase().includes(lowerCaseTerm)
         );
     }, [searchTerm, allPhrasesForSearch]);
+    
 
-    const handlePlayAudio = async (chineseText, burmeseText, lang) => {
-        const text = lang === 'zh' ? chineseText : burmeseText;
-        const voice = lang === 'zh' ? 'zh-CN-XiaoyanNeural' : 'my-MM-ThihaNeural';
-        const rate = lang === 'zh' ? chineseRate : burmeseRate;
-        const audio = await getTTSAudio(text, voice, rate);
-        if (audio) audio.play().catch(e => console.error("音频播放失败", e));
+    // 渲染函数
+    const renderContent = () => {
+        if (isLoading) {
+            return <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin text-blue-500" size={40} /></div>;
+        }
+
+        if (searchTerm) {
+            return isSearching 
+                ? <div className="flex justify-center items-center py-20"><Loader2 className="animate-spin text-blue-500" size={40} /></div>
+                : <PhraseListPage phrases={searchResults} category={{ category: '搜索结果' }} subcategory={{ name: `'${searchTerm}'` }} onBack={() => setSearchTerm('')} />;
+        }
+        
+        switch (view) {
+            case 'phrases':
+                return <PhraseListPage phrases={phrases} category={selectedCategory} subcategory={selectedSubcategory} onBack={handleBackToMain} />;
+            case 'main':
+            default:
+                return <MainView onSubcategoryClick={handleSubcategoryClick} />;
+        }
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto py-4 animate-fade-in">
+        <div className="w-full max-w-4xl mx-auto py-4">
             <div className='text-center mb-6'>
                 <h1 className='text-3xl font-extrabold text-gray-800 dark:text-white'>口语练习中心</h1>
                 <p className='mt-2 text-gray-500 dark:text-gray-400'>选择场景或搜索关键词开始学习</p>
             </div>
-
-            <div className="sticky top-0 z-20 p-4 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-lg rounded-xl mb-6 shadow-sm">
-                <div className="relative mb-4">
-                    <input type="text" placeholder="搜索中文、拼音或缅文..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    />
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2"><Search size={20} className="text-gray-400" /></div>
-                </div>
-                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300 mb-2">
-                    <SlidersHorizontal size={16} /><h3 className="font-semibold text-sm">发音语速设置</h3>
-                </div>
-                <div className="flex flex-col md:flex-row gap-4">
-                    <SpeedController title="中文" value={chineseRate} onChange={setChineseRate} colorClass="bg-blue-200 dark:bg-blue-800" />
-                    <SpeedController title="缅甸语" value={burmeseRate} onChange={setBurmeseRate} colorClass="bg-green-200 dark:bg-green-800" />
-                </div>
-            </div>
-
-            {searchTerm ? (
-                <div>
-                    <h3 className="font-bold text-lg mb-4 px-4">搜索结果 ({isSearching ? '...' : searchResults.length})</h3>
-                    <div className="px-4">
-                        {isSearching ? <div className="flex justify-center items-center py-10"><Loader2 className="animate-spin text-blue-500" size={32} /></div>
-                            : searchResults.length > 0 ? (
-                                searchResults.map(phrase => <PhraseCard key={phrase.id} phrase={phrase} onPlayAudio={handlePlayAudio} />)
-                            ) : <p className="text-center text-gray-500 py-8">未找到相关短句。</p>
-                        }
+            
+            {/* 仅在主页显示搜索框 */}
+            {view === 'main' && !searchTerm && (
+                <div className="sticky top-0 z-10 p-4 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-lg rounded-xl mb-6 shadow-sm">
+                    <div className="relative">
+                        <input type="text" placeholder="全局搜索中文、拼音或缅文..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border-2 border-transparent rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        />
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"><Search size={20} className="text-gray-400" /></div>
                     </div>
                 </div>
-            ) : (
-                <div>
-                    {speakingCategories.map(item => (
-                        <CategoryAccordion
-                            key={item.category}
-                            category={item}
-                            phrases={openAccordion === item.category ? categoryPhrases : []}
-                            isLoading={openAccordion === item.category && isLoading}
-                            isOpen={openAccordion === item.category}
-                            onToggle={() => setOpenAccordion(openAccordion === item.category ? null : item.category)}
-                            onPlayAudio={handlePlayAudio}
-                        />
-                    ))}
-                </div>
             )}
+            
+            {renderContent()}
         </div>
     );
-}
+    }
