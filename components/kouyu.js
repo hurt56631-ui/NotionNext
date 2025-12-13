@@ -1,40 +1,75 @@
-
-import { useState, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom'; // 引入 Portal
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { pinyin } from 'pinyin-pro';
-import { ChevronLeft, Search, Languages, Mic, Loader2, Volume2, Settings2, PlayCircle, StopCircle, X } from 'lucide-react';
+import { ChevronLeft, Search, Languages, Mic, Loader2, Volume2, Settings2, X, PlayCircle } from 'lucide-react';
 import { speakingCategories } from '@/data/speaking-structure';
 
-// --- TTS 模块 (保持不变) ---
-const ttsCache = new Map();
-const getTTSAudio = async (text, voice, rate = 0) => {
-    const cacheKey = `${text}|${voice}|${rate}`;
-    if (ttsCache.has(cacheKey)) return ttsCache.get(cacheKey);
-    try {
-        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=${rate}`;
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('TTS API Error');
-        const blob = await response.blob();
-        const audio = new Audio(URL.createObjectURL(blob));
-        ttsCache.set(cacheKey, audio);
-        return audio;
-    } catch (e) { console.error(`获取TTS失败: "${text}"`, e); return null; }
+// --- 全局音频控制器 (解决音频重叠与延迟问题) ---
+// 放在组件外部，确保全局唯一
+const GlobalAudioController = {
+    currentAudio: null, // 当前播放的 Audio 对象
+    currentId: null,    // 当前播放的短句 ID
+
+    stop() {
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio.currentTime = 0;
+            this.currentAudio = null;
+            this.currentId = null;
+        }
+    },
+
+    play(url, id, onEnded, onError) {
+        // 1. 立即停止上一条
+        this.stop();
+
+        // 2. 创建新音频 (直接使用 URL 流式播放，减少等待)
+        const audio = new Audio(url);
+        this.currentAudio = audio;
+        this.currentId = id;
+        
+        // 3. 预加载设置，提升响应速度
+        audio.preload = 'auto';
+
+        audio.onended = () => {
+            if (this.currentId === id) { // 确保 ID 匹配
+                this.currentAudio = null;
+                this.currentId = null;
+                if (onEnded) onEnded();
+            }
+        };
+
+        audio.onerror = (e) => {
+            console.error("音频播放错误:", e);
+            this.currentAudio = null;
+            this.currentId = null;
+            if (onError) onError();
+        };
+
+        // 4. 播放
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("播放被打断或失败:", error);
+                if (onError) onError();
+            });
+        }
+    }
 };
 
-// --- 全屏传送门组件 (关键修改：实现真全屏) ---
+// --- 全屏传送门组件 ---
 const FullScreenPortal = ({ children }) => {
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
         setMounted(true);
-        // 锁定背景滚动
-        document.body.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden'; // 锁定背景滚动
         return () => { document.body.style.overflow = ''; };
     }, []);
     
     if (!mounted || typeof document === 'undefined') return null;
     
     return createPortal(
-        <div className="fixed inset-0 z-[99999] bg-gray-50 dark:bg-gray-900 flex flex-col animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[99999] bg-gray-50 dark:bg-gray-900 flex flex-col animate-in slide-in-from-right duration-200">
             {children}
         </div>,
         document.body
@@ -43,17 +78,42 @@ const FullScreenPortal = ({ children }) => {
 
 // --- 短句列表页面组件 ---
 const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
-    // 音频设置状态
+    // 语速设置：默认中文 -0.35
     const [isReadingChinese, setIsReadingChinese] = useState(true);
     const [isReadingBurmese, setIsReadingBurmese] = useState(true);
-    const [chineseRate, setChineseRate] = useState(0);
+    const [chineseRate, setChineseRate] = useState(-0.35); 
     const [burmeseRate, setBurmeseRate] = useState(-0.3);
     const [showSettings, setShowSettings] = useState(false);
     
     // 播放状态
-    const [playingId, setPlayingId] = useState(null); // 当前正在播放的卡片ID
+    const [playingId, setPlayingId] = useState(null);
 
-    // 处理数据：拼音符号化
+    // --- 核心修复：手势返回支持 ---
+    useEffect(() => {
+        // 1. 组件挂载时，向浏览器历史压入一个状态
+        // 这样按物理返回键或左滑时，不会直接关闭网页，而是触发 popstate
+        const pushState = () => {
+            window.history.pushState({ panel: 'phrase-list' }, '', window.location.pathname + '#list');
+        };
+
+        pushState();
+
+        // 2. 监听返回事件
+        const handlePopState = (event) => {
+            // 拦截返回，执行关闭逻辑
+            onBack(); 
+        };
+
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+            // 组件卸载时停止音频
+            GlobalAudioController.stop();
+        };
+    }, [onBack]);
+
+    // 处理数据
     const processedPhrases = useMemo(() => phrases.map(phrase => ({
         ...phrase,
         pinyin: pinyin(phrase.chinese, { toneType: 'symbol', v: true, nonZh: 'consecutive' }),
@@ -61,54 +121,85 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
 
     // 播放逻辑
     const handleCardClick = async (phrase) => {
-        // 如果点击的是当前正在播放的，则停止（可选逻辑，这里简单处理为重播或忽略）
-        if (playingId === phrase.id) return;
-
-        setPlayingId(phrase.id);
-        try {
-            if (isReadingChinese) {
-                const audioZh = await getTTSAudio(phrase.chinese, 'zh-CN-XiaoyanNeural', chineseRate);
-                if (audioZh) {
-                    await new Promise(resolve => { 
-                        audioZh.onended = resolve; 
-                        audioZh.play().catch(() => resolve()); // 捕获播放错误防止卡死
-                    });
-                }
-            }
-            if (isReadingBurmese) {
-                // 中文读完稍微停顿
-                if (isReadingChinese) await new Promise(r => setTimeout(r, 300));
-                
-                const audioMy = await getTTSAudio(phrase.burmese, 'my-MM-ThihaNeural', burmeseRate);
-                if (audioMy) {
-                    await new Promise(resolve => { 
-                        audioMy.onended = resolve; 
-                        audioMy.play().catch(() => resolve());
-                    });
-                }
-            }
-        } catch (error) {
-            console.error("播放出错", error);
-        } finally {
-            setPlayingId(null); // 播放结束，重置状态
+        // 如果点击的是当前正在播放的，则停止
+        if (playingId === phrase.id) {
+            GlobalAudioController.stop();
+            setPlayingId(null);
+            return;
         }
+
+        setPlayingId(phrase.id); // 设置 UI 状态为 Loading/Playing
+
+        const playSequence = async () => {
+            try {
+                // 1. 播放中文
+                if (isReadingChinese) {
+                    await new Promise((resolve, reject) => {
+                        const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(phrase.chinese)}&v=zh-CN-XiaoyanNeural&r=${chineseRate}`;
+                        // 使用全局控制器播放，它会自动停止之前的
+                        GlobalAudioController.play(
+                            url, 
+                            phrase.id, 
+                            resolve, // 播放结束
+                            reject   // 播放出错
+                        );
+                    });
+                }
+
+                // 2. 如果还在播放状态（没被切歌），且需要读缅文
+                if (isReadingBurmese && GlobalAudioController.currentId === phrase.id) {
+                    if (isReadingChinese) {
+                        // 稍微停顿一下，体验更好
+                        await new Promise(r => setTimeout(r, 200)); 
+                    }
+                    
+                    await new Promise((resolve, reject) => {
+                         const url = `https://t.leftsite.cn/tts?t=${encodeURIComponent(phrase.burmese)}&v=my-MM-ThihaNeural&r=${burmeseRate}`;
+                         GlobalAudioController.play(
+                            url,
+                            phrase.id,
+                            resolve,
+                            reject
+                         );
+                    });
+                }
+            } catch (e) {
+                console.error("Play aborted or error", e);
+            } finally {
+                // 只有当 ID 还是当前 ID 时才重置状态（防止切歌后把新歌的状态重置了）
+                if (GlobalAudioController.currentId === phrase.id) {
+                    setPlayingId(null);
+                }
+            }
+        };
+
+        playSequence();
     };
 
     return (
         <FullScreenPortal>
+            {/* 注入极细滚动条样式 */}
+            <style jsx global>{`
+                .thin-scrollbar::-webkit-scrollbar { width: 2px; }
+                .thin-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .thin-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+                .thin-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+            `}</style>
+
             {/* 顶部固定导航栏 */}
-            <div className="flex-none bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-10 shadow-sm">
+            <div className="flex-none bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 z-10 shadow-sm safe-area-top">
                 <div className="px-4 py-3 flex items-center justify-between">
+                    {/* 返回按钮：手动点击也触发浏览器的 back，保持逻辑一致 */}
                     <button 
-                        onClick={onBack} 
+                        onClick={() => window.history.back()} 
                         className="p-2 -ml-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all text-gray-600 dark:text-gray-300"
                     >
                         <ChevronLeft size={28} />
                     </button>
                     
                     <div className="flex flex-col items-center">
-                        <h1 className="font-bold text-lg text-gray-800 dark:text-white">{subcategory.name}</h1>
-                        <span className="text-xs text-gray-500">{category.category} · {processedPhrases.length}句</span>
+                        <h1 className="font-bold text-lg text-gray-800 dark:text-white truncate max-w-[200px]">{subcategory.name}</h1>
+                        <span className="text-xs text-gray-500">{category.category}</span>
                     </div>
 
                     <button 
@@ -119,7 +210,7 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                     </button>
                 </div>
 
-                {/* 设置面板 (可折叠) */}
+                {/* 设置面板 */}
                 {showSettings && (
                     <div className="px-4 pb-4 pt-2 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 animate-in slide-in-from-top-2 duration-200">
                          <div className="flex gap-3 mb-4">
@@ -127,13 +218,13 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                                 onClick={() => setIsReadingChinese(!isReadingChinese)} 
                                 className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center justify-center gap-2 ${isReadingChinese ? 'bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-200' : 'bg-white text-gray-600 border-gray-200'}`}
                             >
-                                <Languages size={16}/> 中文朗读
+                                <Languages size={16}/> 中文
                             </button>
                             <button 
                                 onClick={() => setIsReadingBurmese(!isReadingBurmese)} 
                                 className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition-all flex items-center justify-center gap-2 ${isReadingBurmese ? 'bg-green-500 text-white border-green-500 shadow-md shadow-green-200' : 'bg-white text-gray-600 border-gray-200'}`}
                             >
-                                <Mic size={16}/> 缅文朗读
+                                <Mic size={16}/> 缅文
                             </button>
                         </div>
                         <div className="grid grid-cols-2 gap-6">
@@ -142,22 +233,22 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                                     <label className="text-xs font-medium text-gray-500">中文语速</label>
                                     <span className="text-xs text-blue-500 font-bold">{chineseRate}</span>
                                 </div>
-                                <input type="range" min="-0.5" max="0.5" step="0.1" value={chineseRate} onChange={e => setChineseRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                                <input type="range" min="-0.5" max="0.5" step="0.05" value={chineseRate} onChange={e => setChineseRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500" />
                             </div>
                             <div>
                                 <div className="flex justify-between mb-1.5">
                                     <label className="text-xs font-medium text-gray-500">缅文语速</label>
                                     <span className="text-xs text-green-500 font-bold">{burmeseRate}</span>
                                 </div>
-                                <input type="range" min="-0.5" max="0.5" step="0.1" value={burmeseRate} onChange={e => setBurmeseRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500" />
+                                <input type="range" min="-0.5" max="0.5" step="0.05" value={burmeseRate} onChange={e => setBurmeseRate(parseFloat(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-500" />
                             </div>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* 列表内容区 (可滚动) */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20 bg-gray-50 dark:bg-gray-900">
+            {/* 列表内容区 (应用极细滚动条) */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-20 bg-gray-50 dark:bg-gray-900 thin-scrollbar">
                 {processedPhrases.map((phrase) => {
                     const isPlaying = playingId === phrase.id;
                     return (
@@ -166,8 +257,8 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                             onClick={() => handleCardClick(phrase)}
                             className={`
                                 relative bg-white dark:bg-gray-800 rounded-2xl p-6 
-                                shadow-sm transition-all duration-300 cursor-pointer border-2
-                                flex flex-col items-center text-center
+                                shadow-sm transition-all duration-200 cursor-pointer border-2
+                                flex flex-col items-center text-center select-none
                                 ${isPlaying 
                                     ? 'border-blue-400 dark:border-blue-500 shadow-lg scale-[1.01]' 
                                     : 'border-transparent hover:border-gray-100 dark:hover:border-gray-700 active:scale-[0.98]'
@@ -176,7 +267,7 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                         >
                             {/* 播放状态图标 */}
                             <div className={`absolute top-4 right-4 transition-colors duration-300 ${isPlaying ? 'text-blue-500' : 'text-gray-200 dark:text-gray-700'}`}>
-                                {isPlaying ? <Loader2 size={20} className="animate-spin" /> : <Volume2 size={20} />}
+                                {isPlaying ? <Loader2 size={20} className="animate-spin" /> : <PlayCircle size={20} />}
                             </div>
 
                             {/* 1. 拼音 (上方) */}
@@ -184,7 +275,7 @@ const PhraseListPage = ({ phrases, category, subcategory, onBack }) => {
                                 {phrase.pinyin}
                             </div>
                             
-                            {/* 2. 中文 (居中, 加大) */}
+                            {/* 2. 中文 (居中) */}
                             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 leading-relaxed">
                                 {phrase.chinese}
                             </h3>
@@ -254,13 +345,15 @@ export default function KouyuPage() {
 
     const handleSubcategoryClick = async (category, subcategory) => {
         setIsLoading(true);
-        // 这里设置为 phrases 视图，但在 renderContent 中会通过 Portal 渲染覆盖全屏
-        setView('phrases');
+        // 这里只是设置数据状态，真正的渲染是 Portal 接管的
+        // 关键：状态更新后，PhraseListPage 组件挂载，它的 useEffect 会写入 history
         setSelectedCategory(category);
         setSelectedSubcategory(subcategory);
+        
         try {
             const module = await import(`@/data/speaking/${subcategory.file}.js`);
             setPhrases(module.default);
+            setView('phrases'); // 确保数据加载完再切视图
         } catch (e) {
             console.error("加载失败:", e);
             setPhrases([]);
@@ -269,15 +362,17 @@ export default function KouyuPage() {
         }
     };
 
-    // 返回主界面：重置所有状态
+    // 从子组件触发的返回（可能是手势触发的，也可能是点击按钮触发的）
     const handleBackToMain = () => {
         setView('main');
         setSelectedCategory(null);
         setSelectedSubcategory(null);
         setPhrases([]);
+        // 停止音频
+        GlobalAudioController.stop();
     };
 
-    // 搜索逻辑
+    // 搜索数据预加载
     useEffect(() => {
         const loadSearchData = async () => {
             if (searchTerm && allPhrasesForSearch.length === 0) {
@@ -312,7 +407,6 @@ export default function KouyuPage() {
             );
         }
 
-        // 搜索结果页 (使用相同的 PhraseListPage，但参数略有不同)
         if (searchTerm) {
             return isSearching 
                 ? <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
@@ -324,18 +418,15 @@ export default function KouyuPage() {
                   />;
         }
         
-        // 短句列表页 (Portal 渲染)
         if (view === 'phrases') {
             return <PhraseListPage phrases={phrases} category={selectedCategory} subcategory={selectedSubcategory} onBack={handleBackToMain} />;
         }
 
-        // 默认显示分类列表
         return <MainView onSubcategoryClick={handleSubcategoryClick} />;
     };
 
     return (
         <div className="w-full max-w-2xl mx-auto min-h-screen bg-gray-50/50 dark:bg-gray-900">
-             {/* 仅在主页显示标题 */}
              {view === 'main' && !searchTerm && (
                 <div className='text-center pt-8 pb-4 px-4'>
                     <h1 className='text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight'>口语练习</h1>
@@ -343,7 +434,6 @@ export default function KouyuPage() {
                 </div>
             )}
             
-            {/* 仅在主页显示搜索框 */}
             {view === 'main' && (
                 <div className="sticky top-0 z-10 px-4 pb-2 bg-gray-50/90 dark:bg-gray-900/90 backdrop-blur-sm pt-2">
                     <div className="relative group">
@@ -371,4 +461,4 @@ export default function KouyuPage() {
             </div>
         </div>
     );
-}
+                            }
