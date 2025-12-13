@@ -2,15 +2,16 @@
 
 export const speakingCategories = [
   {
-    category: '日常问候与寒暄',
+    category: '问候与寒暄',
     icon: '🤝',
     subcategories: [
-      // name: 是显示给用户的名称
-      // file: 是对应的数据文件名 (建议用纯英文，无.js后缀)
+      { name: '打招呼', file: 'dazhaohu' },
       { name: '初次见面', file: 'chucimian' },
-      { name: '日常问候', file: 'richangwenhou' },
-      { name: '介绍他人', file: 'jieshaotaren' },
-      { name: '道别', file: 'daobie' }
+      { name: '日常攀谈与久别重逢', file: 'jiubiechongfeng' },
+      { name: '关心与回应', file: 'guanxinyuhuiying' },
+      { name: '找人说话与插话', file: 'zhaorenshuohua' },
+      { name: '电话与信息', file: 'dianhuayuxinxi' },
+      { name: '结束与告别', file: 'jieshuyugaobie' }
     ]
   },
   {
