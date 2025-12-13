@@ -4,7 +4,7 @@ import { pinyin } from 'pinyin-pro';
 import { ChevronLeft, Search, Languages, Mic, Loader2, Volume2, Settings2, X, PlayCircle } from 'lucide-react';
 import { speakingCategories } from '@/data/speaking-structure';
 
-// --- 全局音频控制器 (解决音频重叠与延迟问题) ---
+// --- 全局音频控制器 (解决音频重叠与延迟题) ---
 // 放在组件外部，确保全局唯一
 const GlobalAudioController = {
     currentAudio: null, // 当前播放的 Audio 对象
