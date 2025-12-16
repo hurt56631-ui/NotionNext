@@ -1,42 +1,29 @@
-// themes/heo/index.js
+/**
+ *   HEO 主题说明
+ *  > 主题设计者 [张洪](https://zhheo.com/)
+ *  > 主题开发者 [tangly1024](https://github.com/tangly1024)
+ *  > 此文件已根据用户需求进行定制修改，整合了新的主页布局。
+ */
 
-import Comment from '@/components/Comment'
-import { AdSlot } from '@/components/GoogleAdsense'
-import { HashTag } from '@/components/HeroIcons'
-import LazyImage from '@/components/LazyImage'
-import LoadingCover from '@/components/LoadingCover'
-import replaceSearchResult from '@/components/Mark'
-import NotionPage from '@/components/NotionPage'
-import WWAds from '@/components/WWAds'
-import { siteConfig } from '@/lib/config'
-import { useGlobal } from '@/lib/global'
-import { loadWowJS } from '@/lib/plugins/wow'
-import { isBrowser } from '@/lib/utils'
-import { Transition, Dialog } from '@headlessui/react'
-import SmartLink from '@/components/SmartLink'
+// React & Next.js
 import { useRouter } from 'next/router'
 import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
+import dynamic from 'next/dynamic'
+
+// UI & Animation
+import { Transition, Dialog } from '@headlessui/react'
 import { useSwipeable } from 'react-swipeable'
+import { loadWowJS } from '@/lib/plugins/wow'
 
-// 依赖于您项目中的 themes/heo/components/ 文件夹
-import BlogPostArchive from './components/BlogPostArchive'
-import BlogPostListPage from './components/BlogPostListPage'
-import BlogPostListScroll from './components/BlogPostListScroll'
-import CategoryBar from './components/CategoryBar'
-import FloatTocButton from './components/FloatTocButton'
-import Footer from './components/Footer'
-import Header from './components/Header'
-import PostHeader from './components/PostHeader'
-import { PostLock } from './components/PostLock'
-import SearchNav from './components/SearchNav'
-import SideRight from './components/SideRight'
-
+// Global State & Config
+import { useGlobal } from '@/lib/global'
+import { siteConfig } from '@/lib/config'
 import CONFIG from './config'
-import { Style } from './style'
+
+// Icons
 import { FaTiktok, FaFacebook, FaTelegramPlane } from 'react-icons/fa'
 import {
     GraduationCap,
-    ClipboardCheck,
     BookOpen,
     Phone,
     MessageSquare,
@@ -53,27 +40,69 @@ import {
     SpellCheck2,
     Type
 } from 'lucide-react'
-import dynamic from 'next/dynamic'
+import { HashTag } from '@/components/HeroIcons'
 
-// 导入内容块组件
-import HskContentBlock from '@/components/HskPageClient'
-// 更新：从 kouyu.js 导入新的口语页面组件
-import KouyuPage from '@/components/kouyu'
-import PracticeContentBlock from '@/components/PracticeContentBlock'
-import BooksContentBlock from '@/components/BooksContentBlock'
-import WordsContentBlock from '@/components/WordsContentBlock'
+// Base Components from NotionNext
+import Comment from '@/components/Comment'
+import { AdSlot } from '@/components/GoogleAdsense'
+import LazyImage from '@/components/LazyImage'
+import LoadingCover from '@/components/LoadingCover'
+import replaceSearchResult from '@/components/Mark'
+import NotionPage from '@/components/NotionPage'
+import SmartLink from '@/components/SmartLink'
+import WWAds from '@/components/WWAds'
+import AISummary from '@/components/AISummary'
+import ArticleExpirationNotice from '@/components/ArticleExpirationNotice'
+import ShareBar from '@/components/ShareBar'
+
+
+// Original HEO Theme Components (for other pages)
+import BlogPostArchive from './components/BlogPostArchive'
+import BlogPostListPage from './components/BlogPostListPage'
+import BlogPostListScroll from './components/BlogPostListScroll'
+import CategoryBar from './components/CategoryBar'
+import FloatTocButton from './components/FloatTocButton'
+import Footer from './components/Footer'
+import Header from './components/Header'
+import Hero from './components/Hero'
+import LatestPostsGroup from './components/LatestPostsGroup'
+import { NoticeBar } from './components/NoticeBar'
+import PostAdjacent from './components/PostAdjacent'
+import PostCopyright from './components/PostCopyright'
+import PostHeader from './components/PostHeader'
+import { PostLock } from './components/PostLock'
+import PostRecommend from './components/PostRecommend'
+import SearchNav from './components/SearchNav'
+import SideRight from './components/SideRight'
+import { Style } from './style'
+
+// Custom Content Block Components for the new homepage
+// 请确保您在项目中创建了这些组件文件
 import PinyinContentBlock from '@/components/PinyinContentBlock'
-import AiChatAssistant from '@/components/AiChatAssistant'
+import WordsContentBlock from '@/components/WordsContentBlock'
+// import KouyuPage from '@/components/kouyu'
+import HskContentBlock from '@/components/HskContentBlock'
 
-// 动态导入重组件
+// Dynamically imported heavy components for the new homepage
 const GlosbeSearchCard = dynamic(() => import('@/components/GlosbeSearchCard'), { ssr: false })
 const ShortSentenceCard = dynamic(() => import('@/components/ShortSentenceCard'), { ssr: false })
 const WordCard = dynamic(() => import('@/components/WordCard'), { ssr: false })
 
+// Helper function to check if running in browser
+const isBrowser = typeof window !== 'undefined';
 
 // =================================================================================
-// ======================  辅助组件 ========================
+// ======================  辅助组件 (for new homepage)  ========================
 // =================================================================================
+
+const CustomScrollbarStyle = () => (
+    <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.3); border-radius: 10px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
+    `}</style>
+);
 
 const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   const { isDarkMode, toggleDarkMode } = useGlobal();
@@ -128,100 +157,6 @@ const HomeSidebar = ({ isOpen, onClose, sidebarX, isDragging }) => {
   );
 };
 
-const LayoutBase = props => {
-  const { children, slotTop, className } = props
-  const { fullWidth, isDarkMode } = useGlobal()
-  const router = useRouter()
-  // 首页布局由 LayoutIndex 接管
-  if (router.route === '/') { return <>{children}</> }
-
-  const headerSlot = (
-    <header>
-      <Header {...props} />
-      {fullWidth || props.post ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
-    </header>
-  )
-
-  const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
-  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
-
-  useEffect(() => { loadWowJS() }, [])
-
-  return (
-    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
-      <Style />
-      {headerSlot}
-      <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
-        <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
-          <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
-          <div className='lg:px-2'></div>
-          <div className='hidden xl:block'>{slotRight}</div>
-        </div>
-      </main>
-      <Footer />
-      {siteConfig('HEO_LOADING_COVER', true, CONFIG) && <LoadingCover />}
-    </div>
-  )
-}
-
-const CustomScrollbarStyle = () => (
-    <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.3); border-radius: 10px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 100, 100, 0.4); }
-    `}</style>
-);
-
-const BottomNavBar = ({ onOpenAiDrawer }) => {
-    const router = useRouter();
-    const mainLearnTabs = ['pinyin', 'words']; // "学习"按钮只在拼音和单词页高亮
-
-    const navItems = [
-        { type: 'link', href: '/', label: '学习', icon: 'fas fa-graduation-cap', mainTabs: mainLearnTabs },
-        { type: 'link', href: '/?tab=speaking', label: '口语', icon: 'fas fa-microphone' },
-        { type: 'button', label: 'AI助手', icon: 'fas fa-robot' },
-        { type: 'link', href: '/?tab=practice', label: '练习', icon: 'fas fa-clipboard-check' },
-        { type: 'link', href: '/?tab=books', label: '书籍', icon: 'fas fa-book-open' },
-    ];
-
-    const isActive = (item) => {
-        if (item.type === 'button') return false; 
-        const currentTab = router.query.tab || 'pinyin'; 
-
-        if (item.href.startsWith('/?tab=')) {
-            const tab = item.href.split('=')[1];
-            return currentTab === tab;
-        }
-        if (item.href === '/') {
-            return router.pathname === '/' && item.mainTabs.includes(currentTab);
-        }
-        return router.pathname === item.href;
-    };
-
-    return (
-        <nav className='fixed bottom-0 left-0 right-0 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-lg shadow-[0_-2px_10px_rgba(0,0,0,0.1)] z-50 flex justify-around items-center md:hidden'>
-            {navItems.map(item => {
-                const itemWidth = 'w-1/5'; // 5个按钮，每个占1/5宽度
-                if (item.type === 'button') {
-                    return (
-                        <button key={item.label} onClick={onOpenAiDrawer} className={`flex flex-col items-center justify-center ${itemWidth} text-gray-500 dark:text-gray-400`}>
-                            <i className={`${item.icon} text-xl`}></i>
-                            <span className='text-xs mt-1'>{item.label}</span>
-                        </button>
-                    );
-                }
-                return (
-                     <SmartLink key={item.label} href={item.href} className={`flex flex-col items-center justify-center ${itemWidth} ${isActive(item) ? 'text-blue-500' : 'text-gray-500'}`}>
-                        <i className={`${item.icon} text-xl`}></i>
-                        <span className={`text-xs mt-1`}>{item.label}</span>
-                    </SmartLink>
-                );
-            })}
-        </nav>
-    );
-};
-
 const ActionButtons = ({ onOpenFavorites, onOpenContact }) => {
   const actions = [
     { icon: <Phone size={24} />, text: '联系我们', type: 'contact', color: 'from-blue-500 to-sky-500' },
@@ -248,42 +183,6 @@ const ActionButtons = ({ onOpenFavorites, onOpenContact }) => {
     </div>
   );
 };
-
-// IndexedDB Helper Functions
-const DB_NAME = 'ChineseLearningDB';
-const SENTENCE_STORE_NAME = 'favoriteSentences';
-const WORD_STORE_NAME = 'favoriteWords';
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    if (!isBrowser) return resolve(null);
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject('数据库打开失败');
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(SENTENCE_STORE_NAME)) db.createObjectStore(SENTENCE_STORE_NAME, { keyPath: 'id' });
-      if (!db.objectStoreNames.contains(WORD_STORE_NAME)) db.createObjectStore(WORD_STORE_NAME, { keyPath: 'id' });
-    };
-  });
-}
-
-async function getAllFavorites(storeName) {
-    try {
-        const db = await openDB();
-        if (!db) return [];
-        const tx = db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.getAll();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = (event) => reject(new Error('Failed to retrieve items: ' + event.target.errorCode));
-        });
-    } catch (error) {
-        console.error("IndexedDB Error:", error);
-        return [];
-    }
-}
 
 const ContactPanel = ({ isOpen, onClose }) => {
     const socialLinks = [
@@ -324,38 +223,64 @@ const ContactPanel = ({ isOpen, onClose }) => {
     );
 };
 
+// IndexedDB Helper Functions
+const DB_NAME = 'ChineseLearningDB';
+const SENTENCE_STORE_NAME = 'favoriteSentences';
+const WORD_STORE_NAME = 'favoriteWords';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (!isBrowser) return resolve(null);
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject('数据库打开失败');
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(SENTENCE_STORE_NAME)) db.createObjectStore(SENTENCE_STORE_NAME, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(WORD_STORE_NAME)) db.createObjectStore(WORD_STORE_NAME, { keyPath: 'id' });
+    };
+  });
+}
+
+async function getAllFavorites(storeName) {
+    try {
+        const db = await openDB();
+        if (!db) return [];
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        return new Promise((resolve, reject) => {
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = (event) => reject(new Error('Failed to retrieve items: ' + event.target.errorCode));
+        });
+    } catch (error) {
+        console.error("IndexedDB Error:", error);
+        return [];
+    }
+}
+
 
 // =================================================================================
-// ======================  LayoutIndex 组件  ========================
+// ======================  新主页布局 (LayoutIndex) ========================
 // =================================================================================
 const LayoutIndex = props => {
   const router = useRouter();
-  const { books, speakingCourses, sentenceCards, allWords } = props;
 
   const allTabs = [
     { name: '拼音', key: 'pinyin', icon: <Type size={22} /> },
     { name: '单词', key: 'words', icon: <BookText size={22} /> },
     { name: 'HSK', key: 'hsk', icon: <GraduationCap size={22} /> },
     { name: '口语', key: 'speaking', icon: <Mic size={22} /> },
-    { name: '语法', key: 'grammar', icon: <SpellCheck2 size={22} /> },
-    { name: '练习', key: 'practice', icon: <ClipboardCheck size={22} /> },
-    { name: '书籍', key: 'books', icon: <BookOpen size={22} /> }
+    { name: '语法', key: 'grammar', icon: <SpellCheck2 size={22} /> }
   ];
   
-  const visibleTabKeys = ['pinyin', 'words', 'speaking'];
-  const displayTabs = allTabs.filter(tab => visibleTabKeys.includes(tab.key));
-
   const [activeTabKey, setActiveTabKey] = useState('pinyin'); 
 
   useEffect(() => {
     if (router.isReady) {
       const tabFromQuery = router.query.tab;
       const validTab = allTabs.find(t => t.key === tabFromQuery);
-      if (validTab) {
-          setActiveTabKey(validTab.key);
-      } else if (!tabFromQuery) {
-          setActiveTabKey(displayTabs[0].key);
-      }
+      setActiveTabKey(validTab ? validTab.key : allTabs[0].key);
     }
   }, [router.isReady, router.query.tab]);
   
@@ -385,24 +310,6 @@ const LayoutIndex = props => {
   const isWordFavoritesCardOpen = isBrowser ? window.location.hash === '#favorite-words' : false;
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(false);
   
-  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
-  const handleOpenAiDrawer = () => {
-      router.push(router.asPath + '#ai-chat', undefined, { shallow: true });
-      setIsAiDrawerOpen(true);
-  };
-  const handleCloseAiDrawer = () => {
-      if (window.location.hash === '#ai-chat') router.back();
-      else setIsAiDrawerOpen(false);
-  };
-
-  useEffect(() => {
-    const handlePopState = () => {
-        if (window.location.hash !== '#ai-chat') setIsAiDrawerOpen(false);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
   const handleOpenFavorites = useCallback(async (type) => {
     if (type === 'sentences') {
         const sentences = await getAllFavorites(SENTENCE_STORE_NAME);
@@ -488,15 +395,15 @@ const LayoutIndex = props => {
 
   const contentSwipeHandlers = useSwipeable({
       onSwipedLeft: () => {
-          const currentIndex = displayTabs.findIndex(t => t.key === activeTabKey);
-          if (currentIndex !== -1 && currentIndex < displayTabs.length - 1) {
-              handleTabChange(displayTabs[currentIndex + 1].key);
+          const currentIndex = allTabs.findIndex(t => t.key === activeTabKey);
+          if (currentIndex !== -1 && currentIndex < allTabs.length - 1) {
+              handleTabChange(allTabs[currentIndex + 1].key);
           }
       },
       onSwipedRight: () => {
-          const currentIndex = displayTabs.findIndex(t => t.key === activeTabKey);
+          const currentIndex = allTabs.findIndex(t => t.key === activeTabKey);
           if (currentIndex > 0) {
-              handleTabChange(displayTabs[currentIndex - 1].key);
+              handleTabChange(allTabs[currentIndex - 1].key);
           }
       },
       preventDefaultTouchmoveEvent: true,
@@ -528,7 +435,7 @@ const LayoutIndex = props => {
   const openSidebar = () => { setIsSidebarOpen(true); setSidebarX(0); };
   const closeSidebar = () => { setIsSidebarOpen(false); setSidebarX(-sidebarWidth); };
   
-  const renderTabButtons = () => displayTabs.map(tab => (
+  const renderTabButtons = () => allTabs.map(tab => (
     <button key={tab.key} onClick={() => handleTabChange(tab.key)} className={`flex flex-col items-center justify-center w-1/4 pt-2.5 pb-1.5 transition-colors duration-300 focus:outline-none ${activeTabKey === tab.key ? 'text-blue-500' : 'text-gray-500 dark:text-gray-400'}`}>
         {tab.icon}
         <span className='text-xs font-semibold mt-1'>{tab.name}</span>
@@ -561,7 +468,6 @@ const LayoutIndex = props => {
                     <div className='mt-4 grid grid-cols-3 grid-rows-2 gap-2 h-40'>
                         <a href="https://www.tiktok.com/@mmzh.onlione?_r=1&_t=ZS-91OzyDddPu8" target="_blank" rel="noopener noreferrer" className='col-span-1 row-span-1 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/tiktok.jpg')" }}><div className='absolute top-1 left-1 bg-pink-500 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaTiktok size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
                         <a href="https://www.facebook.com/share/1ErXyBbrZ1" target="_blank" rel="noopener noreferrer" className='col-span-1 row-start-2 rounded-xl overflow-hidden relative group bg-cover bg-center' style={{ backgroundImage: "url('/img/facebook.jpg')" }}><div className='absolute top-1 left-1 bg-blue-600 text-white text-[8px] font-bold px-1 py-0.25 rounded'>LIVE</div><div className='absolute bottom-1 right-1 p-1 flex flex-col items-end text-white text-right'><FaFacebook size={18}/><span className='text-[10px] mt-0.5 font-semibold'>直播订阅</span></div></a>
-                        {/* FIX: Corrected iframe syntax */}
                         <div className='col-span-2 col-start-2 row-span-2 rounded-xl overflow-hidden bg-black'><iframe title="YouTube" width="100%" height="100%" src="https://www.you999tube.com/embed/your_video_id_here" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>
                     </div>
                 </div>
@@ -569,7 +475,7 @@ const LayoutIndex = props => {
 
             <div ref={scrollableContainerRef} className='absolute inset-0 z-20 overflow-y-auto overscroll-y-contain custom-scrollbar'>
                 <div className='h-[40vh] flex-shrink-0' />
-                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-24 min-h-[calc(60vh+1px)]'>
+                <div className='relative bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl pb-6 min-h-[calc(60vh+1px)]'>
                     
                     <div className='bg-violet-50 dark:bg-gray-800 rounded-t-2xl'>
                         <div className='pt-6'>
@@ -593,30 +499,68 @@ const LayoutIndex = props => {
                         <div className='p-4'>
                             {activeTabKey === 'pinyin' && <PinyinContentBlock />}
                             {activeTabKey === 'words' && <WordsContentBlock />}
-                            {/* 更新：调用新的口语页面组件 */}
                             {activeTabKey === 'speaking' && <KouyuPage />}
-                            {activeTabKey === 'practice' && <PracticeContentBlock />}
-                            {activeTabKey === 'books' && <BooksContentBlock notionBooks={books} />}
+                            {activeTabKey === 'hsk' && <HskContentBlock />}
+                            {/* {activeTabKey === 'grammar' && <GrammarContentBlock />} */}
                         </div>
                     </main>
                 </div>
             </div>
-            <BottomNavBar onOpenAiDrawer={handleOpenAiDrawer} />
+            {/* 底部导航栏已移除 */}
         </div>
 
         {sentenceCardData && <ShortSentenceCard sentences={sentenceCardData} isOpen={isSentenceFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-sentences" />}
         {wordCardData && <WordCard words={wordCardData} isOpen={isWordFavoritesCardOpen} onClose={handleCloseFavorites} progressKey="favorites-words" />}
         <ContactPanel isOpen={isContactPanelOpen} onClose={() => setIsContactPanelOpen(false)} />
-        
-        <AiChatAssistant isOpen={isAiDrawerOpen} onClose={handleCloseAiDrawer} />
     </div>
   );
 };
 
+// =================================================================================
+// ====================== 其他页面布局 (保持 HEO 主题原有功能) ========================
+// =================================================================================
 
-// =================================================================================
-// ======================  其他组件  ========================
-// =================================================================================
+const LayoutBase = props => {
+  const { children, slotTop, className } = props
+  const { fullWidth, isDarkMode } = useGlobal()
+  const router = useRouter()
+  
+  // 首页布局由 LayoutIndex 接管，不使用 LayoutBase
+  if (router.route === '/') {
+    return <LayoutIndex {...props} />
+  }
+
+  const headerSlot = (
+    <header>
+      <Header {...props} />
+      {router.route === '/' ? <Hero {...props} /> : null}
+      {fullWidth ? null : <PostHeader {...props} isDarkMode={isDarkMode} />}
+    </header>
+  )
+
+  const slotRight = router.route === '/404' || fullWidth ? null : <SideRight {...props} />
+  const maxWidth = fullWidth ? 'max-w-[96rem] mx-auto' : 'max-w-[86rem]'
+  const HEO_LOADING_COVER = siteConfig('HEO_LOADING_COVER', true, CONFIG)
+
+  useEffect(() => { loadWowJS() }, [])
+
+  return (
+    <div id='theme-heo' className={`${siteConfig('FONT_STYLE')} bg-[#f7f9fe] dark:bg-[#18171d] h-full min-h-screen flex flex-col scroll-smooth`}>
+      <Style />
+      {headerSlot}
+      <main id='wrapper-outer' className={`flex-grow w-full ${maxWidth} mx-auto relative md:px-5`}>
+        <div id='container-inner' className='w-full mx-auto lg:flex justify-center relative z-10'>
+          <div className={`w-full h-auto ${className || ''}`}>{slotTop}{children}</div>
+          <div className='lg:px-2'></div>
+          <div className='hidden xl:block'>{slotRight}</div>
+        </div>
+      </main>
+      <Footer />
+      {HEO_LOADING_COVER && <LoadingCover />}
+    </div>
+  )
+}
+
 const LayoutPostList = props => (
     <div id='post-outer-wrapper' className='px-5  md:px-0'>
       <CategoryBar {...props} />
@@ -701,9 +645,15 @@ const LayoutSlug = props => {
         {!lock && post && (
           <div id="article-wrapper" className='px-5'>
             <article itemScope itemType='https://schema.org/Article'>
+              <ArticleExpirationNotice post={post} />
+              <AISummary aiSummary={post.aiSummary} />
               <WWAds orientation='horizontal' className='w-full' />
               {post && <NotionPage post={post} />}
               <WWAds orientation='horizontal' className='w-full' />
+              <ShareBar post={post} />
+              <PostCopyright {...props} />
+              <PostRecommend {...props} />
+              <PostAdjacent {...props} />
             </article>
             {commentEnable && (
               <div className='px-5'>
@@ -721,7 +671,7 @@ const LayoutSlug = props => {
   )
 }
 
-const Layout404 = () => {
+const Layout404 = (props) => {
   const { onLoading } = useGlobal()
   return (
     <div id='error-wrapper' className='w-full mx-auto justify-center'>
@@ -731,13 +681,18 @@ const Layout404 = () => {
           leave='transition ease-in-out duration-300 transform' leaveFrom='opacity-100 translate-y-0' leaveTo='opacity-0 -translate-y-16'
           unmount={false}>
           <div className='error-content flex flex-col md:flex-row w-full mt-12 h-[30rem] md:h-96 justify-center items-center bg-white dark:bg-[#1B1C20] border dark:border-gray-800 rounded-3xl'>
-            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'}></LazyImage>
+            {/* [修复] 将 LazyImage 改为自闭合标签 */}
+            <LazyImage className='error-img h-60 md:h-full p-4' src={'https://bu.dusays.com/2023/03/03/6401a7906aa4a.gif'} />
             <div className='error-info flex-1 flex flex-col justify-center items-center space-y-4'>
               <h1 className='error-title font-extrabold md:text-9xl text-7xl dark:text-white'>404</h1>
               <div className='dark:text-white'>请尝试站内搜索寻找文章</div>
               <SmartLink href='/'><button className='bg-blue-500 py-2 px-4 text-white shadow rounded-lg hover:bg-blue-600 hover:shadow-md duration-200 transition-all'>回到主页</button></SmartLink>
             </div>
           </div>
+           {/* 404页面底部显示最新文章 */}
+           <div className='mt-12'>
+              <LatestPostsGroup {...props} />
+            </div>
         </Transition>
     </div>
   )
@@ -786,4 +741,4 @@ const LayoutTagIndex = props => {
 export {
   Layout404, LayoutArchive, LayoutBase, LayoutCategoryIndex, LayoutIndex,
   LayoutPostList, LayoutSearch, LayoutSlug, LayoutTagIndex, CONFIG as THEME_CONFIG
-}
+            }
