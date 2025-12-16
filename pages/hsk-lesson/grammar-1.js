@@ -3,7 +3,7 @@ import Head from 'next/head';
 
 // 导入你的语法播放器组件
 // 确保这个路径是正确的！
-import GrammarPointPlayer from '../../components/GrammarPointPlayer';
+import GrammarPointPlayer from '../../components/Tixing/GrammarPointPlayer';
 
 // 导入我们刚刚创建的语法数据
 import lessonData from '../../data/grammar-data';
