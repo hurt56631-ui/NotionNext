@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaVolumeUp, FaCheck, FaTimes, FaArrowRight, FaLightbulb } from 'react-icons/fa';
+import { FaVolumeUp, FaCheck, FaTimes, FaArrowRight, FaLightbulb, FaCog } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// --- 1. IndexedDB 缓存 (保持不变) ---
+// --- 1. IndexedDB 缓存 ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -51,7 +51,7 @@ const idb = {
   }
 };
 
-// --- 2. 音频控制器 (保持不变) ---
+// --- 2. 音频控制器 (支持动态设置) ---
 const audioController = {
   currentAudio: null,
   playlist: [],
@@ -84,9 +84,15 @@ const audioController = {
     return 'zh';
   },
 
-  async fetchAudioBlob(text, lang) {
+  // 修改：接受 voice 参数
+  async fetchAudioBlob(text, lang, preferredVoice) {
     if (typeof window === 'undefined') return null;
-    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    
+    // 默认声音逻辑
+    let voice = 'zh-CN-XiaoyouMultilingualNeural'; // 默认中文
+    if (lang === 'my') voice = 'my-MM-NilarNeural'; // 默认缅文
+    if (lang === 'zh' && preferredVoice) voice = preferredVoice; // 如果指定了中文发音人
+
     const cacheKey = `tts-${voice}-${text}-0`;
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
@@ -108,12 +114,15 @@ const audioController = {
     }
   },
 
-  async playMixed(text, onStart, onEnd) {
+  // 修改：接受 settings 参数
+  async playMixed(text, onStart, onEnd, settings = {}) {
     if (typeof window === 'undefined') return;
     this.stop();
     if (!text) { if (onEnd) onEnd(); return; }
     const reqId = ++this.latestRequestId;
     if (onStart) onStart();
+
+    const { voice = 'zh-CN-XiaoyouMultilingualNeural', speed = 1.0 } = settings;
 
     const segments = [];
     const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
@@ -128,7 +137,7 @@ const audioController = {
     if (segments.length === 0) { if (onEnd) onEnd(); return; }
 
     try {
-      const blobs = await Promise.all(segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang)));
+      const blobs = await Promise.all(segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang, voice)));
       if (reqId !== this.latestRequestId) return;
 
       const validBlobs = [];
@@ -141,7 +150,10 @@ const audioController = {
         const url = URL.createObjectURL(blob);
         this.activeBlobUrls.push(url);
         const audio = new Audio(url);
-        audio.playbackRate = validSegments[index].lang === 'zh' ? 0.7 : 1.0;
+        // 应用语速设置
+        const isZh = validSegments[index].lang === 'zh';
+        // 如果是中文，使用设置的语速；如果是外语(缅文等)，通常保持默认或稍微调整
+        audio.playbackRate = isZh ? speed : 1.0; 
         return audio;
       });
 
@@ -171,7 +183,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 (重点修改：气泡、人物、Overlay解析) ---
+// --- 3. 样式定义 ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
@@ -201,142 +213,160 @@ const cssStyles = `
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0 0 160px 0; /* 底部留出空间 */
+    padding: 0 0 180px 0;
     display: flex; flex-direction: column; align-items: center;
     scrollbar-width: none;
   }
   .xzt-scroll-area::-webkit-scrollbar { display: none; }
 
+  /* 顶部设置栏 */
+  .top-bar {
+    width: 100%;
+    max-width: 600px;
+    display: flex; justify-content: flex-end;
+    padding: 16px 20px;
+    z-index: 10;
+  }
+  .settings-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .settings-btn:active { transform: scale(0.95); }
+
   /* --- 场景区域 (人物 + 气泡) --- */
   .scene-wrapper {
     width: 100%; max-width: 600px;
-    padding: 20px 20px 0 20px;
+    padding: 10px 20px 0 20px;
     display: flex;
-    align-items: flex-end; /* 底部对齐 */
+    align-items: flex-end;
     justify-content: center;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     position: relative;
   }
 
-  /* 人物图片 */
+  /* 人物图片 - 关键修复：mix-blend-mode */
   .teacher-img {
-    height: 220px; /* 调大人物尺寸 */
+    height: 180px; /* 稍微调小一点，比例更协调 */
     width: auto;
     object-fit: contain;
-    margin-right: -10px; /* 稍微重叠一点气泡 */
+    margin-right: -15px; /* 让人物靠近气泡 */
     z-index: 2;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+    /* 核心修改：让白底变透明，融入背景 */
+    mix-blend-mode: multiply; 
+    filter: contrast(1.05); /* 稍微增加对比度防止变淡 */
   }
 
   /* 气泡容器 */
   .bubble-container {
     flex: 1;
+    /* 限制气泡最大宽度，不再撑满 */
+    max-width: 320px; 
+    width: fit-content;
     background: var(--white);
-    border-radius: 24px;
-    padding: 20px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    border-radius: 20px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.06);
     position: relative;
     z-index: 1;
-    margin-bottom: 40px; /* 把人物对齐到底部 */
-    margin-left: 10px;
+    margin-bottom: 40px;
+    margin-left: 5px;
     border: 1px solid rgba(255,255,255,0.8);
   }
 
   /* 尖锐的气泡尾巴 */
   .bubble-tail {
     position: absolute;
-    bottom: 30px;
-    left: -14px;
+    bottom: 20px; /* 调整位置 */
+    left: -12px;
     width: 0; 
     height: 0; 
-    border-top: 15px solid transparent;
-    border-bottom: 15px solid transparent; 
-    border-right: 25px solid var(--white); /* 白色三角形 */
-    filter: drop-shadow(-4px 0 2px rgba(0,0,0,0.03));
+    /* 变尖锐：调整border宽度比例 */
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent; 
+    border-right: 20px solid var(--white);
+    filter: drop-shadow(-2px 0 1px rgba(0,0,0,0.03));
   }
 
-  /* 气泡内的内容布局 */
-  .bubble-content {
-    display: flex; flex-direction: column; 
-  }
+  .bubble-content { display: flex; flex-direction: column; }
   
   .rich-text-container {
     display: flex; flex-wrap: wrap;
     align-items: flex-end;
     gap: 4px; line-height: 1.5;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; }
-  .pinyin-top { font-size: 0.9rem; color: var(--text-sub); margin-bottom: -4px; font-weight: 500; }
-  .cn-char { font-size: 1.6rem; font-weight: 700; color: var(--text-main); }
-  .other-text-block { font-size: 1.4rem; font-weight: 600; color: var(--text-main); margin: 0 4px; transform: translateY(-3px); }
+  .pinyin-top { font-size: 0.85rem; color: var(--text-sub); margin-bottom: -2px; font-weight: 500; }
+  .cn-char { font-size: 1.4rem; font-weight: 700; color: var(--text-main); }
+  .other-text-block { font-size: 1.2rem; font-weight: 600; color: var(--text-main); margin: 0 3px; transform: translateY(-3px); }
 
-  /* 朗读按钮 (气泡内) */
   .bubble-audio-btn {
     align-self: flex-end;
-    width: 36px; height: 36px;
+    width: 32px; height: 32px;
     background: #eef2ff;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     color: var(--primary-color);
-    cursor: pointer;
-    transition: all 0.2s;
+    cursor: pointer; font-size: 0.9rem;
   }
-  .bubble-audio-btn:active { transform: scale(0.9); background: #e0e7ff; }
-  .bubble-audio-btn.playing { background: var(--primary-color); color: white; animation: pulse 1.5s infinite; }
+  .bubble-audio-btn.playing { background: var(--primary-color); color: white; animation: pulse 1.2s infinite; }
 
   @keyframes pulse {
     0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-    70% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+    70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
     100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
   }
 
-  /* 题目图片 (如果题目本身带图) */
   .question-ref-img {
-    width: 100%; max-height: 180px; object-fit: cover;
-    border-radius: 12px; margin-top: 10px; margin-bottom: 10px;
-    border: 1px solid #f1f5f9;
+    width: 100%; max-height: 150px; object-fit: contain;
+    border-radius: 8px; margin-bottom: 12px;
+    background: #f8fafc;
   }
 
-  /* --- 选项区域 --- */
+  /* --- 选项区域 (变窄) --- */
   .xzt-options-grid { 
-    width: 100%; max-width: 600px;
-    padding: 0 20px;
-    display: grid; gap: 14px;
+    /* 关键修改：变窄 */
+    width: 90%; 
+    max-width: 480px; 
+    display: grid; gap: 12px;
   }
   
   .xzt-option-card {
     position: relative;
     background: white;
-    border-radius: 18px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
     cursor: pointer;
-    padding: 16px;
+    padding: 14px 18px;
     display: flex; align-items: center;
     border: 2px solid transparent;
-    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   
-  .xzt-option-card:not(.disabled):active { transform: scale(0.98); background: #f8fafc; }
-  .xzt-option-card.selected { border-color: var(--primary-color); background: #eef2ff; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15); }
+  .xzt-option-card:not(.disabled):active { transform: scale(0.97); background: #f8fafc; }
+  .xzt-option-card.selected { border-color: var(--primary-color); background: #eef2ff; }
   
-  /* 结果状态 */
   .xzt-option-card.correct-answer { border-color: var(--success-color); background: #ecfdf5; }
   .xzt-option-card.wrong-answer { border-color: var(--error-color); background: #fef2f2; opacity: 0.9; }
   .xzt-option-card.disabled { pointer-events: none; }
 
   .opt-img {
-    width: 60px; height: 60px; border-radius: 12px;
-    object-fit: cover; margin-right: 16px; flex-shrink: 0;
+    width: 50px; height: 50px; border-radius: 10px;
+    object-fit: cover; margin-right: 14px; flex-shrink: 0;
     background-color: #f1f5f9;
   }
 
   .opt-content { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-  .opt-py { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 2px; }
-  .opt-txt { font-size: 1.15rem; font-weight: 600; color: var(--text-main); }
+  .opt-py { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 2px; }
+  .opt-txt { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
   
-  .status-icon { font-size: 1.5rem; margin-left: 12px; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-  @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+  .status-icon { font-size: 1.4rem; margin-left: 10px; }
   .text-green { color: var(--success-color); }
   .text-red { color: var(--error-color); }
 
@@ -348,81 +378,134 @@ const cssStyles = `
   }
   .submit-btn {
     pointer-events: auto;
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    background: var(--primary-color);
     color: white; border: none;
-    padding: 16px 80px;
+    padding: 14px 70px;
     border-radius: 99px;
-    font-size: 1.2rem; font-weight: 700;
-    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.4);
-    transition: transform 0.2s, box-shadow 0.2s;
-    letter-spacing: 0.5px;
+    font-size: 1.1rem; font-weight: 700;
+    box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.4);
+    transition: transform 0.2s;
   }
   .submit-btn:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
   .submit-btn:active { transform: scale(0.96); }
 
-  /* --- 解析遮罩层 (Overlay) --- */
+  /* --- 设置弹窗 (Overlay) --- */
+  .settings-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(4px);
+  }
+  .settings-overlay.show { opacity: 1; pointer-events: auto; }
+  
+  .settings-panel {
+    background: white; width: 85%; max-width: 320px;
+    border-radius: 20px; padding: 24px;
+    transform: scale(0.9); transition: transform 0.2s;
+  }
+  .settings-overlay.show .settings-panel { transform: scale(1); }
+
+  .setting-group { margin-bottom: 20px; }
+  .setting-label { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-bottom: 10px; display: block;}
+  
+  .setting-select {
+    width: 100%; padding: 10px; border-radius: 10px;
+    border: 1px solid #e2e8f0; background: #f8fafc;
+    font-size: 1rem; color: var(--text-main);
+  }
+  
+  .speed-options { display: flex; gap: 8px; }
+  .speed-btn {
+    flex: 1; padding: 8px; border-radius: 8px;
+    border: 1px solid #e2e8f0; background: white;
+    font-size: 0.9rem; font-weight: 500; color: var(--text-sub);
+    cursor: pointer;
+  }
+  .speed-btn.active {
+    background: var(--primary-color); color: white; border-color: var(--primary-color);
+  }
+
+  .close-settings-btn {
+    width: 100%; padding: 12px;
+    background: #f1f5f9; color: var(--text-main);
+    border: none; border-radius: 12px;
+    font-weight: 700; cursor: pointer;
+  }
+
+  /* --- 解析遮罩层 (底部) --- */
   .overlay-backdrop {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.3);
-    backdrop-filter: blur(2px);
+    background: rgba(0,0,0,0.1);
     z-index: 90;
     opacity: 0; pointer-events: none;
     transition: opacity 0.3s;
   }
   .overlay-backdrop.show { opacity: 1; pointer-events: auto; }
 
+  /* 底部面板根据状态变色 */
   .explanation-sheet {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: white;
-    border-radius: 28px 28px 0 0;
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
     z-index: 100;
     transform: translateY(110%);
-    transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1);
     padding: 24px 24px 40px 24px;
     display: flex; flex-direction: column; gap: 16px;
-    max-height: 70vh; overflow-y: auto;
+    border-top: 4px solid transparent; /* 用于显示颜色条 */
   }
   .explanation-sheet.show { transform: translateY(0); }
+
+  /* 答对时的样式 */
+  .explanation-sheet.is-right {
+    background: #f0fdf4; /* 浅绿色背景 */
+    border-top-color: var(--success-color);
+  }
+  /* 答错时的样式 */
+  .explanation-sheet.is-wrong {
+    background: #fef2f2; /* 浅红色背景 */
+    border-top-color: var(--error-color);
+  }
 
   .sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .result-badge {
     padding: 6px 16px; border-radius: 20px;
     font-size: 1.1rem; font-weight: 800;
     display: flex; align-items: center; gap: 8px;
+    background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   }
-  .result-badge.correct { background: #ecfdf5; color: var(--success-color); }
-  .result-badge.wrong { background: #fef2f2; color: var(--error-color); }
+  .is-right .result-badge { color: var(--success-color); }
+  .is-wrong .result-badge { color: var(--error-color); }
 
   .explanation-box {
-    background: #f8fafc;
-    border-radius: 16px;
-    padding: 18px;
-    border: 1px solid #e2e8f0;
+    background: white; /* 保持白色，对比度好 */
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid rgba(0,0,0,0.05);
   }
-  .exp-label { font-size: 0.95rem; font-weight: 700; color: var(--text-sub); margin-bottom: 6px; display:flex; align-items:center; gap:6px;}
-  .exp-text { font-size: 1.05rem; color: var(--text-main); line-height: 1.6; }
+  .exp-label { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); margin-bottom: 6px; display:flex; align-items:center; gap:6px;}
+  .exp-text { font-size: 1rem; color: var(--text-main); line-height: 1.6; }
 
   .next-btn {
     width: 100%;
     background: var(--text-main);
     color: white; border: none;
-    padding: 18px;
-    border-radius: 20px;
-    font-size: 1.15rem; font-weight: 700;
+    padding: 16px;
+    border-radius: 16px;
+    font-size: 1.1rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; gap: 10px;
-    margin-top: 8px;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-top: 8px; cursor: pointer;
   }
-  .next-btn:active { transform: scale(0.98); opacity: 0.95; }
-  .next-btn.is-correct { 
-    background: var(--success-color); 
-    box-shadow: 0 8px 25px -5px rgba(16, 185, 129, 0.5); 
-  }
+  .is-right .next-btn { background: var(--success-color); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
+  .is-wrong .next-btn { background: var(--error-color); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
 `;
 
-// --- 4. 文本解析 (保持不变) ---
+
+// --- 4. 文本解析 ---
 const parseTitleText = (text) => {
   if (!text) return [];
   const result = [];
@@ -449,8 +532,18 @@ const parseOptionText = (text) => {
   return { isZh: true, text, pinyins: pinyins.join(' ') };
 };
 
+// --- 5. 语音列表 ---
+const VOICE_OPTIONS = [
+  { id: 'zh-CN-XiaoyouMultilingualNeural', name: '中文-女声 (小悠)' },
+  { id: 'zh-CN-YunxiNeural', name: '中文-男声 (云希)' },
+  { id: 'zh-CN-XiaoxiaoNeural', name: '中文-活泼女声 (晓晓)' },
+  { id: 'zh-TW-HsiaoChenNeural', name: '台湾-女声 (晓臻)' }
+];
 
-// --- 5. 组件主体 ---
+const SPEED_OPTIONS = [0.5, 0.75, 1.0, 1.25, 1.5];
+
+
+// --- 6. 组件主体 ---
 const XuanZeTi = (props) => {
   const rawData = props.data || props;
   const rawQuestion = props.question || rawData.question || {};
@@ -473,6 +566,13 @@ const XuanZeTi = (props) => {
   const [orderedOptions, setOrderedOptions] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   
+  // 设置状态
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({
+    voice: 'zh-CN-XiaoyouMultilingualNeural',
+    speed: 1.0
+  });
+
   const mountedRef = useRef(true);
   const hasAutoPlayedRef = useRef(false);
 
@@ -480,7 +580,7 @@ const XuanZeTi = (props) => {
   useEffect(() => {
     mountedRef.current = true;
     
-    // 切换题目时强制重置所有状态
+    // 切换题目时重置
     audioController.stop();
     setIsPlaying(false);
     setSelectedId(null);
@@ -488,7 +588,6 @@ const XuanZeTi = (props) => {
     setIsRight(false);
     hasAutoPlayedRef.current = false;
 
-    // 解析新数据
     setTitleSegments(parseTitleText(questionText));
     setOrderedOptions(rawOptions.map(opt => ({
       ...opt,
@@ -496,7 +595,7 @@ const XuanZeTi = (props) => {
       hasImage: !!opt.imageUrl
     })));
 
-    // 延时自动播放，提升体验
+    // 自动播放
     if (questionText) {
       const timer = setTimeout(() => {
         if (mountedRef.current && !hasAutoPlayedRef.current) {
@@ -508,23 +607,28 @@ const XuanZeTi = (props) => {
     }
 
     return () => { mountedRef.current = false; audioController.stop(); };
-  }, [questionText, rawOptions]); // 依赖项确保数据变化时重置
+  }, [questionText, rawOptions]); 
 
+  // 播放处理 (传入当前设置)
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
+    
+    // 自动播放时不震动，手动点击时震动
     if (!isAuto && navigator.vibrate) navigator.vibrate(30);
 
     audioController.playMixed(
       questionText,
       () => setIsPlaying(true),
-      () => setIsPlaying(false)
+      () => setIsPlaying(false),
+      settings // 传入 voice 和 speed
     );
   };
 
   const handleCardClick = (option) => {
     if (isSubmitted) return;
     setSelectedId(option.id);
-    audioController.playMixed(option.text || '');
+    // 选项播放也使用当前语速和发音人（如果是中文）
+    audioController.playMixed(option.text || '', null, null, settings);
   };
 
   const handleSubmit = () => {
@@ -544,21 +648,13 @@ const XuanZeTi = (props) => {
     }
   };
 
-  // 修复后的下一题逻辑
   const handleNext = () => {
-    // 1. 处理得分回调
     if (isRight) {
       if (onCorrect) onCorrect();
     } else {
       if (onIncorrect) onIncorrect();
     }
-
-    // 2. 调用父级切换题目
-    // 注意：这里不需要手动 setIsSubmitted(false)，
-    // 因为父组件更新 props.question 后，上面的 useEffect 会自动执行重置。
-    if (onNext) {
-      onNext();
-    }
+    if (onNext) onNext();
   };
 
   return (
@@ -567,6 +663,13 @@ const XuanZeTi = (props) => {
 
       <div className="xzt-container">
         
+        {/* 顶部栏 */}
+        <div className="top-bar">
+          <div className="settings-btn" onClick={() => setShowSettings(true)}>
+            <FaCog />
+          </div>
+        </div>
+
         {/* 滚动区域 */}
         <div className="xzt-scroll-area">
           
@@ -603,7 +706,7 @@ const XuanZeTi = (props) => {
             </div>
           </div>
 
-          {/* 选项网格 */}
+          {/* 选项网格 (变窄) */}
           <div className="xzt-options-grid">
             {orderedOptions.map(opt => {
               const isSel = String(opt.id) === String(selectedId);
@@ -658,13 +761,16 @@ const XuanZeTi = (props) => {
           </div>
         )}
 
-        {/* 遮罩层 */}
-        <div className={`overlay-backdrop ${isSubmitted ? 'show' : ''}`} onClick={() => {}} />
+        {/* 遮罩层 (用于 Settings 和 Result Sheet) */}
+        <div 
+          className={`overlay-backdrop ${isSubmitted ? 'show' : ''}`} 
+          onClick={() => {}} 
+        />
 
-        {/* 底部解析面板 (Overlay) */}
-        <div className={`explanation-sheet ${isSubmitted ? 'show' : ''}`}>
+        {/* 底部解析面板 (颜色根据对错变化) */}
+        <div className={`explanation-sheet ${isSubmitted ? 'show' : ''} ${isRight ? 'is-right' : 'is-wrong'}`}>
           <div className="sheet-header">
-            <div className={`result-badge ${isRight ? 'correct' : 'wrong'}`}>
+            <div className="result-badge">
               {isRight ? <FaCheck /> : <FaTimes />}
               <span>{isRight ? 'မှန်ပါတယ်' : 'မှားပါတယ်'}</span>
             </div>
@@ -678,11 +784,50 @@ const XuanZeTi = (props) => {
           )}
 
           <button 
-            className={`next-btn ${isRight ? 'is-correct' : ''}`}
+            className="next-btn"
             onClick={handleNext}
           >
             နောက်တစ်ပုဒ် <FaArrowRight />
           </button>
+        </div>
+
+        {/* 设置弹窗 */}
+        <div className={`settings-overlay ${showSettings ? 'show' : ''}`} onClick={() => setShowSettings(false)}>
+          <div className="settings-panel" onClick={e => e.stopPropagation()}>
+            <h3 style={{marginBottom: 20, marginTop:0, color:'#1e293b'}}>Playback Settings</h3>
+            
+            <div className="setting-group">
+              <label className="setting-label">Voice / 发音人</label>
+              <select 
+                className="setting-select"
+                value={settings.voice}
+                onChange={(e) => setSettings({...settings, voice: e.target.value})}
+              >
+                {VOICE_OPTIONS.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">Speed / 语速 ({settings.speed}x)</label>
+              <div className="speed-options">
+                {SPEED_OPTIONS.map(s => (
+                  <button 
+                    key={s} 
+                    className={`speed-btn ${settings.speed === s ? 'active' : ''}`}
+                    onClick={() => setSettings({...settings, speed: s})}
+                  >
+                    {s}x
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button className="close-settings-btn" onClick={() => setShowSettings(false)}>
+              Done
+            </button>
+          </div>
         </div>
 
       </div>
