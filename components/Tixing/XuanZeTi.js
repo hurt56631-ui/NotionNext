@@ -84,14 +84,12 @@ const audioController = {
     return 'zh';
   },
 
-  // 修改：接受 voice 参数
   async fetchAudioBlob(text, lang, preferredVoice) {
     if (typeof window === 'undefined') return null;
     
-    // 默认声音逻辑
-    let voice = 'zh-CN-XiaoyouMultilingualNeural'; // 默认中文
-    if (lang === 'my') voice = 'my-MM-NilarNeural'; // 默认缅文
-    if (lang === 'zh' && preferredVoice) voice = preferredVoice; // 如果指定了中文发音人
+    let voice = 'zh-CN-XiaoyouMultilingualNeural'; 
+    if (lang === 'my') voice = 'my-MM-NilarNeural'; 
+    if (lang === 'zh' && preferredVoice) voice = preferredVoice; 
 
     const cacheKey = `tts-${voice}-${text}-0`;
     const cached = await idb.get(cacheKey);
@@ -114,7 +112,6 @@ const audioController = {
     }
   },
 
-  // 修改：接受 settings 参数
   async playMixed(text, onStart, onEnd, settings = {}) {
     if (typeof window === 'undefined') return;
     this.stop();
@@ -150,9 +147,7 @@ const audioController = {
         const url = URL.createObjectURL(blob);
         this.activeBlobUrls.push(url);
         const audio = new Audio(url);
-        // 应用语速设置
         const isZh = validSegments[index].lang === 'zh';
-        // 如果是中文，使用设置的语速；如果是外语(缅文等)，通常保持默认或稍微调整
         audio.playbackRate = isZh ? speed : 1.0; 
         return audio;
       });
@@ -242,51 +237,49 @@ const cssStyles = `
   /* --- 场景区域 (人物 + 气泡) --- */
   .scene-wrapper {
     width: 100%; max-width: 600px;
-    padding: 10px 20px 0 20px;
+    padding: 10px 20px 0 30px; /* 左侧padding大一点 */
     display: flex;
     align-items: flex-end;
-    justify-content: center;
+    justify-content: flex-start; /* 改为左对齐 */
     margin-bottom: 24px;
     position: relative;
   }
 
-  /* 人物图片 - 关键修复：mix-blend-mode */
+  /* 人物图片 - mix-blend-mode 修复白底 */
   .teacher-img {
-    height: 180px; /* 稍微调小一点，比例更协调 */
+    height: 160px; /* 尺寸调小 */
     width: auto;
     object-fit: contain;
-    margin-right: -15px; /* 让人物靠近气泡 */
+    margin-right: -10px; 
     z-index: 2;
-    /* 核心修改：让白底变透明，融入背景 */
     mix-blend-mode: multiply; 
-    filter: contrast(1.05); /* 稍微增加对比度防止变淡 */
+    filter: contrast(1.05);
+    flex-shrink: 0;
   }
 
   /* 气泡容器 */
   .bubble-container {
     flex: 1;
-    /* 限制气泡最大宽度，不再撑满 */
-    max-width: 320px; 
+    max-width: 260px; /* 气泡再小一点 */
     width: fit-content;
     background: var(--white);
-    border-radius: 20px;
-    padding: 16px 20px;
+    border-radius: 18px;
+    padding: 14px 18px;
     box-shadow: 0 8px 25px rgba(0,0,0,0.06);
     position: relative;
     z-index: 1;
-    margin-bottom: 40px;
-    margin-left: 5px;
+    margin-bottom: 35px;
+    margin-left: -15px; /* 往左边移动，更贴近人物 */
     border: 1px solid rgba(255,255,255,0.8);
   }
 
-  /* 尖锐的气泡尾巴 */
+  /* 气泡尾巴 */
   .bubble-tail {
     position: absolute;
-    bottom: 20px; /* 调整位置 */
+    bottom: 20px;
     left: -12px;
     width: 0; 
     height: 0; 
-    /* 变尖锐：调整border宽度比例 */
     border-top: 10px solid transparent;
     border-bottom: 10px solid transparent; 
     border-right: 20px solid var(--white);
@@ -298,22 +291,24 @@ const cssStyles = `
   .rich-text-container {
     display: flex; flex-wrap: wrap;
     align-items: flex-end;
-    gap: 4px; line-height: 1.5;
-    margin-bottom: 10px;
+    gap: 3px; line-height: 1.4;
+    margin-bottom: 8px;
   }
+  
+  /* 气泡内文字更小 */
   .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; }
-  .pinyin-top { font-size: 0.85rem; color: var(--text-sub); margin-bottom: -2px; font-weight: 500; }
-  .cn-char { font-size: 1.4rem; font-weight: 700; color: var(--text-main); }
-  .other-text-block { font-size: 1.2rem; font-weight: 600; color: var(--text-main); margin: 0 3px; transform: translateY(-3px); }
+  .pinyin-top { font-size: 0.75rem; color: var(--text-sub); margin-bottom: -1px; font-weight: 500; }
+  .cn-char { font-size: 1.15rem; font-weight: 700; color: var(--text-main); }
+  .other-text-block { font-size: 1.0rem; font-weight: 600; color: var(--text-main); margin: 0 2px; transform: translateY(-2px); }
 
   .bubble-audio-btn {
     align-self: flex-end;
-    width: 32px; height: 32px;
+    width: 28px; height: 28px;
     background: #eef2ff;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     color: var(--primary-color);
-    cursor: pointer; font-size: 0.9rem;
+    cursor: pointer; font-size: 0.8rem;
   }
   .bubble-audio-btn.playing { background: var(--primary-color); color: white; animation: pulse 1.2s infinite; }
 
@@ -324,14 +319,13 @@ const cssStyles = `
   }
 
   .question-ref-img {
-    width: 100%; max-height: 150px; object-fit: contain;
-    border-radius: 8px; margin-bottom: 12px;
+    width: 100%; max-height: 140px; object-fit: contain;
+    border-radius: 8px; margin-bottom: 10px;
     background: #f8fafc;
   }
 
   /* --- 选项区域 (变窄) --- */
   .xzt-options-grid { 
-    /* 关键修改：变窄 */
     width: 90%; 
     max-width: 480px; 
     display: grid; gap: 12px;
@@ -344,7 +338,9 @@ const cssStyles = `
     box-shadow: 0 2px 8px rgba(0,0,0,0.03);
     cursor: pointer;
     padding: 14px 18px;
-    display: flex; align-items: center;
+    display: flex; 
+    align-items: center; /* 垂直居中 */
+    justify-content: center; /* 水平居中 (如果需要内容块居中) */
     border: 2px solid transparent;
     transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
@@ -357,16 +353,24 @@ const cssStyles = `
   .xzt-option-card.disabled { pointer-events: none; }
 
   .opt-img {
-    width: 50px; height: 50px; border-radius: 10px;
-    object-fit: cover; margin-right: 14px; flex-shrink: 0;
+    width: 45px; height: 45px; border-radius: 8px;
+    object-fit: cover; margin-right: 12px; flex-shrink: 0;
     background-color: #f1f5f9;
   }
 
-  .opt-content { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  /* 选项文字居中显示 */
+  .opt-content { 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    align-items: center; /* 关键：文字水平居中 */
+    text-align: center;  /* 关键：多行文字居中 */
+  }
   .opt-py { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 2px; }
   .opt-txt { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
   
-  .status-icon { font-size: 1.4rem; margin-left: 10px; }
+  .status-icon { font-size: 1.4rem; margin-left: 10px; position: absolute; right: 16px; }
   .text-green { color: var(--success-color); }
   .text-red { color: var(--error-color); }
 
@@ -385,6 +389,7 @@ const cssStyles = `
     font-size: 1.1rem; font-weight: 700;
     box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.4);
     transition: transform 0.2s;
+    text-align: center;
   }
   .submit-btn:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; }
   .submit-btn:active { transform: scale(0.96); }
@@ -445,7 +450,7 @@ const cssStyles = `
   }
   .overlay-backdrop.show { opacity: 1; pointer-events: auto; }
 
-  /* 底部面板根据状态变色 */
+  /* 底部面板根据状态变色 - 透明度增加，尺寸加大 */
   .explanation-sheet {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: white;
@@ -454,54 +459,59 @@ const cssStyles = `
     z-index: 100;
     transform: translateY(110%);
     transition: transform 0.35s cubic-bezier(0.19, 1, 0.22, 1);
-    padding: 24px 24px 40px 24px;
-    display: flex; flex-direction: column; gap: 16px;
-    border-top: 4px solid transparent; /* 用于显示颜色条 */
+    
+    /* 加大尺寸 */
+    padding: 32px 24px 50px 24px;
+    display: flex; flex-direction: column; gap: 20px;
+    
+    border-top: 1px solid rgba(0,0,0,0.05);
+    backdrop-filter: blur(10px); /* 磨砂效果 */
   }
   .explanation-sheet.show { transform: translateY(0); }
 
-  /* 答对时的样式 */
+  /* 答对时的样式：带透明度的大绿色背景 */
   .explanation-sheet.is-right {
-    background: #f0fdf4; /* 浅绿色背景 */
+    background: rgba(240, 253, 244, 0.85); /* 浅绿带透明 */
     border-top-color: var(--success-color);
   }
-  /* 答错时的样式 */
+  /* 答错时的样式：带透明度的大红色背景 */
   .explanation-sheet.is-wrong {
-    background: #fef2f2; /* 浅红色背景 */
+    background: rgba(254, 242, 242, 0.85); /* 浅红带透明 */
     border-top-color: var(--error-color);
   }
 
-  .sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .sheet-header { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
   .result-badge {
-    padding: 6px 16px; border-radius: 20px;
-    font-size: 1.1rem; font-weight: 800;
+    padding: 8px 24px; border-radius: 30px;
+    font-size: 1.2rem; font-weight: 800;
     display: flex; align-items: center; gap: 8px;
-    background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    background: white; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
   }
   .is-right .result-badge { color: var(--success-color); }
   .is-wrong .result-badge { color: var(--error-color); }
 
   .explanation-box {
-    background: white; /* 保持白色，对比度好 */
-    border-radius: 14px;
-    padding: 16px;
+    background: rgba(255, 255, 255, 0.8); /* 解释框也要带点半透明 */
+    border-radius: 16px;
+    padding: 20px;
     border: 1px solid rgba(0,0,0,0.05);
+    text-align: center; /* 解释内容也居中 */
   }
-  .exp-label { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); margin-bottom: 6px; display:flex; align-items:center; gap:6px;}
+  .exp-label { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); margin-bottom: 8px; display:flex; align-items:center; justify-content: center; gap:6px;}
   .exp-text { font-size: 1rem; color: var(--text-main); line-height: 1.6; }
 
   .next-btn {
     width: 100%;
     background: var(--text-main);
     color: white; border: none;
-    padding: 16px;
-    border-radius: 16px;
-    font-size: 1.1rem; font-weight: 700;
+    padding: 18px;
+    border-radius: 18px;
+    font-size: 1.15rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; gap: 10px;
-    margin-top: 8px; cursor: pointer;
+    margin-top: 10px; cursor: pointer;
   }
-  .is-right .next-btn { background: var(--success-color); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
-  .is-wrong .next-btn { background: var(--error-color); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+  .is-right .next-btn { background: var(--success-color); box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3); }
+  .is-wrong .next-btn { background: var(--error-color); box-shadow: 0 6px 15px rgba(239, 68, 68, 0.3); }
 `;
 
 
@@ -767,7 +777,7 @@ const XuanZeTi = (props) => {
           onClick={() => {}} 
         />
 
-        {/* 底部解析面板 (颜色根据对错变化) */}
+        {/* 底部解析面板 (颜色根据对错变化，带透明背景) */}
         <div className={`explanation-sheet ${isSubmitted ? 'show' : ''} ${isRight ? 'is-right' : 'is-wrong'}`}>
           <div className="sheet-header">
             <div className="result-badge">
