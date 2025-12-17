@@ -26,7 +26,7 @@ const idb = {
         if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       };
       request.onsuccess = (e) => { this.db = e.target.result; resolve(); };
-      request.onerror = () => resolve(); // Fail silently
+      request.onerror = () => resolve(); 
     });
   },
   async get(key) {
