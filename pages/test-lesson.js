@@ -1,9 +1,9 @@
 import React from 'react';
 import Head from 'next/head';
 // 1. 引入你的主互动组件
-import InteractiveLesson from '../../components/Tixing/InteractiveLesson'; 
+import InteractiveLesson from '../components/Tixing/InteractiveLesson'; 
 // 2. 引入刚才创建的数据
-import { hskLessonData } from '../../data/hsk1-lesson1'; 
+import { hskLessonData } from '../data/hsk1-lesson1'; 
 
 export default function TestLessonPage() {
   return (
