@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useTransition, animated } from '@react-spring/web';
-import { html as pinyinHtml } from 'pinyin-pro'; 
+import { pinyin as pinyinConverter } from 'pinyin-pro';
 import { 
-  FaPlay, FaPause, FaTimes, FaChevronLeft, FaChevronRight, 
-  FaExpand, FaVolumeUp, FaImage, FaVideo, FaListUl 
+  FaPlay, FaPause, FaStepBackward, FaStepForward, 
+  FaTimes, FaChevronLeft, FaChevronRight, FaExpand 
 } from 'react-icons/fa';
-import { motion } from 'framer-motion';
+import { TbMultiplier1X, TbMultiplier15X, TbMultiplier05X } from "react-icons/tb";
+import { motion, useDragControls } from 'framer-motion';
 
 // =================================================================================
-// ===== 1. 工具与音频 Hook (IndexedDB 缓存 + 音频控制) =====
+// ===== 1. IndexedDB 工具 (保持不变) =====
 // =================================================================================
 const DB_NAME = 'MixedTTSCache';
 const STORE_NAME = 'audio_blobs';
@@ -19,14 +20,14 @@ const idb = {
   db: null,
   async init() {
     if (this.db || typeof window === 'undefined' || !window.indexedDB) return;
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       };
       request.onsuccess = (e) => { this.db = e.target.result; resolve(); };
-      request.onerror = () => resolve();
+      request.onerror = (e) => reject(e);
     });
   },
   async get(key) {
@@ -48,23 +49,31 @@ const idb = {
 
 const inFlightRequests = new Map();
 
+// =================================================================================
+// ===== 2. 增强版 Audio Hook (支持倍速和进度) =====
+// =================================================================================
 function useMixedTTS() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playingId, setPlayingId] = useState(null); 
+  const [playingId, setPlayingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   
+  // 播放器状态
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1.0);
 
   const audioObjRef = useRef(null);
+  const currentUrlRef = useRef(null);
 
   useEffect(() => {
     return () => stop();
   }, []);
 
+  // 监听倍速变化
   useEffect(() => {
-    if (audioObjRef.current) audioObjRef.current.playbackRate = playbackRate;
+    if (audioObjRef.current) {
+      audioObjRef.current.playbackRate = playbackRate;
+    }
   }, [playbackRate]);
 
   const stop = useCallback(() => {
@@ -77,11 +86,11 @@ function useMixedTTS() {
     setCurrentTime(0);
   }, []);
 
-  const fetchAudioBlob = async (text) => {
-    const hasBurmese = /[\u1000-\u109F]/.test(text);
-    const voice = hasBurmese ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-v3-${voice}-${text}`; // v3 cache key
+  const fetchAudioBlob = async (text, lang) => {
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const cacheKey = `tts-blob-${voice}-${text}`;
     
+    // 尝试缓存
     const cached = await idb.get(cacheKey);
     if (cached) return cached;
 
@@ -100,7 +109,8 @@ function useMixedTTS() {
     return promise;
   };
 
-  const play = useCallback(async (text, uniqueId) => {
+  const play = useCallback(async (textOrUrl, uniqueId, isLink = false) => {
+    // 如果点击的是当前正在播放的，则暂停/继续
     if (playingId === uniqueId && audioObjRef.current) {
       if (audioObjRef.current.paused) {
         audioObjRef.current.play();
@@ -113,43 +123,45 @@ function useMixedTTS() {
     }
 
     stop();
-    
-    // 清理 Markdown 标记用于朗读
-    const cleanText = String(text)
-      .replace(/<[^>]+>/g, '')
-      .replace(/\*\*/g, '') // remove bold
-      .replace(/!\[.*?\]\(.*?\)/g, '') // remove images
-      .replace(/\[VIDEO\]\(.*?\)/g, '') // remove videos
-      .replace(/^[#\-\s✅❌⚠️·•]+/, '') // remove bullet points headers
-      .trim();
-
-    if (!cleanText) return;
-
     setIsLoading(true);
     setPlayingId(uniqueId);
 
     try {
-      const blob = await fetchAudioBlob(cleanText);
-      const audioUrl = URL.createObjectURL(blob);
+      let finalUrl = textOrUrl;
 
-      const audio = new Audio(audioUrl);
+      // 如果不是链接，则是TTS文本，需要转换
+      if (!isLink) {
+        let cleanText = String(textOrUrl).replace(/<[^>]+>/g, '').replace(/\{\{|\}\}/g, '').trim();
+        if (!cleanText) { setIsLoading(false); return; }
+        
+        // 简单处理：目前播放器模式只支持单段音频控制进度。
+        // 如果是长文本，这里直接请求整段中文（忽略缅语混合以保证进度条可用性，或者你可以保留之前的混合逻辑但进度条会比较难做）
+        // 为了"音乐播放器"体验，这里假设是一段完整的TTS
+        const blob = await fetchAudioBlob(cleanText, 'zh');
+        finalUrl = URL.createObjectURL(blob);
+      }
+
+      if (currentUrlRef.current && !isLink) URL.revokeObjectURL(currentUrlRef.current);
+      currentUrlRef.current = isLink ? null : finalUrl;
+
+      const audio = new Audio(finalUrl);
       audioObjRef.current = audio;
       audio.playbackRate = playbackRate;
       
+      // 事件监听
       audio.onloadedmetadata = () => setDuration(audio.duration);
       audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
       audio.onended = () => {
         setIsPlaying(false);
         setCurrentTime(0);
         setPlayingId(null);
-        URL.revokeObjectURL(audioUrl);
       };
       audio.onplay = () => setIsPlaying(true);
       audio.onpause = () => setIsPlaying(false);
-      audio.onerror = () => { setIsLoading(false); setPlayingId(null); };
 
       await audio.play();
       setIsLoading(false);
+
     } catch (e) {
       console.error("Play failed", e);
       setIsLoading(false);
@@ -172,17 +184,13 @@ function useMixedTTS() {
 }
 
 // =================================================================================
-// ===== 2. 悬浮播放器 (只对主讲解显示完整控制) =====
+// ===== 3. 浮动音乐播放器组件 (UI核心) =====
 // =================================================================================
 const FloatingMusicPlayer = ({ 
   isPlaying, onToggle, duration, currentTime, onSeek, 
-  playbackRate, onRateChange, playingType, isLoading 
+  playbackRate, onRateChange, title, isLoading 
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-
-  if (!playingType && !isLoading) return null;
-
-  const isMain = playingType === 'main'; 
 
   const formatTime = (t) => {
     if (!t || isNaN(t)) return "00:00";
@@ -191,85 +199,120 @@ const FloatingMusicPlayer = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // 切换倍速
   const cycleSpeed = () => {
-    const rates = [0.75, 1.0, 1.25, 1.5];
-    const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
-    onRateChange(next);
+    if (playbackRate === 1.0) onRateChange(1.25);
+    else if (playbackRate === 1.25) onRateChange(0.75);
+    else onRateChange(1.0);
   };
 
   return (
     <motion.div
-      drag dragMomentum={false} whileDrag={{ scale: 1.05 }}
-      initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-      style={{ 
-        position: 'fixed', 
-        bottom: '120px', // 提高位置，避免遮挡底部导航
-        right: '20px', 
-        zIndex: 100, 
-        touchAction: 'none' 
+      drag
+      dragMomentum={false}
+      whileDrag={{ scale: 1.05 }}
+      initial={{ y: 0, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      style={{
+        position: 'fixed', bottom: '100px', right: '20px', zIndex: 100,
+        touchAction: 'none' // 防止拖动时触发页面滚动
       }}
     >
       <div style={{
-        background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(16px)',
-        borderRadius: '24px', boxShadow: '0 10px 40px rgba(30, 41, 59, 0.15)',
-        border: '1px solid rgba(255, 255, 255, 0.6)',
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(12px)',
+        borderRadius: '24px',
+        boxShadow: '0 8px 32px rgba(31, 38, 135, 0.15)',
+        border: '1px solid rgba(255, 255, 255, 0.4)',
         padding: isExpanded ? '16px' : '10px',
-        width: isExpanded ? (isMain ? '290px' : '220px') : '60px',
+        width: isExpanded ? '280px' : '60px',
         height: isExpanded ? 'auto' : '60px',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        transition: 'width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.3s'
+        display: 'flex', flexDirection: 'column',
+        transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        overflow: 'hidden'
       }}>
-        {!isExpanded ? (
-          <div onClick={() => setIsExpanded(true)} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#6366f1' }}>
-            {isLoading ? <FaTimes className="spin" /> : <span className="music-bars-anim" />}
+        
+        {/* 收起状态 */}
+        {!isExpanded && (
+          <div 
+            onClick={() => setIsExpanded(true)} 
+            style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#2563eb' }}
+          >
+            {isLoading ? <FaTimes className="spin" /> : (isPlaying ? <span className="music-bars-anim" /> : <FaExpand />)}
           </div>
-        ) : (
+        )}
+
+        {/* 展开状态 */}
+        {isExpanded && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMain ? '12px' : '0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
-                <span className="music-bars-anim" style={{ transform: 'scale(0.8)' }} />
-                <span style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>
-                  {isMain ? "语法讲解中" : "正在朗读..."}
+            {/* 顶部：标题与关闭 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isPlaying ? '#22c55e' : '#cbd5e1', flexShrink: 0 }}></div>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {title || "语音播放器"}
                 </span>
               </div>
-              <div style={{display:'flex', gap: 8}}>
-                 {isMain && (
-                   <button onClick={cycleSpeed} style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', padding: '4px 10px', fontSize: '11px', fontWeight: 'bold', color: '#64748b', cursor: 'pointer', transition:'background 0.2s' }}>
-                     {playbackRate}x
-                   </button>
-                 )}
-                 <button onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}>
-                   <FaExpand size={12} />
-                 </button>
-              </div>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setIsExpanded(false); }}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+              >
+                <FaTimes />
+              </button>
             </div>
 
-            {isMain && (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
-                  <button onClick={onToggle} style={{ 
-                      width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', 
-                      color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      boxShadow: '0 6px 15px rgba(99, 102, 241, 0.4)', cursor: 'pointer', fontSize: '16px'
-                    }}>
-                    {isPlaying ? <FaPause /> : <FaPlay style={{marginLeft:3}}/>}
-                  </button>
-                </div>
-                <div style={{ width: '100%' }}>
-                  <input type="range" min="0" max={duration || 100} value={currentTime} onChange={(e) => onSeek(Number(e.target.value))}
-                    style={{ width: '100%', cursor: 'pointer', height: '4px', borderRadius: '2px', accentColor: '#6366f1', marginBottom: '6px', display: 'block' }} 
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94a3b8', fontFamily: 'monospace', fontWeight: 600 }}>
-                    <span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span>
-                  </div>
-                </div>
-              </>
-            )}
+            {/* 中部：控制按钮 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <button onClick={cycleSpeed} style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', padding: '6px 10px', fontSize: '12px', fontWeight: 'bold', color: '#475569', cursor: 'pointer', minWidth: '40px' }}>
+                {playbackRate}x
+              </button>
+
+              <button 
+                onClick={onToggle}
+                style={{ 
+                  width: '48px', height: '48px', borderRadius: '50%', 
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                  color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)', cursor: 'pointer'
+                }}
+              >
+                {isLoading ? <FaTimes className="spin" /> : (isPlaying ? <FaPause /> : <FaPlay style={{ marginLeft: '2px' }} />)}
+              </button>
+              
+              <div style={{ width: '40px' }}></div> {/* 占位，保持居中 */}
+            </div>
+
+            {/* 底部：进度条 */}
+            <div style={{ width: '100%' }}>
+              <input 
+                type="range" 
+                min="0" max={duration || 100} 
+                value={currentTime} 
+                onChange={(e) => onSeek(Number(e.target.value))}
+                style={{
+                  width: '100%', cursor: 'pointer', height: '4px', borderRadius: '2px',
+                  accentColor: '#2563eb', marginBottom: '6px', display: 'block'
+                }} 
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+            </div>
           </>
         )}
       </div>
+      
+      {/* 音乐跳动动画 CSS */}
       <style>{`
-        .music-bars-anim { width: 16px; height: 16px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E"); background-size: cover; animation: bounce 1s infinite alternate; }
+        .music-bars-anim {
+          width: 20px; height: 20px;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'%3E%3Cpath d='M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z'/%3E%3C/svg%3E");
+          background-size: cover;
+          animation: bounce 1s infinite alternate;
+        }
         @keyframes bounce { from { transform: scale(0.9); } to { transform: scale(1.1); } }
       `}</style>
     </motion.div>
@@ -277,572 +320,307 @@ const FloatingMusicPlayer = ({
 };
 
 // =================================================================================
-// ===== 3. 富文本渲染组件 (支持加粗、多层级、媒体) =====
+// ===== 4. 聊天气泡组件 (新功能) =====
 // =================================================================================
-
-// 核心：支持加粗的拼音渲染
-const RichPinyinText = ({ text }) => {
-  if (!text) return null;
+const ChatMessage = ({ text, role, onPlay, isPlaying }) => {
+  const isMe = role === 'B'; // 假设 B 是"我"（右侧），A 是"对方"（左侧）
   
-  // 1. 分割加粗语法 **text**
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  
+  // 头像颜色
+  const avatarColor = isMe ? '#2563eb' : '#ea580c';
+  const avatarText = role;
+
   return (
-    <span>
-      {parts.map((part, index) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          const content = part.slice(2, -2);
-          const html = pinyinHtml(content, { toneType: 'symbol' });
-          return <strong key={index} className="rich-bold" dangerouslySetInnerHTML={{ __html: html }} />;
-        } else {
-          const html = pinyinHtml(part, { toneType: 'symbol' });
-          return <span key={index} className="pinyin-ruby" dangerouslySetInnerHTML={{ __html: html }} />;
-        }
-      })}
-    </span>
-  );
-};
-
-// 媒体组件：图片
-const ImageViewer = ({ src, alt }) => (
-  <div style={{ margin: '16px 0', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-    <img src={src} alt={alt} style={{ width: '100%', height: 'auto', display: 'block' }} loading="lazy" />
-    {alt && <div style={{ padding: '8px 12px', fontSize: '0.85rem', color: '#64748b', background: '#f1f5f9', display:'flex', alignItems:'center', gap:6 }}><FaImage /> {alt}</div>}
-  </div>
-);
-
-// 媒体组件：视频 (简单链接或嵌入)
-const VideoPlayer = ({ src }) => (
-  <div style={{ margin: '16px 0', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#000' }}>
-    <video controls src={src} style={{ width: '100%', height: 'auto', display: 'block' }} />
-    <div style={{ padding: '8px', color: '#94a3b8', fontSize: '0.8rem', background: '#1e293b', display:'flex', alignItems:'center', gap:6 }}><FaVideo /> Video Playback</div>
-  </div>
-);
-
-// 列表项 (支持缩进)
-const ListItem = ({ text, level = 0 }) => (
-  <div style={{ display: 'flex', gap: '10px', marginLeft: `${level * 20}px`, marginBottom: '8px', alignItems: 'flex-start' }}>
-    <span style={{ color: '#6366f1', marginTop: '6px', fontSize: '0.8rem' }}><FaListUl /></span>
-    <div style={{ flex: 1, lineHeight: '1.7' }}>
-      <RichPinyinText text={text} />
-    </div>
-  </div>
-);
-
-// 可点击的行（例句）
-const PlayableLine = ({ text, onPlay, isPlaying }) => {
-  const cleanText = text.replace(/^[·•✅❌⚠️]\s*/, ''); 
-  
-  return (
-    <div 
-      onClick={() => onPlay(cleanText)}
-      className={`playable-line ${isPlaying ? 'active' : ''}`}
-      style={{ 
-        cursor: 'pointer', padding: '10px 14px', borderRadius: '12px', 
-        transition: 'all 0.2s ease', display: 'block', width: '100%',
-        margin: '6px 0', border: '1px solid transparent'
-      }}
-    >
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-        <div style={{ color: isPlaying ? '#6366f1' : '#cbd5e1', fontSize: '1rem', marginTop: '4px' }}>
-          {isPlaying ? <span className="music-bars-anim" style={{display:'inline-block', width:14, height:14}} /> : <FaVolumeUp />}
-        </div>
-        <div style={{ flex: 1, lineHeight: '1.8', fontSize: '1.05rem', color: '#334155' }}>
-          <RichPinyinText text={text} />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// 渲染表格
-const MarkdownTable = ({ rows }) => {
-  return (
-    <div style={{ overflowX: 'auto', margin: '20px 0', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-        <tbody>
-          {rows.map((row, rIndex) => (
-            <tr key={rIndex} style={{ background: rIndex === 0 ? '#f8fafc' : 'white', borderBottom: '1px solid #f1f5f9' }}>
-              {row.map((cell, cIndex) => (
-                <td key={cIndex} style={{ 
-                  padding: '12px 16px', borderRight: '1px solid #f1f5f9', 
-                  color: rIndex === 0 ? '#475569' : '#1e293b', 
-                  fontWeight: rIndex === 0 ? '700' : 'normal',
-                  minWidth: '80px'
-                }}>
-                  <RichPinyinText text={cell} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-// 聊天气泡
-const ChatBubble = ({ role, text, onPlay, isPlaying }) => {
-  const isMe = role === 'B';
-  return (
-    <div 
-      onClick={() => onPlay(text)}
-      style={{ 
-        display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', 
-        marginBottom: '20px', gap: '12px', alignItems: 'flex-end' 
-      }}
-    >
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: isMe ? 'row-reverse' : 'row', 
+      marginBottom: '20px', 
+      gap: '10px',
+      alignItems: 'flex-start'
+    }}>
+      {/* 头像 */}
       <div style={{ 
         width: '40px', height: '40px', borderRadius: '50%', 
-        background: isMe ? '#6366f1' : '#f97316', color: 'white', 
-        display: 'flex', alignItems: 'center', justifyContent: 'center', 
-        fontWeight: 'bold', fontSize: '16px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        background: avatarColor, color: 'white', 
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 'bold', flexShrink: 0, boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
       }}>
-        {role}
+        {avatarText}
       </div>
-      <div style={{ position: 'relative', maxWidth: '82%' }}>
-        <div 
-          className={isPlaying ? 'chat-playing' : ''}
-          style={{
-            background: isMe ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'white',
-            color: isMe ? 'white' : '#1e293b',
-            padding: '12px 18px',
-            borderRadius: '20px',
-            borderBottomRightRadius: isMe ? '4px' : '20px',
-            borderBottomLeftRadius: isMe ? '20px' : '4px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-            fontSize: '1.05rem', lineHeight: '1.6', cursor: 'pointer',
-            border: isMe ? 'none' : '1px solid #f1f5f9'
-          }}
-        >
-          {/* 这里加个简单的白字处理，因为 RichPinyinText 生成的 ruby rt 默认是灰色 */}
-          <div className={isMe ? 'white-ruby' : ''}>
-            <RichPinyinText text={text} />
-          </div>
+
+      {/* 气泡 */}
+      <div 
+        onClick={onPlay}
+        style={{
+          maxWidth: '75%',
+          background: isMe ? '#eff6ff' : '#ffffff',
+          border: isMe ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+          padding: '12px 16px',
+          borderRadius: '16px',
+          borderTopRightRadius: isMe ? '2px' : '16px',
+          borderTopLeftRadius: isMe ? '16px' : '2px',
+          position: 'relative',
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          transition: 'transform 0.1s',
+          transform: isPlaying ? 'scale(1.02)' : 'scale(1)'
+        }}
+      >
+        <div style={{ fontSize: '15px', color: '#1e293b', lineHeight: '1.6' }}>
+          {/* 渲染文本，支持高亮 */}
+          {text.split(/(\{\{.*?\}\})/).map((part, i) => {
+            if (part.startsWith('{{') && part.endsWith('}}')) {
+               return <span key={i} style={{ color: isMe ? '#1d4ed8' : '#c2410c', fontWeight: 'bold' }}>{part.slice(2, -2)}</span>;
+            }
+            return part;
+          })}
         </div>
+        
+        {/* 播放状态指示器 */}
+        {isPlaying && (
+          <div style={{ position: 'absolute', bottom: '-20px', right: isMe ? '0' : 'auto', left: isMe ? 'auto' : '0', fontSize: '10px', color: '#2563eb', fontWeight: 'bold' }}>
+            正在朗读...
+          </div>
+        )}
       </div>
     </div>
   );
 };
-
-// 内容解析器
-const ContentRenderer = ({ content, playFunc, playingId }) => {
-  const elements = useMemo(() => {
-    if (!content) return [];
-    
-    const lines = content.split('\n');
-    const result = [];
-    let tableBuffer = [];
-    let dialogueBuffer = [];
-    let groupCount = 0;
-
-    const flushTable = () => {
-      if (tableBuffer.length > 0) {
-        result.push({ type: 'table', rows: tableBuffer });
-        tableBuffer = [];
-      }
-    };
-
-    const flushDialogue = () => {
-      if (dialogueBuffer.length > 0) {
-        groupCount++;
-        result.push({ type: 'dialogue_group', items: dialogueBuffer, groupId: groupCount });
-        dialogueBuffer = [];
-      }
-    };
-
-    lines.forEach((line, index) => {
-      const trim = line.trim();
-      
-      // 表格检测
-      if (trim.startsWith('|') && trim.endsWith('|')) {
-        flushDialogue();
-        const cells = trim.split('|').filter(c => c).map(c => c.trim());
-        if (!trim.includes('---')) tableBuffer.push(cells);
-        return;
-      }
-      flushTable();
-
-      // 对话检测
-      const dialogueMatch = trim.match(/^([AB])[:：](.*)/);
-      if (dialogueMatch) {
-        dialogueBuffer.push({ role: dialogueMatch[1], text: dialogueMatch[2].trim(), id: `dia_${index}` });
-        return;
-      }
-      if (trim !== '') flushDialogue();
-
-      // 空行
-      if (trim === '') {
-        result.push({ type: 'spacer' });
-        return;
-      }
-
-      // 标题 (Heading)
-      const headerMatch = trim.match(/^(#{1,6})\s+(.*)/);
-      if (headerMatch) {
-        result.push({ type: 'heading', level: headerMatch[1].length, text: headerMatch[2] });
-        return;
-      }
-
-      // 图片 ![alt](src)
-      const imgMatch = trim.match(/^!\[(.*?)\]\((.*?)\)/);
-      if (imgMatch) {
-        result.push({ type: 'image', alt: imgMatch[1], src: imgMatch[2] });
-        return;
-      }
-
-      // 视频 [VIDEO](src)
-      const vidMatch = trim.match(/^\[VIDEO\]\((.*?)\)/);
-      if (vidMatch) {
-        result.push({ type: 'video', src: vidMatch[1] });
-        return;
-      }
-
-      // 列表 (多级缩进检测)
-      const listMatch = line.match(/^(\s*)([-*])\s+(.*)/);
-      if (listMatch) {
-        const indent = listMatch[1].length; // 空格数量
-        // 假设2空格或1tab为一级，粗略计算
-        const level = Math.floor(indent / 2);
-        result.push({ type: 'list', text: listMatch[3], level });
-        return;
-      }
-
-      // 可朗读例句
-      if (/^[✅❌·•◆]/.test(trim)) {
-        result.push({ type: 'playable', text: trim, id: `line_${index}` });
-      } else if (trim.startsWith('⚠️')) {
-        result.push({ type: 'warning', text: trim.substring(1) });
-      } else {
-        result.push({ type: 'text', text: trim });
-      }
-    });
-
-    flushTable();
-    flushDialogue();
-    return result;
-  }, [content]);
-
-  return (
-    <div>
-      {elements.map((el, i) => {
-        switch (el.type) {
-          case 'table':
-            return <MarkdownTable key={i} rows={el.rows} />;
-          case 'dialogue_group':
-            return (
-              <div key={i} style={{ margin: '32px 0', padding: '24px', background: '#f8fafc', borderRadius: '20px', border: '1px solid #f1f5f9' }}>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '800' }}>
-                  Conversation Group {el.groupId}
-                </div>
-                {el.items.map(d => (
-                  <ChatBubble 
-                    key={d.id} role={d.role} text={d.text} 
-                    isPlaying={playingId === d.id} onPlay={(t) => playFunc(t, d.id)} 
-                  />
-                ))}
-              </div>
-            );
-          case 'playable':
-            return <PlayableLine key={i} text={el.text} isPlaying={playingId === el.id} onPlay={(t) => playFunc(t, el.id)} />;
-          case 'heading':
-            const fontSize = el.level === 1 ? '1.8rem' : el.level === 2 ? '1.5rem' : '1.2rem';
-            const marginTop = el.level === 1 ? '32px' : '24px';
-            return <div key={i} style={{ fontSize, fontWeight: '800', color: '#1e293b', marginTop, marginBottom: '16px', lineHeight: 1.3 }}><RichPinyinText text={el.text} /></div>;
-          case 'image':
-            return <ImageViewer key={i} src={el.src} alt={el.alt} />;
-          case 'video':
-            return <VideoPlayer key={i} src={el.src} />;
-          case 'list':
-            return <ListItem key={i} text={el.text} level={el.level} />;
-          case 'warning':
-            return (
-              <div key={i} style={{ background: '#fffbeb', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '0 8px 8px 0', margin: '16px 0', display: 'flex', gap: '12px', color: '#92400e', alignItems:'center' }}>
-                <span style={{fontSize:'1.2rem'}}>⚠️</span>
-                <span style={{lineHeight: 1.6}}><RichPinyinText text={el.text} /></span>
-              </div>
-            );
-          case 'spacer':
-            return <div key={i} style={{ height: '16px' }} />;
-          default:
-            return <p key={i} style={{ lineHeight: 1.8, fontSize: '1.05rem', color: '#475569', margin: '10px 0' }}><RichPinyinText text={el.text} /></p>;
-        }
-      })}
-    </div>
-  );
-};
-
 
 // =================================================================================
-// ===== 4. 主组件 (布局逻辑 - 修复移动端地址栏遮挡) =====
+// ===== 5. 内容解析器 (自动分离对话) =====
+// =================================================================================
+const parseContent = (htmlString) => {
+  if (!htmlString) return { explanation: [], dialogues: [] };
+  
+  const lines = htmlString.split('\n');
+  const explanationLines = [];
+  const dialogues = [];
+  let isDialogueSection = false;
+
+  lines.forEach(line => {
+    const trim = line.trim();
+    if (!trim) { explanationLines.push({type: 'br'}); return; }
+    
+    // 检测是否进入对话部分 (模糊匹配)
+    if (trim.includes('对话') && (trim.startsWith('##') || trim.startsWith('◆'))) {
+      isDialogueSection = true;
+      return; 
+    }
+
+    // 识别对话行 "A: ..." 或 "B: ..."
+    const dialogueMatch = trim.match(/^([AB])[:：](.*)/);
+    
+    if (dialogueMatch) {
+      // 只要匹配到A/B，就认为是对话，无论是否在对话章节下
+      dialogues.push({
+        id: Math.random().toString(36).substr(2, 9),
+        role: dialogueMatch[1].toUpperCase(),
+        text: dialogueMatch[2].trim()
+      });
+    } else {
+      // 非对话内容，只有在非对话章节才加入解释
+      if (!isDialogueSection) {
+        explanationLines.push({ type: 'text', content: trim });
+      }
+    }
+  });
+
+  return { explanationLines, dialogues };
+};
+
+// =================================================================================
+// ===== 6. 主组件: GrammarPointPlayer =====
 // =================================================================================
 const GrammarPointPlayer = ({ grammarPoints, onComplete = () => {} }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const lastDirection = useRef(0);
   const contentRef = useRef(null);
   
+  // 引入新的播放器钩子
   const { 
     play, stop, isPlaying, playingId, isLoading, 
-    duration, currentTime, seek, playbackRate, setPlaybackRate 
+    duration, currentTime, seek, 
+    playbackRate, setPlaybackRate 
   } = useMixedTTS();
 
   const currentGp = grammarPoints[currentIndex] || {};
-  const playingType = playingId === 'main_narration' ? 'main' : (playingId ? 'example' : null);
+  
+  // 解析当前内容，分离解释和对话
+  const { explanationLines, dialogues } = useMemo(() => 
+    parseContent(currentGp['语法详解'] || currentGp.visibleExplanation || ''), 
+  [currentGp]);
 
   const transitions = useTransition(currentIndex, {
     key: currentGp.id || currentIndex,
-    from: { opacity: 0, transform: 'translateX(60px)' },
+    from: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '100%' : '-100%'})` },
     enter: { opacity: 1, transform: 'translateX(0%)' },
-    leave: { opacity: 0, transform: 'translateX(-60px)', position: 'absolute' },
-    config: { tension: 280, friction: 30 },
+    leave: { opacity: 0, transform: `translateX(${lastDirection.current > 0 ? '-100%' : '100%'})`, position: 'absolute' },
+    config: { mass: 1, tension: 280, friction: 30 },
   });
 
-  const handleNext = () => { stop(); setCurrentIndex(p => p < grammarPoints.length - 1 ? p + 1 : p); if(currentIndex === grammarPoints.length -1) onComplete(); };
-  const handlePrev = () => { stop(); setCurrentIndex(p => p > 0 ? p - 1 : 0); };
+  const handleNext = () => {
+    stop();
+    if (currentIndex < grammarPoints.length - 1) {
+      lastDirection.current = 1;
+      setCurrentIndex(p => p + 1);
+    } else {
+      onComplete();
+    }
+  };
 
-  // 回到顶部
-  useEffect(() => {
-    if (contentRef.current) contentRef.current.scrollTop = 0;
-  }, [currentIndex]);
+  const handlePrev = () => {
+    stop();
+    if (currentIndex > 0) {
+      lastDirection.current = -1;
+      setCurrentIndex(p => p - 1);
+    }
+  };
+
+  // 生成顶部解释的HTML (不包含对话)
+  const renderExplanationHtml = () => {
+    let html = '';
+    explanationLines.forEach(item => {
+      if (item.type === 'br') html += '<div style="height:10px"></div>';
+      else {
+        // 简单的Markdown处理
+        let t = item.content;
+        if (t.startsWith('##')) html += `<h2>${t.replace(/^##\s*/, '')}</h2>`;
+        else if (t.startsWith('✅')) html += `<div class="check-item correct">✅ ${t.substring(1)}</div>`;
+        else if (t.startsWith('❌')) html += `<div class="check-item wrong">❌ ${t.substring(1)}</div>`;
+        else if (t.startsWith('◆')) html += `<div class="pattern-item">${t}</div>`;
+        else html += `<p>${t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')}</p>`;
+      }
+    });
+    return html;
+  };
 
   return (
     <div style={styles.container}>
-      
-      {/* 悬浮播放器 */}
+      {/* 浮动播放器 (全局) */}
       <FloatingMusicPlayer 
-        isPlaying={isPlaying && playingType === 'main'}
+        isPlaying={isPlaying}
         isLoading={isLoading}
-        playingType={playingType} 
-        onToggle={() => play(currentGp['讲解脚本'] || currentGp.grammarPoint, 'main_narration')}
-        duration={duration} currentTime={currentTime} onSeek={seek}
-        playbackRate={playbackRate} onRateChange={setPlaybackRate}
+        onToggle={() => play(playingId === 'main_narration' ? null : (currentGp['讲解脚本'] || currentGp.grammarPoint), 'main_narration')}
+        duration={duration}
+        currentTime={currentTime}
+        onSeek={seek}
+        playbackRate={playbackRate}
+        onRateChange={setPlaybackRate}
+        title={playingId === 'main_narration' ? "语法讲解" : "对话朗读"}
       />
 
-      {/* 页面过渡区域 */}
-      <div style={styles.transitionWrapper}>
-        {transitions((style, i) => {
-          const gp = grammarPoints[i];
-          if (!gp) return null;
-          
-          return (
-            <animated.div style={{ ...styles.page, ...style }}>
-              
-              {/* 核心内容滚动区 */}
-              <div style={styles.scrollContainer} ref={contentRef}>
-                <div style={styles.contentWrapper}>
-                  
-                  {/* 顶部标题区 */}
-                  <div style={styles.header}>
-                    <div style={styles.tag}>Grammar Point {i + 1}</div>
-                    <h2 style={styles.title}>{gp['语法标题'] || gp.grammarPoint}</h2>
-                    <button 
-                      onClick={() => play(gp['讲解脚本'] || gp.grammarPoint, 'main_narration')}
-                      style={{
-                        ...styles.mainPlayBtn, 
-                        background: playingId === 'main_narration' && isPlaying ? '#6366f1' : '#e0e7ff', 
-                        color: playingId === 'main_narration' && isPlaying ? 'white' : '#4338ca',
-                        transform: playingId === 'main_narration' && isPlaying ? 'scale(1.05)' : 'scale(1)'
-                      }}
-                    >
-                      {playingId === 'main_narration' && isPlaying ? <FaPause /> : <FaPlay />} 
-                      <span style={{marginLeft:8}}>听老师讲解</span>
-                    </button>
-                  </div>
-
-                  {/* 句型结构卡片 */}
-                  {gp['句型结构'] && (
-                    <div style={styles.patternBox}>
-                      <div style={styles.patternLabel}>STRUCTURE / 句型结构</div>
-                      <div style={styles.patternText}><RichPinyinText text={gp['句型结构']} /></div>
-                    </div>
-                  )}
-
-                  {/* 动态内容渲染 */}
-                  <ContentRenderer 
-                     content={gp['语法详解'] || gp.visibleExplanation} 
-                     playFunc={play}
-                     playingId={playingId}
-                  />
-
-                  {/* 底部留白，防止内容被导航栏遮挡 */}
-                  <div style={{ height: '140px' }}></div>
+      {transitions((style, i) => {
+        const gp = grammarPoints[i];
+        if (!gp) return null;
+        
+        return (
+          <animated.div style={{ ...styles.page, ...style }}>
+            <div style={styles.scrollContainer} ref={contentRef}>
+              <div style={styles.contentWrapper}>
+                
+                {/* 1. 标题区 */}
+                <div style={styles.header}>
+                  <h2 style={styles.title}>{gp['语法标题'] || gp.grammarPoint}</h2>
+                  {/* 点击这个播放按钮，将触发 "main_narration" */}
+                  <button 
+                    onClick={() => play(gp['讲解脚本'] || gp.grammarPoint, 'main_narration')}
+                    style={styles.mainPlayBtn}
+                  >
+                    {playingId === 'main_narration' && isPlaying ? <FaPause /> : <FaPlay />} 
+                    <span style={{marginLeft:8}}>听讲解</span>
+                  </button>
                 </div>
+
+                {/* 2. 句型结构 */}
+                {gp['句型结构'] && (
+                  <div style={styles.patternBox}>
+                    <div style={styles.patternLabel}>句型结构</div>
+                    <div style={styles.patternText}>{gp['句型结构']}</div>
+                  </div>
+                )}
+
+                {/* 3. 语法详解 (解析后的剩余部分) */}
+                <div style={styles.section}>
+                  <div 
+                    className="rich-text-content"
+                    dangerouslySetInnerHTML={{ __html: renderExplanationHtml() }} 
+                  />
+                </div>
+
+                {/* 4. 对话区 (新版气泡) */}
+                {dialogues.length > 0 && (
+                  <div style={styles.section}>
+                    <div style={styles.sectionTitle}>💬 场景对话</div>
+                    <div style={styles.chatContainer}>
+                      {dialogues.map((d) => (
+                        <ChatMessage 
+                          key={d.id} 
+                          role={d.role} 
+                          text={d.text} 
+                          isPlaying={playingId === d.id && isPlaying}
+                          onPlay={() => play(d.text, d.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ height: '140px' }}></div>
               </div>
+            </div>
 
-            </animated.div>
-          );
-        })}
-      </div>
+            {/* 底部导航 */}
+            <div style={styles.bottomBar}>
+              <button 
+                onClick={handlePrev} 
+                style={{ ...styles.navBtn, opacity: i === 0 ? 0 : 1, pointerEvents: i === 0 ? 'none' : 'auto' }}
+              >
+                <FaChevronLeft /> 上一个
+              </button>
+              <div style={styles.pageIndicator}>{i + 1} / {grammarPoints.length}</div>
+              <button onClick={handleNext} style={{ ...styles.navBtn, background: '#2563eb', color: 'white' }}>
+                {i === grammarPoints.length - 1 ? '完成' : '下一个'} <FaChevronRight />
+              </button>
+            </div>
+          </animated.div>
+        );
+      })}
 
-      {/* 固定底部导航栏 (Padding safe area) */}
-      <div style={styles.bottomBar}>
-        <button onClick={handlePrev} disabled={currentIndex === 0} style={{ ...styles.navBtn, opacity: currentIndex === 0 ? 0.4 : 1 }}>
-          <FaChevronLeft /> Prev
-        </button>
-        <div style={styles.pageIndicator}>
-          <span style={{color: '#6366f1', fontSize: '1.2rem'}}>{currentIndex + 1}</span> 
-          <span style={{opacity: 0.4, margin: '0 4px'}}>/</span> 
-          {grammarPoints.length}
-        </div>
-        <button onClick={handleNext} style={{ ...styles.navBtn, background: '#6366f1', color: 'white', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>
-          {currentIndex === grammarPoints.length - 1 ? 'Done' : 'Next'} <FaChevronRight />
-        </button>
-      </div>
-
-      {/* 全局样式注入 */}
+      {/* 注入 CSS */}
       <style dangerouslySetInnerHTML={{__html: `
-        ruby { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; ruby-align: center; }
-        rt { font-size: 0.55em; color: #94a3b8; font-weight: normal; user-select: none; transform: translateY(-2px); }
-        .white-ruby rt { color: rgba(255,255,255,0.8); }
-        .playable-line:hover { background: #f1f5f9; border-color: #e2e8f0 !important; }
-        .playable-line.active { background: #eef2ff; border-color: #c7d2fe !important; }
-        .chat-playing { border: 2px solid #818cf8 !important; background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 8px 20px rgba(99,102,241,0.3) !important; }
-        .rich-bold { color: #0f172a; font-weight: 800; }
+        .rich-text-content h2 { font-size: 1.1rem; color: #334155; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-top: 24px; margin-bottom: 16px; }
+        .rich-text-content p { margin-bottom: 12px; line-height: 1.7; color: #475569; }
+        .check-item { padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.95rem; }
+        .check-item.correct { background: #f0fdf4; color: #166534; }
+        .check-item.wrong { background: #fef2f2; color: #991b1b; }
+        .pattern-item { font-weight: bold; color: #2563eb; margin: 10px 0; padding-left: 10px; border-left: 3px solid #2563eb; }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        /* 隐藏滚动条但保留功能 */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
       `}} />
     </div>
   );
 };
 
 // =================================================================================
-// ===== 5. 样式系统 (支持 dvh 和 safe-area) =====
+// ===== 7. 样式定义 =====
 // =================================================================================
 const styles = {
-  // 使用 dvh (Dynamic Viewport Height) 解决移动端地址栏问题
-  container: { 
-    position: 'absolute', 
-    inset: 0, 
-    height: '100dvh', // 关键 fix
-    background: '#f8fafc', 
-    display: 'flex', 
-    flexDirection: 'column',
-    overflow: 'hidden'
-  },
-  transitionWrapper: {
-    position: 'relative',
-    flex: 1, // 占据剩余空间
-    width: '100%',
-    overflow: 'hidden' // 确保动画不溢出
-  },
-  page: { 
-    position: 'absolute', 
-    inset: 0, 
-    display: 'flex', 
-    flexDirection: 'column', 
-    background: '#fff',
-    width: '100%',
-    height: '100%'
-  },
-  scrollContainer: { 
-    flex: 1, 
-    overflowY: 'auto', 
-    WebkitOverflowScrolling: 'touch',
-    scrollBehavior: 'smooth',
-    paddingBottom: '20px' 
-  },
-  contentWrapper: { 
-    maxWidth: '800px', 
-    margin: '0 auto', 
-    padding: '32px 24px' 
-  },
-  header: { 
-    textAlign: 'center', 
-    marginBottom: '40px' 
-  },
-  tag: {
-    display: 'inline-block',
-    padding: '4px 12px',
-    borderRadius: '20px',
-    background: '#f1f5f9',
-    color: '#64748b',
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    letterSpacing: '0.5px',
-    textTransform: 'uppercase',
-    marginBottom: '12px'
-  },
-  title: { 
-    fontSize: '2rem', 
-    fontWeight: '800', 
-    color: '#1e293b', 
-    marginBottom: '20px',
-    lineHeight: 1.2
-  },
-  mainPlayBtn: { 
-    display: 'inline-flex', 
-    alignItems: 'center', 
-    padding: '12px 28px', 
-    borderRadius: '50px', 
-    border: 'none', 
-    fontWeight: '700', 
-    cursor: 'pointer', 
-    fontSize: '15px', 
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
-    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' 
-  },
-  patternBox: { 
-    background: 'linear-gradient(180deg, #f8fafc 0%, #fff 100%)', 
-    padding: '28px', 
-    borderRadius: '24px', 
-    border: '1px solid #e2e8f0', 
-    marginBottom: '40px', 
-    textAlign: 'center',
-    boxShadow: '0 4px 20px -5px rgba(0,0,0,0.03)'
-  },
-  patternLabel: { 
-    fontSize: '0.7rem', 
-    color: '#94a3b8', 
-    fontWeight: '800', 
-    letterSpacing: '1.5px', 
-    marginBottom: '14px',
-    textTransform: 'uppercase'
-  },
-  patternText: { 
-    fontSize: '1.6rem', 
-    color: '#4f46e5', 
-    fontWeight: '700', 
-    lineHeight: 1.4 
-  },
-  // 底部导航栏：包含安全区域 padding
-  bottomBar: { 
-    height: 'auto',
-    minHeight: '80px', 
-    background: 'rgba(255,255,255,0.92)', 
-    backdropFilter: 'blur(12px)', 
-    borderTop: '1px solid #e2e8f0', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    padding: '16px 24px', 
-    // 适配 iPhone X 等底部横条
-    paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', 
-    zIndex: 50,
-    boxShadow: '0 -4px 20px rgba(0,0,0,0.02)'
-  },
-  navBtn: { 
-    border: 'none', 
-    background: '#f1f5f9', 
-    padding: '12px 24px', 
-    borderRadius: '16px', 
-    fontSize: '15px', 
-    fontWeight: '700', 
-    color: '#475569', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '8px', 
-    cursor: 'pointer', 
-    transition: 'transform 0.1s' 
-  },
-  pageIndicator: { 
-    fontSize: '15px', 
-    fontWeight: '800', 
-    color: '#94a3b8',
-    fontFamily: 'monospace'
-  }
+  container: { position: 'relative', width: '100%', height: '100%', background: '#f8fafc', overflow: 'hidden' },
+  page: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: '#f8fafc' },
+  scrollContainer: { flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' },
+  contentWrapper: { maxWidth: '800px', margin: '0 auto', padding: '24px 20px' },
+  header: { textAlign: 'center', marginBottom: '24px' },
+  title: { fontSize: '1.8rem', fontWeight: '800', color: '#0f172a', marginBottom: '16px' },
+  mainPlayBtn: { display: 'inline-flex', alignItems: 'center', padding: '8px 20px', borderRadius: '30px', background: '#e0e7ff', color: '#3730a3', border: 'none', fontWeight: '600', cursor: 'pointer', fontSize: '14px' },
+  patternBox: { background: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '32px', textAlign: 'center' },
+  patternLabel: { fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '1px', marginBottom: '8px', textTransform: 'uppercase' },
+  patternText: { fontSize: '1.4rem', color: '#2563eb', fontWeight: 'bold' },
+  section: { marginBottom: '32px' },
+  sectionTitle: { fontSize: '1rem', fontWeight: '700', color: '#64748b', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' },
+  chatContainer: { display: 'flex', flexDirection: 'column' },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', zIndex: 10 },
+  navBtn: { border: 'none', background: '#f1f5f9', padding: '12px 20px', borderRadius: '12px', fontSize: '14px', fontWeight: '600', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', transition: 'all 0.2s' },
+  pageIndicator: { fontSize: '14px', fontWeight: '600', color: '#94a3b8' }
 };
 
 GrammarPointPlayer.propTypes = {
