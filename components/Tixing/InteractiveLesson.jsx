@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
-import { FaPlay } from "react-icons/fa";
+import { FaPlay, FaCheck, FaHome, FaRedo } from "react-icons/fa";
 
 // --- 动态导入组件 ---
 const GrammarPointPlayer = dynamic(() => import('./GrammarPointPlayer'), { ssr: false });
@@ -10,13 +10,13 @@ const XuanZeTi = dynamic(() => import('./XuanZeTi'), { ssr: false });
 const PanDuanTi = dynamic(() => import('./PanDuanTi'), { ssr: false });
 const DuiHua = dynamic(() => import('./DuiHua'), { ssr: false });
 
-// --- 样式 ---
+// --- 样式：隐藏滚动条但保留功能 ---
 const scrollbarStyles = `
   ::-webkit-scrollbar { width: 0px; background: transparent; }
-  * { scrollbar-width: none; }
+  * { scrollbar-width: none; -ms-overflow-style: none; }
 `;
 
-// --- Audio Manager (保持不变) ---
+// --- Audio Manager ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 const audioManager = (() => {
   if (typeof window === 'undefined') return { stop:()=>{}, playTTS:async()=>{}, playDing:()=>{} };
@@ -34,71 +34,69 @@ const audioManager = (() => {
   };
 })();
 
-// --- 封面组件 (已修正：接收 externalImage 参数) ---
+// --- 封面组件 ---
 const CoverScreen = ({ title, subTitle, image, onStart }) => {
-    // 默认兜底图，防止数据没配图片时一片黑
     const bgImage = image || "https://images.unsplash.com/photo-1548625361-9877015037d2?q=80&w=1920&auto=format&fit=crop";
-
     return (
         <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-slate-900">
-            {/* 1. 背景图 */}
             <div 
-                className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 transform scale-105 transition-transform duration-[10s] ease-linear hover:scale-110"
-                style={{ 
-                    backgroundImage: `url("${bgImage}")`,
-                    filter: 'brightness(0.7) blur(2px)' //稍微压暗和模糊，突出文字
-                }}
+                className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 transform scale-105 transition-transform duration-[20s] ease-linear hover:scale-110"
+                style={{ backgroundImage: `url("${bgImage}")`, filter: 'brightness(0.6) blur(2px)' }}
             />
-            
-            {/* 2. 内容卡片 */}
-            <div className="relative z-10 p-8 md:p-14 flex flex-col items-center max-w-md mx-4 animate-in fade-in zoom-in duration-500">
-                
-                {/* 装饰线条 */}
-                <div className="mb-8 w-20 h-1.5 bg-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.6)]"></div>
-                
-                {/* 标题 */}
-                <h1 className="text-4xl md:text-5xl font-black text-white text-center leading-tight mb-4 drop-shadow-2xl tracking-wide">
+            <div className="relative z-10 p-8 flex flex-col items-center max-w-md mx-4 animate-in fade-in zoom-in duration-700">
+                <div className="mb-8 w-16 h-1.5 bg-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.8)]"></div>
+                <h1 className="text-4xl md:text-5xl font-black text-white text-center leading-tight mb-6 drop-shadow-xl tracking-wide">
                     {title || "HSK 课程"}
                 </h1>
-                
-                {/* 副标题/描述 */}
-                <p className="text-white/90 text-lg mb-12 font-medium tracking-wider font-['Padauk'] text-center">
-                    {subTitle || "开始你的中文学习之旅"}
+                <p className="text-white/90 text-lg mb-12 font-medium tracking-widest font-sans text-center opacity-90">
+                    {subTitle || "Interactive Learning"}
                 </p>
-                
-                {/* 开始按钮 */}
                 <button 
                     onClick={onStart}
-                    className="group relative px-10 py-4 bg-white text-slate-900 font-black rounded-full shadow-[0_10px_20px_rgba(0,0,0,0.25)] hover:shadow-[0_15px_30px_rgba(255,255,255,0.3)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 flex items-center gap-3 overflow-hidden"
+                    className="group relative px-12 py-4 bg-white text-slate-900 font-black rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_40px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 flex items-center gap-3 overflow-hidden"
                 >
                     <span className="relative z-10 text-xl tracking-wide">开始学习</span>
-                    <FaPlay size={16} className="relative z-10 ml-1 text-blue-600 group-hover:scale-110 transition-transform" />
-                    
-                    {/* 按钮光效 */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out skew-x-12"></div>
+                    <FaPlay size={16} className="relative z-10 ml-1 text-blue-600 group-hover:translate-x-1 transition-transform" />
                 </button>
-            </div>
-            
-            <div className="absolute bottom-10 text-white/30 text-xs tracking-[0.2em] uppercase font-bold">
-                Interactive Learning
             </div>
         </div>
     );
 };
 
-// --- 完成页面 ---
-const CompletionBlock = ({ onExit }) => { 
+// --- 完成页面 (优化版) ---
+const CompletionBlock = ({ onExit, onRestart }) => { 
   useEffect(() => { 
-    import('canvas-confetti').then(m => m.default({ particleCount: 150, spread: 70, origin: { y: 0.6 } })); 
+    import('canvas-confetti').then(m => {
+        const duration = 3000;
+        const animationEnd = Date.now() + duration;
+        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+        const randomInRange = (min, max) => Math.random() * (max - min) + min;
+        const interval = setInterval(function() {
+            const timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) return clearInterval(interval);
+            const particleCount = 50 * (timeLeft / duration);
+            m.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+            m.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+        }, 250);
+    });
   }, []);
   
   return (
-    <div className="flex flex-col items-center justify-center h-full bg-slate-50 animate-in fade-in duration-500">
-      <div className="text-8xl mb-6 animate-bounce">🎉</div>
-      <h2 className="text-3xl font-black text-slate-800 mb-2">课程完成！</h2>
-      <button onClick={onExit} className="px-10 py-3 mt-8 bg-white border border-slate-200 text-slate-700 font-bold rounded-full shadow-sm hover:shadow-md transition-all">
-        返回列表
-      </button>
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 animate-in fade-in duration-500 p-6">
+      <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center shadow-lg mb-8 animate-bounce">
+          <FaCheck className="text-white text-4xl" />
+      </div>
+      <h2 className="text-3xl md:text-4xl font-black text-slate-800 mb-4 text-center">恭喜完成！</h2>
+      <p className="text-slate-500 mb-12 text-center max-w-xs text-lg">你已经完成了本节课的所有内容，掌握了新的知识点。</p>
+      
+      <div className="flex flex-col gap-4 w-full max-w-xs">
+          <button onClick={onExit} className="w-full px-6 py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all flex items-center justify-center gap-2">
+            <FaHome /> 返回课程列表
+          </button>
+          <button onClick={onRestart} className="w-full px-6 py-4 bg-white text-slate-600 font-bold rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+            <FaRedo /> 再学一次
+          </button>
+      </div>
     </div>
   ); 
 };
@@ -125,6 +123,11 @@ export default function InteractiveLesson({ lesson }) {
     audioManager?.stop(); 
     if (currentIndex > 0) setCurrentIndex(prev => prev - 1); 
   }, [currentIndex]);
+
+  const handleRestart = () => {
+      setCurrentIndex(0);
+      setIsStarted(false); // 可选：是否回到封面
+  };
   
   const handleCorrect = useCallback(() => {
     audioManager.playDing();
@@ -135,64 +138,123 @@ export default function InteractiveLesson({ lesson }) {
 
   if (!hasMounted) return null;
 
-  // 1. 封面状态：读取 lesson.coverImage
+  // 1. 封面状态
   if (!isStarted) {
       return (
         <div className="fixed inset-0 w-screen h-screen bg-slate-900 font-sans">
              <style>{scrollbarStyles}</style>
              <CoverScreen 
                 title={lesson?.title} 
-                subTitle={lesson?.description} // 如果数据里有描述
-                image={lesson?.coverImage}     // ✅ 关键修改：从数据读取图片
+                subTitle={lesson?.description} 
+                image={lesson?.coverImage}     
                 onStart={() => { audioManager.playDing(); setIsStarted(true); }} 
              />
         </div>
       );
   }
 
-  // 2. 完成状态
+  // 2. 完成状态 (当索引超出 blocks 长度时)
   if (currentIndex >= blocks.length) {
-      return <div className="fixed inset-0 w-screen h-screen bg-white"><CompletionBlock onExit={handleExit} /></div>;
+      return (
+        <div className="fixed inset-0 w-screen h-screen bg-white font-sans">
+            <style>{scrollbarStyles}</style>
+            <CompletionBlock onExit={handleExit} onRestart={handleRestart} />
+        </div>
+      );
   }
 
   // 3. 学习内容渲染
+  // 通用 props
   const commonProps = { 
     key: `${lesson.id}-${currentIndex}`, 
+    // 数据透传
     data: currentBlock.content,
-    // 透传互动题所需参数 
+    // 互动题特定字段
     question: currentBlock.content.question, 
     options: currentBlock.content.options,
     correctAnswer: currentBlock.content.correctAnswer, 
+    // 回调
     onCorrect: handleCorrect,
-    onComplete: goNext,
-    onNext: goNext,
+    onComplete: goNext, // 语法/单词学完后调用
+    onNext: goNext,     // 互动题做完后调用
     onPrev: goPrev,
     isFirst: currentIndex === 0
   };
 
   const type = (currentBlock.type || '').toLowerCase();
   
-  // 容器
-  const FullScreen = ({ children }) => <div className="w-full h-full animate-in fade-in slide-in-from-right-4 duration-300">{children}</div>;
+  // 容器组件
+  // FullScreen: 用于单词、语法、对话等全屏展示的内容，强制 overflow-y-auto 防止截断
+  const FullScreen = ({ children }) => (
+      <div className="w-full h-full animate-in fade-in slide-in-from-right-8 duration-300 overflow-y-auto bg-slate-50">
+          {children}
+      </div>
+  );
+
+  // QuestionWrapper: 用于选择题等，居中显示
   const QuestionWrapper = ({ children }) => (
-      <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-slate-50 animate-in fade-in duration-300 relative">
-         <div className="w-full max-w-md z-10">{children}</div>
+      <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-slate-50 animate-in fade-in duration-300 relative overflow-y-auto">
+         <div className="w-full max-w-md z-10 my-auto">{children}</div>
       </div>
   );
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans">
+    <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-800">
       <style>{scrollbarStyles}</style>
+      
+      {/* 隐藏的顶部栏，用于放置返回按钮(可选) */}
+      <div className="absolute top-0 left-0 p-4 z-50 pointer-events-none">
+         {/* 如果需要返回按钮可以放这里，目前为空保持全屏沉浸 */}
+      </div>
+
       <main className="w-full h-full relative">
-        {type === 'word_study' && <FullScreen><WordStudyPlayer data={commonProps.data} onNext={goNext} onPrev={goPrev} isFirstBlock={commonProps.isFirst} /></FullScreen>}
-        {type === 'grammar_study' && <FullScreen><GrammarPointPlayer grammarPoints={commonProps.data.grammarPoints} onComplete={goNext} /></FullScreen>}
-        {type === 'choice' && <QuestionWrapper><XuanZeTi {...commonProps} question={currentBlock.content.question} /></QuestionWrapper>}
-        {type === 'panduan' && <QuestionWrapper><PanDuanTi {...commonProps} /></QuestionWrapper>}
-        {type === 'dialogue' && <FullScreen><DuiHua {...commonProps} /></FullScreen>}
+        {type === 'word_study' && (
+            <FullScreen>
+                <WordStudyPlayer 
+                    data={commonProps.data} 
+                    onNext={goNext} 
+                    onPrev={goPrev} 
+                    isFirstBlock={commonProps.isFirst} 
+                />
+            </FullScreen>
+        )}
+        
+        {type === 'grammar_study' && (
+            <FullScreen>
+                <GrammarPointPlayer 
+                    // 确保传递的是 grammarPoints 数组
+                    grammarPoints={commonProps.data.grammarPoints} 
+                    onComplete={goNext} 
+                />
+            </FullScreen>
+        )}
+        
+        {type === 'choice' && (
+            <QuestionWrapper>
+                <XuanZeTi {...commonProps} />
+            </QuestionWrapper>
+        )}
+        
+        {type === 'panduan' && (
+            <QuestionWrapper>
+                <PanDuanTi {...commonProps} />
+            </QuestionWrapper>
+        )}
+        
+        {type === 'dialogue' && (
+            <FullScreen>
+                <DuiHua {...commonProps} />
+            </FullScreen>
+        )}
+        
+        {/* 未知类型处理 */}
         {!['word_study','grammar_study','choice','panduan','dialogue'].includes(type) && (
-            <div className="flex items-center justify-center h-full text-gray-400"><button onClick={goNext}>跳过未知模块: {type}</button></div>
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <p>Unknown Module: {type}</p>
+                <button onClick={goNext} className="mt-4 text-blue-500">Skip</button>
+            </div>
         )}
       </main>
     </div>
   );
-    }
+}
