@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { FaCheckCircle, FaTimesCircle, FaVolumeUp, FaArrowRight, FaTachometerAlt } from 'react-icons/fa';
+import { FaVolumeUp, FaCheck, FaTimes, FaArrowRight, FaLightbulb } from 'react-icons/fa';
 import { pinyin } from 'pinyin-pro';
 
-// ============================================================================
-// 1. 基础工具与缓存 (保持不变)
-// ============================================================================
+// --- 1. IndexedDB 缓存 (保持核心逻辑不变) ---
 const DB_NAME = 'LessonCacheDB';
 const STORE_NAME = 'tts_audio';
 const DB_VERSION = 1;
@@ -33,7 +31,10 @@ const idb = {
     return new Promise((resolve) => {
       const tx = this.db.transaction(STORE_NAME, 'readonly');
       const req = tx.objectStore(STORE_NAME).get(key);
-      req.onsuccess = () => resolve(req.result?.size > 0 ? req.result : null);
+      req.onsuccess = () => {
+        const res = req.result;
+        resolve((res && res.size > 0) ? res : null);
+      };
       req.onerror = () => resolve(null);
     });
   },
@@ -41,317 +42,588 @@ const idb = {
     if (typeof window === 'undefined') return;
     await this.init();
     if (!this.db) return;
-    const tx = this.db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(blob, key);
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(STORE_NAME, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore(STORE_NAME).put(blob, key);
+    });
   }
 };
 
+// --- 2. 音频控制器 (保持不变) ---
 const audioController = {
   currentAudio: null,
+  playlist: [],
   activeBlobUrls: [],
-  
+  latestRequestId: 0,
+  _pendingFetches: [],
+
   stop() {
+    if (typeof window === 'undefined') return;
+    this.latestRequestId++;
+    this._pendingFetches.forEach(ctrl => { try { ctrl.abort(); } catch (e) {} });
+    this._pendingFetches = [];
     if (this.currentAudio) {
-      this.currentAudio.pause();
+      try {
+        this.currentAudio.onended = null;
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch (e) {}
       this.currentAudio = null;
     }
-    this.activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
-    this.activeBlobUrls = [];
+    this.playlist = [];
+    if (this.activeBlobUrls.length > 0) {
+      this.activeBlobUrls.forEach(url => { try { URL.revokeObjectURL(url); } catch (e) {} });
+      this.activeBlobUrls = [];
+    }
   },
 
-  async play(text, rate = 1.0) {
+  detectLanguage(text) {
+    if (/[\u1000-\u109F]/.test(text)) return 'my';
+    return 'zh';
+  },
+
+  async fetchAudioBlob(text, lang) {
+    if (typeof window === 'undefined') return null;
+    const voice = lang === 'my' ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
+    const cacheKey = `tts-${voice}-${text}-0`;
+    const cached = await idb.get(cacheKey);
+    if (cached) return cached;
+
+    const apiUrl = `https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}&r=0`;
+    const controller = new AbortController();
+    this._pendingFetches.push(controller);
+    try {
+      const res = await fetch(apiUrl, { signal: controller.signal });
+      if (!res.ok) throw new Error(`TTS Fetch failed`);
+      const blob = await res.blob();
+      if (blob.size === 0) return null;
+      await idb.set(cacheKey, blob);
+      return blob;
+    } catch (e) {
+        return null;
+    } finally {
+      this._pendingFetches = this._pendingFetches.filter(c => c !== controller);
+    }
+  },
+
+  async playMixed(text, onStart, onEnd) {
+    if (typeof window === 'undefined') return;
     this.stop();
-    if (!text) return;
+    if (!text) { if (onEnd) onEnd(); return; }
+    const reqId = ++this.latestRequestId;
+    if (onStart) onStart();
 
-    // 简单判断中英文/其他语言
-    const isBurmese = /[\u1000-\u109F]/.test(text);
-    const voice = isBurmese ? 'my-MM-NilarNeural' : 'zh-CN-XiaoyouMultilingualNeural';
-    const cacheKey = `tts-${voice}-${text}`;
-
-    let blob = await idb.get(cacheKey);
-    if (!blob) {
-      try {
-        const res = await fetch(`https://t.leftsite.cn/tts?t=${encodeURIComponent(text)}&v=${voice}`);
-        blob = await res.blob();
-        if (blob.size > 0) await idb.set(cacheKey, blob);
-      } catch (e) { console.error(e); return; }
+    const segments = [];
+    const regex = /([\u4e00-\u9fa5]+)|([^\u4e00-\u9fa5]+)/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      const segmentText = match[0].trim();
+      if (segmentText && /[\u4e00-\u9fa5a-zA-Z0-9\u1000-\u109F]/.test(segmentText)) {
+        segments.push({ text: segmentText, lang: this.detectLanguage(segmentText) });
+      }
     }
 
-    if (!blob) return;
-    
-    const url = URL.createObjectURL(blob);
-    this.activeBlobUrls.push(url);
-    const audio = new Audio(url);
-    audio.playbackRate = rate;
-    this.currentAudio = audio;
-    audio.play().catch(e => console.warn(e));
+    if (segments.length === 0) { if (onEnd) onEnd(); return; }
+
+    try {
+      const blobs = await Promise.all(segments.map(seg => this.fetchAudioBlob(seg.text, seg.lang)));
+      if (reqId !== this.latestRequestId) return;
+
+      const validBlobs = [];
+      const validSegments = [];
+      blobs.forEach((b, i) => { if (b) { validBlobs.push(b); validSegments.push(segments[i]); } });
+
+      if (validBlobs.length === 0) { if (onEnd) onEnd(); return; }
+
+      const audioObjects = validBlobs.map((blob, index) => {
+        const url = URL.createObjectURL(blob);
+        this.activeBlobUrls.push(url);
+        const audio = new Audio(url);
+        audio.playbackRate = validSegments[index].lang === 'zh' ? 0.7 : 1.0;
+        return audio;
+      });
+
+      this.playlist = audioObjects;
+
+      const playNext = (index) => {
+        if (reqId !== this.latestRequestId) return;
+        if (index >= audioObjects.length) {
+          this.currentAudio = null;
+          if (onEnd) onEnd();
+          return;
+        }
+        const audio = audioObjects[index];
+        this.currentAudio = audio;
+        audio.onended = () => playNext(index + 1);
+        audio.onerror = () => playNext(index + 1);
+        audio.play().catch(() => {
+            this.stop();
+            if (onEnd) onEnd();
+        });
+      };
+      playNext(0);
+    } catch (e) {
+      if (onEnd) onEnd();
+    }
   }
 };
 
-// ============================================================================
-// 2. 样式定义 (CSS-in-JS)
-// ============================================================================
-const styles = {
-  container: {
-    fontFamily: '"Nunito", "Noto Sans SC", sans-serif',
-    display: 'flex', flexDirection: 'column', height: '100%', width: '100%',
-    padding: '20px', backgroundColor: '#fff', overflowY: 'auto'
-  },
-  
-  // 顶部解析栏
-  feedbackBar: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '4px',
-    animation: 'slideDown 0.3s ease-out', boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-  },
-  feedbackCorrect: { backgroundColor: '#dcfce7', color: '#166534', borderBottom: '2px solid #86efac' },
-  feedbackWrong: { backgroundColor: '#fee2e2', color: '#991b1b', borderBottom: '2px solid #fca5a5' },
-  
-  // 角色区域
-  characterArea: {
-    display: 'flex', gap: '16px', marginBottom: '32px', marginTop: '10px',
-    alignItems: 'flex-start'
-  },
-  avatar: {
-    width: '80px', height: '80px', flexShrink: 0,
-    backgroundImage: 'url("https://api.dicebear.com/7.x/fun-emoji/svg?seed=Felix")', 
-    backgroundSize: 'cover', borderRadius: '12px'
-  },
-  bubble: {
-    position: 'relative', background: '#fff', border: '2px solid #e5e7eb', borderRadius: '16px',
-    padding: '16px', flex: 1, boxShadow: '0 4px 0 #e5e7eb',
-    fontSize: '1.2rem', color: '#374151', fontWeight: 'bold', lineHeight: 1.5
-  },
-  bubbleArrow: {
-    position: 'absolute', left: '-10px', top: '24px', width: '16px', height: '16px',
-    background: '#fff', borderLeft: '2px solid #e5e7eb', borderBottom: '2px solid #e5e7eb',
-    transform: 'rotate(45deg)'
-  },
-  
-  // 控制按钮
-  controls: { display: 'flex', gap: '10px', marginTop: '12px' },
-  controlBtn: {
-    background: '#f3f4f6', border: 'none', borderRadius: '8px', padding: '6px 12px',
-    color: '#3b82f6', fontWeight: 'bold', fontSize: '0.9rem', cursor: 'pointer',
-    display: 'flex', alignItems: 'center', gap: '6px',
-    boxShadow: '0 2px 0 #e5e7eb'
-  },
 
-  // 选项区域
-  optionsGrid: { display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' },
-  optionCard: {
-    display: 'flex', alignItems: 'center', padding: '16px', borderRadius: '16px',
-    border: '2px solid #e5e7eb', background: '#fff', cursor: 'pointer',
-    fontSize: '1.1rem', fontWeight: '600', color: '#374151',
-    boxShadow: '0 4px 0 #e5e7eb', transition: 'all 0.1s', position: 'relative'
-  },
-  optionSelected: { background: '#ddf4ff', borderColor: '#84d8ff', boxShadow: '0 4px 0 #84d8ff', color: '#1cb0f6' },
-  optionCorrect: { background: '#d7ffb8', borderColor: '#58cc02', boxShadow: '0 4px 0 #58cc02', color: '#58cc02' },
-  optionWrong: { background: '#ffdfe0', borderColor: '#ff4b4b', boxShadow: '0 4px 0 #ff4b4b', color: '#ff4b4b' },
+// --- 3. 样式定义 (美化版) ---
+const cssStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+  :root {
+    --primary-color: #6366f1; /* Indigo 500 */
+    --primary-dark: #4f46e5;
+    --success-color: #10b981; /* Emerald 500 */
+    --error-color: #ef4444; /* Red 500 */
+    --bg-color: #f8fafc;
+    --text-main: #1e293b;
+    --text-sub: #64748b;
+  }
+
+  .xzt-container {
+    font-family: "Padauk", "Noto Sans SC", sans-serif;
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    background-color: var(--bg-color);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 滚动区域 */
+  .xzt-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 20px 180px 20px; /* 底部留白给固定区域 */
+    display: flex; flex-direction: column; align-items: center;
+    scrollbar-width: none;
+  }
+  .xzt-scroll-area::-webkit-scrollbar { display: none; }
+
+  /* 题干朗读按钮 */
+  .audio-btn-wrapper {
+    display: flex; justify-content: flex-end; width: 100%; max-width: 600px;
+    margin-bottom: 10px;
+  }
+  .book-read-btn {
+    width: 44px; height: 44px;
+    background: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--primary-color);
+    font-size: 1.2rem;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    cursor: pointer; transition: all 0.2s;
+    border: 1px solid #e0e7ff;
+  }
+  .book-read-btn:active { transform: scale(0.95); }
+  .book-read-btn.playing { 
+    background: var(--primary-color); color: white;
+    animation: pulse-ring 2s infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  }
+
+  /* 题目区域 */
+  .xzt-question-area {
+    width: 100%; max-width: 600px;
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 4px 20px -5px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    display: flex; flex-direction: column; align-items: center;
+  }
   
-  // 底部按钮栏
-  bottomBar: {
-    marginTop: 'auto', paddingTop: '20px', borderTop: '2px solid #f3f4f6',
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-  },
-  submitBtn: {
-    width: '100%', padding: '14px', borderRadius: '16px', border: 'none',
-    fontSize: '1.1rem', fontWeight: '800', color: '#fff', cursor: 'pointer',
-    background: '#58cc02', boxShadow: '0 4px 0 #46a302', textTransform: 'uppercase', letterSpacing: '1px'
-  },
-  submitDisabled: { background: '#e5e7eb', color: '#afb6c1', boxShadow: 'none', cursor: 'not-allowed' },
-  nextBtn: {
-    width: '100%', padding: '14px', borderRadius: '16px', border: 'none',
-    fontSize: '1.1rem', fontWeight: '800', color: '#fff', cursor: 'pointer',
-    background: '#ffc800', boxShadow: '0 4px 0 #e5a500', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-  },
-  nextWrong: { background: '#ff4b4b', boxShadow: '0 4px 0 #ea2b2b' }
+  .question-img { 
+    width: 100%; max-height: 220px; object-fit: contain; 
+    border-radius: 12px; margin-bottom: 20px;
+  }
+
+  .rich-text-container {
+    width: 100%; display: flex; flex-wrap: wrap;
+    justify-content: center; align-items: flex-end;
+    gap: 4px; line-height: 1.6;
+  }
+  .cn-block { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px; }
+  .pinyin-top { font-size: 0.8rem; color: var(--text-sub); margin-bottom: -2px; font-weight: 500; }
+  .cn-char { font-size: 1.5rem; font-weight: 700; color: var(--text-main); }
+  .other-text-block { font-size: 1.3rem; font-weight: 600; color: var(--text-main); margin: 0 4px; transform: translateY(-3px); }
+
+  /* 选项区域 */
+  .xzt-options-grid { 
+    width: 100%; max-width: 600px;
+    display: grid; gap: 12px;
+  }
+  
+  .xzt-option-card {
+    position: relative;
+    background: white;
+    border-radius: 16px;
+    border: 2px solid transparent;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    cursor: pointer;
+    padding: 16px;
+    display: flex; align-items: center;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  
+  .xzt-option-card:not(.disabled):active { transform: scale(0.98); background: #f1f5f9; }
+  .xzt-option-card.selected { border-color: var(--primary-color); background: #eef2ff; }
+  
+  /* 提交后的状态颜色 */
+  .xzt-option-card.correct-answer { border-color: var(--success-color); background: #ecfdf5; }
+  .xzt-option-card.wrong-answer { border-color: var(--error-color); background: #fef2f2; opacity: 0.8; }
+  .xzt-option-card.disabled { pointer-events: none; }
+
+  .opt-img {
+    width: 56px; height: 56px; border-radius: 10px;
+    object-fit: cover; margin-right: 16px; flex-shrink: 0;
+    background-color: #f1f5f9; border: 1px solid #e2e8f0;
+  }
+
+  .opt-content { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .opt-py { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 2px; }
+  .opt-txt { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
+  
+  .status-icon { font-size: 1.4rem; margin-left: 12px; }
+  .text-green { color: var(--success-color); }
+  .text-red { color: var(--error-color); }
+
+  /* 底部固定操作栏 (提交前) */
+  .bottom-submit-area {
+    position: fixed; bottom: 30px; left: 0; right: 0;
+    display: flex; justify-content: center;
+    pointer-events: none; z-index: 50;
+  }
+  .submit-btn {
+    pointer-events: auto;
+    background: var(--primary-color);
+    color: white; border: none;
+    padding: 16px 60px;
+    border-radius: 99px;
+    font-size: 1.1rem; font-weight: 700;
+    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.5);
+    transition: transform 0.2s;
+  }
+  .submit-btn:disabled { background: #cbd5e1; box-shadow: none; }
+  .submit-btn:active { transform: scale(0.95); }
+
+  /* 底部解析面板 (提交后) - 核心修改 */
+  .explanation-sheet {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: white;
+    border-radius: 24px 24px 0 0;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.1);
+    z-index: 100;
+    transform: translateY(110%);
+    transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding: 24px 24px 40px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .explanation-sheet.show { transform: translateY(0); }
+
+  .sheet-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .result-title { font-size: 1.4rem; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .result-title.correct { color: var(--success-color); }
+  .result-title.wrong { color: var(--error-color); }
+
+  .explanation-box {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 16px;
+    border-left: 4px solid var(--primary-color);
+  }
+  .exp-label { font-size: 0.9rem; font-weight: 700; color: var(--text-sub); margin-bottom: 4px; display:flex; align-items:center; gap:6px;}
+  .exp-text { font-size: 1rem; color: var(--text-main); line-height: 1.6; }
+
+  .next-btn {
+    width: 100%;
+    background: var(--text-main);
+    color: white; border: none;
+    padding: 18px;
+    border-radius: 16px;
+    font-size: 1.1rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    margin-top: 10px;
+    cursor: pointer;
+  }
+  .next-btn:active { transform: scale(0.98); opacity: 0.9; }
+  /* 正确时按钮绿色，错误时保持深色或根据需求调整 */
+  .next-btn.is-correct { background: var(--success-color); box-shadow: 0 8px 20px -4px rgba(16, 185, 129, 0.4); }
+  
+`;
+
+
+// --- 4. 文本解析逻辑 (保持不变) ---
+const parseTitleText = (text) => {
+  if (!text) return [];
+  const result = [];
+  const regex = /([\p{Script=Han}]+)|([^\p{Script=Han}]+)/gu;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const segment = match[0];
+    if (/\p{Script=Han}/u.test(segment)) {
+      const pinyins = pinyin(segment, { type: 'array', toneType: 'symbol' });
+      segment.split('').forEach((char, i) => {
+        result.push({ type: 'zh', char, pinyin: pinyins[i] || '' });
+      });
+    } else {
+      result.push({ type: 'other', text: segment });
+    }
+  }
+  return result;
 };
 
-// ============================================================================
-// 3. 辅助函数
-// ============================================================================
-const renderPinyin = (text) => {
-  const tokens = pinyin(text, { type: 'all', toneType: 'symbol' });
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'flex-end' }}>
-      {tokens.map((t, i) => (
-        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '-2px' }}>{t.pinyin}</span>
-          <span>{text[i]}</span>
-        </div>
-      ))}
-    </div>
-  );
+const parseOptionText = (text) => {
+  const isZh = /[\u4e00-\u9fa5]/.test(text);
+  if (!isZh) return { isZh: false, text };
+  const pinyins = pinyin(text, { type: 'array', toneType: 'symbol', nonZh: 'consecutive' });
+  return { isZh: true, text, pinyins: pinyins.join(' ') };
 };
 
-// ============================================================================
-// 4. 主组件
-// ============================================================================
+
+// --- 5. 组件主体 ---
 const XuanZeTi = (props) => {
-  // --- 数据标准化 ---
+  // 数据解构与容错处理
   const rawData = props.data || props;
   const rawQuestion = props.question || rawData.question || {};
   const rawOptions = props.options || rawData.options || [];
   const rawCorrectAnswer = props.correctAnswer || rawData.correctAnswer || [];
-  const { onCorrect, onIncorrect, onNext } = props;
+  const explanationText = props.explanation || rawData.explanation || ""; // 新增解析字段
 
   const questionText = typeof rawQuestion === 'string' ? rawQuestion : (rawQuestion.text || '');
   const questionImage = typeof rawQuestion === 'object' ? rawQuestion.imageUrl : null;
-  const explanation = rawData.explanation || "Correct Answer: " + rawOptions.find(o => rawCorrectAnswer.includes(o.id))?.text;
-
-  // --- 状态 ---
-  const [selectedId, setSelectedId] = useState(null);
-  const [status, setStatus] = useState('idle'); // idle, submitted
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [playRate, setPlayRate] = useState(1.0);
   
-  const hasAutoPlayed = useRef(false);
+  const { onCorrect, onIncorrect, onNext } = props;
 
-  // 自动朗读
+  // 状态管理
+  const [selectedId, setSelectedId] = useState(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isRight, setIsRight] = useState(false);
+  
+  const [titleSegments, setTitleSegments] = useState([]);
+  const [orderedOptions, setOrderedOptions] = useState([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  
+  const mountedRef = useRef(true);
+  const hasAutoPlayedRef = useRef(false);
+
+  // 初始化
   useEffect(() => {
-    if (questionText && !hasAutoPlayed.current) {
-      setTimeout(() => {
-        audioController.play(questionText, 1.0);
-        hasAutoPlayed.current = true;
-      }, 500);
-    }
-    return () => audioController.stop();
-  }, [questionText]);
-
-  // 提交逻辑
-  const handleSubmit = () => {
-    if (!selectedId) return;
+    mountedRef.current = true;
     
-    const correct = rawCorrectAnswer.map(String).includes(String(selectedId));
-    setIsCorrect(correct);
-    setStatus('submitted');
+    // 重置状态
+    audioController.stop();
+    setIsPlaying(false);
+    setSelectedId(null);
+    setIsSubmitted(false);
+    setIsRight(false);
+    hasAutoPlayedRef.current = false;
+
+    // 解析数据
+    setTitleSegments(parseTitleText(questionText));
+    setOrderedOptions(rawOptions.map(opt => ({
+      ...opt,
+      parsed: parseOptionText(opt.text),
+      hasImage: !!opt.imageUrl
+    })));
+
+    // 自动播放
+    if (questionText) {
+      setTimeout(() => {
+        if (mountedRef.current && !hasAutoPlayedRef.current) {
+          handleTitlePlay(null, true);
+          hasAutoPlayedRef.current = true;
+        }
+      }, 600);
+    }
+
+    return () => { mountedRef.current = false; audioController.stop(); };
+  }, [questionText, rawOptions]); 
+
+  // 播放处理
+  const handleTitlePlay = (e, isAuto = false) => {
+    if (e) e.stopPropagation();
+    if (!isAuto && navigator.vibrate) navigator.vibrate(40);
+
+    audioController.playMixed(
+      questionText,
+      () => setIsPlaying(true),
+      () => setIsPlaying(false)
+    );
+  };
+
+  // 选项点击
+  const handleCardClick = (option) => {
+    if (isSubmitted) return; // 提交后禁止更改
+    setSelectedId(option.id);
+    audioController.playMixed(option.text || '');
+  };
+
+  // 提交答案
+  const handleSubmit = () => {
+    if (!selectedId || isSubmitted) return;
+    
+    const isCorrect = rawCorrectAnswer.map(String).includes(String(selectedId));
+    setIsRight(isCorrect);
+    setIsSubmitted(true); // 触发底部面板动画
+    audioController.stop();
 
     // 播放音效
-    const sound = correct ? '/sounds/correct.mp3' : '/sounds/incorrect.mp3';
-    new Audio(sound).play().catch(() => {});
-
-    if (correct) {
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    if (isCorrect) {
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 }, colors: ['#10b981', '#34d399'] });
+      new Audio('/sounds/correct.mp3').play().catch(()=>{});
     } else {
+      new Audio('/sounds/incorrect.mp3').play().catch(()=>{});
       if (navigator.vibrate) navigator.vibrate(200);
     }
   };
 
-  // 下一题逻辑
-  const handleNextClick = () => {
-    audioController.stop();
-    if (isCorrect) {
+  // 进入下一题 (修复了无法跳转的Bug)
+  const handleNext = () => {
+    // 1. 先处理积分逻辑
+    if (isRight) {
       if (onCorrect) onCorrect();
-      else if (onNext) onNext();
     } else {
       if (onIncorrect) onIncorrect();
-      if (onNext) onNext();
     }
-  };
 
-  // 切换语速
-  const toggleSpeed = () => {
-    const newRate = playRate === 1.0 ? 0.7 : 1.0;
-    setPlayRate(newRate);
-    audioController.play(questionText, newRate);
-  };
-
-  // 获取选项样式
-  const getOptionStyle = (optId) => {
-    const idStr = String(optId);
-    if (status === 'submitted') {
-      if (rawCorrectAnswer.includes(idStr)) return styles.optionCorrect;
-      if (idStr === String(selectedId)) return styles.optionWrong;
+    // 2. 强制执行跳转
+    if (onNext) {
+      onNext();
     } else {
-      if (idStr === String(selectedId)) return styles.optionSelected;
+      console.warn("未提供 onNext 回调，无法跳转");
     }
-    return styles.optionCard;
   };
 
   return (
-    <div style={styles.container}>
-      <style>{`
-        @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
-      `}</style>
+    <>
+      <style>{cssStyles}</style>
 
-      {/* 1. 顶部解析栏 (提交后显示) */}
-      {status === 'submitted' && (
-        <div style={{ ...styles.feedbackBar, ...(isCorrect ? styles.feedbackCorrect : styles.feedbackWrong) }}>
-          <div style={{ fontWeight: '800', fontSize: '1.1rem' }}>
-            {isCorrect ? '太棒了！(Great job!)' : '正确答案 (Correct Solution):'}
-          </div>
-          {!isCorrect && <div style={{ fontSize: '0.95rem' }}>{explanation}</div>}
-        </div>
-      )}
-
-      {/* 2. 题目区域 (多邻国风格气泡) */}
-      <div style={styles.characterArea}>
-        <div style={styles.avatar}></div>
-        <div style={styles.bubble}>
-          <div style={styles.bubbleArrow}></div>
+      <div className="xzt-container">
+        
+        {/* 可滚动区域 */}
+        <div className="xzt-scroll-area">
           
-          {questionImage && (
-            <img src={questionImage} alt="Q" style={{ maxWidth: '100%', borderRadius: '8px', marginBottom: '10px' }} />
-          )}
-          
-          {/* 中文支持拼音显示 */}
-          {/[\u4e00-\u9fa5]/.test(questionText) ? renderPinyin(questionText) : <div>{questionText}</div>}
-
-          {/* 朗读控制 */}
-          <div style={styles.controls}>
-            <button style={styles.controlBtn} onClick={() => audioController.play(questionText, playRate)}>
-              <FaVolumeUp /> 
-            </button>
-            <button style={styles.controlBtn} onClick={toggleSpeed}>
-              <FaTachometerAlt /> {playRate === 1.0 ? 'Normal' : 'Slow'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. 选项列表 */}
-      <div style={styles.optionsGrid}>
-        {rawOptions.map(opt => (
-          <div 
-            key={opt.id} 
-            style={getOptionStyle(opt.id)}
-            onClick={() => status === 'idle' && setSelectedId(opt.id)}
-          >
-            {opt.imageUrl && (
-              <img src={opt.imageUrl} alt="" style={{ width: '48px', height: '48px', borderRadius: '8px', marginRight: '12px', objectFit: 'cover' }} />
-            )}
-            <div style={{ flex: 1 }}>
-              {opt.text}
+          <div className="audio-btn-wrapper">
+            <div 
+              className={`book-read-btn ${isPlaying ? 'playing' : ''}`} 
+              onClick={(e) => handleTitlePlay(e, false)}
+            >
+              <FaVolumeUp />
             </div>
-            
-            {/* 状态图标 */}
-            {status === 'submitted' && rawCorrectAnswer.includes(String(opt.id)) && <FaCheckCircle style={{ color: '#58cc02', fontSize: '1.4rem' }} />}
-            {status === 'submitted' && String(opt.id) === String(selectedId) && !isCorrect && <FaTimesCircle style={{ color: '#ff4b4b', fontSize: '1.4rem' }} />}
           </div>
-        ))}
-      </div>
 
-      {/* 4. 底部按钮 */}
-      <div style={styles.bottomBar}>
-        {status === 'idle' ? (
-          <button 
-            style={{ ...styles.submitBtn, ...(selectedId ? {} : styles.submitDisabled) }}
-            onClick={handleSubmit}
-            disabled={!selectedId}
-          >
-            CHECK
-          </button>
-        ) : (
-          <button 
-            style={{ ...styles.nextBtn, ...(isCorrect ? {} : styles.nextWrong) }}
-            onClick={handleNextClick}
-          >
-            CONTINUE <FaArrowRight />
-          </button>
+          <div className="xzt-question-area">
+            {questionImage && (
+              <img src={questionImage} alt="Question" className="question-img" />
+            )}
+
+            <div className="rich-text-container">
+              {titleSegments.map((seg, i) => (
+                seg.type === 'zh' ? (
+                  <div key={i} className="cn-block">
+                    <span className="pinyin-top">{seg.pinyin}</span>
+                    <span className="cn-char">{seg.char}</span>
+                  </div>
+                ) : (
+                  <span key={i} className="other-text-block">{seg.text}</span>
+                )
+              ))}
+            </div>
+          </div>
+
+          <div className="xzt-options-grid">
+            {orderedOptions.map(opt => {
+              const isSel = String(opt.id) === String(selectedId);
+              const isCorrectOpt = rawCorrectAnswer.map(String).includes(String(opt.id));
+              
+              let cardClass = "";
+              if (isSubmitted) {
+                cardClass = "disabled ";
+                if (isCorrectOpt) cardClass += "correct-answer";
+                else if (isSel) cardClass += "wrong-answer";
+              } else if (isSel) {
+                cardClass = "selected";
+              }
+
+              return (
+                <div 
+                  key={opt.id} 
+                  className={`xzt-option-card ${cardClass}`} 
+                  onClick={() => handleCardClick(opt)}
+                >
+                  {opt.hasImage && <img src={opt.imageUrl} alt="" className="opt-img" />}
+                  
+                  <div className="opt-content">
+                    {opt.parsed.isZh ? (
+                      <>
+                        <div className="opt-py">{opt.parsed.pinyins}</div>
+                        <div className="opt-txt">{opt.text}</div>
+                      </>
+                    ) : (
+                      <div className="opt-txt">{opt.text}</div>
+                    )}
+                  </div>
+                  
+                  {isSubmitted && isCorrectOpt && <FaCheck className="status-icon text-green" />}
+                  {isSubmitted && isSel && !isCorrectOpt && <FaTimes className="status-icon text-red" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 底部按钮 (未提交时显示) */}
+        {!isSubmitted && (
+          <div className="bottom-submit-area">
+            <button 
+              className="submit-btn"
+              onClick={handleSubmit}
+              disabled={!selectedId}
+            >
+              တင်သွင်းသည်
+            </button>
+          </div>
         )}
+
+        {/* 底部解析面板 (提交后滑出，覆盖底部内容) */}
+        <div className={`explanation-sheet ${isSubmitted ? 'show' : ''}`}>
+          <div className="sheet-header">
+            <div className={`result-title ${isRight ? 'correct' : 'wrong'}`}>
+              {isRight ? <FaCheck /> : <FaTimes />}
+              <span>{isRight ? 'မှန်ပါတယ်' : 'မှားပါတယ်'}</span>
+            </div>
+          </div>
+
+          {/* 如果有解析文本，显示解析框 */}
+          {explanationText && (
+            <div className="explanation-box">
+              <div className="exp-label"><FaLightbulb /> ရှင်းလင်းချက်</div>
+              <div className="exp-text">{explanationText}</div>
+            </div>
+          )}
+
+          <button 
+            className={`next-btn ${isRight ? 'is-correct' : ''}`}
+            onClick={handleNext}
+          >
+            နောက်တစ်ပုဒ် <FaArrowRight />
+          </button>
+        </div>
+
       </div>
-    </div>
+    </>
   );
 };
 
