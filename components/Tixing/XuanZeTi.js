@@ -180,7 +180,7 @@ const audioController = {
 };
 
 
-// --- 3. 样式定义 ---
+// --- 3. 样式定义 (保持不变) ---
 const cssStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Noto+Sans+SC:wght@400;600;700&display=swap');
 
@@ -201,7 +201,6 @@ const cssStyles = `
   }
   .xzt-container::-webkit-scrollbar { display: none; }
 
-  /* 朗读按钮 */
   .book-read-btn {
     width: 50px; height: 50px;
     background: linear-gradient(135deg, #a78bfa, #7c3aed);
@@ -224,7 +223,6 @@ const cssStyles = `
     100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); }
   }
 
-  /* 题目区域 */
   .xzt-question-area {
     width: 100%; max-width: 500px; margin: 0 auto 32px auto; 
     display: flex; flex-direction: column; align-items: center;
@@ -232,7 +230,6 @@ const cssStyles = `
     z-index: 10;
   }
   
-  /* 题目图片支持 */
   .question-img { 
     width: auto; max-width: 100%; max-height: 200px; 
     object-fit: contain; 
@@ -240,7 +237,6 @@ const cssStyles = `
     box-shadow: 0 4px 10px rgba(0,0,0,0.08);
   }
 
-  /* 文本块 */
   .rich-text-container {
     width: 100%; display: flex; flex-wrap: wrap;
     justify-content: center; align-items: flex-end;
@@ -251,7 +247,6 @@ const cssStyles = `
   .cn-char { font-size: 1.35rem; font-weight: 600; color: #1e293b; font-family: "Noto Sans SC", serif; line-height: 1.2; }
   .other-text-block { font-size: 1.2rem; font-weight: 500; color: #334155; padding: 0 4px; display: inline-block; align-self: flex-end; margin-bottom: 4px; }
 
-  /* 选项列表 */
   .xzt-options-grid { 
     display: flex; flex-direction: column; gap: 14px; 
     width: 100%; max-width: 400px; 
@@ -284,7 +279,6 @@ const cssStyles = `
   .opt-py { font-size: 0.85rem; color: #94a3b8; line-height: 1; margin-bottom: 2px; font-family: monospace; }
   .opt-txt { font-size: 1.15rem; font-weight: 600; color: #334155; }
   
-  /* 底部固定区域 */
   .fixed-bottom-area {
     position: fixed; bottom: 8vh; left: 0; right: 0;
     display: flex; justify-content: center;
@@ -296,7 +290,6 @@ const cssStyles = `
     display: flex; justify-content: center; width: 100%;
   }
 
-  /* 通用按钮样式 */
   .action-btn {
     width: auto; min-width: 200px; padding: 14px 40px;
     border-radius: 99px; font-size: 1.1rem; font-weight: 700; color: white; border: none;
@@ -306,13 +299,11 @@ const cssStyles = `
   }
   .action-btn:active { transform: scale(0.96); }
   
-  /* 提交按钮 */
   .submit-btn {
     background: linear-gradient(135deg, #6366f1, #8b5cf6);
   }
   .submit-btn:disabled { background: #cbd5e1; color: #94a3b8; box-shadow: none; opacity: 0.8; }
 
-  /* 下一题按钮 */
   .next-btn {
     background: linear-gradient(135deg, #10b981, #059669); /* 绿色系 */
     box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
@@ -354,8 +345,25 @@ const parseOptionText = (text) => {
 };
 
 
-// --- 5. 组件主体 ---
-const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, onIncorrect, onNext }) => {
+// --- 5. 组件主体 (核心修改) ---
+const XuanZeTi = (props) => {
+  // 🔥🔥🔥 核心修复：数据标准化 🔥🔥🔥
+  // 1. 尝试从 props.data 中获取，如果不存在则直接用 props
+  const rawData = props.data || props;
+  
+  // 2. 尝试获取 question 和 options，如果不存在则给默认值
+  const rawQuestion = props.question || rawData.question || {};
+  const rawOptions = props.options || rawData.options || [];
+  const rawCorrectAnswer = props.correctAnswer || rawData.correctAnswer || [];
+
+  // 3. 提取题目文本 (兼容旧版 String 和新版 Object)
+  const questionText = typeof rawQuestion === 'string' ? rawQuestion : (rawQuestion.text || '');
+  const questionImage = typeof rawQuestion === 'object' ? rawQuestion.imageUrl : null;
+  
+  // 4. 事件回调 (直接解构 props，因为这些通常是直接传的)
+  const { onCorrect, onIncorrect, onNext } = props;
+
+  // --- 状态 ---
   const [selectedId, setSelectedId] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [titleSegments, setTitleSegments] = useState([]);
@@ -372,22 +380,16 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     transitioningRef.current = true;
     audioController.stop();
 
-    // 判断对错，执行原有的不对称跳转逻辑
-    const isCorrect = correctAnswer.map(String).includes(String(selectedId));
+    const isCorrect = rawCorrectAnswer.map(String).includes(String(selectedId));
 
     if (isCorrect) {
-      // 答对：父组件会自动跳转
       try { 
-        if (onCorrect) {
-          onCorrect(); 
-        } else if (onNext) {
-          onNext(); // 保底
-        }
+        if (onCorrect) { onCorrect(); } 
+        else if (onNext) { onNext(); }
       } catch (e) { console.warn(e); }
     } else {
-      // 答错：父组件不自动跳转，需要显式调用 onNext
       try { 
-        if (onIncorrect) onIncorrect(question);
+        if (onIncorrect) onIncorrect(rawQuestion);
         if (onNext) onNext();
       } catch (e) { console.warn(e); }
     }
@@ -407,16 +409,18 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     setIsSubmitted(false);
     hasAutoPlayedRef.current = false;
 
-    // 解析文本
-    setTitleSegments(parseTitleText(question.text || ''));
-    setOrderedOptions((options || []).map(opt => ({
+    // 解析文本：使用处理过的 questionText
+    setTitleSegments(parseTitleText(questionText));
+    
+    // 处理选项
+    setOrderedOptions(rawOptions.map(opt => ({
       ...opt,
       parsed: parseOptionText(opt.text),
       hasImage: !!opt.imageUrl
     })));
 
     // 自动播放题干
-    if (question.text) {
+    if (questionText) {
       setTimeout(() => {
         if (!mountedRef.current || transitioningRef.current || hasAutoPlayedRef.current) return;
         handleTitlePlay(null, true);
@@ -426,7 +430,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
     return () => { audioController.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question, options]);
+  }, [questionText, rawOptions]); // 依赖项改为解析后的文本
 
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
@@ -434,7 +438,7 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
     if (!isAuto && typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
 
     audioController.playMixed(
-      question.text || '',
+      questionText, // 使用处理过的 questionText
       () => setIsPlaying(true),
       () => setIsPlaying(false)
     );
@@ -464,13 +468,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
 
   const handleSubmit = () => {
     if (!selectedId || isSubmitted || transitioningRef.current) return;
-    setIsSubmitted(true); // 锁定界面，显示结果
+    setIsSubmitted(true); 
     
-    const isCorrect = correctAnswer.map(String).includes(String(selectedId));
+    const isCorrect = rawCorrectAnswer.map(String).includes(String(selectedId));
     playFeedbackEffects(isCorrect);
-    
-    // 注意：这里不再设置 setTimeout 自动跳转
-    // 而是等待用户点击"下一题"按钮
   };
 
   return (
@@ -487,13 +488,13 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         </div>
 
         <div className="xzt-question-area">
-          {/* 题目图片支持 */}
-          {question.imageUrl && (
-            <img src={question.imageUrl} alt="Question" className="question-img" />
+          {/* 使用处理过的 questionImage */}
+          {questionImage && (
+            <img src={questionImage} alt="Question" className="question-img" />
           )}
 
           <div className="rich-text-container" aria-hidden="false">
-            {titleSegments.map((seg, i) => {
+            {titleSegments.length > 0 ? titleSegments.map((seg, i) => {
               if (seg.type === 'zh') {
                 return (
                   <div key={i} className="cn-block">
@@ -504,7 +505,10 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
               } else {
                 return <span key={i} className="other-text-block">{seg.text}</span>;
               }
-            })}
+            }) : (
+               /* 如果解析结果为空，显示一个占位符，方便调试 */
+               <div className="text-gray-400 text-sm">暂无题目文本</div>
+            )}
           </div>
         </div>
 
@@ -512,9 +516,8 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
           {orderedOptions.map(opt => {
             let status = '';
             const isSel = String(opt.id) === String(selectedId);
-            const isRight = correctAnswer.map(String).includes(String(opt.id));
+            const isRight = rawCorrectAnswer.map(String).includes(String(opt.id));
             
-            // 提交后的状态判定
             if (isSubmitted) {
               if (isRight) status = 'correct';
               else if (isSel) status = 'incorrect';
@@ -552,7 +555,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
         <div className="fixed-bottom-area" aria-hidden="false">
           <div className="bottom-actions-container">
             {!isSubmitted ? (
-              // 状态1: 提交按钮
               <button 
                 className="action-btn submit-btn"
                 onClick={(e) => { e.stopPropagation(); handleSubmit(); }}
@@ -561,7 +563,6 @@ const XuanZeTi = ({ question = {}, options = [], correctAnswer = [], onCorrect, 
                 တင်သွင်းသည်
               </button>
             ) : (
-              // 状态2: 下一题按钮
               <button 
                 className="action-btn next-btn"
                 onClick={(e) => { e.stopPropagation(); handleManualNext(); }}
