@@ -7,8 +7,8 @@ import GrammarPointPlayer from '../../components/Tixing/GrammarPointPlayer';
 
 // 导入我们刚刚创建的语法数据
 import lessonData from '../../data/grammar-data';
-import InteractiveLesson from '../components/InteractiveLesson'; // 刚才优化的组件
-import { testLessonData } from '../data/test-lesson-data'; // 刚才的数据
+import InteractiveLesson from '../../components/Tixing/InteractiveLesson'; // 刚才优化的组件
+import { testLessonData } from '../../data/test-lesson-data'; // 刚才的数据
 
 // 这是我们的课程页面组件
 const GrammarLessonPage = () => {
