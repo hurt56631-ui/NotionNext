@@ -10,7 +10,7 @@ const XuanZeTi = dynamic(() => import('./XuanZeTi'), { ssr: false });
 const PanDuanTi = dynamic(() => import('./PanDuanTi'), { ssr: false });
 const DuiHua = dynamic(() => import('./DuiHua'), { ssr: false });
 
-// --- 样式：隐藏滚动条但保留功能 ---
+// --- 样式 ---
 const scrollbarStyles = `
   ::-webkit-scrollbar { width: 0px; background: transparent; }
   * { scrollbar-width: none; -ms-overflow-style: none; }
@@ -63,7 +63,7 @@ const CoverScreen = ({ title, subTitle, image, onStart }) => {
     );
 };
 
-// --- 完成页面 (优化版) ---
+// --- 完成页面 ---
 const CompletionBlock = ({ onExit, onRestart }) => { 
   useEffect(() => { 
     import('canvas-confetti').then(m => {
@@ -108,7 +108,6 @@ export default function InteractiveLesson({ lesson }) {
   const [isStarted, setIsStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // 从 lesson 对象中读取 blocks
   const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
   const currentBlock = blocks[currentIndex];
 
@@ -126,7 +125,7 @@ export default function InteractiveLesson({ lesson }) {
 
   const handleRestart = () => {
       setCurrentIndex(0);
-      setIsStarted(false); // 可选：是否回到封面
+      setIsStarted(false); 
   };
   
   const handleCorrect = useCallback(() => {
@@ -138,7 +137,6 @@ export default function InteractiveLesson({ lesson }) {
 
   if (!hasMounted) return null;
 
-  // 1. 封面状态
   if (!isStarted) {
       return (
         <div className="fixed inset-0 w-screen h-screen bg-slate-900 font-sans">
@@ -153,7 +151,6 @@ export default function InteractiveLesson({ lesson }) {
       );
   }
 
-  // 2. 完成状态 (当索引超出 blocks 长度时)
   if (currentIndex >= blocks.length) {
       return (
         <div className="fixed inset-0 w-screen h-screen bg-white font-sans">
@@ -163,35 +160,28 @@ export default function InteractiveLesson({ lesson }) {
       );
   }
 
-  // 3. 学习内容渲染
-  // 通用 props
   const commonProps = { 
     key: `${lesson.id}-${currentIndex}`, 
-    // 数据透传
     data: currentBlock.content,
-    // 互动题特定字段
     question: currentBlock.content.question, 
     options: currentBlock.content.options,
     correctAnswer: currentBlock.content.correctAnswer, 
-    // 回调
     onCorrect: handleCorrect,
-    onComplete: goNext, // 语法/单词学完后调用
-    onNext: goNext,     // 互动题做完后调用
+    onComplete: goNext, 
+    onNext: goNext,     
     onPrev: goPrev,
     isFirst: currentIndex === 0
   };
 
   const type = (currentBlock.type || '').toLowerCase();
   
-  // 容器组件
-  // FullScreen: 用于单词、语法、对话等全屏展示的内容，强制 overflow-y-auto 防止截断
+  // 🔥🔥🔥 关键修改：去掉了 overflow-y-auto，让子组件全屏接管 🔥🔥🔥
   const FullScreen = ({ children }) => (
-      <div className="w-full h-full animate-in fade-in slide-in-from-right-8 duration-300 overflow-y-auto bg-slate-50">
+      <div className="w-full h-full relative bg-slate-50 animate-in fade-in slide-in-from-right-8 duration-300">
           {children}
       </div>
   );
 
-  // QuestionWrapper: 用于选择题等，居中显示
   const QuestionWrapper = ({ children }) => (
       <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-slate-50 animate-in fade-in duration-300 relative overflow-y-auto">
          <div className="w-full max-w-md z-10 my-auto">{children}</div>
@@ -202,11 +192,6 @@ export default function InteractiveLesson({ lesson }) {
     <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-800">
       <style>{scrollbarStyles}</style>
       
-      {/* 隐藏的顶部栏，用于放置返回按钮(可选) */}
-      <div className="absolute top-0 left-0 p-4 z-50 pointer-events-none">
-         {/* 如果需要返回按钮可以放这里，目前为空保持全屏沉浸 */}
-      </div>
-
       <main className="w-full h-full relative">
         {type === 'word_study' && (
             <FullScreen>
@@ -222,7 +207,6 @@ export default function InteractiveLesson({ lesson }) {
         {type === 'grammar_study' && (
             <FullScreen>
                 <GrammarPointPlayer 
-                    // 确保传递的是 grammarPoints 数组
                     grammarPoints={commonProps.data.grammarPoints} 
                     onComplete={goNext} 
                 />
@@ -247,7 +231,6 @@ export default function InteractiveLesson({ lesson }) {
             </FullScreen>
         )}
         
-        {/* 未知类型处理 */}
         {!['word_study','grammar_study','choice','panduan','dialogue'].includes(type) && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <p>Unknown Module: {type}</p>
