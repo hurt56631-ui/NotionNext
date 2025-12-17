@@ -237,20 +237,20 @@ const cssStyles = `
   /* --- 场景区域 (人物 + 气泡) --- */
   .scene-wrapper {
     width: 100%; max-width: 600px;
-    padding: 10px 20px 0 30px; /* 左侧padding大一点 */
+    padding: 10px 20px 0 20px; 
     display: flex;
     align-items: flex-end;
-    justify-content: flex-start; /* 改为左对齐 */
+    justify-content: center; 
     margin-bottom: 24px;
     position: relative;
+    gap: 20px; /* 人物与气泡的空隙 */
   }
 
   /* 人物图片 - mix-blend-mode 修复白底 */
   .teacher-img {
-    height: 160px; /* 尺寸调小 */
+    height: 160px; /* 尺寸 */
     width: auto;
     object-fit: contain;
-    margin-right: -10px; 
     z-index: 2;
     mix-blend-mode: multiply; 
     filter: contrast(1.05);
@@ -260,7 +260,7 @@ const cssStyles = `
   /* 气泡容器 */
   .bubble-container {
     flex: 1;
-    max-width: 260px; /* 气泡再小一点 */
+    max-width: 280px;
     width: fit-content;
     background: var(--white);
     border-radius: 18px;
@@ -269,7 +269,6 @@ const cssStyles = `
     position: relative;
     z-index: 1;
     margin-bottom: 35px;
-    margin-left: -15px; /* 往左边移动，更贴近人物 */
     border: 1px solid rgba(255,255,255,0.8);
   }
 
@@ -309,6 +308,7 @@ const cssStyles = `
     display: flex; align-items: center; justify-content: center;
     color: var(--primary-color);
     cursor: pointer; font-size: 0.8rem;
+    margin-top: 4px;
   }
   .bubble-audio-btn.playing { background: var(--primary-color); color: white; animation: pulse 1.2s infinite; }
 
@@ -320,15 +320,23 @@ const cssStyles = `
 
   .question-ref-img {
     width: 100%; max-height: 140px; object-fit: contain;
-    border-radius: 8px; margin-bottom: 10px;
+    border-radius: 8px; margin-bottom: 5px;
     background: #f8fafc;
+    display: block;
   }
 
-  /* --- 选项区域 (变窄) --- */
+  /* --- 选项区域 --- */
   .xzt-options-grid { 
     width: 90%; 
     max-width: 480px; 
-    display: grid; gap: 12px;
+    display: grid; 
+    gap: 12px;
+    grid-template-columns: 1fr; /* 默认单列 */
+  }
+
+  /* 有图片的选项改为两列 */
+  .xzt-options-grid.grid-images {
+    grid-template-columns: 1fr 1fr;
   }
   
   .xzt-option-card {
@@ -339,12 +347,19 @@ const cssStyles = `
     cursor: pointer;
     padding: 14px 18px;
     display: flex; 
-    align-items: center; /* 垂直居中 */
-    justify-content: center; /* 水平居中 (如果需要内容块居中) */
+    align-items: center; /* 垂直居中 (Text模式) */
     border: 2px solid transparent;
     transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    overflow: hidden;
   }
-  
+
+  /* 图片模式的卡片布局 */
+  .xzt-option-card.card-with-image {
+    flex-direction: column; /* 垂直排列：上图下文 */
+    padding: 0; /* 图片贴边，去掉padding */
+    align-items: stretch; /* 宽度拉伸 */
+  }
+
   .xzt-option-card:not(.disabled):active { transform: scale(0.97); background: #f8fafc; }
   .xzt-option-card.selected { border-color: var(--primary-color); background: #eef2ff; }
   
@@ -352,10 +367,21 @@ const cssStyles = `
   .xzt-option-card.wrong-answer { border-color: var(--error-color); background: #fef2f2; opacity: 0.9; }
   .xzt-option-card.disabled { pointer-events: none; }
 
+  /* 选项内的图片样式 */
   .opt-img {
     width: 45px; height: 45px; border-radius: 8px;
     object-fit: cover; margin-right: 12px; flex-shrink: 0;
     background-color: #f1f5f9;
+  }
+
+  /* 图片模式下的图片样式（变大、贴顶） */
+  .card-with-image .opt-img {
+    width: 100%;
+    height: 130px; /* 图片高度 */
+    margin-right: 0;
+    margin-bottom: 0;
+    border-radius: 0;
+    object-fit: cover;
   }
 
   /* 选项文字居中显示 */
@@ -364,13 +390,22 @@ const cssStyles = `
     display: flex; 
     flex-direction: column; 
     justify-content: center; 
-    align-items: center; /* 关键：文字水平居中 */
-    text-align: center;  /* 关键：多行文字居中 */
+    align-items: center; 
+    text-align: center;
   }
+
+  /* 图片模式下的文字容器要加回Padding */
+  .card-with-image .opt-content {
+    padding: 12px 10px;
+  }
+
   .opt-py { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 2px; }
   .opt-txt { font-size: 1.1rem; font-weight: 600; color: var(--text-main); }
   
   .status-icon { font-size: 1.4rem; margin-left: 10px; position: absolute; right: 16px; }
+  /* 图片模式下状态图标位置调整 */
+  .card-with-image .status-icon { top: 8px; right: 8px; background: rgba(255,255,255,0.8); border-radius: 50%; padding: 2px; }
+
   .text-green { color: var(--success-color); }
   .text-red { color: var(--error-color); }
 
@@ -619,6 +654,9 @@ const XuanZeTi = (props) => {
     return () => { mountedRef.current = false; audioController.stop(); };
   }, [questionText, rawOptions]); 
 
+  // 判断是否应该以图片模式显示选项 (只要有一个选项有图片，就采用Grid模式)
+  const hasOptionImages = orderedOptions.some(opt => opt.hasImage);
+
   // 播放处理 (传入当前设置)
   const handleTitlePlay = (e, isAuto = false) => {
     if (e) e.stopPropagation();
@@ -691,20 +729,27 @@ const XuanZeTi = (props) => {
               <div className="bubble-tail"></div>
               
               <div className="bubble-content">
-                {questionImage && <img src={questionImage} alt="ref" className="question-ref-img" />}
-                
-                <div className="rich-text-container">
-                  {titleSegments.map((seg, i) => (
-                    seg.type === 'zh' ? (
-                      <div key={i} className="cn-block">
-                        <span className="pinyin-top">{seg.pinyin}</span>
-                        <span className="cn-char">{seg.char}</span>
-                      </div>
-                    ) : (
-                      <span key={i} className="other-text-block">{seg.text}</span>
-                    )
-                  ))}
-                </div>
+                {/* 
+                  逻辑修改：
+                  如果标题有图片 (questionImage)，则只显示图片。
+                  如果没有图片，则显示文本。
+                */}
+                {questionImage ? (
+                  <img src={questionImage} alt="ref" className="question-ref-img" />
+                ) : (
+                  <div className="rich-text-container">
+                    {titleSegments.map((seg, i) => (
+                      seg.type === 'zh' ? (
+                        <div key={i} className="cn-block">
+                          <span className="pinyin-top">{seg.pinyin}</span>
+                          <span className="cn-char">{seg.char}</span>
+                        </div>
+                      ) : (
+                        <span key={i} className="other-text-block">{seg.text}</span>
+                      )
+                    ))}
+                  </div>
+                )}
 
                 <div 
                   className={`bubble-audio-btn ${isPlaying ? 'playing' : ''}`} 
@@ -716,19 +761,24 @@ const XuanZeTi = (props) => {
             </div>
           </div>
 
-          {/* 选项网格 (变窄) */}
-          <div className="xzt-options-grid">
+          {/* 选项网格 */}
+          {/* 
+             如果有选项图片，增加 'grid-images' 类，使网格变为2列。
+          */}
+          <div className={`xzt-options-grid ${hasOptionImages ? 'grid-images' : ''}`}>
             {orderedOptions.map(opt => {
               const isSel = String(opt.id) === String(selectedId);
               const isCorrectOpt = rawCorrectAnswer.map(String).includes(String(opt.id));
               
               let cardClass = "";
+              if (opt.hasImage) cardClass += " card-with-image"; // 图片模式的特殊样式类
+
               if (isSubmitted) {
-                cardClass = "disabled ";
-                if (isCorrectOpt) cardClass += "correct-answer";
-                else if (isSel) cardClass += "wrong-answer";
+                cardClass += " disabled";
+                if (isCorrectOpt) cardClass += " correct-answer";
+                else if (isSel) cardClass += " wrong-answer";
               } else if (isSel) {
-                cardClass = "selected";
+                cardClass += " selected";
               }
 
               return (
@@ -737,8 +787,10 @@ const XuanZeTi = (props) => {
                   className={`xzt-option-card ${cardClass}`} 
                   onClick={() => handleCardClick(opt)}
                 >
+                  {/* 图片显示 */}
                   {opt.hasImage && <img src={opt.imageUrl} alt="" className="opt-img" />}
                   
+                  {/* 文字内容区域 */}
                   <div className="opt-content">
                     {opt.parsed.isZh ? (
                       <>
