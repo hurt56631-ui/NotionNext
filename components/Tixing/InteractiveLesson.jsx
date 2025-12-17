@@ -6,7 +6,7 @@ import { FaChevronLeft, FaTimes } from "react-icons/fa";
 // ✅ 2. 使用 dynamic 禁用 SSR (服务端渲染)
 // 这样 Next.js 在打包时就会跳过这些组件的预渲染，彻底解决 "document is not defined"
 const GrammarPointPlayer = dynamic(() => import('./GrammarPointPlayer'), { ssr: false });
-const WordStudyPlayer = dynamic(() => import('./WordStudyPlayer'), { ssr: false });
+// const WordStudyPlayer = dynamic(() => import('./WordStudyPlayer'), { ssr: false });
 
 // 题型组件也建议这样导入，防止里面有直接操作 DOM 的代码
 const XuanZeTi = dynamic(() => import('./XuanZeTi'), { ssr: false });
