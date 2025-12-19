@@ -1,243 +1,338 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
-import dynamic from 'next/dynamic';
-import { FaPlay, FaCheck, FaHome, FaRedo } from "react-icons/fa";
+import { HiSpeakerWave } from "react-icons/hi2";
+import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 
-// --- 动态导入组件 ---
-const GrammarPointPlayer = dynamic(() => import('./GrammarPointPlayer'), { ssr: false });
-const WordStudyPlayer = dynamic(() => import('./WordStudyPlayer'), { ssr: false });
-const XuanZeTi = dynamic(() => import('./XuanZeTi'), { ssr: false });
-const PanDuanTi = dynamic(() => import('./PanDuanTi'), { ssr: false });
-const DuiHua = dynamic(() => import('./DuiHua'), { ssr: false });
+// --- 外部题型组件 ---
+import XuanZeTi from './XuanZeTi';
+import PanDuanTi from './PanDuanTi';
+import PaiXuTi from './PaiXuTi';
+import LianXianTi from './LianXianTi';
+import GaiCuoTi from './GaiCuoTi';
+import DuiHua from './DuiHua';
+import TianKongTi from './TianKongTi';
+import GrammarPointPlayer from './GrammarPointPlayer';
 
-// --- 样式 ---
-const scrollbarStyles = `
-  ::-webkit-scrollbar { width: 0px; background: transparent; }
-  * { scrollbar-width: none; -ms-overflow-style: none; }
-`;
+// --- 学习卡片 ---
+import WordCard from '../WordCard';
+import PhraseCard from '../PhraseCard';
 
 // --- Audio Manager ---
 const ttsVoices = { zh: 'zh-CN-XiaoyouNeural', my: 'my-MM-NilarNeural' };
 const audioManager = (() => {
-  if (typeof window === 'undefined') return { stop:()=>{}, playTTS:async()=>{}, playDing:()=>{} };
-  let audioEl = null;
-  const stop = () => { try { if (audioEl) { audioEl.pause(); audioEl = null; } } catch (e) {} };
-  const playUrl = async (url) => { stop(); if (!url) return; try { const a = new Audio(url); a.play().catch(()=>{}); audioEl = a; } catch (e) {} };
+  if (typeof window === 'undefined') return null;
+  let audioEl = null, onEnded = null;
+  const stop = () => { try { if (audioEl) { audioEl.pause(); audioEl = null; } } catch (e) {} if (onEnded) { onEnded(); onEnded = null; } };
+  const playUrl = async (url, { onEnd = null } = {}) => { stop(); if (!url) return; try { const a = new Audio(url); a.volume = 1.0; a.preload = 'auto'; a.onended = () => { if (onEnd) onEnd(); if (audioEl === a) { audioEl = null; onEnded = null; } }; a.onerror = () => { if (onEnd) onEnd(); }; audioEl = a; onEnded = onEnd; await a.play().catch(()=>{}); } catch (e) { if (onEnd) onEnd(); } };
+  const blobCache = new Map();
+  const fetchToBlobUrl = async (url) => { try { if (blobCache.has(url)) return blobCache.get(url); const r = await fetch(url); const b = await r.blob(); const u = URL.createObjectURL(b); blobCache.set(url, u); return u; } catch (e) { return url; } };
   return { 
     stop, 
-    playTTS: async (t) => { 
-        if(!t) return;
-        const u = `https://t.leftsite.cn/tts?t=${encodeURIComponent(t)}&v=${ttsVoices.zh}`; 
-        playUrl(u); 
+    playTTS: async (t, l='zh', r=0, cb=null) => { 
+      if (!t) { if (cb) cb(); return; } 
+      const v = ttsVoices[l]||ttsVoices.zh; 
+      const u = await fetchToBlobUrl(`https://t.leftsite.cn/tts?t=${encodeURIComponent(t)}&v=${v}&r=${r}`); 
+      return playUrl(u, { onEnd: cb }); 
     }, 
     playDing: () => { try { new Audio('/sounds/click.mp3').play().catch(()=>{}); } catch(e){} } 
   };
 })();
 
-// --- 封面组件 ---
-const CoverScreen = ({ title, subTitle, image, onStart }) => {
-    const bgImage = image || "https://images.unsplash.com/photo-1548625361-9877015037d2?q=80&w=1920&auto=format&fit=crop";
-    return (
-        <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-slate-900">
-            <div 
-                className="absolute inset-0 bg-cover bg-center bg-no-repeat z-0 transform scale-105 transition-transform duration-[20s] ease-linear hover:scale-110"
-                style={{ backgroundImage: `url("${bgImage}")`, filter: 'brightness(0.6) blur(2px)' }}
-            />
-            <div className="relative z-10 p-8 flex flex-col items-center max-w-md mx-4 animate-in fade-in zoom-in duration-700">
-                <div className="mb-8 w-16 h-1.5 bg-yellow-400 rounded-full shadow-[0_0_15px_rgba(250,204,21,0.8)]"></div>
-                <h1 className="text-4xl md:text-5xl font-black text-white text-center leading-tight mb-6 drop-shadow-xl tracking-wide">
-                    {title || "HSK 课程"}
-                </h1>
-                <p className="text-white/90 text-lg mb-12 font-medium tracking-widest font-sans text-center opacity-90">
-                    {subTitle || "Interactive Learning"}
-                </p>
-                <button 
-                    onClick={onStart}
-                    className="group relative px-12 py-4 bg-white text-slate-900 font-black rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_40px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300 flex items-center gap-3 overflow-hidden"
-                >
-                    <span className="relative z-10 text-xl tracking-wide">开始学习</span>
-                    <FaPlay size={16} className="relative z-10 ml-1 text-blue-600 group-hover:translate-x-1 transition-transform" />
-                </button>
-            </div>
-        </div>
-    );
+// --- 首页封面组件 ---
+const CoverBlock = ({ data, onStart }) => {
+  return (
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-slate-900">
+      {data.image && (
+        <img 
+          src={data.image} 
+          className="absolute inset-0 w-full h-full object-cover opacity-80" 
+          alt="cover" 
+        />
+      )}
+      {/* 渐变遮罩确保文字清晰 */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+      
+      <div className="relative z-10 text-center px-8 flex flex-col items-center">
+        <h1 className="text-4xl font-black text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] mb-4 leading-tight">
+          {data.title || "开始学习"}
+        </h1>
+        {data.description && (
+          <p className="text-lg text-white/90 drop-shadow-md mb-12 max-w-xs">
+            {data.description}
+          </p>
+        )}
+        
+        <button 
+          onClick={onStart}
+          className="group relative flex items-center justify-center"
+        >
+          <div className="absolute -inset-2 bg-blue-500 rounded-full blur opacity-30 group-active:opacity-10 transition duration-1000"></div>
+          <div className="relative px-12 py-5 bg-blue-600 text-white font-black text-xl rounded-full shadow-2xl active:scale-95 transition-all flex items-center gap-2">
+            点击开始学习
+          </div>
+        </button>
+      </div>
+    </div>
+  );
 };
 
-// --- 完成页面 ---
-const CompletionBlock = ({ onExit, onRestart }) => { 
-  useEffect(() => { 
-    import('canvas-confetti').then(m => {
-        const duration = 3000;
-        const animationEnd = Date.now() + duration;
-        const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-        const randomInRange = (min, max) => Math.random() * (max - min) + min;
-        const interval = setInterval(function() {
-            const timeLeft = animationEnd - Date.now();
-            if (timeLeft <= 0) return clearInterval(interval);
-            const particleCount = 50 * (timeLeft / duration);
-            m.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
-            m.default(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
-        }, 250);
-    });
-  }, []);
-  
+// --- 列表容器适配器 ---
+const CardListRenderer = ({ data, type, onComplete }) => {
+  const isPhrase = type === 'phrase_study' || type === 'sentences';
+  const list = data.words || data.sentences || data.vocabulary || []; 
+
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50 animate-in fade-in duration-500 p-6">
-      <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center shadow-lg mb-8 animate-bounce">
-          <FaCheck className="text-white text-4xl" />
+    <div className="w-full h-full flex flex-col relative bg-slate-50">
+      <div className="flex-none pt-12 pb-4 px-4 text-center z-10 bg-slate-50">
+        <h2 className="text-2xl font-black text-slate-800">
+          {data.title || (isPhrase ? "常用短句" : "核心生词")}
+        </h2>
+        <p className="text-slate-400 text-xs mt-1">共 {list.length} 个 • 点击卡片跟读</p>
       </div>
-      <h2 className="text-3xl md:text-4xl font-black text-slate-800 mb-4 text-center">恭喜完成！</h2>
-      <p className="text-slate-500 mb-12 text-center max-w-xs text-lg">你已经完成了本节课的所有内容，掌握了新的知识点。</p>
-      
-      <div className="flex flex-col gap-4 w-full max-w-xs">
-          <button onClick={onExit} className="w-full px-6 py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-lg hover:bg-slate-800 hover:shadow-xl transition-all flex items-center justify-center gap-2">
-            <FaHome /> 返回课程列表
-          </button>
-          <button onClick={onRestart} className="w-full px-6 py-4 bg-white text-slate-600 font-bold rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
-            <FaRedo /> 再学一次
-          </button>
+      <div className="flex-1 w-full overflow-y-auto px-4 pb-32" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className={`grid gap-4 ${isPhrase ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          {list.map((item, i) => (
+            isPhrase ? (
+              <PhraseCard 
+                key={item.id || i} 
+                phrase={item} 
+                data={item}
+                onPlay={() => audioManager.playTTS(item.sentence || item.chinese)}
+              />
+            ) : (
+              <WordCard 
+                key={item.id || i} 
+                word={item}
+                data={item}
+                onPlay={() => audioManager.playTTS(item.word || item.chinese)}
+              />
+            )
+          ))}
+        </div>
       </div>
+      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent z-20">
+        <button 
+          onClick={onComplete} 
+          className="w-full py-4 bg-blue-600 text-white font-bold text-lg rounded-2xl shadow-xl shadow-blue-200 active:scale-95 transition-all"
+        >
+          我学会了
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- 完成块 ---
+const CompletionBlock = ({ data, router }) => { 
+  useEffect(() => { 
+    audioManager?.playTTS("恭喜完成", 'zh'); 
+    setTimeout(() => router.back(), 2500); 
+  }, [router]); 
+  return (
+    <div className="flex flex-col items-center justify-center h-full animate-bounce-in bg-white">
+      <div className="text-8xl mb-6">🎉</div>
+      <h2 className="text-3xl font-black text-slate-800">{data.title||"完成！"}</h2>
+      <p className="text-slate-400 mt-2">正在返回课程列表...</p>
     </div>
   ); 
 };
 
-// --- 主组件 ---
+const UnknownBlockHandler = ({ type, onSkip }) => <div onClick={onSkip} className="flex flex-col items-center justify-center h-full text-gray-400"><p>未知题型: {type}</p><button className="mt-4 text-blue-500 underline">点击跳过</button></div>;
+
+// 辅助函数
+const shuffleArray = (array) => {
+  const newArray = [...array]; 
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]]; 
+  }
+  return newArray;
+};
+
+// ---------------- 主组件 ----------------
 export default function InteractiveLesson({ lesson }) {
   const router = useRouter();
   const [hasMounted, setHasMounted] = useState(false);
-  const [isStarted, setIsStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const blocks = useMemo(() => lesson?.blocks || [], [lesson]);
+  const totalBlocks = blocks.length;
   const currentBlock = blocks[currentIndex];
 
   useEffect(() => { setHasMounted(true); }, []);
-
-  const goNext = useCallback(() => { 
-    audioManager?.stop(); 
-    if (currentIndex < blocks.length) setCurrentIndex(prev => prev + 1); 
-  }, [currentIndex, blocks.length]);
-
-  const goPrev = useCallback(() => { 
-    audioManager?.stop(); 
-    if (currentIndex > 0) setCurrentIndex(prev => prev - 1); 
-  }, [currentIndex]);
-
-  const handleRestart = () => {
-      setCurrentIndex(0);
-      setIsStarted(false); 
-  };
   
-  const handleCorrect = useCallback(() => {
-    audioManager.playDing();
-    import('canvas-confetti').then(m => m.default({ particleCount: 50, spread: 60, origin: { y: 0.7 } }));
-  }, []);
+  // 1. 读取进度的逻辑
+  useEffect(() => { 
+    if (lesson?.id && hasMounted) { 
+      const saved = localStorage.getItem(`lesson-progress-${lesson.id}`); 
+      if (saved) {
+        const savedIndex = parseInt(saved, 10);
+        if (savedIndex < totalBlocks) {
+          setCurrentIndex(savedIndex); 
+        } else {
+          setCurrentIndex(0);
+          localStorage.removeItem(`lesson-progress-${lesson.id}`);
+        }
+      }
+    } 
+  }, [lesson, hasMounted, totalBlocks]);
 
-  const handleExit = () => router.back();
+  // 2. 进度保存逻辑
+  useEffect(() => { 
+    if (hasMounted && lesson?.id) {
+        const isFinished = currentIndex >= totalBlocks || 
+                           ['complete', 'end'].includes(blocks[currentIndex]?.type);
+
+        if (isFinished) {
+            localStorage.removeItem(`lesson-progress-${lesson.id}`);
+        } else {
+            localStorage.setItem(`lesson-progress-${lesson.id}`, currentIndex.toString());
+        }
+    }
+    audioManager?.stop(); 
+  }, [currentIndex, lesson?.id, hasMounted, totalBlocks, blocks]);
+
+  // 自动跳过 Teaching (非封面性质的静默块)
+  useEffect(() => {
+    if (currentBlock && currentBlock.type === 'teaching' && !currentBlock.content?.image) {
+      const timer = setTimeout(() => {
+        if (currentIndex < totalBlocks) setCurrentIndex(prev => Math.min(prev + 1, totalBlocks));
+      }, 50); 
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, currentBlock, totalBlocks]);
+
+  const goNext = useCallback(() => { audioManager?.stop(); if (currentIndex < totalBlocks) setCurrentIndex(prev => Math.min(prev + 1, totalBlocks)); }, [currentIndex, totalBlocks]);
+  const goPrev = useCallback(() => { audioManager?.stop(); if (currentIndex > 0) setCurrentIndex(prev => Math.max(prev - 1, 0)); }, [currentIndex]);
+  
+  const delayedNextStep = useCallback(() => {
+    import('canvas-confetti').then(m => m.default({ particleCount: 80, spread: 60, origin: { y: 0.6 } })).catch(()=>{});
+    setTimeout(() => setCurrentIndex(prev => Math.min(prev + 1, totalBlocks)), 1200); 
+  }, [totalBlocks]);
+
+  const renderBlock = () => {
+    if (!currentBlock) return <div className="text-slate-400 mt-20">Loading...</div>;
+    const type = (currentBlock.type || '').toLowerCase();
+    
+    const commonProps = { 
+      key: `${lesson.id}-${currentIndex}`, 
+      data: currentBlock.content, 
+      onCorrect: delayedNextStep, 
+      onComplete: goNext, 
+      onNext: goNext, 
+      settings: { playTTS: audioManager?.playTTS } 
+    };
+    
+    const CommonWrapper = ({ children }) => <div className="w-full h-full flex flex-col items-center justify-center pt-4">{children}</div>;
+    const FullHeightWrapper = ({ children }) => <div className="w-full h-full flex flex-col">{children}</div>;
+
+    try {
+      switch (type) {
+        // 如果是封面(teaching 且含有图片)
+        case 'teaching': 
+          if (currentBlock.content?.image) {
+            return <CoverBlock data={currentBlock.content} onStart={goNext} />;
+          }
+          return null; 
+
+        case 'cover':
+          return <CoverBlock data={currentBlock.content} onStart={goNext} />;
+
+        case 'word_study': 
+        case 'phrase_study': 
+        case 'sentences':
+          return <FullHeightWrapper><CardListRenderer {...commonProps} type={type} /></FullHeightWrapper>;
+
+        case 'grammar_study': 
+          if (!commonProps.data.grammarPoints?.length) return <UnknownBlockHandler type="grammar_study (empty)" onSkip={goNext} />;
+          return (
+             <div className="w-full h-full relative">
+                <GrammarPointPlayer grammarPoints={commonProps.data.grammarPoints} onComplete={commonProps.onComplete} />
+             </div>
+          );
+
+        case 'choice': {
+            const { correctId } = commonProps.data;
+            const correctAnswer = Array.isArray(correctId) ? correctId : (correctId != null ? [correctId] : []);
+            return <CommonWrapper><XuanZeTi {...commonProps} data={{...commonProps.data, correctAnswer}} /></CommonWrapper>;
+        }
+        case 'lianxian': {
+            const columnA = commonProps.data.pairs?.map(p => ({ id: p.id, content: p.left })) || [];
+            const columnB = commonProps.data.pairs?.map(p => ({ id: `${p.id}_b`, content: p.right })) || [];
+            const shuffledColumnB = shuffleArray(columnB);
+            const pairsMap = commonProps.data.pairs?.reduce((acc, p) => { acc[p.id] = `${p.id}_b`; return acc }, {}) || {};
+            
+            return <CommonWrapper><LianXianTi {...commonProps} data={{...commonProps.data, columnA, columnB: shuffledColumnB, pairs: pairsMap}} /></CommonWrapper>;
+        }
+        case 'paixu': {
+            const correctOrder = [...(commonProps.data.items || [])].sort((a,b) => a.order - b.order).map(i => i.id);
+            return <CommonWrapper><PaiXuTi {...commonProps} data={{...commonProps.data, correctOrder}} /></CommonWrapper>;
+        }
+        
+        case 'panduan': return <CommonWrapper><PanDuanTi {...commonProps} /></CommonWrapper>;
+        case 'gaicuo': return <CommonWrapper><GaiCuoTi {...commonProps} /></CommonWrapper>;
+        case 'image_match_blanks': return <CommonWrapper><TianKongTi {...commonProps} /></CommonWrapper>;
+        case 'dialogue_cinematic': return <DuiHua {...commonProps} />;
+        
+        case 'complete': case 'end': return <CompletionBlock data={commonProps.data} router={router} />;
+        default: return <UnknownBlockHandler type={type} onSkip={goNext} />;
+      }
+    } catch (e) { 
+        console.error("Error rendering block:", type, e);
+        return <UnknownBlockHandler type={`${type} Error`} onSkip={goNext} />; 
+    }
+  };
 
   if (!hasMounted) return null;
 
-  if (!isStarted) {
-      return (
-        <div className="fixed inset-0 w-screen h-screen bg-slate-900 font-sans">
-             <style>{scrollbarStyles}</style>
-             <CoverScreen 
-                title={lesson?.title} 
-                subTitle={lesson?.description} 
-                image={lesson?.coverImage}     
-                onStart={() => { audioManager.playDing(); setIsStarted(true); }} 
-             />
-        </div>
-      );
-  }
+  const type = currentBlock?.type?.toLowerCase();
+  const isCover = (type === 'teaching' && currentBlock?.content?.image) || type === 'cover';
 
-  if (currentIndex >= blocks.length) {
-      return (
-        <div className="fixed inset-0 w-screen h-screen bg-white font-sans">
-            <style>{scrollbarStyles}</style>
-            <CompletionBlock onExit={handleExit} onRestart={handleRestart} />
-        </div>
-      );
-  }
-
-  const commonProps = { 
-    key: `${lesson.id}-${currentIndex}`, 
-    data: currentBlock.content,
-    question: currentBlock.content.question, 
-    options: currentBlock.content.options,
-    correctAnswer: currentBlock.content.correctAnswer, 
-    onCorrect: handleCorrect,
-    onComplete: goNext, 
-    onNext: goNext,     
-    onPrev: goPrev,
-    isFirst: currentIndex === 0
-  };
-
-  const type = (currentBlock.type || '').toLowerCase();
-  
-  // 🔥🔥🔥 关键修改：去掉了 overflow-y-auto，让子组件全屏接管 🔥🔥🔥
-  const FullScreen = ({ children }) => (
-      <div className="w-full h-full relative bg-slate-50 animate-in fade-in slide-in-from-right-8 duration-300">
-          {children}
-      </div>
-  );
-
-  const QuestionWrapper = ({ children }) => (
-      <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-slate-50 animate-in fade-in duration-300 relative overflow-y-auto">
-         <div className="w-full max-w-md z-10 my-auto">{children}</div>
-      </div>
-  );
+  // 导航显隐控制
+  const hideBottomNav = ['word_study', 'phrase_study', 'sentences', 'complete', 'end'].includes(type) || isCover;
+  const hideTopProgressBar = ['dialogue_cinematic', 'complete', 'end'].includes(type) || isCover;
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-800">
-      <style>{scrollbarStyles}</style>
+    <div className="fixed inset-0 w-screen h-screen bg-slate-50 flex flex-col overflow-hidden font-sans select-none" style={{ touchAction: 'none' }}>
+      <style>{`::-webkit-scrollbar { display: none; } * { -webkit-tap-highlight-color: transparent; }`}</style>
       
-      <main className="w-full h-full relative">
-        {type === 'word_study' && (
-            <FullScreen>
-                <WordStudyPlayer 
-                    data={commonProps.data} 
-                    onNext={goNext} 
-                    onPrev={goPrev} 
-                    isFirstBlock={commonProps.isFirst} 
-                />
-            </FullScreen>
+      {/* 顶部进度条 - 更细更灵动 */}
+      <div className="absolute top-0 left-0 right-0 pt-[env(safe-area-inset-top)] z-30 pointer-events-none">
+        {!hideTopProgressBar && currentIndex < totalBlocks && (
+          <div className="h-[3px] bg-slate-200/40 w-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-500 transition-all duration-500 ease-out" 
+              style={{ width: `${((currentIndex + 1) / totalBlocks) * 100}%` }} 
+            />
+          </div>
         )}
-        
-        {type === 'grammar_study' && (
-            <FullScreen>
-                <GrammarPointPlayer 
-                    grammarPoints={commonProps.data.grammarPoints} 
-                    onComplete={goNext} 
-                />
-            </FullScreen>
-        )}
-        
-        {type === 'choice' && (
-            <QuestionWrapper>
-                <XuanZeTi {...commonProps} />
-            </QuestionWrapper>
-        )}
-        
-        {type === 'panduan' && (
-            <QuestionWrapper>
-                <PanDuanTi {...commonProps} />
-            </QuestionWrapper>
-        )}
-        
-        {type === 'dialogue' && (
-            <FullScreen>
-                <DuiHua {...commonProps} />
-            </FullScreen>
-        )}
-        
-        {!['word_study','grammar_study','choice','panduan','dialogue'].includes(type) && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <p>Unknown Module: {type}</p>
-                <button onClick={goNext} className="mt-4 text-blue-500">Skip</button>
-            </div>
-        )}
+      </div>
+
+      <main className="relative w-full h-full flex flex-col z-10 overflow-hidden">
+        {currentIndex >= totalBlocks ? <CompletionBlock data={blocks[totalBlocks - 1]?.content || {}} router={router} /> : renderBlock()}
       </main>
+
+      {/* 底部导航按钮 - 位置上移，且不显示页码 */}
+      {!hideBottomNav && currentIndex < totalBlocks && (
+        <div className="absolute bottom-10 left-0 right-0 px-8 z-30 flex justify-between items-center pointer-events-none">
+            <button 
+              onClick={goPrev} 
+              className={`pointer-events-auto w-14 h-14 rounded-full bg-white/90 shadow-lg text-slate-600 flex items-center justify-center backdrop-blur-md transition-all active:scale-90 ${currentIndex === 0 ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
+            >
+              <FaChevronLeft size={20} />
+            </button>
+            
+            {/* 中间留空，不再显示页码 */}
+            <div className="flex-1" />
+
+            <button 
+              onClick={goNext} 
+              className={`pointer-events-auto w-14 h-14 rounded-full bg-white/90 shadow-lg text-slate-600 flex items-center justify-center backdrop-blur-md transition-all active:scale-90 ${currentIndex >= totalBlocks - 1 && (type === 'complete' || type === 'end') ? 'opacity-0 scale-0' : 'opacity-100 scale-100'}`}
+            >
+              <FaChevronRight size={20} />
+            </button>
+        </div>
+      )}
     </div>
   );
 }
