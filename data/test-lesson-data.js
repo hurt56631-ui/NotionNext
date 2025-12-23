@@ -1,93 +1,247 @@
-export const hskLessonData = {
+// components/Data/1.js
+
+export default {
   id: "hsk1_01",
+  level: 1,
   title: "第1课：你是哪国人？",
   blocks: [
     // ==========================================
-    // 1. 单词学习 (Word Study) - 已适配新版播放器字段
+    // 1. 课程封面
+    // ==========================================
+    {
+      type: "cover",
+      content: {
+        title: "HSK 1 - 第1课",
+        subtitle: "你是哪国人？",
+        description: "学习中文最核心的疑问词：什么、谁、哪，以及如何用“是”和“吗”造句。",
+        imageUrl: "https://images.pexels.com/photos/35267296/pexels-photo-35267296.jpeg"
+      }
+    },
+
+    // ==========================================
+    // 2. 单词学习 (无拼音字段，双例句)
     // ==========================================
     {
       type: "word_study",
       content: {
-        title: "核心生词",
+        title: "核心生词 (Core Vocabulary)",
         words: [
-          {
-            id: 1,
-            hsk_level: 1, // 必须：用于 R2 音频
-            word: "你好",
-            pinyin: "nǐ hǎo",
-            decomposition: ["你", "好"], // 必须：用于拆解显示
-            similar_sound: "尼好",
-            burmese: "မင်္ဂလာပါ",
-            definition: "Hello / Hi", // 英文定义
-            explanation: "用于打招呼，任何时间都可以说。", // 中文详解
-            example: "你好！你是老师吗？",
-            example_burmese: "မင်္ဂလာပါ၊ သင်က ဆရာလား။",
-            example2: "老师，你好！",
-            example2_burmese: "ဆရာ/မ မင်္ဂလာပါ။"
+          // --- 核心疑问词 ---
+          { 
+            id: 1, 
+            word: "什么", 
+            burmese: "ဘာ / ဘာလဲ", 
+            definition: "What", 
+            examples: [
+                { zh: "这是什么？", my: "ဒါဘာလဲ?" },
+                { zh: "你吃什么？", my: "မင်း ဘာစားလဲ?" }
+            ]
           },
-          {
-            id: 2,
-            hsk_level: 1,
-            word: "中国",
-            pinyin: "Zhōng guó",
-            decomposition: ["中", "国"],
-            similar_sound: "钟国",
-            burmese: "တရုတ်",
-            definition: "China",
-            explanation: "东亚国家。",
-            example: "我是中国人。",
-            example_burmese: "ကျွန်တော်က တရုတ်လူမျိုးပါ။",
-            example2: "我爱中国。",
-            example2_burmese: "ကျွန်တော် တရုတ်ပြည်ကို ချစ်တယ်။"
+          { 
+            id: 2, 
+            word: "谁", 
+            burmese: "ဘယ်သူ", 
+            definition: "Who", 
+            examples: [
+                { zh: "他是谁？", my: "သူ ဘယ်သူလဲ?" },
+                { zh: "谁是老师？", my: "ဘယ်သူက ဆရာလဲ?" }
+            ]
           },
-          {
-            id: 3,
-            hsk_level: 1,
-            word: "美国",
-            pinyin: "Měi guó",
-            decomposition: ["美", "国"],
-            similar_sound: "美过",
-            burmese: "အမေရိကန်",
-            definition: "USA",
-            explanation: "北美国家。",
-            example: "他是美国人。",
-            example_burmese: "သူက အမေရိကန်လူမျိုးပါ။",
-            example2: "你要去美国吗？",
-            example2_burmese: "မင်း အမေရိကန်ကို သွားမှာလား။"
+          { 
+            id: 3, 
+            word: "哪", 
+            burmese: "ဘယ်...", 
+            definition: "Which", 
+            examples: [
+                { zh: "哪本书？", my: "ဘယ်စာအုပ်လဲ?" },
+                { zh: "你是哪国人？", my: "မင်း ဘယ်နိုင်ငံသားလဲ?" }
+            ]
           },
-          {
-            id: 4,
-            hsk_level: 1,
-            word: "人",
-            pinyin: "rén",
-            decomposition: ["人"],
-            similar_sound: "忍",
-            burmese: "လူ",
-            definition: "Person / People",
-            explanation: "人类，或者指某种身份的人。",
-            example: "中国人 / 美国人",
-            example_burmese: "တရုတ်လူမျိုး / အမေရိကန်လူမျိုး",
-            example2: "你是哪国人？",
-            example2_burmese: "မင်း ဘယ်နိုင်ငံသားလဲ။"
+          
+          // --- 代词 ---
+          { 
+            id: 4, 
+            word: "我", 
+            burmese: "ကျွန်တော် / ကျွန်မ", 
+            definition: "I / Me", 
+            examples: [
+                { zh: "我是学生。", my: "ကျွန်တော် ကျောင်းသား ဖြစ်ပါတယ်။" },
+                { zh: "我去中国。", my: "ငါ တရုတ်ပြည် သွားမယ်။" }
+            ]
           },
-          {
-            id: 5,
-            hsk_level: 1,
-            word: "老师",
-            pinyin: "lǎo shī",
-            decomposition: ["老", "师"],
-            similar_sound: "老狮",
-            burmese: "ဆရာ/ဆရာမ",
-            definition: "Teacher",
-            explanation: "在学校教书的人。",
-            example: "谢谢你，老师。",
-            example_burmese: "ကျေးဇူးတင်ပါတယ် ဆရာ။",
-            example2: "他是汉语老师。",
-            example2_burmese: "သူက တရုတ်စာ ဆရာဖြစ်တယ်။"
+          { 
+            id: 5, 
+            word: "你", 
+            burmese: "မင်း / ခင်ဗျား", 
+            definition: "You", 
+            examples: [
+                { zh: "你是中国人吗？", my: "မင်းက တရုတ်လူမျိုးလား?" },
+                { zh: "你叫什么名字？", my: "မင်းနာမည် ဘယ်လိုခေါ်လဲ?" }
+            ]
+          },
+          { 
+            id: 6, 
+            word: "他", 
+            burmese: "သူ (ယောက်ျား)", 
+            definition: "He / Him", 
+            examples: [
+                { zh: "他是我的朋友。", my: "သူက ငါ့သူငယ်ချင်းပါ။" },
+                { zh: "他不是老师。", my: "သူက ဆရာမဟုတ်ဘူး။" }
+            ]
+          },
+          { 
+            id: 7, 
+            word: "她", 
+            burmese: "သူမ", 
+            definition: "She / Her", 
+            examples: [
+                { zh: "她是漂亮的女孩。", my: "သူမက လှပတဲ့ မိန်းကလေးပါ။" },
+                { zh: "她是我的姐姐。", my: "သူမက ငါ့အစ်မပါ။" }
+            ]
+          },
+
+          // --- 动词 ---
+          { 
+            id: 8, 
+            word: "是", 
+            burmese: "ဖြစ်သည် / ဟုတ်သည်", 
+            definition: "To be (is/am/are)", 
+            examples: [
+                { zh: "我是缅甸人。", my: "ငါက မြန်မာလူမျိုးပါ။" },
+                { zh: "这是书。", my: "ဒါ စာအုပ်ပါ။" }
+            ]
+          },
+          { 
+            id: 9, 
+            word: "叫", 
+            burmese: "ခေါ်သည် / အမည်တွင်သည်", 
+            definition: "To be called", 
+            examples: [
+                { zh: "我叫大卫。", my: "ငါ့နာမည် ဒေးဗစ်ပါ။" },
+                { zh: "这只狗叫什么？", my: "ဒီခွေးနာမည် ဘယ်လိုခေါ်လဲ?" }
+            ]
+          },
+          
+          // --- 国家与名词 ---
+          { 
+            id: 10, 
+            word: "国", 
+            burmese: "နိုင်ငံ", 
+            definition: "Country", 
+            examples: [
+                { zh: "你是哪国人？", my: "မင်း ဘယ်နိုင်ငံသားလဲ?" },
+                { zh: "中国是大国。", my: "တရုတ်ပြည်က နိုင်ငံကြီးတစ်ခုပါ။" }
+            ]
+          },
+          { 
+            id: 11, 
+            word: "人", 
+            burmese: "လူ", 
+            definition: "Person", 
+            examples: [
+                { zh: "他是好人。", my: "သူက လူကောင်းပါ။" },
+                { zh: "这里有很多人。", my: "ဒီမှာ လူတွေအများကြီးရှိတယ်။" }
+            ]
+          },
+          { 
+            id: 12, 
+            word: "中国", 
+            burmese: "တရုတ်နိုင်ငံ", 
+            definition: "China", 
+            examples: [
+                { zh: "我想去中国。", my: "ငါ တရုတ်ပြည် သွားချင်တယ်။" },
+                { zh: "我喜欢中国。", my: "ငါ တရုတ်ပြည်ကို ကြိုက်တယ်။" }
+            ]
+          },
+          { 
+            id: 13, 
+            word: "美国", 
+            burmese: "အမေရိကန်နိုင်ငံ", 
+            definition: "USA", 
+            examples: [
+                { zh: "他是美国人。", my: "သူက အမေရိကန်လူမျိုးပါ။" },
+                { zh: "我也去美国。", my: "ငါလည်း အမေရိကန်သွားမယ်။" }
+            ]
+          },
+          { 
+            id: 14, 
+            word: "缅甸", 
+            burmese: "မြန်မာနိုင်ငံ", 
+            definition: "Myanmar", 
+            examples: [
+                { zh: "我是缅甸人。", my: "ငါက မြန်မာလူမျိုးပါ။" },
+                { zh: "缅甸很漂亮。", my: "မြန်မာပြည်က အရမ်းလှတယ်။" }
+            ]
+          },
+          
+          // --- 身份 ---
+          { 
+            id: 15, 
+            word: "老师", 
+            burmese: "ဆရာ / ဆရာမ", 
+            definition: "Teacher", 
+            examples: [
+                { zh: "老师你好。", my: "မင်္ဂလာပါ ဆရာ။" },
+                { zh: "老师很好。", my: "ဆရာက သဘောကောင်းတယ်။" }
+            ]
+          },
+          { 
+            id: 16, 
+            word: "学生", 
+            burmese: "ကျောင်းသား", 
+            definition: "Student", 
+            examples: [
+                { zh: "我是学生。", my: "ကျွန်တော်က ကျောင်းသားပါ။" },
+                { zh: "有很多学生。", my: "ကျောင်းသားတွေ အများကြီးရှိတယ်။" }
+            ]
+          },
+          { 
+            id: 17, 
+            word: "名字", 
+            burmese: "နာမည်", 
+            definition: "Name", 
+            examples: [
+                { zh: "你叫什么名字？", my: "မင်းနာမည် ဘယ်လိုခေါ်လဲ?" },
+                { zh: "写你的名字。", my: "မင်းနာမည် ရေးပါ။" }
+            ]
+          },
+
+          // --- 虚词与副词 ---
+          { 
+            id: 18, 
+            word: "吗", 
+            burmese: "လား (မေးခွန်း)", 
+            definition: "Question particle", 
+            examples: [
+                { zh: "你好吗？", my: "နေကောင်းလား?" },
+                { zh: "这是水吗？", my: "ဒါ ရေလား?" }
+            ]
+          },
+          { 
+            id: 19, 
+            word: "不", 
+            burmese: "မ...ဘူး", 
+            definition: "No / Not", 
+            examples: [
+                { zh: "我不去。", my: "ငါ မသွားဘူး။" },
+                { zh: "我不吃。", my: "ငါ မစားဘူး။" }
+            ]
+          },
+          { 
+            id: 20, 
+            word: "呢", 
+            burmese: "ကော / ရော", 
+            definition: "Particle (And you?)", 
+            examples: [
+                { zh: "我很好，你呢？", my: "ငါနေကောင်းတယ်၊ မင်းရော?" },
+                { zh: "书在哪儿呢？", my: "စာအုပ် ဘယ်မှာလဲ?" }
+            ]
           }
         ]
       }
     },
+
+    
 
     // ==========================================
     // 2. 语法讲解 (Grammar Study)
